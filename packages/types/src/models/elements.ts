@@ -72,7 +72,7 @@ export interface ImageElement extends ElementBase {
 
 // ============= Shape Element =============
 
-export type ShapeType = "rectangle" | "ellipse" | "line" | "polygon" | "path";
+export type ShapeType = "rectangle" | "circle" | "ellipse" | "triangle" | "line" | "arrow" | "polygon" | "path";
 
 export interface ShapeGeometry {
   points: Point[];

@@ -211,11 +211,11 @@ export function EditorCanvas({
       }
 
       if (["Rect", "Circle", "Triangle", "Ellipse", "Line"].includes(typeName)) {
-        type ShapeTypeValue = "rectangle" | "ellipse" | "line" | "polygon" | "path";
-        let shapeTypeResult: ShapeTypeValue = "rectangle";
-        if (typeName === "Circle" || typeName === "Ellipse") shapeTypeResult = "ellipse";
+        let shapeTypeResult: ShapeType = "rectangle";
+        if (typeName === "Circle") shapeTypeResult = "circle";
+        if (typeName === "Ellipse") shapeTypeResult = "ellipse";
         if (typeName === "Line") shapeTypeResult = "line";
-        if (typeName === "Triangle") shapeTypeResult = "polygon";
+        if (typeName === "Triangle") shapeTypeResult = "triangle";
 
         return {
           ...baseElement,
