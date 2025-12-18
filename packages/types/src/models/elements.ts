@@ -102,8 +102,10 @@ export type AnnotationType =
   | "highlight"
   | "underline"
   | "strikeout"
+  | "strikethrough"
   | "squiggly"
   | "note"
+  | "comment"
   | "freetext"
   | "stamp"
   | "link";
