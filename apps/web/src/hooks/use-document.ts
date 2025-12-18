@@ -266,6 +266,7 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
 
       const updatedPages = [...document.pages];
       const [movedPage] = updatedPages.splice(fromIndex, 1);
+      if (!movedPage) return;
       updatedPages.splice(toIndex, 0, movedPage);
 
       // Mettre à jour les numéros de page
