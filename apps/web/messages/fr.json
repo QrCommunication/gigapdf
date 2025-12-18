@@ -18,6 +18,12 @@
     "or": "ou",
     "and": "et"
   },
+  "theme": {
+    "toggle": "Changer le thème",
+    "light": "Clair",
+    "dark": "Sombre",
+    "system": "Système"
+  },
   "nav": {
     "features": "Fonctionnalités",
     "openSource": "Open Source",

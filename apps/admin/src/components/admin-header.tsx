@@ -2,9 +2,9 @@
 
 import { Bell, LogOut, User } from "lucide-react";
 import Link from "next/link";
-import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { Logo } from "@/components/logo";
 
 export function AdminHeader() {
   const t = useTranslations("nav");
@@ -15,14 +15,7 @@ export function AdminHeader() {
         <div className="flex flex-1 items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/dashboard" className="flex items-center gap-3">
-              <Image
-                src="/logo.png"
-                alt="GigaPDF"
-                width={120}
-                height={54}
-                className="h-8 w-auto"
-                priority
-              />
+              <Logo size="sm" />
               <span className="text-sm font-medium text-muted-foreground">Admin</span>
             </Link>
           </div>

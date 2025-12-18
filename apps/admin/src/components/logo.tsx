@@ -19,7 +19,7 @@ const sizes = {
   lg: { icon: 48, width: 200 },
 };
 
-export function Logo({ className, showText = true, size = "md", href = "/" }: LogoProps) {
+export function Logo({ className, showText = true, size = "md", href }: LogoProps) {
   const { width } = sizes[size];
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);

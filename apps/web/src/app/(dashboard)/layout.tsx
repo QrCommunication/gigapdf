@@ -5,12 +5,13 @@ import { useTranslations } from "next-intl";
 import { Button } from "@giga-pdf/ui";
 import { FileText, Home, Settings, CreditCard, LogOut, Menu, Building2 } from "lucide-react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
+import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 export default function DashboardLayout(props: { children?: React.ReactNode }) {
   const { children } = props;
@@ -44,16 +45,7 @@ export default function DashboardLayout(props: { children?: React.ReactNode }) {
           )}
         >
           <div className="flex h-16 items-center border-b px-6">
-            <Link href="/dashboard" className="flex items-center">
-              <Image
-                src="/logo.png"
-                alt="GigaPDF"
-                width={120}
-                height={54}
-                className="h-8 w-auto"
-                priority
-              />
-            </Link>
+            <Logo href="/dashboard" size="sm" />
           </div>
           <nav className="space-y-1 p-4">
             {navItems.map((item) => {
@@ -92,6 +84,7 @@ export default function DashboardLayout(props: { children?: React.ReactNode }) {
               <Menu className="h-6 w-6" />
             </Button>
             <div className="flex items-center gap-4 ml-auto">
+              <ThemeSwitcher />
               <LanguageSwitcher />
               <div className="flex items-center gap-2">
                 <div className="text-right">

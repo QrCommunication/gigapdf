@@ -18,6 +18,12 @@
     "or": "or",
     "and": "and"
   },
+  "theme": {
+    "toggle": "Toggle theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
   "nav": {
     "features": "Features",
     "openSource": "Open Source",

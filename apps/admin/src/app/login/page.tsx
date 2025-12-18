@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { signIn } from "@/lib/auth-client";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { Logo } from "@/components/logo";
 
 export default function LoginPage() {
   const t = useTranslations("auth.login");
@@ -50,14 +50,7 @@ export default function LoginPage() {
       </div>
       <div className="w-full max-w-md space-y-8">
         <div className="flex flex-col items-center">
-          <Image
-            src="/logo.png"
-            alt="GigaPDF"
-            width={180}
-            height={81}
-            className="h-12 w-auto"
-            priority
-          />
+          <Logo size="lg" />
           <h2 className="mt-6 text-3xl font-bold">{t("title")}</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             {t("subtitle")}

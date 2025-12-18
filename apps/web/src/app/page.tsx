@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { Button } from "@giga-pdf/ui";
 import { useTranslations } from "next-intl";
 import {
@@ -19,6 +18,8 @@ import {
   GitFork,
 } from "lucide-react";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { ThemeSwitcher } from "@/components/theme-switcher";
+import { Logo } from "@/components/logo";
 
 export default function HomePage() {
   const t = useTranslations();
@@ -105,16 +106,7 @@ export default function HomePage() {
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <Link href="/" className="flex items-center">
-            <Image
-              src="/logo.png"
-              alt="GigaPDF"
-              width={140}
-              height={63}
-              className="h-10 w-auto"
-              priority
-            />
-          </Link>
+          <Logo href="/" size="md" />
           <nav className="hidden md:flex items-center gap-6">
             <a href="#features" className="text-sm text-muted-foreground hover:text-foreground">
               {t("nav.features")}
@@ -136,6 +128,7 @@ export default function HomePage() {
             </a>
           </nav>
           <div className="flex items-center gap-2 md:gap-4">
+            <ThemeSwitcher />
             <LanguageSwitcher />
             <Link href="/login">
               <Button variant="ghost">{t("nav.signIn")}</Button>
@@ -443,13 +436,7 @@ export default function HomePage() {
           <div className="grid gap-8 md:grid-cols-4 max-w-6xl mx-auto">
             <div>
               <div className="mb-4">
-                <Image
-                  src="/logo.png"
-                  alt="GigaPDF"
-                  width={120}
-                  height={54}
-                  className="h-8 w-auto"
-                />
+                <Logo href="/" size="sm" />
               </div>
               <p className="text-sm text-muted-foreground mb-4">
                 {t("landing.footer.tagline")}
