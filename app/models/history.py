@@ -7,10 +7,12 @@ Maintains a stack of document states for reversible operations.
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, Field
+
+from app.models.base import CamelCaseModel, to_camel
 
 
-class HistoryEntry(BaseModel):
+class HistoryEntry(CamelCaseModel):
     """Single entry in the history stack."""
 
     index: int = Field(ge=0, description="Position in history stack")
@@ -26,7 +28,7 @@ class HistoryEntry(BaseModel):
     )
 
 
-class HistoryState(BaseModel):
+class HistoryState(CamelCaseModel):
     """
     Complete history state for a document.
 
@@ -47,41 +49,42 @@ class HistoryState(BaseModel):
         """Check if redo is available."""
         return self.current_index < len(self.history) - 1
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        json_schema_extra={
             "example": {
-                "current_index": 2,
+                "currentIndex": 2,
                 "history": [
                     {
                         "index": 0,
                         "action": "Document opened",
                         "timestamp": "2024-01-15T10:30:00Z",
-                        "can_undo": False,
-                        "can_redo": True,
+                        "canUndo": False,
+                        "canRedo": True,
                     },
                     {
                         "index": 1,
                         "action": "Text modified on page 1",
                         "timestamp": "2024-01-15T10:31:00Z",
-                        "can_undo": True,
-                        "can_redo": True,
+                        "canUndo": True,
+                        "canRedo": True,
                     },
                     {
                         "index": 2,
                         "action": "Image added to page 2",
                         "timestamp": "2024-01-15T10:32:00Z",
-                        "can_undo": True,
-                        "can_redo": False,
+                        "canUndo": True,
+                        "canRedo": False,
                     },
                 ],
-                "max_history_size": 100,
+                "maxHistorySize": 100,
             }
-        }
+        },
+    )
 
 
-class DocumentSnapshot(BaseModel):
+class DocumentSnapshot(CamelCaseModel):
     """
     Snapshot of document state for history.
 

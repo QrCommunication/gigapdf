@@ -8,7 +8,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, Field
+
+from app.models.base import CamelCaseModel, to_camel
 
 
 class JobStatus(str, Enum):
@@ -32,7 +34,7 @@ class JobType(str, Enum):
     CONVERT = "convert"
 
 
-class JobError(BaseModel):
+class JobError(CamelCaseModel):
     """Error details for a failed job."""
 
     code: str = Field(description="Error code")
@@ -40,7 +42,7 @@ class JobError(BaseModel):
     details: Optional[dict[str, Any]] = Field(default=None, description="Additional details")
 
 
-class JobObject(BaseModel):
+class JobObject(CamelCaseModel):
     """
     Async job representation.
 
@@ -72,21 +74,22 @@ class JobObject(BaseModel):
         """Check if job is currently running."""
         return self.status == JobStatus.PROCESSING
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        json_schema_extra={
             "example": {
-                "job_id": "550e8400-e29b-41d4-a716-446655440030",
+                "jobId": "550e8400-e29b-41d4-a716-446655440030",
                 "type": "ocr",
                 "status": "processing",
                 "progress": 45.5,
-                "created_at": "2024-01-15T10:30:00Z",
-                "started_at": "2024-01-15T10:30:05Z",
-                "completed_at": None,
+                "createdAt": "2024-01-15T10:30:00Z",
+                "startedAt": "2024-01-15T10:30:05Z",
+                "completedAt": None,
                 "result": None,
                 "error": None,
-                "document_id": "550e8400-e29b-41d4-a716-446655440000",
-                "websocket_channel": "jobs:550e8400-e29b-41d4-a716-446655440030",
+                "documentId": "550e8400-e29b-41d4-a716-446655440000",
+                "websocketChannel": "jobs:550e8400-e29b-41d4-a716-446655440030",
             }
-        }
+        },
+    )

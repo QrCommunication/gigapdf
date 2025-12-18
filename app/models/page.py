@@ -7,12 +7,13 @@ with coordinates in web-standard format.
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, Field
 
+from app.models.base import CamelCaseModel, to_camel
 from app.models.elements import Element
 
 
-class Dimensions(BaseModel):
+class Dimensions(CamelCaseModel):
     """Page dimensions in PDF points."""
 
     width: float = Field(gt=0, description="Page width in points")
@@ -28,7 +29,7 @@ class Dimensions(BaseModel):
             raise ValueError("Rotation must be 0, 90, 180, or 270 degrees")
 
 
-class MediaBox(BaseModel):
+class MediaBox(CamelCaseModel):
     """
     PDF media box defining the page boundaries.
 
@@ -42,14 +43,14 @@ class MediaBox(BaseModel):
     height: float = Field(gt=0, description="Box height in points")
 
 
-class PagePreview(BaseModel):
+class PagePreview(CamelCaseModel):
     """Preview URLs for page rendering."""
 
     thumbnail_url: str = Field(description="URL for low-resolution thumbnail")
     full_url: str = Field(description="URL for full-resolution preview")
 
 
-class PageObject(BaseModel):
+class PageObject(CamelCaseModel):
     """
     Complete representation of a PDF page.
 
@@ -65,25 +66,26 @@ class PageObject(BaseModel):
     elements: list[Element] = Field(default_factory=list, description="Page elements")
     preview: Optional[PagePreview] = Field(default=None, description="Preview URLs")
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        json_schema_extra={
             "example": {
-                "page_id": "550e8400-e29b-41d4-a716-446655440001",
-                "page_number": 1,
+                "pageId": "550e8400-e29b-41d4-a716-446655440001",
+                "pageNumber": 1,
                 "dimensions": {"width": 612.0, "height": 792.0, "rotation": 0},
-                "media_box": {"x": 0, "y": 0, "width": 612.0, "height": 792.0},
+                "mediaBox": {"x": 0, "y": 0, "width": 612.0, "height": 792.0},
                 "elements": [],
                 "preview": {
-                    "thumbnail_url": "/api/v1/documents/abc123/pages/1/preview?dpi=72",
-                    "full_url": "/api/v1/documents/abc123/pages/1/preview?dpi=150",
+                    "thumbnailUrl": "/api/v1/documents/abc123/pages/1/preview?dpi=72",
+                    "fullUrl": "/api/v1/documents/abc123/pages/1/preview?dpi=150",
                 },
             }
-        }
+        },
+    )
 
 
-class PageSummary(BaseModel):
+class PageSummary(CamelCaseModel):
     """Lightweight page representation for listings."""
 
     page_id: str = Field(description="Unique page identifier")

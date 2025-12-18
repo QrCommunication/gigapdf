@@ -7,10 +7,12 @@ Models for saved documents, versions, and folders.
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from app.models.base import CamelCaseModel
 
 
-class StoredDocumentVersion(BaseModel):
+class StoredDocumentVersion(CamelCaseModel):
     """A version of a stored document."""
 
     version: int = Field(ge=1, description="Version number")
@@ -20,7 +22,7 @@ class StoredDocumentVersion(BaseModel):
     size_bytes: int = Field(ge=0, description="File size in bytes")
 
 
-class StoredDocument(BaseModel):
+class StoredDocument(CamelCaseModel):
     """
     A document saved to persistent storage.
 
@@ -40,7 +42,7 @@ class StoredDocument(BaseModel):
     is_deleted: bool = Field(default=False, description="Soft delete flag")
 
 
-class StorageFolder(BaseModel):
+class StorageFolder(CamelCaseModel):
     """A folder in the document storage hierarchy."""
 
     folder_id: str = Field(description="Unique folder ID (UUID v4)")
@@ -51,7 +53,7 @@ class StorageFolder(BaseModel):
     document_count: int = Field(default=0, ge=0, description="Number of documents in folder")
 
 
-class StorageQuota(BaseModel):
+class StorageQuota(CamelCaseModel):
     """User storage quota information."""
 
     user_id: str = Field(description="User ID")

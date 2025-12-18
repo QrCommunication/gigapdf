@@ -8,14 +8,15 @@ and other PDF-level structures.
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, Field
 
+from app.models.base import CamelCaseModel, to_camel
 from app.models.bookmarks import BookmarkObject
 from app.models.layers import LayerObject
 from app.models.page import PageObject, PageSummary
 
 
-class DocumentPermissions(BaseModel):
+class DocumentPermissions(CamelCaseModel):
     """PDF permission flags."""
 
     print: bool = Field(default=True, description="Allow printing")
@@ -28,7 +29,7 @@ class DocumentPermissions(BaseModel):
     print_high_quality: bool = Field(default=True, description="Allow high-quality print")
 
 
-class DocumentMetadata(BaseModel):
+class DocumentMetadata(CamelCaseModel):
     """PDF document metadata (XMP and info dict)."""
 
     title: Optional[str] = Field(default=None, description="Document title")
@@ -47,7 +48,7 @@ class DocumentMetadata(BaseModel):
     )
 
 
-class EmbeddedFileObject(BaseModel):
+class EmbeddedFileObject(CamelCaseModel):
     """Embedded file attachment in a PDF."""
 
     file_id: str = Field(description="Unique file identifier")
@@ -60,7 +61,7 @@ class EmbeddedFileObject(BaseModel):
     data_url: str = Field(description="URL to download the file")
 
 
-class NamedDestination(BaseModel):
+class NamedDestination(CamelCaseModel):
     """Named destination in a PDF."""
 
     name: str = Field(description="Destination name")
@@ -69,7 +70,7 @@ class NamedDestination(BaseModel):
     zoom: Optional[float] = Field(default=None, ge=0, description="Zoom level")
 
 
-class DocumentObject(BaseModel):
+class DocumentObject(CamelCaseModel):
     """
     Complete PDF document representation.
 
@@ -89,18 +90,18 @@ class DocumentObject(BaseModel):
     )
     layers: list[LayerObject] = Field(default_factory=list, description="Optional content layers")
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        json_schema_extra={
             "example": {
-                "document_id": "550e8400-e29b-41d4-a716-446655440000",
+                "documentId": "550e8400-e29b-41d4-a716-446655440000",
                 "metadata": {
                     "title": "Sample Document",
                     "author": "John Doe",
-                    "page_count": 10,
-                    "pdf_version": "1.7",
-                    "is_encrypted": False,
+                    "pageCount": 10,
+                    "pdfVersion": "1.7",
+                    "isEncrypted": False,
                     "permissions": {
                         "print": True,
                         "modify": True,
@@ -110,14 +111,15 @@ class DocumentObject(BaseModel):
                 },
                 "pages": [],
                 "outlines": [],
-                "named_destinations": {},
-                "embedded_files": [],
+                "namedDestinations": {},
+                "embeddedFiles": [],
                 "layers": [],
             }
-        }
+        },
+    )
 
 
-class DocumentSummary(BaseModel):
+class DocumentSummary(CamelCaseModel):
     """Lightweight document representation for listings."""
 
     document_id: str = Field(description="Unique document identifier")

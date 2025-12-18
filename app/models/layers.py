@@ -5,10 +5,12 @@ Layers allow organizing content that can be shown/hidden,
 commonly used for version control, language variants, etc.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, Field
+
+from app.models.base import CamelCaseModel, to_camel
 
 
-class LayerObject(BaseModel):
+class LayerObject(CamelCaseModel):
     """
     PDF layer (Optional Content Group).
 
@@ -24,12 +26,12 @@ class LayerObject(BaseModel):
     print: bool = Field(default=True, description="Include layer when printing")
     order: int = Field(default=0, description="Z-order (higher = front)")
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        json_schema_extra={
             "example": {
-                "layer_id": "550e8400-e29b-41d4-a716-446655440010",
+                "layerId": "550e8400-e29b-41d4-a716-446655440010",
                 "name": "Annotations",
                 "visible": True,
                 "locked": False,
@@ -37,4 +39,5 @@ class LayerObject(BaseModel):
                 "print": True,
                 "order": 1,
             }
-        }
+        },
+    )

@@ -9,7 +9,9 @@ annotations, and form fields. All coordinates use web-standard system
 from enum import Enum
 from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from app.models.base import CamelCaseModel
 
 
 class ElementType(str, Enum):
@@ -22,7 +24,7 @@ class ElementType(str, Enum):
     FORM_FIELD = "form_field"
 
 
-class Bounds(BaseModel):
+class Bounds(CamelCaseModel):
     """
     Bounding rectangle for an element.
 
@@ -36,7 +38,7 @@ class Bounds(BaseModel):
     height: float = Field(ge=0, description="Height in points")
 
 
-class Transform(BaseModel):
+class Transform(CamelCaseModel):
     """Transformation matrix for an element."""
 
     rotation: float = Field(default=0.0, description="Rotation angle in degrees")
@@ -46,7 +48,7 @@ class Transform(BaseModel):
     skew_y: float = Field(default=0.0, description="Vertical skew in degrees")
 
 
-class ElementBase(BaseModel):
+class ElementBase(CamelCaseModel):
     """Base class for all PDF elements."""
 
     element_id: str = Field(description="Unique identifier (UUID v4)")
@@ -63,7 +65,7 @@ class ElementBase(BaseModel):
 # =============================================================================
 
 
-class TextStyle(BaseModel):
+class TextStyle(CamelCaseModel):
     """Styling for text elements."""
 
     font_family: str = Field(default="Helvetica", description="Font family name")
@@ -94,7 +96,7 @@ class TextElement(ElementBase):
 # =============================================================================
 
 
-class ImageSource(BaseModel):
+class ImageSource(CamelCaseModel):
     """Source information for an image element."""
 
     type: Literal["embedded", "external"] = Field(default="embedded")
@@ -105,7 +107,7 @@ class ImageSource(BaseModel):
     )
 
 
-class ImageStyle(BaseModel):
+class ImageStyle(CamelCaseModel):
     """Styling for image elements."""
 
     opacity: float = Field(default=1.0, ge=0, le=1)
@@ -114,7 +116,7 @@ class ImageStyle(BaseModel):
     ] = Field(default="normal")
 
 
-class ImageCrop(BaseModel):
+class ImageCrop(CamelCaseModel):
     """Crop rectangle for an image (in percentage of original dimensions)."""
 
     x: float = Field(ge=0, le=100, description="X offset percentage")
@@ -147,14 +149,14 @@ class ShapeType(str, Enum):
     PATH = "path"
 
 
-class Point(BaseModel):
+class Point(CamelCaseModel):
     """A 2D point."""
 
     x: float
     y: float
 
 
-class ShapeGeometry(BaseModel):
+class ShapeGeometry(CamelCaseModel):
     """Geometry definition for shapes."""
 
     points: list[Point] = Field(default_factory=list, description="Points for polygon/path")
@@ -162,7 +164,7 @@ class ShapeGeometry(BaseModel):
     corner_radius: float = Field(default=0.0, ge=0, description="Corner radius for rectangles")
 
 
-class ShapeStyle(BaseModel):
+class ShapeStyle(CamelCaseModel):
     """Styling for shape elements."""
 
     fill_color: Optional[str] = Field(
@@ -206,7 +208,7 @@ class AnnotationType(str, Enum):
     LINK = "link"
 
 
-class LinkDestination(BaseModel):
+class LinkDestination(CamelCaseModel):
     """Destination for a link annotation."""
 
     type: Literal["internal", "external"] = Field(description="Link type")
@@ -215,14 +217,14 @@ class LinkDestination(BaseModel):
     position: Optional[Point] = Field(default=None, description="Position on target page")
 
 
-class AnnotationPopup(BaseModel):
+class AnnotationPopup(CamelCaseModel):
     """Popup configuration for annotations."""
 
     is_open: bool = Field(default=False, description="Whether popup is initially open")
     bounds: Bounds = Field(description="Popup bounds")
 
 
-class AnnotationStyle(BaseModel):
+class AnnotationStyle(CamelCaseModel):
     """Styling for annotations."""
 
     color: str = Field(default="#FFFF00", pattern=r"^#[0-9A-Fa-f]{6}$")
@@ -261,7 +263,7 @@ class FieldType(str, Enum):
     BUTTON = "button"
 
 
-class FieldFormat(BaseModel):
+class FieldFormat(CamelCaseModel):
     """Format settings for form fields."""
 
     type: Literal["none", "number", "date", "time", "percentage", "currency"] = Field(
@@ -270,7 +272,7 @@ class FieldFormat(BaseModel):
     pattern: Optional[str] = Field(default=None, description="Custom format pattern")
 
 
-class FieldProperties(BaseModel):
+class FieldProperties(CamelCaseModel):
     """Properties for form fields."""
 
     required: bool = Field(default=False)
@@ -282,7 +284,7 @@ class FieldProperties(BaseModel):
     format: FieldFormat = Field(default_factory=FieldFormat)
 
 
-class FieldStyle(BaseModel):
+class FieldStyle(CamelCaseModel):
     """Styling for form fields."""
 
     font_family: str = Field(default="Helvetica")

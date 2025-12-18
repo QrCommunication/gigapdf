@@ -7,10 +7,12 @@ for navigating within a PDF document.
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, Field
+
+from app.models.base import CamelCaseModel, to_camel
 
 
-class BookmarkDestination(BaseModel):
+class BookmarkDestination(CamelCaseModel):
     """Navigation destination for a bookmark."""
 
     page_number: int = Field(ge=1, description="Target page number (1-indexed)")
@@ -22,7 +24,7 @@ class BookmarkDestination(BaseModel):
     )
 
 
-class BookmarkStyle(BaseModel):
+class BookmarkStyle(CamelCaseModel):
     """Visual style for bookmark entry."""
 
     bold: bool = Field(default=False, description="Bold text")
@@ -30,7 +32,7 @@ class BookmarkStyle(BaseModel):
     color: str = Field(default="#000000", pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
-class BookmarkObject(BaseModel):
+class BookmarkObject(CamelCaseModel):
     """
     PDF bookmark (outline entry).
 
@@ -46,26 +48,27 @@ class BookmarkObject(BaseModel):
         default_factory=list, description="Child bookmarks"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        json_schema_extra={
             "example": {
-                "bookmark_id": "550e8400-e29b-41d4-a716-446655440020",
+                "bookmarkId": "550e8400-e29b-41d4-a716-446655440020",
                 "title": "Chapter 1: Introduction",
-                "destination": {"page_number": 1, "position": {"x": 0, "y": 792}, "zoom": "fit"},
+                "destination": {"pageNumber": 1, "position": {"x": 0, "y": 792}, "zoom": "fit"},
                 "style": {"bold": True, "italic": False, "color": "#000000"},
                 "children": [
                     {
-                        "bookmark_id": "550e8400-e29b-41d4-a716-446655440021",
+                        "bookmarkId": "550e8400-e29b-41d4-a716-446655440021",
                         "title": "1.1 Overview",
-                        "destination": {"page_number": 2, "position": None, "zoom": None},
+                        "destination": {"pageNumber": 2, "position": None, "zoom": None},
                         "style": {"bold": False, "italic": False, "color": "#000000"},
                         "children": [],
                     }
                 ],
             }
-        }
+        },
+    )
 
 
 # Enable forward references for recursive type
