@@ -787,9 +787,10 @@ export function EditorCanvas({
       },
       undo: () => {
         if (historyIndex <= 0 || !fabricRef.current) return;
-        setIsUpdatingHistory(true);
         const newIndex = historyIndex - 1;
         const json = historyStack[newIndex];
+        if (!json) return;
+        setIsUpdatingHistory(true);
         fabricRef.current.loadFromJSON(JSON.parse(json)).then(() => {
           fabricRef.current?.renderAll();
           setHistoryIndex(newIndex);
@@ -799,9 +800,10 @@ export function EditorCanvas({
       redo: () => {
         if (historyIndex >= historyStack.length - 1 || !fabricRef.current)
           return;
-        setIsUpdatingHistory(true);
         const newIndex = historyIndex + 1;
         const json = historyStack[newIndex];
+        if (!json) return;
+        setIsUpdatingHistory(true);
         fabricRef.current.loadFromJSON(JSON.parse(json)).then(() => {
           fabricRef.current?.renderAll();
           setHistoryIndex(newIndex);
