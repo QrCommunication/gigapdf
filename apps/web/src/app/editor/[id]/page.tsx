@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import type { Tool, Element } from "@giga-pdf/types";
+import type { Tool, Element, ShapeType, AnnotationType } from "@giga-pdf/types";
 import { Button } from "@giga-pdf/ui";
 import {
   ArrowLeft,
@@ -28,6 +28,7 @@ import {
   CollaborationOverlay,
   CollaboratorsList,
 } from "@/components/editor";
+import type { EditorCanvasHandle } from "@/components/editor/editor-canvas";
 
 export default function EditorPage() {
   const params = useParams();
@@ -42,6 +43,19 @@ export default function EditorPage() {
   const [zoom, setZoom] = useState(1);
   const [selectedElementIds, setSelectedElementIds] = useState<string[]>([]);
 
+  // Options d'outils
+  const [shapeType, setShapeType] = useState<ShapeType>("rectangle");
+  const [annotationType, setAnnotationType] =
+    useState<AnnotationType>("highlight");
+  const [strokeColor, setStrokeColor] = useState("#000000");
+  const [fillColor, setFillColor] = useState("transparent");
+  const [strokeWidth, setStrokeWidth] = useState(2);
+
+  // Canvas handle (via callback)
+  const [canvasHandle, setCanvasHandle] = useState<EditorCanvasHandle | null>(null);
+  // Ref pour l'input file
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Charger le document
   const {
     name,
@@ -54,6 +68,10 @@ export default function EditorPage() {
     goToPage,
     isDirty,
     setDirty,
+    addPage,
+    deletePage,
+    reorderPages,
+    duplicatePage,
   } = useDocument({ storedDocumentId });
 
   // Sauvegarde hybride (immédiate pour actions critiques, debounced pour modifications mineures)
@@ -107,11 +125,9 @@ export default function EditorPage() {
   // Ref pour le canvas (pour la position du curseur)
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Historique (placeholder pour l'instant)
-  const [undoStack] = useState<unknown[]>([]);
-  const [redoStack] = useState<unknown[]>([]);
-  const canUndo = undoStack.length > 0;
-  const canRedo = redoStack.length > 0;
+  // Undo/Redo state via canvas handle
+  const canUndo = canvasHandle?.canUndo() ?? false;
+  const canRedo = canvasHandle?.canRedo() ?? false;
 
   // Éléments sélectionnés
   const selectedElements = useMemo(() => {
@@ -123,14 +139,24 @@ export default function EditorPage() {
 
   // Handlers
   const handleUndo = useCallback(() => {
-    // TODO: Implémenter undo
-    console.log("Undo");
-  }, []);
+    canvasHandle?.undo();
+  }, [canvasHandle]);
 
   const handleRedo = useCallback(() => {
-    // TODO: Implémenter redo
-    console.log("Redo");
-  }, []);
+    canvasHandle?.redo();
+  }, [canvasHandle]);
+
+  const handleDelete = useCallback(() => {
+    canvasHandle?.deleteSelected();
+    setDirty(true);
+    saveWithPriority("immediate");
+  }, [canvasHandle, setDirty, saveWithPriority]);
+
+  const handleDuplicate = useCallback(() => {
+    canvasHandle?.duplicateSelected();
+    setDirty(true);
+    saveWithPriority("debounced");
+  }, [canvasHandle, setDirty, saveWithPriority]);
 
   const handleElementAdded = useCallback(
     (element: Element) => {
@@ -214,6 +240,164 @@ export default function EditorPage() {
     window.open(`/api/documents/${documentId}/download`, "_blank");
   }, [documentId]);
 
+  // Handler pour l'ajout d'image
+  const handleAddImage = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  // Handler pour le chargement de l'image
+  const handleImageFileChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      // Vérifier le type de fichier
+      if (!file.type.startsWith("image/")) {
+        alert(t("error.invalidImageType"));
+        return;
+      }
+
+      // Vérifier la taille (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        alert(t("error.imageTooLarge"));
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        const img = new Image();
+        img.onload = () => {
+          canvasHandle?.addImage(dataUrl, img.width, img.height);
+          setDirty(true);
+          saveWithPriority("immediate");
+        };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(file);
+
+      // Reset input pour permettre de sélectionner le même fichier
+      event.target.value = "";
+    },
+    [t, canvasHandle, setDirty, saveWithPriority]
+  );
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignorer si on est dans un input
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
+      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+      // Ctrl/Cmd + Z - Undo
+      if (cmdOrCtrl && !e.shiftKey && e.key === "z") {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      // Ctrl/Cmd + Shift + Z or Ctrl/Cmd + Y - Redo
+      if (
+        (cmdOrCtrl && e.shiftKey && e.key === "z") ||
+        (cmdOrCtrl && e.key === "y")
+      ) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
+      // Ctrl/Cmd + S - Save
+      if (cmdOrCtrl && e.key === "s") {
+        e.preventDefault();
+        save();
+        return;
+      }
+
+      // Ctrl/Cmd + D - Duplicate
+      if (cmdOrCtrl && e.key === "d") {
+        e.preventDefault();
+        handleDuplicate();
+        return;
+      }
+
+      // Delete or Backspace - Delete selected
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (selectedElementIds.length > 0) {
+          e.preventDefault();
+          handleDelete();
+        }
+        return;
+      }
+
+      // Escape - Deselect
+      if (e.key === "Escape") {
+        setSelectedElementIds([]);
+        setActiveTool("select");
+        return;
+      }
+
+      // Tool shortcuts
+      if (!cmdOrCtrl && !e.shiftKey && !e.altKey) {
+        switch (e.key.toLowerCase()) {
+          case "v":
+            setActiveTool("select");
+            break;
+          case "t":
+            setActiveTool("text");
+            break;
+          case "s":
+            setActiveTool("shape");
+            break;
+          case "a":
+            setActiveTool("annotation");
+            break;
+          case "h":
+            setActiveTool("hand");
+            break;
+          case "i":
+            setActiveTool("image");
+            handleAddImage();
+            break;
+          case "f":
+            setActiveTool("form_field");
+            break;
+        }
+      }
+
+      // Zoom shortcuts
+      if (cmdOrCtrl) {
+        if (e.key === "=" || e.key === "+") {
+          e.preventDefault();
+          setZoom((z) => Math.min(4, z + 0.25));
+        } else if (e.key === "-") {
+          e.preventDefault();
+          setZoom((z) => Math.max(0.25, z - 0.25));
+        } else if (e.key === "0") {
+          e.preventDefault();
+          setZoom(1);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    handleUndo,
+    handleRedo,
+    handleDelete,
+    handleDuplicate,
+    handleAddImage,
+    save,
+    selectedElementIds,
+  ]);
+
   // Rendu conditionnel pour chargement/erreur
   if (loading) {
     return (
@@ -261,6 +445,15 @@ export default function EditorPage() {
 
   return (
     <div className="flex h-screen flex-col bg-background">
+      {/* Hidden file input for image upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageFileChange}
+      />
+
       {/* Header */}
       <header className="flex items-center justify-between border-b px-4 py-2">
         <div className="flex items-center gap-3">
@@ -349,6 +542,19 @@ export default function EditorPage() {
         onRedo={handleRedo}
         hasSelection={selectedElementIds.length > 0}
         onFormatAction={handleFormatAction}
+        shapeType={shapeType}
+        onShapeTypeChange={setShapeType}
+        annotationType={annotationType}
+        onAnnotationTypeChange={setAnnotationType}
+        strokeColor={strokeColor}
+        onStrokeColorChange={setStrokeColor}
+        fillColor={fillColor}
+        onFillColorChange={setFillColor}
+        strokeWidth={strokeWidth}
+        onStrokeWidthChange={setStrokeWidth}
+        onDelete={handleDelete}
+        onDuplicate={handleDuplicate}
+        onAddImage={handleAddImage}
       />
 
       {/* Main content */}
@@ -358,6 +564,10 @@ export default function EditorPage() {
           pages={pages}
           currentPageIndex={currentPageIndex}
           onPageSelect={goToPage}
+          onPageAdd={addPage}
+          onPageDelete={deletePage}
+          onPageReorder={reorderPages}
+          onPageDuplicate={duplicatePage}
           previewBaseUrl={process.env.NEXT_PUBLIC_API_URL}
         />
 
@@ -371,11 +581,17 @@ export default function EditorPage() {
             page={currentPage}
             tool={activeTool}
             zoom={zoom}
+            shapeType={shapeType}
+            annotationType={annotationType}
+            strokeColor={strokeColor}
+            fillColor={fillColor}
+            strokeWidth={strokeWidth}
             onElementAdded={handleElementAdded}
             onElementModified={handleElementModified}
             onElementRemoved={handleElementRemoved}
             onSelectionChanged={handleSelectionChanged}
             onZoomChanged={setZoom}
+            onCanvasReady={setCanvasHandle}
           />
 
           {/* Overlay des curseurs des collaborateurs */}
@@ -397,11 +613,17 @@ export default function EditorPage() {
 
       {/* Status bar */}
       <footer className="flex items-center justify-between border-t px-4 py-1.5 text-xs text-muted-foreground">
-        <div>
-          {t("pageIndicator", {
-            current: currentPageIndex + 1,
-            total: pages.length,
-          })}
+        <div className="flex items-center gap-4">
+          <span>
+            {t("pageIndicator", {
+              current: currentPageIndex + 1,
+              total: pages.length,
+            })}
+          </span>
+          <span className="text-muted-foreground/60">
+            {t("shortcuts.hint")} (V: Select, T: Text, S: Shape, I: Image, F:
+            Form)
+          </span>
         </div>
         <div className="flex items-center gap-2">
           {saving && <Loader2 className="h-3 w-3 animate-spin" />}

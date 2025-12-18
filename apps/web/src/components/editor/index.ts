@@ -1,5 +1,5 @@
 export { EditorCanvas } from "./editor-canvas";
-export type { EditorCanvasProps } from "./editor-canvas";
+export type { EditorCanvasProps, EditorCanvasHandle } from "./editor-canvas";
 
 export { EditorToolbar } from "./editor-toolbar";
 export type { EditorToolbarProps } from "./editor-toolbar";

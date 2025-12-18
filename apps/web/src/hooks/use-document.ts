@@ -38,6 +38,21 @@ export interface UseDocumentReturn {
   isDirty: boolean;
   /** Marquer comme modifié */
   setDirty: (dirty: boolean) => void;
+  /** Ajouter une nouvelle page */
+  addPage: () => void;
+  /** Supprimer une page */
+  deletePage: (pageIndex: number) => void;
+  /** Réordonner les pages */
+  reorderPages: (fromIndex: number, toIndex: number) => void;
+  /** Dupliquer une page */
+  duplicatePage: (pageIndex: number) => void;
+  /** Mettre à jour le nom du document */
+  setName: (name: string) => void;
+}
+
+// Génère un ID unique pour les nouvelles pages
+function generatePageId(): string {
+  return `page_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
 /**
@@ -56,8 +71,12 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
 
   const [document, setDocument] = useState<DocumentObject | null>(null);
   const [name, setName] = useState<string>("");
-  const [documentId, setDocumentId] = useState<string | null>(sessionDocumentId || null);
-  const [storedId, setStoredId] = useState<string | null>(storedDocumentId || null);
+  const [documentId, setDocumentId] = useState<string | null>(
+    sessionDocumentId || null
+  );
+  const [storedId, setStoredId] = useState<string | null>(
+    storedDocumentId || null
+  );
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,8 +119,10 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
           creator: (docData.metadata?.creator as string) || null,
           producer: (docData.metadata?.producer as string) || null,
           creationDate: (docData.metadata?.creation_date as string) || null,
-          modificationDate: (docData.metadata?.modification_date as string) || null,
-          pageCount: (docData.metadata?.page_count as number) || docData.pages.length,
+          modificationDate:
+            (docData.metadata?.modification_date as string) || null,
+          pageCount:
+            (docData.metadata?.page_count as number) || docData.pages.length,
           pdfVersion: (docData.metadata?.pdf_version as string) || "1.4",
           isEncrypted: (docData.metadata?.is_encrypted as boolean) || false,
           permissions: {
@@ -126,7 +147,8 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       setName(doc.metadata.title || docName);
       setCurrentPageIndex(0);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Erreur de chargement";
+      const message =
+        err instanceof Error ? err.message : "Erreur de chargement";
       setError(message);
       console.error("Erreur chargement document:", err);
     } finally {
@@ -153,6 +175,160 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     [document]
   );
 
+  // Ajouter une nouvelle page
+  const addPage = useCallback(() => {
+    if (!document) return;
+
+    const newPage: PageObject = {
+      pageId: generatePageId(),
+      pageNumber: document.pages.length + 1,
+      dimensions: {
+        width: 612, // Letter size in points
+        height: 792,
+        rotation: 0,
+      },
+      elements: [],
+      preview: null,
+    };
+
+    const updatedPages = [...document.pages, newPage];
+
+    setDocument({
+      ...document,
+      pages: updatedPages,
+      metadata: {
+        ...document.metadata,
+        pageCount: updatedPages.length,
+      },
+    });
+
+    setDirty(true);
+    // Naviguer vers la nouvelle page
+    setCurrentPageIndex(updatedPages.length - 1);
+  }, [document]);
+
+  // Supprimer une page
+  const deletePage = useCallback(
+    (pageIndex: number) => {
+      if (!document || document.pages.length <= 1) return;
+      if (pageIndex < 0 || pageIndex >= document.pages.length) return;
+
+      const updatedPages = document.pages
+        .filter((_, index) => index !== pageIndex)
+        .map((page, index) => ({
+          ...page,
+          pageNumber: index + 1,
+        }));
+
+      setDocument({
+        ...document,
+        pages: updatedPages,
+        metadata: {
+          ...document.metadata,
+          pageCount: updatedPages.length,
+        },
+      });
+
+      setDirty(true);
+
+      // Ajuster l'index de la page actuelle si nécessaire
+      if (currentPageIndex >= updatedPages.length) {
+        setCurrentPageIndex(updatedPages.length - 1);
+      } else if (currentPageIndex > pageIndex) {
+        setCurrentPageIndex(currentPageIndex - 1);
+      }
+    },
+    [document, currentPageIndex]
+  );
+
+  // Réordonner les pages
+  const reorderPages = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      if (!document) return;
+      if (
+        fromIndex < 0 ||
+        fromIndex >= document.pages.length ||
+        toIndex < 0 ||
+        toIndex >= document.pages.length
+      ) {
+        return;
+      }
+
+      const updatedPages = [...document.pages];
+      const [movedPage] = updatedPages.splice(fromIndex, 1);
+      updatedPages.splice(toIndex, 0, movedPage);
+
+      // Mettre à jour les numéros de page
+      const renumberedPages = updatedPages.map((page, index) => ({
+        ...page,
+        pageNumber: index + 1,
+      }));
+
+      setDocument({
+        ...document,
+        pages: renumberedPages,
+      });
+
+      setDirty(true);
+
+      // Ajuster l'index de la page actuelle
+      if (currentPageIndex === fromIndex) {
+        setCurrentPageIndex(toIndex);
+      } else if (fromIndex < currentPageIndex && toIndex >= currentPageIndex) {
+        setCurrentPageIndex(currentPageIndex - 1);
+      } else if (fromIndex > currentPageIndex && toIndex <= currentPageIndex) {
+        setCurrentPageIndex(currentPageIndex + 1);
+      }
+    },
+    [document, currentPageIndex]
+  );
+
+  // Dupliquer une page
+  const duplicatePage = useCallback(
+    (pageIndex: number) => {
+      if (!document) return;
+      if (pageIndex < 0 || pageIndex >= document.pages.length) return;
+
+      const pageToDuplicate = document.pages[pageIndex];
+
+      // Créer une copie profonde de la page avec un nouvel ID
+      const duplicatedPage: PageObject = {
+        ...JSON.parse(JSON.stringify(pageToDuplicate)),
+        pageId: generatePageId(),
+        pageNumber: pageIndex + 2,
+        elements: pageToDuplicate.elements.map((element) => ({
+          ...element,
+          elementId: `el_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        })),
+      };
+
+      // Insérer la page dupliquée après l'originale
+      const updatedPages = [
+        ...document.pages.slice(0, pageIndex + 1),
+        duplicatedPage,
+        ...document.pages.slice(pageIndex + 1),
+      ].map((page, index) => ({
+        ...page,
+        pageNumber: index + 1,
+      }));
+
+      setDocument({
+        ...document,
+        pages: updatedPages,
+        metadata: {
+          ...document.metadata,
+          pageCount: updatedPages.length,
+        },
+      });
+
+      setDirty(true);
+
+      // Naviguer vers la page dupliquée
+      setCurrentPageIndex(pageIndex + 1);
+    },
+    [document]
+  );
+
   // Pages du document
   const pages = document?.pages || [];
   const currentPage = pages[currentPageIndex] || null;
@@ -171,5 +347,10 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     reload: loadDocument,
     isDirty,
     setDirty,
+    addPage,
+    deletePage,
+    reorderPages,
+    duplicatePage,
+    setName,
   };
 }

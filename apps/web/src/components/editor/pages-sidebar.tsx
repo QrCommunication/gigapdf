@@ -3,7 +3,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import type { PageObject } from "@giga-pdf/types";
-import { Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Trash2, ChevronUp, ChevronDown, Copy } from "lucide-react";
 
 export interface PagesSidebarProps {
   /** Liste des pages */
@@ -18,12 +18,14 @@ export interface PagesSidebarProps {
   onPageDelete?: (pageIndex: number) => void;
   /** Callback pour réordonner les pages */
   onPageReorder?: (fromIndex: number, toIndex: number) => void;
+  /** Callback pour dupliquer une page */
+  onPageDuplicate?: (pageIndex: number) => void;
   /** URL de base pour les previews */
   previewBaseUrl?: string;
 }
 
 /**
- * Sidebar affichant les miniatures des pages.
+ * Sidebar affichant les miniatures des pages avec actions.
  */
 export function PagesSidebar({
   pages,
@@ -32,6 +34,7 @@ export function PagesSidebar({
   onPageAdd,
   onPageDelete,
   onPageReorder,
+  onPageDuplicate,
   previewBaseUrl = "",
 }: PagesSidebarProps) {
   const t = useTranslations("editor.pages");
@@ -72,9 +75,10 @@ export function PagesSidebar({
             key={page.pageId}
             className={`
               page-thumbnail group relative cursor-pointer rounded-lg overflow-hidden border-2 transition-colors
-              ${index === currentPageIndex
-                ? "border-primary ring-2 ring-primary/20"
-                : "border-transparent hover:border-muted-foreground/30"
+              ${
+                index === currentPageIndex
+                  ? "border-primary ring-2 ring-primary/20"
+                  : "border-transparent hover:border-muted-foreground/30"
               }
             `}
             onClick={() => onPageSelect(index)}
@@ -101,7 +105,8 @@ export function PagesSidebar({
             </div>
 
             {/* Actions (visible on hover) */}
-            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1">
+              {/* Move up */}
               {onPageReorder && index > 0 && (
                 <button
                   type="button"
@@ -115,6 +120,7 @@ export function PagesSidebar({
                   <ChevronUp size={12} />
                 </button>
               )}
+              {/* Move down */}
               {onPageReorder && index < pages.length - 1 && (
                 <button
                   type="button"
@@ -128,6 +134,21 @@ export function PagesSidebar({
                   <ChevronDown size={12} />
                 </button>
               )}
+              {/* Duplicate */}
+              {onPageDuplicate && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPageDuplicate(index);
+                  }}
+                  title={t("duplicate")}
+                  className="p-1 bg-background/80 rounded hover:bg-primary hover:text-primary-foreground"
+                >
+                  <Copy size={12} />
+                </button>
+              )}
+              {/* Delete */}
               {onPageDelete && pages.length > 1 && (
                 <button
                   type="button"
