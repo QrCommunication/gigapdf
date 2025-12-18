@@ -311,6 +311,9 @@ async def create_element(
     """Create a new element on a page."""
     start_time = time.time()
 
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     element_data = request.model_dump(exclude_none=True)
 
     element = element_service.create_element(
@@ -367,6 +370,9 @@ async def update_element(
     """Update an element."""
     start_time = time.time()
 
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     updates = request.model_dump(exclude_none=True)
 
     element = element_service.update_element(
@@ -408,6 +414,9 @@ async def delete_element(
     user: OptionalUser = None,
 ) -> None:
     """Delete an element."""
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     element_service.delete_element(
         document_id=document_id,
         element_id=element_id,
@@ -445,6 +454,9 @@ async def move_element(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Move element to another page."""
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     from app.models.elements import Bounds
 
     new_bounds = None
@@ -506,6 +518,9 @@ async def duplicate_element(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Duplicate an element."""
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     element = element_service.duplicate_element(
         document_id=document_id,
         element_id=element_id,
@@ -575,6 +590,9 @@ async def batch_operations(
 ) -> APIResponse[dict]:
     """Perform batch element operations."""
     start_time = time.time()
+
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
 
     results = element_service.batch_operations(
         document_id=document_id,

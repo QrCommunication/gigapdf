@@ -10,6 +10,7 @@ from typing import Any, Literal, Optional
 from fastapi import APIRouter, File, Form, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
 
+from app.dependencies import preload_document_session
 from app.middleware.auth import AuthenticatedUser, OptionalUser
 from app.middleware.request_id import get_request_id
 from app.schemas.requests.documents import DownloadDocumentParams, UnlockDocumentRequest
@@ -216,6 +217,9 @@ async def get_document(
     """Get document structure."""
     start_time = time.time()
 
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     document = document_service.get_document(
         document_id=document_id,
         include_elements=include_elements,
@@ -281,6 +285,9 @@ async def download_document(
     user: OptionalUser = None,
 ) -> Response:
     """Download the modified PDF."""
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     pdf_bytes, filename = document_service.download_document(
         document_id=document_id,
         flatten_forms=flatten_forms,
@@ -320,6 +327,9 @@ async def delete_document(
     user: OptionalUser = None,
 ) -> None:
     """Delete document and free memory."""
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     document_service.delete_document(document_id)
 
 
@@ -353,6 +363,9 @@ async def unlock_document(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Unlock an encrypted PDF."""
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     # This would need implementation in the document service
     # For now, return a placeholder
     return APIResponse(
