@@ -27,6 +27,14 @@ ENV_FILE="$APP_DIR/.env"
 cd "$APP_DIR"
 
 # =============================================================================
+# 0. Fix permissions for gigapdf user
+# =============================================================================
+log_info "Fixing permissions..."
+chown -R gigapdf:gigapdf /opt/gigapdf
+chown -R gigapdf:gigapdf /var/lib/gigapdf
+chown -R gigapdf:gigapdf /var/log/gigapdf
+
+# =============================================================================
 # 1. Copy Production Environment if not exists
 # =============================================================================
 if [ ! -f "$ENV_FILE" ]; then
@@ -34,6 +42,12 @@ if [ ! -f "$ENV_FILE" ]; then
     cp deploy/.env.production "$ENV_FILE"
     log_warn "Please edit /opt/gigapdf/.env with production values!"
 fi
+
+# =============================================================================
+# 1.5 Clean turbo cache to avoid build issues
+# =============================================================================
+log_info "Cleaning turbo cache..."
+rm -rf .turbo packages/*/.turbo apps/*/.turbo
 
 # =============================================================================
 # 2. Python Virtual Environment & Dependencies
