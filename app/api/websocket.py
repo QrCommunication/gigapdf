@@ -22,15 +22,49 @@ logger = logging.getLogger(__name__)
 
 # Create Socket.IO server
 settings = get_settings()
+
+# Configure Redis client manager with TLS support if needed
+def get_redis_manager():
+    """Create Redis manager with proper TLS configuration."""
+    redis_url = settings.socketio_message_queue
+
+    # Check if URL has ssl_ca_certs parameter (needs special handling)
+    if "ssl_ca_certs=" in redis_url:
+        import ssl
+        from urllib.parse import urlparse, parse_qs
+
+        # Parse URL and extract ssl_ca_certs
+        parsed = urlparse(redis_url)
+        query_params = parse_qs(parsed.query)
+        ca_certs = query_params.get("ssl_ca_certs", [None])[0]
+
+        # Rebuild URL without query params
+        clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+
+        # Create SSL context
+        ssl_context = ssl.create_default_context(cafile=ca_certs)
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_REQUIRED
+
+        return socketio.AsyncRedisManager(
+            clean_url,
+            redis_options={"ssl": ssl_context}
+        )
+    else:
+        return socketio.AsyncRedisManager(redis_url)
+
+try:
+    client_manager = get_redis_manager()
+except Exception as e:
+    logger.warning(f"Failed to create Redis manager: {e}. Using in-memory mode.")
+    client_manager = None
+
 sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins="*" if settings.is_development else [],
     logger=settings.app_debug,
     engineio_logger=settings.app_debug,
-    # Use Redis for message queue to support multiple workers
-    client_manager=socketio.AsyncRedisManager(
-        settings.socketio_message_queue
-    ),
+    client_manager=client_manager,
 )
 
 # Create ASGI app
