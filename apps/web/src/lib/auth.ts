@@ -18,29 +18,39 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: false, // Set to true in production
     sendResetPassword: async ({ user, url }) => {
-      // Get user locale preference (default to French)
-      const locale = "fr";
-      const { subject, html } = getPasswordResetEmailTemplate(url, locale);
+      try {
+        // Get user locale preference (default to French)
+        const locale = "fr";
+        const { subject, html } = getPasswordResetEmailTemplate(url, locale);
 
-      await sendEmail({
-        to: user.email,
-        subject,
-        html,
-      });
+        await sendEmail({
+          to: user.email,
+          subject,
+          html,
+        });
+      } catch (error) {
+        // Log but don't throw - email failure shouldn't block reset flow
+        console.error("Failed to send password reset email:", error);
+      }
     },
   },
   emailVerification: {
-    sendOnSignUp: false, // Temporarily disabled for debugging
+    sendOnSignUp: true,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
-      const locale = "fr";
-      const { subject, html } = getVerificationEmailTemplate(url, locale);
+      try {
+        const locale = "fr";
+        const { subject, html } = getVerificationEmailTemplate(url, locale);
 
-      await sendEmail({
-        to: user.email,
-        subject,
-        html,
-      });
+        await sendEmail({
+          to: user.email,
+          subject,
+          html,
+        });
+      } catch (error) {
+        // Log but don't throw - email failure shouldn't block signup
+        console.error("Failed to send verification email:", error);
+      }
     },
   },
   session: {
