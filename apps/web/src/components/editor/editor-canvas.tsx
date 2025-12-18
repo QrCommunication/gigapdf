@@ -123,40 +123,63 @@ export function EditorCanvas({
   const fabricObjectToElement = useCallback(
     (obj: FabricObjectWithData): Element | null => {
       const elementId = obj.data?.elementId || generateId();
+      const scaleX = obj.scaleX ?? 1;
+      const scaleY = obj.scaleY ?? 1;
 
+      // Base element properties matching ElementBase interface
       const baseElement = {
         elementId,
-        pageId: page?.pageId || "",
-        position: {
+        bounds: {
           x: obj.left || 0,
           y: obj.top || 0,
+          width: (obj.width || 100) * scaleX,
+          height: (obj.height || 100) * scaleY,
+        },
+        transform: {
           rotation: obj.angle || 0,
+          scaleX: 1, // Already applied to bounds
+          scaleY: 1,
+          skewX: obj.skewX || 0,
+          skewY: obj.skewY || 0,
         },
-        style: {
-          opacity: obj.opacity ?? 1,
-          fillColor: (obj.fill as string) || "",
-          strokeColor: (obj.stroke as string) || "",
-          strokeWidth: obj.strokeWidth || 0,
-        },
+        layerId: null,
         locked: !obj.selectable,
         visible: obj.visible ?? true,
-        zIndex: 0,
       };
 
       // Check object type using constructor name
       const typeName = obj.constructor.name;
 
       if (typeName === "IText" || typeName === "FabricText" || typeName === "Text") {
-        const textObj = obj as FabricObjectWithData & { text?: string; fontSize?: number; fontFamily?: string };
+        const textObj = obj as FabricObjectWithData & {
+          text?: string;
+          fontSize?: number;
+          fontFamily?: string;
+          fontWeight?: string;
+          fontStyle?: string;
+          fill?: string;
+          textAlign?: string;
+          lineHeight?: number;
+          charSpacing?: number;
+        };
         return {
           ...baseElement,
           type: "text" as const,
-          content: {
-            text: textObj.text || "",
-            fontSize: textObj.fontSize || 16,
+          content: textObj.text || "",
+          style: {
             fontFamily: textObj.fontFamily || "Arial",
+            fontSize: textObj.fontSize || 16,
+            fontWeight: textObj.fontWeight === "bold" ? "bold" : "normal",
+            fontStyle: textObj.fontStyle === "italic" ? "italic" : "normal",
+            color: (textObj.fill as string) || "#000000",
+            opacity: obj.opacity ?? 1,
+            textAlign: (textObj.textAlign as "left" | "center" | "right" | "justify") || "left",
+            lineHeight: textObj.lineHeight || 1.2,
+            letterSpacing: textObj.charSpacing || 0,
+            writingMode: "horizontal-tb" as const,
           },
-        } as Element;
+          ocrConfidence: null,
+        };
       }
 
       if (typeName === "FabricImage" || typeName === "Image") {
@@ -170,53 +193,53 @@ export function EditorCanvas({
         return {
           ...baseElement,
           type: "image" as const,
-          content: {
-            src: imgObj.getSrc?.() || "",
-            width: (imgObj.width || 0) * (imgObj.scaleX || 1),
-            height: (imgObj.height || 0) * (imgObj.scaleY || 1),
+          source: {
+            type: "embedded" as const,
+            dataUrl: imgObj.getSrc?.() || "",
+            originalFormat: "png",
+            originalDimensions: {
+              width: imgObj.width || 100,
+              height: imgObj.height || 100,
+            },
           },
-        } as Element;
+          style: {
+            opacity: obj.opacity ?? 1,
+            blendMode: "normal" as const,
+          },
+          crop: null,
+        };
       }
 
       if (["Rect", "Circle", "Triangle", "Ellipse", "Line"].includes(typeName)) {
-        let shapeTypeResult: ShapeType = "rectangle";
-        if (typeName === "Circle") shapeTypeResult = "circle";
-        if (typeName === "Triangle") shapeTypeResult = "triangle";
-        if (typeName === "Ellipse") shapeTypeResult = "ellipse";
+        type ShapeTypeValue = "rectangle" | "ellipse" | "line" | "polygon" | "path";
+        let shapeTypeResult: ShapeTypeValue = "rectangle";
+        if (typeName === "Circle" || typeName === "Ellipse") shapeTypeResult = "ellipse";
         if (typeName === "Line") shapeTypeResult = "line";
-
-        const shapeObj = obj as FabricObjectWithData & {
-          width?: number;
-          height?: number;
-          radius?: number;
-          rx?: number;
-          ry?: number;
-        };
+        if (typeName === "Triangle") shapeTypeResult = "polygon";
 
         return {
           ...baseElement,
           type: "shape" as const,
-          content: {
-            shapeType: shapeTypeResult,
-            width:
-              typeName === "Circle"
-                ? (shapeObj.radius || 50) * 2
-                : typeName === "Ellipse"
-                  ? (shapeObj.rx || 50) * 2
-                  : shapeObj.width || 100,
-            height:
-              typeName === "Circle"
-                ? (shapeObj.radius || 50) * 2
-                : typeName === "Ellipse"
-                  ? (shapeObj.ry || 25) * 2
-                  : shapeObj.height || 100,
+          shapeType: shapeTypeResult,
+          geometry: {
+            points: [],
+            pathData: null,
+            cornerRadius: 0,
           },
-        } as Element;
+          style: {
+            fillColor: (obj.fill as string) || null,
+            fillOpacity: obj.opacity ?? 1,
+            strokeColor: (obj.stroke as string) || null,
+            strokeWidth: obj.strokeWidth || 1,
+            strokeOpacity: 1,
+            strokeDashArray: [],
+          },
+        };
       }
 
       return null;
     },
-    [page?.pageId]
+    []
   );
 
   // Handlers d'événements
