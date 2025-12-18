@@ -1,0 +1,581 @@
+{
+  "common": {
+    "loading": "Chargement...",
+    "error": "Une erreur est survenue",
+    "retry": "Réessayer",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "saveChanges": "Enregistrer les modifications",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "create": "Créer",
+    "search": "Rechercher",
+    "close": "Fermer",
+    "back": "Retour",
+    "next": "Suivant",
+    "previous": "Précédent",
+    "yes": "Oui",
+    "no": "Non",
+    "all": "Tous",
+    "none": "Aucun",
+    "actions": "Actions",
+    "refresh": "Actualiser",
+    "export": "Exporter",
+    "import": "Importer",
+    "filter": "Filtrer",
+    "clear": "Effacer",
+    "submit": "Soumettre",
+    "confirm": "Confirmer",
+    "view": "Voir",
+    "download": "Télécharger",
+    "upload": "Téléverser",
+    "copy": "Copier",
+    "success": "Succès",
+    "failed": "Échoué",
+    "pending": "En attente",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "noResults": "Aucun résultat trouvé",
+    "noData": "Aucune donnée disponible",
+    "selectAll": "Tout sélectionner",
+    "deselectAll": "Tout désélectionner",
+    "of": "de",
+    "to": "à",
+    "from": "de",
+    "total": "Total",
+    "showing": "Affichage",
+    "entries": "entrées",
+    "perPage": "par page",
+    "page": "Page",
+    "pages": "pages",
+    "rows": "lignes",
+    "selected": "sélectionné(s)"
+  },
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "tenants": "Organisations",
+    "users": "Utilisateurs",
+    "documents": "Documents",
+    "jobs": "Tâches de fond",
+    "logs": "Journaux système",
+    "plans": "Forfaits",
+    "settings": "Paramètres",
+    "logout": "Déconnexion",
+    "notifications": "Notifications",
+    "superAdmin": "Super Admin"
+  },
+  "auth": {
+    "login": {
+      "title": "Super Admin",
+      "subtitle": "Connectez-vous avec votre compte super admin",
+      "email": "Email",
+      "emailPlaceholder": "admin@exemple.com",
+      "password": "Mot de passe",
+      "passwordPlaceholder": "Entrez votre mot de passe",
+      "submit": "Se connecter",
+      "submitting": "Connexion en cours...",
+      "error": {
+        "invalidCredentials": "Identifiants invalides ou permissions insuffisantes",
+        "generic": "Une erreur est survenue lors de la connexion"
+      }
+    }
+  },
+  "dashboard": {
+    "title": "Tableau de bord",
+    "subtitle": "Vue d'ensemble de votre plateforme",
+    "stats": {
+      "totalUsers": "Utilisateurs totaux",
+      "totalDocuments": "Documents totaux",
+      "storageUsed": "Stockage utilisé",
+      "activeJobs": "Tâches actives",
+      "totalTenants": "Organisations totales",
+      "monthlyRevenue": "Revenus mensuels",
+      "apiCalls": "Appels API (24h)",
+      "errorRate": "Taux d'erreur"
+    },
+    "systemStatus": {
+      "title": "État du système",
+      "allOperational": "Tous les systèmes opérationnels",
+      "issuesDetected": "Problèmes détectés",
+      "database": "Base de données",
+      "redis": "Cache Redis",
+      "storage": "Stockage",
+      "api": "Serveur API"
+    },
+    "recentActivity": {
+      "title": "Activité récente",
+      "noActivity": "Aucune activité récente",
+      "newUser": "Nouvel utilisateur inscrit",
+      "newDocument": "Nouveau document créé",
+      "newTenant": "Nouvelle organisation créée",
+      "jobCompleted": "Tâche de fond terminée",
+      "jobFailed": "Tâche de fond échouée"
+    },
+    "charts": {
+      "usage": {
+        "title": "Aperçu de l'utilisation",
+        "documents": "Documents",
+        "users": "Utilisateurs",
+        "apiCalls": "Appels API",
+        "noData": "Aucune donnée d'utilisation disponible"
+      },
+      "revenue": {
+        "title": "Aperçu des revenus",
+        "revenue": "Revenus",
+        "subscriptions": "Abonnements",
+        "noData": "Aucune donnée de revenus disponible"
+      }
+    }
+  },
+  "tenants": {
+    "title": "Organisations",
+    "subtitle": "Gérer toutes les organisations de la plateforme",
+    "create": "Créer une organisation",
+    "search": "Rechercher des organisations...",
+    "filters": {
+      "status": "Statut",
+      "allStatuses": "Tous les statuts",
+      "active": "Actif",
+      "trial": "Essai",
+      "suspended": "Suspendu",
+      "cancelled": "Annulé"
+    },
+    "table": {
+      "name": "Nom",
+      "slug": "Identifiant",
+      "plan": "Forfait",
+      "status": "Statut",
+      "users": "Utilisateurs",
+      "documents": "Documents",
+      "storage": "Stockage",
+      "createdAt": "Créé le",
+      "actions": "Actions"
+    },
+    "form": {
+      "name": "Nom de l'organisation",
+      "namePlaceholder": "Entrez le nom de l'organisation",
+      "slug": "Identifiant",
+      "slugPlaceholder": "identifiant-organisation",
+      "plan": "Forfait",
+      "selectPlan": "Sélectionnez un forfait",
+      "status": "Statut",
+      "selectStatus": "Sélectionnez un statut",
+      "maxUsers": "Utilisateurs max",
+      "maxStorage": "Stockage max (Go)",
+      "features": "Fonctionnalités"
+    },
+    "modal": {
+      "createTitle": "Créer une organisation",
+      "editTitle": "Modifier l'organisation",
+      "deleteTitle": "Supprimer l'organisation",
+      "deleteConfirm": "Êtes-vous sûr de vouloir supprimer cette organisation ? Cette action est irréversible.",
+      "viewDetails": "Voir les détails",
+      "editOrg": "Modifier l'organisation",
+      "suspendOrg": "Suspendre l'organisation",
+      "activateOrg": "Activer l'organisation",
+      "deleteOrg": "Supprimer l'organisation"
+    },
+    "details": {
+      "title": "Détails de l'organisation",
+      "overview": "Aperçu",
+      "users": "Utilisateurs",
+      "documents": "Documents",
+      "billing": "Facturation",
+      "settings": "Paramètres"
+    },
+    "status": {
+      "active": "Actif",
+      "trial": "Essai",
+      "suspended": "Suspendu",
+      "cancelled": "Annulé"
+    }
+  },
+  "users": {
+    "title": "Utilisateurs",
+    "subtitle": "Gérer tous les utilisateurs de la plateforme",
+    "create": "Créer un utilisateur",
+    "search": "Rechercher des utilisateurs...",
+    "filters": {
+      "role": "Rôle",
+      "allRoles": "Tous les rôles",
+      "admin": "Admin",
+      "user": "Utilisateur",
+      "superAdmin": "Super Admin",
+      "status": "Statut",
+      "allStatuses": "Tous les statuts",
+      "active": "Actif",
+      "inactive": "Inactif",
+      "suspended": "Suspendu"
+    },
+    "table": {
+      "name": "Nom",
+      "email": "Email",
+      "role": "Rôle",
+      "tenant": "Organisation",
+      "status": "Statut",
+      "lastLogin": "Dernière connexion",
+      "createdAt": "Créé le",
+      "actions": "Actions"
+    },
+    "form": {
+      "name": "Nom complet",
+      "namePlaceholder": "Entrez le nom complet",
+      "email": "Email",
+      "emailPlaceholder": "utilisateur@exemple.com",
+      "password": "Mot de passe",
+      "passwordPlaceholder": "Entrez le mot de passe",
+      "role": "Rôle",
+      "selectRole": "Sélectionnez un rôle",
+      "tenant": "Organisation",
+      "selectTenant": "Sélectionnez une organisation",
+      "status": "Statut"
+    },
+    "modal": {
+      "createTitle": "Créer un utilisateur",
+      "editTitle": "Modifier l'utilisateur",
+      "deleteTitle": "Supprimer l'utilisateur",
+      "deleteConfirm": "Êtes-vous sûr de vouloir supprimer cet utilisateur ? Cette action est irréversible.",
+      "viewProfile": "Voir le profil",
+      "editUser": "Modifier l'utilisateur",
+      "suspendUser": "Suspendre l'utilisateur",
+      "activateUser": "Activer l'utilisateur",
+      "resetPassword": "Réinitialiser le mot de passe",
+      "deleteUser": "Supprimer l'utilisateur"
+    },
+    "status": {
+      "active": "Actif",
+      "inactive": "Inactif",
+      "suspended": "Suspendu",
+      "pending": "En attente de vérification"
+    },
+    "role": {
+      "superAdmin": "Super Admin",
+      "admin": "Admin",
+      "user": "Utilisateur"
+    }
+  },
+  "documents": {
+    "title": "Documents",
+    "subtitle": "Gérer tous les documents de la plateforme",
+    "search": "Rechercher des documents...",
+    "filters": {
+      "tenant": "Organisation",
+      "allTenants": "Toutes les organisations",
+      "type": "Type",
+      "allTypes": "Tous les types",
+      "status": "Statut",
+      "allStatuses": "Tous les statuts"
+    },
+    "table": {
+      "name": "Nom",
+      "tenant": "Organisation",
+      "owner": "Propriétaire",
+      "size": "Taille",
+      "pages": "Pages",
+      "status": "Statut",
+      "createdAt": "Créé le",
+      "modifiedAt": "Modifié le",
+      "actions": "Actions"
+    },
+    "modal": {
+      "viewTitle": "Détails du document",
+      "deleteTitle": "Supprimer le document",
+      "deleteConfirm": "Êtes-vous sûr de vouloir supprimer ce document ? Cette action est irréversible.",
+      "viewDocument": "Voir le document",
+      "downloadDocument": "Télécharger",
+      "deleteDocument": "Supprimer le document"
+    },
+    "status": {
+      "active": "Actif",
+      "processing": "En traitement",
+      "archived": "Archivé",
+      "deleted": "Supprimé"
+    }
+  },
+  "jobs": {
+    "title": "Tâches de fond",
+    "subtitle": "Surveiller et gérer les tâches de fond",
+    "refresh": "Actualiser",
+    "clearCompleted": "Effacer les terminées",
+    "filters": {
+      "status": "Statut",
+      "allStatuses": "Tous les statuts",
+      "pending": "En attente",
+      "running": "En cours",
+      "completed": "Terminé",
+      "failed": "Échoué",
+      "cancelled": "Annulé",
+      "type": "Type",
+      "allTypes": "Tous les types"
+    },
+    "table": {
+      "id": "ID de tâche",
+      "type": "Type",
+      "status": "Statut",
+      "progress": "Progression",
+      "tenant": "Organisation",
+      "createdAt": "Créé le",
+      "startedAt": "Démarré le",
+      "completedAt": "Terminé le",
+      "duration": "Durée",
+      "actions": "Actions"
+    },
+    "modal": {
+      "detailsTitle": "Détails de la tâche",
+      "retryTitle": "Réessayer la tâche",
+      "cancelTitle": "Annuler la tâche",
+      "viewDetails": "Voir les détails",
+      "retryJob": "Réessayer",
+      "cancelJob": "Annuler"
+    },
+    "status": {
+      "pending": "En attente",
+      "running": "En cours",
+      "completed": "Terminé",
+      "failed": "Échoué",
+      "cancelled": "Annulé"
+    },
+    "types": {
+      "pdfProcessing": "Traitement PDF",
+      "ocrExtraction": "Extraction OCR",
+      "documentConversion": "Conversion de document",
+      "batchExport": "Export par lot",
+      "cleanup": "Nettoyage"
+    }
+  },
+  "logs": {
+    "title": "Journaux système",
+    "subtitle": "Consulter et analyser les journaux système",
+    "export": "Exporter les journaux",
+    "clear": "Effacer les filtres",
+    "filters": {
+      "level": "Niveau",
+      "allLevels": "Tous les niveaux",
+      "debug": "Debug",
+      "info": "Info",
+      "warning": "Avertissement",
+      "error": "Erreur",
+      "critical": "Critique",
+      "source": "Source",
+      "allSources": "Toutes les sources",
+      "dateRange": "Période",
+      "from": "Du",
+      "to": "Au"
+    },
+    "table": {
+      "timestamp": "Horodatage",
+      "level": "Niveau",
+      "source": "Source",
+      "message": "Message",
+      "tenant": "Organisation",
+      "user": "Utilisateur",
+      "details": "Détails"
+    },
+    "level": {
+      "debug": "Debug",
+      "info": "Info",
+      "warning": "Avertissement",
+      "error": "Erreur",
+      "critical": "Critique"
+    },
+    "noLogs": "Aucun journal trouvé pour les filtres sélectionnés"
+  },
+  "plans": {
+    "title": "Forfaits d'abonnement",
+    "subtitle": "Gérer les forfaits et la tarification",
+    "create": "Créer un forfait",
+    "refresh": "Actualiser",
+    "table": {
+      "name": "Nom",
+      "price": "Prix",
+      "interval": "Période",
+      "users": "Utilisateurs max",
+      "storage": "Stockage max",
+      "documents": "Documents max",
+      "apiCalls": "Appels API",
+      "status": "Statut",
+      "subscribers": "Abonnés",
+      "actions": "Actions"
+    },
+    "card": {
+      "storage": "Stockage",
+      "apiCalls": "Appels API/mois",
+      "documents": "Documents",
+      "unlimited": "Illimité",
+      "trial": "{days} jours d'essai gratuit",
+      "edit": "Modifier",
+      "disable": "Désactiver",
+      "enable": "Activer",
+      "delete": "Supprimer",
+      "deleteConfirm": "Supprimer « {name} » ?",
+      "privatePlan": "Forfait privé",
+      "tenantPlan": "Forfait entreprise"
+    },
+    "form": {
+      "slug": "Identifiant unique",
+      "slugPlaceholder": "mon-forfait",
+      "name": "Nom d'affichage",
+      "namePlaceholder": "Mon Forfait",
+      "description": "Description",
+      "descriptionPlaceholder": "Une courte description de ce forfait...",
+      "price": "Prix",
+      "currency": "Devise",
+      "interval": "Période de facturation",
+      "monthly": "Mensuel",
+      "yearly": "Annuel",
+      "storageGb": "Stockage (Go)",
+      "storageHint": "Utilisez -1 pour illimité",
+      "apiCallsLimit": "Appels API/mois",
+      "documentLimit": "Limite de documents",
+      "maxMembers": "Membres max",
+      "maxMembersHint": "Pour les forfaits entreprise",
+      "displayOrder": "Ordre d'affichage",
+      "ctaText": "Texte du bouton",
+      "ctaPlaceholder": "Commencer",
+      "trialDays": "Jours d'essai",
+      "trialPlaceholder": "Pas d'essai",
+      "features": "Fonctionnalités",
+      "customBranding": "Marque personnalisée",
+      "prioritySupport": "Support prioritaire",
+      "slaGuarantee": "Garantie SLA",
+      "dedicatedAccount": "Gestionnaire de compte dédié",
+      "isActive": "Actif",
+      "isPopular": "Marquer comme populaire",
+      "isTenantPlan": "Forfait entreprise",
+      "linkedTenant": "Lier à une organisation (Optionnel)",
+      "linkedTenantPlaceholder": "Rechercher des organisations...",
+      "linkedTenantHint": "Si défini, ce forfait ne sera visible que par cette organisation",
+      "noTenantSelected": "Aucune organisation sélectionnée (forfait public)"
+    },
+    "modal": {
+      "createTitle": "Créer un nouveau forfait",
+      "editTitle": "Modifier le forfait",
+      "deleteTitle": "Supprimer le forfait",
+      "deleteConfirm": "Êtes-vous sûr de vouloir supprimer ce forfait ? Les abonnés existants devront être migrés.",
+      "editPlan": "Modifier le forfait",
+      "duplicatePlan": "Dupliquer le forfait",
+      "deletePlan": "Supprimer le forfait"
+    },
+    "status": {
+      "active": "Actif",
+      "inactive": "Inactif",
+      "deprecated": "Obsolète"
+    },
+    "interval": {
+      "monthly": "Mensuel",
+      "yearly": "Annuel",
+      "perMonth": "/mois",
+      "perYear": "/an"
+    },
+    "errors": {
+      "loadFailed": "Échec du chargement des forfaits",
+      "saveFailed": "Échec de l'enregistrement du forfait",
+      "deleteFailed": "Échec de la suppression du forfait",
+      "updateFailed": "Échec de la mise à jour du forfait"
+    }
+  },
+  "settings": {
+    "title": "Paramètres",
+    "subtitle": "Configurer les paramètres système",
+    "saved": "Paramètres enregistrés avec succès",
+    "sections": {
+      "general": {
+        "title": "Paramètres généraux",
+        "description": "Configuration de base de la plateforme",
+        "siteName": "Nom du site",
+        "siteNamePlaceholder": "Entrez le nom du site",
+        "siteUrl": "URL du site",
+        "siteUrlPlaceholder": "https://exemple.com",
+        "supportEmail": "Email de support",
+        "supportEmailPlaceholder": "support@exemple.com",
+        "defaultLanguage": "Langue par défaut",
+        "timezone": "Fuseau horaire",
+        "maintenanceMode": "Mode maintenance",
+        "maintenanceModeDescription": "Activer pour afficher la page de maintenance aux utilisateurs"
+      },
+      "security": {
+        "title": "Paramètres de sécurité",
+        "description": "Configuration de la sécurité et de l'authentification",
+        "sessionTimeout": "Expiration de session (minutes)",
+        "maxLoginAttempts": "Tentatives de connexion max",
+        "lockoutDuration": "Durée de verrouillage (minutes)",
+        "requireEmailVerification": "Vérification email obligatoire",
+        "require2FA": "Authentification à deux facteurs obligatoire",
+        "allowedDomains": "Domaines email autorisés",
+        "allowedDomainsPlaceholder": "Entrez les domaines (un par ligne, laisser vide pour tous)",
+        "ipWhitelist": "Liste blanche IP",
+        "ipWhitelistPlaceholder": "Entrez les adresses IP (une par ligne, laisser vide pour toutes)"
+      },
+      "email": {
+        "title": "Paramètres email",
+        "description": "Configuration SMTP et email",
+        "smtpHost": "Hôte SMTP",
+        "smtpPort": "Port SMTP",
+        "smtpUser": "Nom d'utilisateur SMTP",
+        "smtpPassword": "Mot de passe SMTP",
+        "smtpEncryption": "Chiffrement",
+        "fromEmail": "Email expéditeur",
+        "fromName": "Nom expéditeur",
+        "testEmail": "Envoyer un email de test"
+      },
+      "storage": {
+        "title": "Paramètres de stockage",
+        "description": "Configuration du stockage de fichiers",
+        "provider": "Fournisseur de stockage",
+        "local": "Local",
+        "s3": "Amazon S3",
+        "gcs": "Google Cloud Storage",
+        "maxFileSize": "Taille max des fichiers (Mo)",
+        "allowedFileTypes": "Types de fichiers autorisés",
+        "compressionEnabled": "Activer la compression",
+        "cdnUrl": "URL CDN (optionnel)"
+      },
+      "limits": {
+        "title": "Limites système",
+        "description": "Limites de ressources et quotas",
+        "maxUsersPerTenant": "Utilisateurs max par organisation",
+        "maxDocumentsPerUser": "Documents max par utilisateur",
+        "maxStoragePerTenant": "Stockage max par organisation (Go)",
+        "maxApiCallsPerMinute": "Appels API max par minute",
+        "maxUploadSize": "Taille max d'upload (Mo)",
+        "retentionDays": "Rétention des journaux (jours)"
+      },
+      "integrations": {
+        "title": "Intégrations",
+        "description": "Intégrations de services tiers",
+        "stripeEnabled": "Activer Stripe",
+        "stripePublicKey": "Clé publique Stripe",
+        "stripeSecretKey": "Clé secrète Stripe",
+        "webhookSecret": "Secret du webhook",
+        "googleEnabled": "Activer Google OAuth",
+        "googleClientId": "Client ID Google",
+        "googleClientSecret": "Client Secret Google",
+        "githubEnabled": "Activer GitHub OAuth",
+        "githubClientId": "Client ID GitHub",
+        "githubClientSecret": "Client Secret GitHub"
+      }
+    }
+  },
+  "errors": {
+    "notFound": {
+      "title": "Page non trouvée",
+      "description": "La page que vous recherchez n'existe pas.",
+      "backHome": "Retour au tableau de bord"
+    },
+    "unauthorized": {
+      "title": "Non autorisé",
+      "description": "Vous n'avez pas la permission d'accéder à cette page.",
+      "backLogin": "Retour à la connexion"
+    },
+    "serverError": {
+      "title": "Erreur serveur",
+      "description": "Une erreur inattendue est survenue. Veuillez réessayer plus tard."
+    },
+    "networkError": {
+      "title": "Erreur réseau",
+      "description": "Impossible de se connecter au serveur. Veuillez vérifier votre connexion."
+    }
+  }
+}

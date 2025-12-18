@@ -1,0 +1,581 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saveChanges": "Save Changes",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "yes": "Yes",
+    "no": "No",
+    "all": "All",
+    "none": "None",
+    "actions": "Actions",
+    "refresh": "Refresh",
+    "export": "Export",
+    "import": "Import",
+    "filter": "Filter",
+    "clear": "Clear",
+    "submit": "Submit",
+    "confirm": "Confirm",
+    "view": "View",
+    "download": "Download",
+    "upload": "Upload",
+    "copy": "Copy",
+    "success": "Success",
+    "failed": "Failed",
+    "pending": "Pending",
+    "active": "Active",
+    "inactive": "Inactive",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "noResults": "No results found",
+    "noData": "No data available",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
+    "of": "of",
+    "to": "to",
+    "from": "from",
+    "total": "Total",
+    "showing": "Showing",
+    "entries": "entries",
+    "perPage": "per page",
+    "page": "Page",
+    "pages": "pages",
+    "rows": "rows",
+    "selected": "selected"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "tenants": "Organizations",
+    "users": "Users",
+    "documents": "Documents",
+    "jobs": "Background Jobs",
+    "logs": "System Logs",
+    "plans": "Plans",
+    "settings": "Settings",
+    "logout": "Logout",
+    "notifications": "Notifications",
+    "superAdmin": "Super Admin"
+  },
+  "auth": {
+    "login": {
+      "title": "Super Admin",
+      "subtitle": "Sign in with your super admin account",
+      "email": "Email",
+      "emailPlaceholder": "admin@example.com",
+      "password": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "submit": "Sign In",
+      "submitting": "Signing in...",
+      "error": {
+        "invalidCredentials": "Invalid credentials or insufficient permissions",
+        "generic": "An error occurred during login"
+      }
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Overview of your platform",
+    "stats": {
+      "totalUsers": "Total Users",
+      "totalDocuments": "Total Documents",
+      "storageUsed": "Storage Used",
+      "activeJobs": "Active Jobs",
+      "totalTenants": "Total Organizations",
+      "monthlyRevenue": "Monthly Revenue",
+      "apiCalls": "API Calls (24h)",
+      "errorRate": "Error Rate"
+    },
+    "systemStatus": {
+      "title": "System Status",
+      "allOperational": "All Systems Operational",
+      "issuesDetected": "Some Issues Detected",
+      "database": "Database",
+      "redis": "Redis Cache",
+      "storage": "Storage",
+      "api": "API Server"
+    },
+    "recentActivity": {
+      "title": "Recent Activity",
+      "noActivity": "No recent activity",
+      "newUser": "New user registered",
+      "newDocument": "New document created",
+      "newTenant": "New organization created",
+      "jobCompleted": "Background job completed",
+      "jobFailed": "Background job failed"
+    },
+    "charts": {
+      "usage": {
+        "title": "Usage Overview",
+        "documents": "Documents",
+        "users": "Users",
+        "apiCalls": "API Calls",
+        "noData": "No usage data available"
+      },
+      "revenue": {
+        "title": "Revenue Overview",
+        "revenue": "Revenue",
+        "subscriptions": "Subscriptions",
+        "noData": "No revenue data available"
+      }
+    }
+  },
+  "tenants": {
+    "title": "Organizations",
+    "subtitle": "Manage all organizations on the platform",
+    "create": "Create Organization",
+    "search": "Search organizations...",
+    "filters": {
+      "status": "Status",
+      "allStatuses": "All statuses",
+      "active": "Active",
+      "trial": "Trial",
+      "suspended": "Suspended",
+      "cancelled": "Cancelled"
+    },
+    "table": {
+      "name": "Name",
+      "slug": "Slug",
+      "plan": "Plan",
+      "status": "Status",
+      "users": "Users",
+      "documents": "Documents",
+      "storage": "Storage",
+      "createdAt": "Created",
+      "actions": "Actions"
+    },
+    "form": {
+      "name": "Organization Name",
+      "namePlaceholder": "Enter organization name",
+      "slug": "Slug",
+      "slugPlaceholder": "organization-slug",
+      "plan": "Plan",
+      "selectPlan": "Select a plan",
+      "status": "Status",
+      "selectStatus": "Select status",
+      "maxUsers": "Max Users",
+      "maxStorage": "Max Storage (GB)",
+      "features": "Features"
+    },
+    "modal": {
+      "createTitle": "Create Organization",
+      "editTitle": "Edit Organization",
+      "deleteTitle": "Delete Organization",
+      "deleteConfirm": "Are you sure you want to delete this organization? This action cannot be undone.",
+      "viewDetails": "View Details",
+      "editOrg": "Edit Organization",
+      "suspendOrg": "Suspend Organization",
+      "activateOrg": "Activate Organization",
+      "deleteOrg": "Delete Organization"
+    },
+    "details": {
+      "title": "Organization Details",
+      "overview": "Overview",
+      "users": "Users",
+      "documents": "Documents",
+      "billing": "Billing",
+      "settings": "Settings"
+    },
+    "status": {
+      "active": "Active",
+      "trial": "Trial",
+      "suspended": "Suspended",
+      "cancelled": "Cancelled"
+    }
+  },
+  "users": {
+    "title": "Users",
+    "subtitle": "Manage all users on the platform",
+    "create": "Create User",
+    "search": "Search users...",
+    "filters": {
+      "role": "Role",
+      "allRoles": "All roles",
+      "admin": "Admin",
+      "user": "User",
+      "superAdmin": "Super Admin",
+      "status": "Status",
+      "allStatuses": "All statuses",
+      "active": "Active",
+      "inactive": "Inactive",
+      "suspended": "Suspended"
+    },
+    "table": {
+      "name": "Name",
+      "email": "Email",
+      "role": "Role",
+      "tenant": "Organization",
+      "status": "Status",
+      "lastLogin": "Last Login",
+      "createdAt": "Created",
+      "actions": "Actions"
+    },
+    "form": {
+      "name": "Full Name",
+      "namePlaceholder": "Enter full name",
+      "email": "Email",
+      "emailPlaceholder": "user@example.com",
+      "password": "Password",
+      "passwordPlaceholder": "Enter password",
+      "role": "Role",
+      "selectRole": "Select role",
+      "tenant": "Organization",
+      "selectTenant": "Select organization",
+      "status": "Status"
+    },
+    "modal": {
+      "createTitle": "Create User",
+      "editTitle": "Edit User",
+      "deleteTitle": "Delete User",
+      "deleteConfirm": "Are you sure you want to delete this user? This action cannot be undone.",
+      "viewProfile": "View Profile",
+      "editUser": "Edit User",
+      "suspendUser": "Suspend User",
+      "activateUser": "Activate User",
+      "resetPassword": "Reset Password",
+      "deleteUser": "Delete User"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "suspended": "Suspended",
+      "pending": "Pending Verification"
+    },
+    "role": {
+      "superAdmin": "Super Admin",
+      "admin": "Admin",
+      "user": "User"
+    }
+  },
+  "documents": {
+    "title": "Documents",
+    "subtitle": "Manage all documents on the platform",
+    "search": "Search documents...",
+    "filters": {
+      "tenant": "Organization",
+      "allTenants": "All organizations",
+      "type": "Type",
+      "allTypes": "All types",
+      "status": "Status",
+      "allStatuses": "All statuses"
+    },
+    "table": {
+      "name": "Name",
+      "tenant": "Organization",
+      "owner": "Owner",
+      "size": "Size",
+      "pages": "Pages",
+      "status": "Status",
+      "createdAt": "Created",
+      "modifiedAt": "Modified",
+      "actions": "Actions"
+    },
+    "modal": {
+      "viewTitle": "Document Details",
+      "deleteTitle": "Delete Document",
+      "deleteConfirm": "Are you sure you want to delete this document? This action cannot be undone.",
+      "viewDocument": "View Document",
+      "downloadDocument": "Download",
+      "deleteDocument": "Delete Document"
+    },
+    "status": {
+      "active": "Active",
+      "processing": "Processing",
+      "archived": "Archived",
+      "deleted": "Deleted"
+    }
+  },
+  "jobs": {
+    "title": "Background Jobs",
+    "subtitle": "Monitor and manage background jobs",
+    "refresh": "Refresh",
+    "clearCompleted": "Clear Completed",
+    "filters": {
+      "status": "Status",
+      "allStatuses": "All statuses",
+      "pending": "Pending",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "type": "Type",
+      "allTypes": "All types"
+    },
+    "table": {
+      "id": "Job ID",
+      "type": "Type",
+      "status": "Status",
+      "progress": "Progress",
+      "tenant": "Organization",
+      "createdAt": "Created",
+      "startedAt": "Started",
+      "completedAt": "Completed",
+      "duration": "Duration",
+      "actions": "Actions"
+    },
+    "modal": {
+      "detailsTitle": "Job Details",
+      "retryTitle": "Retry Job",
+      "cancelTitle": "Cancel Job",
+      "viewDetails": "View Details",
+      "retryJob": "Retry",
+      "cancelJob": "Cancel"
+    },
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "types": {
+      "pdfProcessing": "PDF Processing",
+      "ocrExtraction": "OCR Extraction",
+      "documentConversion": "Document Conversion",
+      "batchExport": "Batch Export",
+      "cleanup": "Cleanup"
+    }
+  },
+  "logs": {
+    "title": "System Logs",
+    "subtitle": "View and analyze system logs",
+    "export": "Export Logs",
+    "clear": "Clear Filters",
+    "filters": {
+      "level": "Level",
+      "allLevels": "All levels",
+      "debug": "Debug",
+      "info": "Info",
+      "warning": "Warning",
+      "error": "Error",
+      "critical": "Critical",
+      "source": "Source",
+      "allSources": "All sources",
+      "dateRange": "Date Range",
+      "from": "From",
+      "to": "To"
+    },
+    "table": {
+      "timestamp": "Timestamp",
+      "level": "Level",
+      "source": "Source",
+      "message": "Message",
+      "tenant": "Organization",
+      "user": "User",
+      "details": "Details"
+    },
+    "level": {
+      "debug": "Debug",
+      "info": "Info",
+      "warning": "Warning",
+      "error": "Error",
+      "critical": "Critical"
+    },
+    "noLogs": "No logs found for the selected filters"
+  },
+  "plans": {
+    "title": "Subscription Plans",
+    "subtitle": "Manage subscription plans and pricing",
+    "create": "Create Plan",
+    "refresh": "Refresh",
+    "table": {
+      "name": "Name",
+      "price": "Price",
+      "interval": "Interval",
+      "users": "Max Users",
+      "storage": "Max Storage",
+      "documents": "Max Documents",
+      "apiCalls": "API Calls",
+      "status": "Status",
+      "subscribers": "Subscribers",
+      "actions": "Actions"
+    },
+    "card": {
+      "storage": "Storage",
+      "apiCalls": "API Calls/month",
+      "documents": "Documents",
+      "unlimited": "Unlimited",
+      "trial": "{days}-day free trial",
+      "edit": "Edit",
+      "disable": "Disable",
+      "enable": "Enable",
+      "delete": "Delete",
+      "deleteConfirm": "Delete \"{name}\"?",
+      "privatePlan": "Private Plan",
+      "tenantPlan": "Tenant Plan"
+    },
+    "form": {
+      "slug": "Slug (unique identifier)",
+      "slugPlaceholder": "my-plan",
+      "name": "Display Name",
+      "namePlaceholder": "My Plan",
+      "description": "Description",
+      "descriptionPlaceholder": "A short description of this plan...",
+      "price": "Price",
+      "currency": "Currency",
+      "interval": "Billing Interval",
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "storageGb": "Storage (GB)",
+      "storageHint": "Use -1 for unlimited",
+      "apiCallsLimit": "API Calls/month",
+      "documentLimit": "Document Limit",
+      "maxMembers": "Max Members",
+      "maxMembersHint": "For tenant/enterprise plans",
+      "displayOrder": "Display Order",
+      "ctaText": "CTA Button Text",
+      "ctaPlaceholder": "Get Started",
+      "trialDays": "Trial Days",
+      "trialPlaceholder": "No trial",
+      "features": "Features",
+      "customBranding": "Custom Branding",
+      "prioritySupport": "Priority Support",
+      "slaGuarantee": "SLA Guarantee",
+      "dedicatedAccount": "Dedicated Account Manager",
+      "isActive": "Active",
+      "isPopular": "Mark as Popular",
+      "isTenantPlan": "Tenant/Enterprise Plan",
+      "linkedTenant": "Link to Organization (Optional)",
+      "linkedTenantPlaceholder": "Search organizations...",
+      "linkedTenantHint": "If set, this plan will only be visible to this organization",
+      "noTenantSelected": "No organization selected (public plan)"
+    },
+    "modal": {
+      "createTitle": "Create New Plan",
+      "editTitle": "Edit Plan",
+      "deleteTitle": "Delete Plan",
+      "deleteConfirm": "Are you sure you want to delete this plan? Existing subscribers will need to be migrated.",
+      "editPlan": "Edit Plan",
+      "duplicatePlan": "Duplicate Plan",
+      "deletePlan": "Delete Plan"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "deprecated": "Deprecated"
+    },
+    "interval": {
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "perMonth": "/month",
+      "perYear": "/year"
+    },
+    "errors": {
+      "loadFailed": "Failed to load plans",
+      "saveFailed": "Failed to save plan",
+      "deleteFailed": "Failed to delete plan",
+      "updateFailed": "Failed to update plan"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Configure system settings",
+    "saved": "Settings saved successfully",
+    "sections": {
+      "general": {
+        "title": "General Settings",
+        "description": "Basic platform configuration",
+        "siteName": "Site Name",
+        "siteNamePlaceholder": "Enter site name",
+        "siteUrl": "Site URL",
+        "siteUrlPlaceholder": "https://example.com",
+        "supportEmail": "Support Email",
+        "supportEmailPlaceholder": "support@example.com",
+        "defaultLanguage": "Default Language",
+        "timezone": "Timezone",
+        "maintenanceMode": "Maintenance Mode",
+        "maintenanceModeDescription": "Enable to show maintenance page to users"
+      },
+      "security": {
+        "title": "Security Settings",
+        "description": "Security and authentication configuration",
+        "sessionTimeout": "Session Timeout (minutes)",
+        "maxLoginAttempts": "Max Login Attempts",
+        "lockoutDuration": "Lockout Duration (minutes)",
+        "requireEmailVerification": "Require Email Verification",
+        "require2FA": "Require Two-Factor Authentication",
+        "allowedDomains": "Allowed Email Domains",
+        "allowedDomainsPlaceholder": "Enter domains (one per line, leave empty for all)",
+        "ipWhitelist": "IP Whitelist",
+        "ipWhitelistPlaceholder": "Enter IP addresses (one per line, leave empty for all)"
+      },
+      "email": {
+        "title": "Email Settings",
+        "description": "SMTP and email configuration",
+        "smtpHost": "SMTP Host",
+        "smtpPort": "SMTP Port",
+        "smtpUser": "SMTP Username",
+        "smtpPassword": "SMTP Password",
+        "smtpEncryption": "Encryption",
+        "fromEmail": "From Email",
+        "fromName": "From Name",
+        "testEmail": "Send Test Email"
+      },
+      "storage": {
+        "title": "Storage Settings",
+        "description": "File storage configuration",
+        "provider": "Storage Provider",
+        "local": "Local",
+        "s3": "Amazon S3",
+        "gcs": "Google Cloud Storage",
+        "maxFileSize": "Max File Size (MB)",
+        "allowedFileTypes": "Allowed File Types",
+        "compressionEnabled": "Enable Compression",
+        "cdnUrl": "CDN URL (optional)"
+      },
+      "limits": {
+        "title": "System Limits",
+        "description": "Resource limits and quotas",
+        "maxUsersPerTenant": "Max Users per Organization",
+        "maxDocumentsPerUser": "Max Documents per User",
+        "maxStoragePerTenant": "Max Storage per Organization (GB)",
+        "maxApiCallsPerMinute": "Max API Calls per Minute",
+        "maxUploadSize": "Max Upload Size (MB)",
+        "retentionDays": "Log Retention (days)"
+      },
+      "integrations": {
+        "title": "Integrations",
+        "description": "Third-party service integrations",
+        "stripeEnabled": "Enable Stripe",
+        "stripePublicKey": "Stripe Public Key",
+        "stripeSecretKey": "Stripe Secret Key",
+        "webhookSecret": "Webhook Secret",
+        "googleEnabled": "Enable Google OAuth",
+        "googleClientId": "Google Client ID",
+        "googleClientSecret": "Google Client Secret",
+        "githubEnabled": "Enable GitHub OAuth",
+        "githubClientId": "GitHub Client ID",
+        "githubClientSecret": "GitHub Client Secret"
+      }
+    }
+  },
+  "errors": {
+    "notFound": {
+      "title": "Page Not Found",
+      "description": "The page you are looking for does not exist.",
+      "backHome": "Back to Dashboard"
+    },
+    "unauthorized": {
+      "title": "Unauthorized",
+      "description": "You do not have permission to access this page.",
+      "backLogin": "Back to Login"
+    },
+    "serverError": {
+      "title": "Server Error",
+      "description": "An unexpected error occurred. Please try again later."
+    },
+    "networkError": {
+      "title": "Network Error",
+      "description": "Unable to connect to the server. Please check your connection."
+    }
+  }
+}

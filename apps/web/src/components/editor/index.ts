@@ -1,0 +1,22 @@
+export { EditorCanvas } from "./editor-canvas";
+export type { EditorCanvasProps } from "./editor-canvas";
+
+export { EditorToolbar } from "./editor-toolbar";
+export type { EditorToolbarProps } from "./editor-toolbar";
+
+export { PagesSidebar } from "./pages-sidebar";
+export type { PagesSidebarProps } from "./pages-sidebar";
+
+export { PropertiesPanel } from "./properties-panel";
+export type { PropertiesPanelProps } from "./properties-panel";
+
+export {
+  CollaborationOverlay,
+  CollaboratorsList,
+  CollaborationStatus,
+} from "./collaboration-overlay";
+export type {
+  CollaborationOverlayProps,
+  CollaboratorsListProps,
+  CollaborationStatusProps,
+} from "./collaboration-overlay";

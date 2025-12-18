@@ -1,0 +1,43 @@
+{
+  "name": "@giga-pdf/editor",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "lint": "eslint src --ext .ts,.tsx",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@giga-pdf/types": "workspace:*",
+    "immer": "^10.1.1",
+    "zustand": "^5.0.2"
+  },
+  "peerDependencies": {
+    "socket.io-client": "^4.7.0"
+  },
+  "peerDependenciesMeta": {
+    "socket.io-client": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@giga-pdf/eslint-config": "workspace:*",
+    "@giga-pdf/typescript-config": "workspace:*",
+    "@types/node": "^20.0.0",
+    "socket.io-client": "^4.7.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2"
+  }
+}

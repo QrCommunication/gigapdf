@@ -1,0 +1,741 @@
+{
+  "common": {
+    "loading": "Chargement...",
+    "error": "Une erreur s'est produite",
+    "retry": "Réessayer",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "create": "Créer",
+    "search": "Rechercher",
+    "close": "Fermer",
+    "back": "Retour",
+    "next": "Suivant",
+    "previous": "Précédent",
+    "yes": "Oui",
+    "no": "Non",
+    "or": "ou",
+    "and": "et"
+  },
+  "nav": {
+    "features": "Fonctionnalités",
+    "openSource": "Open Source",
+    "pricing": "Tarifs",
+    "github": "GitHub",
+    "signIn": "Connexion",
+    "signOut": "Déconnexion",
+    "getStarted": "Commencer",
+    "dashboard": "Tableau de bord",
+    "documents": "Documents",
+    "organization": "Entreprise",
+    "settings": "Paramètres",
+    "billing": "Facturation"
+  },
+  "landing": {
+    "badge": "Éditeur PDF Open Source",
+    "starOnGithub": "Star sur GitHub",
+    "hero": {
+      "title": "Édition PDF Professionnelle",
+      "titleHighlight": "Simplifiée",
+      "description": "Créez, modifiez et collaborez sur des documents PDF avec notre puissant éditeur WYSIWYG. Collaboration en temps réel, fonctionnalités avancées et sécurité de niveau entreprise. 100% open source."
+    },
+    "cta": {
+      "startFreeTrial": "Essai gratuit",
+      "viewOnGithub": "Voir sur GitHub",
+      "readDocs": "Documentation",
+      "contactSales": "Contacter les ventes"
+    },
+    "features": {
+      "title": "Tout ce dont vous avez besoin pour travailler avec des PDFs",
+      "description": "Des fonctionnalités puissantes pour les particuliers et les équipes, des modifications simples aux flux de travail complexes.",
+      "wysiwyg": {
+        "title": "Éditeur WYSIWYG",
+        "description": "Modifiez vos PDFs avec un éditeur visuel qui montre exactement le résultat final. Plus besoin de deviner l'apparence de votre document."
+      },
+      "collaboration": {
+        "title": "Collaboration en temps réel",
+        "description": "Travaillez avec votre équipe en temps réel. Voyez les modifications au fur et à mesure et collaborez sans effort."
+      },
+      "security": {
+        "title": "Sécurité Entreprise",
+        "description": "Vos documents sont chiffrés et sécurisés. Conforme SOC 2 avec des fonctionnalités de sécurité de niveau entreprise."
+      }
+    },
+    "openSource": {
+      "title": "Construit par la communauté, pour la communauté",
+      "description": "GigaPDF est 100% open source sous licence MIT. Inspectez le code, auto-hébergez, contribuez ou personnalisez selon vos besoins.",
+      "badge": "Open Source",
+      "mitLicense": {
+        "title": "Licence MIT",
+        "description": "Utilisez-le comme vous voulez, commercialement ou personnellement. Sans aucune restriction."
+      },
+      "selfHostable": {
+        "title": "Auto-hébergeable",
+        "description": "Exécutez GigaPDF sur votre propre infrastructure avec un contrôle total sur vos données."
+      },
+      "contribute": {
+        "title": "Contribuez",
+        "description": "Rejoignez notre communauté de contributeurs et aidez à améliorer GigaPDF."
+      },
+      "documentation": {
+        "title": "Documentation complète",
+        "description": "Documentation complète, référence API et guides pour démarrer rapidement."
+      },
+      "contributionGuide": "Guide de contribution",
+      "readTheDocs": "Lire la documentation"
+    },
+    "pricing": {
+      "title": "Tarification simple et transparente",
+      "description": "Commencez gratuitement, évoluez selon vos besoins. Pas de frais cachés, annulez à tout moment. L'auto-hébergement est toujours gratuit.",
+      "mostPopular": "Le plus populaire",
+      "perMonth": "/mois",
+      "free": "Gratuit",
+      "contactUs": "Nous contacter",
+      "selfHostNote": "Vous voulez auto-héberger ?",
+      "selfHostLink": "Déployez GigaPDF sur votre propre infrastructure",
+      "forFree": "gratuitement.",
+      "plans": {
+        "free": {
+          "name": "Gratuit",
+          "description": "Parfait pour découvrir GigaPDF",
+          "cta": "Commencer",
+          "features": {
+            "storage": "5 Go de stockage",
+            "apiCalls": "1 000 appels API/mois",
+            "documents": "100 documents",
+            "editing": "Édition PDF basique",
+            "support": "Support communautaire"
+          }
+        },
+        "starter": {
+          "name": "Starter",
+          "description": "Pour les particuliers et petites équipes",
+          "cta": "Essai gratuit",
+          "features": {
+            "storage": "25 Go de stockage",
+            "apiCalls": "10 000 appels API/mois",
+            "documents": "500 documents",
+            "editing": "Édition PDF avancée",
+            "support": "Support par email",
+            "trial": "Essai gratuit de 14 jours"
+          }
+        },
+        "pro": {
+          "name": "Pro",
+          "description": "Pour les entreprises en croissance",
+          "cta": "Essai gratuit",
+          "features": {
+            "storage": "100 Go de stockage",
+            "apiCalls": "100 000 appels API/mois",
+            "documents": "2 000 documents",
+            "branding": "Personnalisation de marque",
+            "support": "Support prioritaire",
+            "api": "Accès API",
+            "trial": "Essai gratuit de 14 jours"
+          }
+        },
+        "enterprise": {
+          "name": "Entreprise",
+          "description": "Pour les grandes organisations avec des besoins personnalisés",
+          "cta": "Contacter les ventes",
+          "features": {
+            "storage": "Stockage illimité",
+            "apiCalls": "Appels API illimités",
+            "documents": "Documents illimités",
+            "branding": "Personnalisation de marque",
+            "sla": "Garantie SLA",
+            "accountManager": "Gestionnaire de compte dédié",
+            "support": "Support prioritaire 24/7",
+            "integrations": "Intégrations personnalisées"
+          }
+        }
+      }
+    },
+    "finalCta": {
+      "title": "Prêt à commencer ?",
+      "description": "Rejoignez des milliers d'utilisateurs qui font confiance à GigaPDF pour leurs besoins d'édition PDF. Commencez gratuitement dès aujourd'hui."
+    },
+    "footer": {
+      "tagline": "Éditeur PDF open source pour les professionnels. Construit avec amour par la communauté.",
+      "madeWith": "Fait avec",
+      "byOpenSource": "par la communauté open source.",
+      "product": {
+        "title": "Produit",
+        "features": "Fonctionnalités",
+        "pricing": "Tarifs",
+        "documentation": "Documentation",
+        "changelog": "Changelog"
+      },
+      "openSource": {
+        "title": "Open Source",
+        "repository": "Dépôt GitHub",
+        "contributing": "Guide de contribution",
+        "license": "Licence MIT",
+        "selfHosting": "Guide d'auto-hébergement"
+      },
+      "company": {
+        "title": "Entreprise",
+        "about": "À propos",
+        "privacy": "Politique de confidentialité",
+        "terms": "Conditions d'utilisation",
+        "contact": "Contact"
+      }
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Bon retour",
+      "description": "Connectez-vous à votre compte pour continuer",
+      "email": "Email",
+      "emailPlaceholder": "nom@exemple.com",
+      "password": "Mot de passe",
+      "passwordPlaceholder": "Entrez votre mot de passe",
+      "rememberMe": "Se souvenir de moi",
+      "forgotPassword": "Mot de passe oublié ?",
+      "submit": "Se connecter",
+      "submitting": "Connexion...",
+      "noAccount": "Vous n'avez pas de compte ?",
+      "signUp": "S'inscrire",
+      "errors": {
+        "invalidCredentials": "Email ou mot de passe invalide",
+        "emailRequired": "L'email est requis",
+        "passwordRequired": "Le mot de passe est requis",
+        "generic": "Une erreur s'est produite lors de la connexion"
+      }
+    },
+    "register": {
+      "title": "Créer un compte",
+      "description": "Entrez vos informations pour commencer",
+      "name": "Nom complet",
+      "namePlaceholder": "Jean Dupont",
+      "email": "Email",
+      "emailPlaceholder": "nom@exemple.com",
+      "password": "Mot de passe",
+      "passwordPlaceholder": "Créez un mot de passe",
+      "confirmPassword": "Confirmer le mot de passe",
+      "confirmPasswordPlaceholder": "Confirmez votre mot de passe",
+      "termsAgreement": "J'accepte les",
+      "termsOfService": "Conditions d'utilisation",
+      "privacyPolicy": "Politique de confidentialité",
+      "submit": "Créer le compte",
+      "submitting": "Création du compte...",
+      "hasAccount": "Vous avez déjà un compte ?",
+      "signIn": "Se connecter",
+      "errors": {
+        "nameRequired": "Le nom est requis",
+        "emailRequired": "L'email est requis",
+        "emailInvalid": "Adresse email invalide",
+        "passwordRequired": "Le mot de passe est requis",
+        "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
+        "passwordMismatch": "Les mots de passe ne correspondent pas",
+        "termsRequired": "Vous devez accepter les conditions",
+        "emailExists": "Un compte avec cet email existe déjà",
+        "generic": "Une erreur s'est produite lors de l'inscription"
+      }
+    },
+    "forgotPassword": {
+      "title": "Réinitialiser votre mot de passe",
+      "description": "Entrez votre email et nous vous enverrons un lien de réinitialisation",
+      "email": "Email",
+      "emailPlaceholder": "nom@exemple.com",
+      "submit": "Envoyer le lien",
+      "submitting": "Envoi...",
+      "success": {
+        "title": "Vérifiez votre email",
+        "description": "Nous avons envoyé un lien de réinitialisation de mot de passe à votre adresse email."
+      },
+      "backToLogin": "Retour à la connexion",
+      "errors": {
+        "emailRequired": "L'email est requis",
+        "emailNotFound": "Aucun compte trouvé avec cet email",
+        "generic": "Une erreur s'est produite"
+      }
+    },
+    "resetPassword": {
+      "title": "Nouveau mot de passe",
+      "description": "Entrez votre nouveau mot de passe ci-dessous",
+      "password": "Nouveau mot de passe",
+      "passwordPlaceholder": "Entrez le nouveau mot de passe",
+      "confirmPassword": "Confirmer le mot de passe",
+      "confirmPasswordPlaceholder": "Confirmez le nouveau mot de passe",
+      "submit": "Réinitialiser",
+      "submitting": "Réinitialisation...",
+      "success": {
+        "title": "Mot de passe réinitialisé",
+        "description": "Votre mot de passe a été réinitialisé. Vous pouvez maintenant vous connecter."
+      },
+      "errors": {
+        "passwordRequired": "Le mot de passe est requis",
+        "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
+        "passwordMismatch": "Les mots de passe ne correspondent pas",
+        "invalidToken": "Lien de réinitialisation invalide ou expiré",
+        "generic": "Une erreur s'est produite"
+      }
+    }
+  },
+  "dashboard": {
+    "title": "Tableau de bord",
+    "welcome": "Bon retour",
+    "recentDocuments": "Documents récents",
+    "allDocuments": "Tous les documents",
+    "newDocument": "Nouveau document",
+    "uploadDocument": "Importer un document",
+    "noDocuments": {
+      "title": "Aucun document",
+      "description": "Créez ou importez votre premier document PDF pour commencer."
+    },
+    "stats": {
+      "totalDocuments": "Total documents",
+      "storageUsed": "Stockage utilisé",
+      "recentActivity": "Activité récente",
+      "apiCalls": "Appels API"
+    },
+    "quickActions": {
+      "title": "Actions rapides",
+      "createNew": "Créer",
+      "upload": "Importer",
+      "merge": "Fusionner PDFs",
+      "split": "Diviser PDF"
+    }
+  },
+  "documents": {
+    "title": "Documents",
+    "subtitle": "Gérez et organisez vos documents PDF",
+    "totalCount": "{count} document(s) au total",
+    "search": "Rechercher des documents...",
+    "newDocument": "Nouveau document",
+    "filters": {
+      "all": "Tous",
+      "recent": "Récents",
+      "shared": "Partagés avec moi",
+      "archived": "Archivés"
+    },
+    "sort": {
+      "newest": "Plus récents",
+      "oldest": "Plus anciens",
+      "name": "Nom",
+      "size": "Taille"
+    },
+    "card": {
+      "pages": "pages",
+      "lastModified": "Dernière modification",
+      "size": "Taille",
+      "created": "Créé le",
+      "modified": "Modifié le",
+      "open": "Ouvrir",
+      "menu": {
+        "open": "Ouvrir le menu",
+        "preview": "Prévisualiser",
+        "download": "Télécharger",
+        "rename": "Renommer",
+        "share": "Partager",
+        "export": "Exporter",
+        "exportWord": "Word (.docx)",
+        "exportExcel": "Excel (.xlsx)",
+        "exportImages": "Images (.png)",
+        "exportHtml": "HTML",
+        "exportText": "Texte (.txt)",
+        "delete": "Supprimer"
+      },
+      "deleteDialog": {
+        "title": "Supprimer le document",
+        "description": "Êtes-vous sûr de vouloir supprimer « {name} » ? Cette action est irréversible.",
+        "cancel": "Annuler",
+        "confirm": "Supprimer",
+        "deleting": "Suppression..."
+      },
+      "renameDialog": {
+        "title": "Renommer le document",
+        "description": "Entrez un nouveau nom pour ce document.",
+        "label": "Nom du document",
+        "placeholder": "Entrez le nom du document",
+        "cancel": "Annuler",
+        "confirm": "Renommer",
+        "renaming": "Renommage..."
+      },
+      "shareDialog": {
+        "title": "Partager le document",
+        "description": "Partagez ce document avec d'autres personnes en utilisant le lien ci-dessous.",
+        "linkLabel": "Lien de partage",
+        "close": "Fermer"
+      },
+      "exportDialog": {
+        "title": "Export en cours",
+        "description": "Veuillez patienter pendant l'export de votre document..."
+      },
+      "preview": {
+        "noPreview": "Aperçu non disponible",
+        "close": "Fermer"
+      },
+      "errors": {
+        "loadFailed": "Échec du chargement du document. Veuillez réessayer.",
+        "downloadFailed": "Échec du téléchargement. Veuillez réessayer.",
+        "deleteFailed": "Échec de la suppression. Veuillez réessayer.",
+        "previewFailed": "Échec du chargement de l'aperçu. Veuillez réessayer.",
+        "exportFailed": "Échec de l'export. Veuillez réessayer.",
+        "renameFailed": "Échec du renommage. Veuillez réessayer.",
+        "shareFailed": "Échec de la génération du lien de partage. Veuillez réessayer."
+      }
+    },
+    "upload": {
+      "title": "Importer un document",
+      "dragDrop": "Glissez-déposez votre PDF ici",
+      "or": "ou",
+      "browse": "Parcourir les fichiers",
+      "maxSize": "Taille maximale : {size} Mo",
+      "uploading": "Import en cours...",
+      "success": "Document importé avec succès",
+      "error": "Échec de l'import du document"
+    },
+    "delete": {
+      "title": "Supprimer le document",
+      "confirm": "Êtes-vous sûr de vouloir supprimer « {name} » ? Cette action est irréversible.",
+      "deleting": "Suppression...",
+      "success": "Document supprimé",
+      "error": "Échec de la suppression"
+    },
+    "noDocuments": {
+      "title": "Aucun document",
+      "description": "Importez votre premier PDF pour commencer",
+      "noResults": "Aucun document trouvé",
+      "noResultsDescription": "Aucun document ne correspond à « {search} »"
+    },
+    "pagination": {
+      "page": "Page {current} sur {total}"
+    },
+    "table": {
+      "name": "Nom",
+      "size": "Taille",
+      "created": "Date de création",
+      "modified": "Dernière modification",
+      "actions": "Actions"
+    },
+    "explorer": {
+      "root": "Mes documents",
+      "viewGrid": "Vue grille",
+      "viewList": "Vue liste",
+      "newFolder": "Nouveau dossier",
+      "emptyFolder": "Ce dossier est vide",
+      "emptyFolderDescription": "Créez un dossier ou importez un document",
+      "newFolderDialog": {
+        "title": "Nouveau dossier",
+        "description": "Créez un nouveau dossier pour organiser vos documents.",
+        "label": "Nom du dossier",
+        "placeholder": "Mon dossier",
+        "cancel": "Annuler",
+        "create": "Créer",
+        "creating": "Création..."
+      }
+    },
+    "errors": {
+      "loadFailed": "Échec du chargement des documents. Veuillez réessayer.",
+      "pdfOnly": "Veuillez sélectionner un fichier PDF",
+      "uploadFailed": "Échec de l'import du document"
+    }
+  },
+  "settings": {
+    "title": "Paramètres",
+    "profile": {
+      "title": "Profil",
+      "description": "Gérez vos informations de compte",
+      "name": "Nom",
+      "email": "Email",
+      "avatar": "Photo de profil",
+      "changeAvatar": "Changer la photo",
+      "save": "Enregistrer",
+      "saved": "Modifications enregistrées"
+    },
+    "security": {
+      "title": "Sécurité",
+      "description": "Gérez vos paramètres de sécurité",
+      "changePassword": "Changer le mot de passe",
+      "currentPassword": "Mot de passe actuel",
+      "newPassword": "Nouveau mot de passe",
+      "confirmPassword": "Confirmer le nouveau mot de passe",
+      "twoFactor": "Authentification à deux facteurs",
+      "twoFactorDescription": "Ajoutez une couche de sécurité supplémentaire à votre compte",
+      "enable2fa": "Activer 2FA",
+      "disable2fa": "Désactiver 2FA",
+      "sessions": "Sessions actives",
+      "revokeAll": "Déconnecter tous les appareils"
+    },
+    "preferences": {
+      "title": "Préférences",
+      "description": "Personnalisez votre expérience",
+      "language": "Langue",
+      "theme": "Thème",
+      "themeLight": "Clair",
+      "themeDark": "Sombre",
+      "themeSystem": "Système",
+      "notifications": "Notifications",
+      "emailNotifications": "Notifications par email",
+      "pushNotifications": "Notifications push"
+    },
+    "danger": {
+      "title": "Zone de danger",
+      "description": "Actions irréversibles",
+      "deleteAccount": "Supprimer le compte",
+      "deleteAccountDescription": "Supprimer définitivement votre compte et toutes vos données",
+      "deleteAccountConfirm": "Cette action est irréversible. Tous vos documents, paramètres et données seront définitivement supprimés.",
+      "exportData": "Exporter les données",
+      "exportDataDescription": "Télécharger toutes vos données"
+    }
+  },
+  "billing": {
+    "title": "Facturation et abonnement",
+    "subtitle": "Gérez votre abonnement et vos informations de facturation",
+    "currentPlan": "Forfait actuel",
+    "currentPlanDescription": "Vous êtes actuellement sur le forfait {plan}",
+    "planName": "Forfait {name}",
+    "renewsOn": "Renouvellement le {date}",
+    "usage": "Utilisation",
+    "storage": "Stockage",
+    "apiCalls": "Appels API",
+    "resetsOn": "réinitialisation le {date}",
+    "resetsMonthly": "mensuel",
+    "availablePlans": "Forfaits disponibles",
+    "noPlans": "Aucun forfait disponible pour le moment.",
+    "popular": "Populaire",
+    "free": "Gratuit",
+    "getStarted": "Commencer",
+    "paymentMethod": "Moyen de paiement",
+    "paymentMethodDescription": "Gérez vos informations de paiement",
+    "noPaymentMethod": "Aucun moyen de paiement enregistré",
+    "invoices": "Factures",
+    "billingHistory": "Historique de facturation",
+    "billingHistoryDescription": "Consultez vos factures passées",
+    "noBillingHistory": "Aucun historique de facturation disponible",
+    "upgrade": "Améliorer",
+    "upgradePlan": "Améliorer le forfait",
+    "downgrade": "Rétrograder",
+    "cancel": "Annuler l'abonnement",
+    "reactivate": "Réactiver l'abonnement",
+    "changePlan": "Changer de forfait",
+    "addPaymentMethod": "Ajouter un moyen de paiement",
+    "updatePaymentMethod": "Modifier le moyen de paiement",
+    "noInvoices": "Aucune facture",
+    "downloadInvoice": "Télécharger",
+    "managedByOrganization": "La facturation est gérée par votre entreprise",
+    "trialDaysRemaining": "{days} jours restants d'essai",
+    "cancelingAtPeriodEnd": "Annulation en fin de période",
+    "accessUntil": "Accès jusqu'au {date}",
+    "reactivateSubscription": "Réactiver l'abonnement",
+    "cancelSubscription": "Annuler l'abonnement",
+    "paymentManagedByOrganization": "Les moyens de paiement sont gérés par l'administrateur de votre entreprise",
+    "default": "Par défaut",
+    "expires": "Expire le",
+    "setDefault": "Définir par défaut",
+    "manageBillingPortal": "Gérer la facturation",
+    "confirmCancel": "Êtes-vous sûr de vouloir annuler votre abonnement ? Vous conserverez l'accès jusqu'à la fin de votre période de facturation.",
+    "confirmRemovePaymentMethod": "Êtes-vous sûr de vouloir supprimer ce moyen de paiement ?"
+  },
+  "editor": {
+    "title": "Éditeur PDF",
+    "loading": "Chargement du document...",
+    "untitled": "Sans titre",
+    "back": "Retour aux documents",
+    "share": "Partager",
+    "export": "Exporter",
+    "save": "Enregistrer",
+    "saving": "Enregistrement...",
+    "saved": "Toutes les modifications sont enregistrées",
+    "unsavedChanges": "Modifications non enregistrées",
+    "lastSaved": "Dernière sauvegarde : {time}",
+    "notSaved": "Non enregistré",
+    "pendingChanges": "modifications en attente",
+    "pageIndicator": "Page {current} sur {total}",
+    "collaborators": "{count, plural, =0 {Aucun collaborateur} one {1 collaborateur} other {{count} collaborateurs}}",
+    "error": {
+      "title": "Erreur de chargement",
+      "backToDocuments": "Retour aux documents"
+    },
+    "toolbar": {
+      "save": "Enregistrer",
+      "undo": "Annuler",
+      "redo": "Rétablir",
+      "zoomIn": "Zoom avant",
+      "zoomOut": "Zoom arrière",
+      "fitWidth": "Ajuster à la largeur",
+      "fitPage": "Ajuster à la page",
+      "rotate": "Pivoter",
+      "addPage": "Ajouter une page",
+      "deletePage": "Supprimer la page",
+      "export": "Exporter",
+      "select": "Sélection",
+      "text": "Texte",
+      "image": "Image",
+      "shape": "Forme",
+      "draw": "Dessin",
+      "annotation": "Annotation",
+      "pan": "Déplacer",
+      "bold": "Gras",
+      "italic": "Italique",
+      "underline": "Souligné",
+      "alignLeft": "Aligner à gauche",
+      "alignCenter": "Centrer",
+      "alignRight": "Aligner à droite"
+    },
+    "tools": {
+      "select": "Sélectionner",
+      "text": "Texte",
+      "image": "Image",
+      "draw": "Dessiner",
+      "highlight": "Surligner",
+      "signature": "Signature",
+      "stamp": "Tampon",
+      "comment": "Commentaire"
+    },
+    "pages": {
+      "title": "Pages",
+      "add": "Ajouter une page",
+      "delete": "Supprimer la page",
+      "moveUp": "Déplacer vers le haut",
+      "moveDown": "Déplacer vers le bas",
+      "pageNumber": "Page {number}",
+      "pageCount": "{count, plural, one {1 page} other {{count} pages}}"
+    },
+    "properties": {
+      "title": "Propriétés",
+      "noSelection": "Aucun élément sélectionné",
+      "multipleSelection": "{count} éléments sélectionnés",
+      "position": "Position",
+      "size": "Taille",
+      "width": "Largeur",
+      "height": "Hauteur",
+      "pageInfo": "Informations de la page",
+      "pageDimensions": "Dimensions",
+      "zoom": "Zoom",
+      "types": {
+        "text": "Texte",
+        "shape": "Forme",
+        "image": "Image",
+        "annotation": "Annotation",
+        "drawing": "Dessin"
+      },
+      "text": {
+        "fontFamily": "Police",
+        "fontSize": "Taille",
+        "color": "Couleur",
+        "opacity": "Opacité"
+      },
+      "shape": {
+        "type": "Type de forme",
+        "fill": "Remplissage",
+        "stroke": "Contour",
+        "strokeWidth": "Épaisseur du contour"
+      },
+      "image": {
+        "dimensions": "Dimensions",
+        "opacity": "Opacité"
+      }
+    },
+    "sidebar": {
+      "pages": "Pages",
+      "bookmarks": "Signets",
+      "annotations": "Annotations",
+      "layers": "Calques"
+    },
+    "exportDialog": {
+      "title": "Exporter le document",
+      "format": "Format",
+      "quality": "Qualité",
+      "pages": "Pages",
+      "allPages": "Toutes les pages",
+      "selectedPages": "Pages sélectionnées",
+      "export": "Exporter",
+      "exporting": "Export en cours..."
+    }
+  },
+  "errors": {
+    "notFound": {
+      "title": "Page introuvable",
+      "description": "La page que vous recherchez n'existe pas.",
+      "backHome": "Retour à l'accueil"
+    },
+    "unauthorized": {
+      "title": "Non autorisé",
+      "description": "Vous n'avez pas la permission d'accéder à cette page.",
+      "signIn": "Se connecter"
+    },
+    "serverError": {
+      "title": "Erreur serveur",
+      "description": "Une erreur s'est produite de notre côté. Veuillez réessayer plus tard."
+    }
+  },
+  "organization": {
+    "title": "Mon entreprise",
+    "description": "Gérez votre entreprise et invitez des membres",
+    "noDescription": "Aucune description",
+    "create": {
+      "title": "Créer une entreprise",
+      "description": "Créez votre entreprise pour partager des documents et des quotas avec votre équipe.",
+      "benefits": "Avantages d'avoir une entreprise :",
+      "benefit1": "Partagez des documents avec tous les membres",
+      "benefit2": "Quotas partagés (stockage, appels API)",
+      "benefit3": "Gérez les permissions par rôle",
+      "button": "Créer mon entreprise",
+      "modalTitle": "Créer une entreprise",
+      "modalDescription": "Remplissez les informations de votre entreprise"
+    },
+    "fields": {
+      "name": "Nom de l'entreprise",
+      "namePlaceholder": "Ma Société",
+      "email": "Email de contact",
+      "emailPlaceholder": "contact@masociete.com",
+      "description": "Description",
+      "descriptionPlaceholder": "Description de votre entreprise"
+    },
+    "stats": {
+      "members": "Membres",
+      "storage": "Stockage",
+      "documents": "Documents",
+      "apiCalls": "Appels API",
+      "total": "au total",
+      "unlimited": "Illimité",
+      "perMonth": "par mois"
+    },
+    "tabs": {
+      "members": "Membres",
+      "invitations": "Invitations"
+    },
+    "members": {
+      "title": "Membres de l'équipe",
+      "description": "Gérez les membres de votre entreprise",
+      "invite": "Inviter",
+      "email": "Email",
+      "role": "Rôle",
+      "joined": "Membre depuis",
+      "actions": "Actions"
+    },
+    "invitations": {
+      "title": "Invitations en attente",
+      "description": "Invitations envoyées qui n'ont pas encore été acceptées",
+      "empty": "Aucune invitation en attente",
+      "email": "Email",
+      "role": "Rôle",
+      "expires": "Expire le",
+      "actions": "Actions"
+    },
+    "invite": {
+      "title": "Inviter un membre",
+      "description": "Envoyez une invitation par email pour rejoindre votre entreprise",
+      "email": "Adresse email",
+      "emailPlaceholder": "membre@exemple.com",
+      "role": "Rôle",
+      "button": "Envoyer l'invitation"
+    },
+    "roles": {
+      "owner": "Propriétaire",
+      "admin": "Administrateur",
+      "manager": "Gestionnaire",
+      "member": "Membre",
+      "viewer": "Lecteur"
+    },
+    "errors": {
+      "requiredFields": "Veuillez remplir tous les champs obligatoires",
+      "createFailed": "Erreur lors de la création de l'entreprise",
+      "inviteFailed": "Erreur lors de l'envoi de l'invitation"
+    }
+  }
+}

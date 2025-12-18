@@ -1,0 +1,47 @@
+# FastAPI and web
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# PDF manipulation
+PyMuPDF>=1.23.0
+pypdf>=3.17.0
+reportlab>=4.0.0
+pdf2image>=1.16.0
+Pillow>=10.2.0
+
+# OCR
+pytesseract>=0.3.10
+
+# WebSocket
+python-socketio>=5.10.0
+
+# Task queue
+celery>=5.3.0
+redis>=5.0.0
+
+# Database
+psycopg2-binary>=2.9.9
+asyncpg>=0.29.0
+SQLAlchemy[asyncio]>=2.0.25
+alembic>=1.13.0
+
+# Authentication
+python-jose[cryptography]>=3.3.0
+httpx>=0.26.0
+
+# Export formats
+python-docx>=1.1.0
+openpyxl>=3.1.2
+
+# Utilities
+python-dateutil>=2.8.2
+aiofiles>=23.2.1
+
+# S3 Storage (Scaleway)
+boto3>=1.34.0
+
+# Payments
+stripe>=7.0.0

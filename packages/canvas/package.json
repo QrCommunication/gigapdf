@@ -1,0 +1,43 @@
+{
+  "name": "@giga-pdf/canvas",
+  "version": "0.1.0",
+  "description": "Fabric.js-based canvas for PDF rendering and editing",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "fabric": "^6.5.1",
+    "pdfjs-dist": "^4.8.69"
+  },
+  "devDependencies": {
+    "@giga-pdf/eslint-config": "workspace:*",
+    "@giga-pdf/types": "workspace:*",
+    "@giga-pdf/typescript-config": "workspace:*",
+    "@types/react": "^18.2.55",
+    "@types/react-dom": "^18.2.19",
+    "react": "^18.2.0",
+    "tsup": "^8.0.2",
+    "typescript": "^5.3.3"
+  },
+  "peerDependencies": {
+    "@giga-pdf/types": "workspace:*",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  }
+}

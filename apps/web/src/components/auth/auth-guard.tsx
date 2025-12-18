@@ -1,0 +1,57 @@
+"use client";
+
+import { useSession } from "@/lib/auth-client";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, ReactNode, useMemo } from "react";
+import { setAuthToken } from "@/lib/api";
+
+interface AuthGuardProps {
+  children: ReactNode;
+}
+
+export function AuthGuard({ children }: AuthGuardProps) {
+  const { data: session, isPending } = useSession();
+  const router = useRouter();
+  const [isTokenReady, setIsTokenReady] = useState(false);
+
+  // Compute the token value from session - this runs synchronously on each render
+  const tokenValue = useMemo(() => {
+    if (session?.session?.token) {
+      return session.session.token;
+    } else if (session?.user?.id) {
+      // If no JWT token, use user ID as fallback for dev mode
+      // In production, this should be a proper JWT
+      return session.user.id;
+    }
+    return null;
+  }, [session]);
+
+  // Set the token synchronously when session changes
+  useEffect(() => {
+    if (!isPending) {
+      if (tokenValue) {
+        setAuthToken(tokenValue);
+        setIsTokenReady(true);
+      } else if (!session) {
+        setAuthToken(null);
+        setIsTokenReady(false);
+        router.push("/login");
+      }
+    }
+  }, [isPending, session, tokenValue, router]);
+
+  // Show loading while pending or while waiting for token to be ready
+  if (isPending || (session && !isTokenReady)) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="h-32 w-32 animate-spin rounded-full border-b-2 border-t-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
+
+  return <>{children}</>;
+}
