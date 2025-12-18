@@ -109,7 +109,7 @@ export function EditorCanvas({
   // Sauvegarder l'état dans l'historique
   const saveHistory = useCallback(
     (canvas: FabricCanvas) => {
-      const json = JSON.stringify(canvas.toJSON(["data"]));
+      const json = JSON.stringify(canvas.toObject(["data"]));
       setHistoryStack((prev) => {
         const newStack = prev.slice(0, historyIndex + 1);
         return [...newStack, json];
