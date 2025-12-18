@@ -92,8 +92,12 @@ class S3Service:
                 'ContentType': content_type,
             }
 
-            # Enable server-side encryption (SSE-S3)
-            if server_side_encryption:
+            # Enable server-side encryption (SSE-S3) - disabled for Scaleway compatibility
+            # Scaleway doesn't support SSE-S3 the same way AWS does
+            # Application-level encryption (AES-256-GCM) is already applied
+            is_scaleway = self.endpoint_url and 'scw.cloud' in self.endpoint_url
+            if server_side_encryption and not is_scaleway:
+                # Only enable SSE for AWS S3, not Scaleway
                 extra_args['ServerSideEncryption'] = 'AES256'
 
             if metadata:

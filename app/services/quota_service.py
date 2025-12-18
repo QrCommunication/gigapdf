@@ -10,7 +10,7 @@ Handles:
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from dataclasses import dataclass
 
@@ -195,7 +195,7 @@ class QuotaService:
         quota = await self.get_or_create_quota(user_id)
 
         # Check if we need to reset monthly quota
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if now >= quota.api_calls_reset_at:
             await self._reset_api_quota(user_id)
             quota = await self.get_or_create_quota(user_id)
@@ -236,7 +236,7 @@ class QuotaService:
                 quota = result.scalar_one()
 
             # Check for monthly reset
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             if now >= quota.api_calls_reset_at:
                 quota.api_calls_used = count
                 quota.api_calls_reset_at = self._get_next_reset_date()
@@ -351,7 +351,7 @@ class QuotaService:
         quota = await self.get_or_create_quota(user_id)
 
         # Check for monthly reset
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if now >= quota.api_calls_reset_at:
             await self._reset_api_quota(user_id)
             quota = await self.get_or_create_quota(user_id)
@@ -409,7 +409,7 @@ class QuotaService:
 
     def _get_next_reset_date(self) -> datetime:
         """Get next monthly reset date (1st of next month)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if now.month == 12:
             return datetime(now.year + 1, 1, 1)
         return datetime(now.year, now.month + 1, 1)
@@ -610,7 +610,7 @@ class QuotaService:
                 raise ValueError(f"Tenant not found: {tenant_id}")
 
             # Check for monthly reset
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             if tenant.api_calls_reset_at and now >= tenant.api_calls_reset_at:
                 tenant.api_calls_used = count
                 tenant.api_calls_reset_at = self._get_next_reset_date()
