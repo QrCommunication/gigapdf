@@ -1,4 +1,10 @@
 {
+  "theme": {
+    "toggle": "Toggle theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
   "common": {
     "loading": "Loading...",
     "error": "An error occurred",

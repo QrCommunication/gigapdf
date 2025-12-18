@@ -4,6 +4,7 @@ import { Bell, LogOut, User } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Logo } from "@/components/logo";
 
 export function AdminHeader() {
@@ -21,6 +22,7 @@ export function AdminHeader() {
           </div>
 
           <div className="flex items-center gap-4">
+            <ThemeSwitcher />
             <LanguageSwitcher />
 
             <button className="relative rounded-full p-2 hover:bg-accent" title={t("notifications")}>

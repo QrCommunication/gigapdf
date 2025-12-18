@@ -164,6 +164,7 @@ export function VerifyEmailForm() {
             <Input
               id="email"
               type="email"
+              autoComplete="email"
               placeholder={t("emailPlaceholder")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}

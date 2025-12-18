@@ -1,4 +1,10 @@
 {
+  "theme": {
+    "toggle": "Changer le thème",
+    "light": "Clair",
+    "dark": "Sombre",
+    "system": "Système"
+  },
   "common": {
     "loading": "Chargement...",
     "error": "Une erreur est survenue",

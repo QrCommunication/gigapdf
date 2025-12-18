@@ -14,6 +14,26 @@ const publicRoutes = [
 // Define auth routes (redirect to dashboard if already authenticated)
 const authRoutes = ["/login", "/register", "/forgot-password"];
 
+// Helper function to get session token from multiple possible cookie names
+function getSessionToken(request: NextRequest) {
+  // Better Auth can use different cookie names depending on the environment
+  // In production with HTTPS, it might use __Secure- prefix
+  const possibleCookieNames = [
+    "better-auth.session_token",
+    "__Secure-better-auth.session_token",
+    "better-auth.session",
+    "__Secure-better-auth.session",
+  ];
+
+  for (const cookieName of possibleCookieNames) {
+    const cookie = request.cookies.get(cookieName);
+    if (cookie?.value) {
+      return cookie;
+    }
+  }
+  return null;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -21,8 +41,8 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = publicRoutes.some((route) => pathname === route);
   const isAuthRoute = authRoutes.some((route) => pathname === route);
 
-  // Get session token from cookies
-  const sessionToken = request.cookies.get("better-auth.session_token");
+  // Get session token from cookies (check multiple possible names)
+  const sessionToken = getSessionToken(request);
 
   // If user is not authenticated and trying to access protected route
   if (!sessionToken && !isPublicRoute) {
