@@ -1,14 +1,18 @@
 """
-Document Session Repository - In-memory document session management.
+Document Session Repository - Hybrid in-memory + Redis session management.
 
 Manages active document editing sessions with PyMuPDF documents
-and their parsed scene graph representations.
+and their parsed scene graph representations. Uses Redis for
+cross-worker persistence.
 """
 
+import asyncio
+import json
 import logging
 import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
 import fitz  # PyMuPDF
@@ -39,6 +43,7 @@ class DocumentSession:
     owner_id: Optional[str] = None
     original_filename: Optional[str] = None
     file_size_bytes: int = 0
+    _pdf_bytes: Optional[bytes] = field(default=None, repr=False)
 
     def touch(self) -> None:
         """Update last accessed timestamp."""
@@ -93,24 +98,100 @@ class DocumentSession:
 
 class DocumentSessionManager:
     """
-    Manages document editing sessions.
+    Manages document editing sessions with Redis persistence.
 
-    Thread-safe manager for active document sessions,
-    handling creation, retrieval, and cleanup.
+    Uses a local LRU cache for fast access and Redis for
+    cross-worker persistence.
     """
 
-    def __init__(self, max_sessions: int = 1000, session_timeout_minutes: int = 60):
+    # Redis key prefixes
+    PDF_PREFIX = "doc:pdf"
+    GRAPH_PREFIX = "doc:graph"
+    META_PREFIX = "doc:meta"
+
+    def __init__(
+        self,
+        max_sessions: int = 100,
+        session_timeout_minutes: int = 120,
+        use_redis: bool = True,
+    ):
         """
         Initialize session manager.
 
         Args:
-            max_sessions: Maximum concurrent sessions.
+            max_sessions: Maximum concurrent local sessions.
             session_timeout_minutes: Session timeout in minutes.
+            use_redis: Whether to use Redis persistence.
         """
-        self._sessions: dict[str, DocumentSession] = {}
+        self._sessions: OrderedDict[str, DocumentSession] = OrderedDict()
         self._lock = threading.RLock()
         self.max_sessions = max_sessions
         self.session_timeout_minutes = session_timeout_minutes
+        self.use_redis = use_redis
+        self._redis_available = False
+
+    async def _get_redis(self):
+        """Get Redis client if available."""
+        if not self.use_redis:
+            return None
+        try:
+            from app.core.cache import get_redis
+            redis_client = await get_redis()
+            await redis_client.ping()
+            self._redis_available = True
+            return redis_client
+        except Exception as e:
+            logger.warning(f"Redis not available: {e}")
+            self._redis_available = False
+            return None
+
+    def _pdf_key(self, document_id: str) -> str:
+        return f"{self.PDF_PREFIX}:{document_id}"
+
+    def _graph_key(self, document_id: str) -> str:
+        return f"{self.GRAPH_PREFIX}:{document_id}"
+
+    def _meta_key(self, document_id: str) -> str:
+        return f"{self.META_PREFIX}:{document_id}"
+
+    def _serialize_history(self, history: HistoryState) -> dict:
+        """Serialize history state to dict."""
+        return {
+            "current_index": history.current_index,
+            "max_history_size": history.max_history_size,
+            "history": [
+                {
+                    "index": e.index,
+                    "action": e.action,
+                    "timestamp": e.timestamp.isoformat(),
+                    "can_undo": e.can_undo,
+                    "can_redo": e.can_redo,
+                    "affected_elements": e.affected_elements,
+                    "affected_pages": e.affected_pages,
+                }
+                for e in history.history
+            ],
+        }
+
+    def _deserialize_history(self, data: dict) -> HistoryState:
+        """Deserialize history state from dict."""
+        history = HistoryState(
+            current_index=data.get("current_index", -1),
+            max_history_size=data.get("max_history_size", 100),
+        )
+        for e in data.get("history", []):
+            history.history.append(
+                HistoryEntry(
+                    index=e["index"],
+                    action=e["action"],
+                    timestamp=datetime.fromisoformat(e["timestamp"]),
+                    can_undo=e.get("can_undo", True),
+                    can_redo=e.get("can_redo", False),
+                    affected_elements=e.get("affected_elements", []),
+                    affected_pages=e.get("affected_pages", []),
+                )
+            )
+        return history
 
     def create_session(
         self,
@@ -120,6 +201,7 @@ class DocumentSessionManager:
         owner_id: Optional[str] = None,
         filename: Optional[str] = None,
         file_size: int = 0,
+        pdf_bytes: Optional[bytes] = None,
     ) -> DocumentSession:
         """
         Create a new document session.
@@ -131,6 +213,7 @@ class DocumentSessionManager:
             owner_id: Owner user ID.
             filename: Original filename.
             file_size: File size in bytes.
+            pdf_bytes: Optional PDF bytes for Redis storage.
 
         Returns:
             DocumentSession: Created session.
@@ -147,6 +230,7 @@ class DocumentSessionManager:
                 owner_id=owner_id,
                 original_filename=filename,
                 file_size_bytes=file_size,
+                _pdf_bytes=pdf_bytes,
             )
 
             # Add initial history entry
@@ -162,13 +246,89 @@ class DocumentSessionManager:
             session.history.current_index = 0
 
             self._sessions[document_id] = session
+            # Move to end (most recently used)
+            self._sessions.move_to_end(document_id)
+
             logger.info(f"Created session for document {document_id}")
+
+            # Store in Redis asynchronously
+            if self.use_redis and pdf_bytes:
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        asyncio.create_task(self._save_to_redis(document_id, session, pdf_bytes))
+                    else:
+                        asyncio.run(self._save_to_redis(document_id, session, pdf_bytes))
+                except Exception as e:
+                    logger.warning(f"Could not save to Redis: {e}")
 
             return session
 
+    async def _save_to_redis(
+        self,
+        document_id: str,
+        session: DocumentSession,
+        pdf_bytes: bytes,
+    ) -> bool:
+        """Save session data to Redis."""
+        redis_client = await self._get_redis()
+        if not redis_client:
+            return False
+
+        ttl = self.session_timeout_minutes * 60
+
+        try:
+            pipe = redis_client.pipeline()
+
+            # Store PDF bytes
+            pipe.setex(self._pdf_key(document_id), ttl, pdf_bytes)
+
+            # Store scene graph as JSON
+            graph_json = session.scene_graph.model_dump_json()
+            pipe.setex(self._graph_key(document_id), ttl, graph_json)
+
+            # Store metadata
+            meta = {
+                "owner_id": session.owner_id,
+                "filename": session.original_filename,
+                "file_size": session.file_size_bytes,
+                "created_at": session.created_at.isoformat(),
+                "last_accessed": session.last_accessed.isoformat(),
+                "locks": session.locks,
+                "history": self._serialize_history(session.history),
+            }
+            pipe.setex(self._meta_key(document_id), ttl, json.dumps(meta))
+
+            await pipe.execute()
+            logger.debug(f"Saved session {document_id} to Redis")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to save session to Redis: {e}")
+            return False
+
     def get_session(self, document_id: str) -> Optional[DocumentSession]:
         """
-        Get an existing session.
+        Get an existing session from local cache.
+
+        For Redis loading, use get_session_async().
+
+        Args:
+            document_id: Document identifier.
+
+        Returns:
+            Optional[DocumentSession]: Session if found locally.
+        """
+        with self._lock:
+            session = self._sessions.get(document_id)
+            if session:
+                session.touch()
+                self._sessions.move_to_end(document_id)
+            return session
+
+    async def get_session_async(self, document_id: str) -> Optional[DocumentSession]:
+        """
+        Get session, checking local cache first then Redis.
 
         Args:
             document_id: Document identifier.
@@ -176,15 +336,89 @@ class DocumentSessionManager:
         Returns:
             Optional[DocumentSession]: Session if found.
         """
-        with self._lock:
-            session = self._sessions.get(document_id)
-            if session:
-                session.touch()
+        # Check local cache first
+        session = self.get_session(document_id)
+        if session:
             return session
+
+        # Try loading from Redis
+        return await self._load_from_redis(document_id)
+
+    async def _load_from_redis(self, document_id: str) -> Optional[DocumentSession]:
+        """Load session from Redis and cache locally."""
+        redis_client = await self._get_redis()
+        if not redis_client:
+            return None
+
+        try:
+            # Get all data from Redis
+            pipe = redis_client.pipeline()
+            pipe.get(self._pdf_key(document_id))
+            pipe.get(self._graph_key(document_id))
+            pipe.get(self._meta_key(document_id))
+            results = await pipe.execute()
+
+            pdf_bytes, graph_json, meta_json = results
+
+            if not pdf_bytes or not graph_json:
+                logger.debug(f"Session {document_id} not found in Redis")
+                return None
+
+            # Rebuild session
+            pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            scene_graph = DocumentObject.model_validate_json(graph_json)
+            meta = json.loads(meta_json) if meta_json else {}
+
+            session = DocumentSession(
+                document_id=document_id,
+                pdf_doc=pdf_doc,
+                scene_graph=scene_graph,
+                owner_id=meta.get("owner_id"),
+                original_filename=meta.get("filename"),
+                file_size_bytes=meta.get("file_size", 0),
+                locks=meta.get("locks", {}),
+                _pdf_bytes=pdf_bytes,
+            )
+
+            # Restore history
+            if "history" in meta:
+                session.history = self._deserialize_history(meta["history"])
+
+            # Restore timestamps
+            if "created_at" in meta:
+                session.created_at = datetime.fromisoformat(meta["created_at"])
+            if "last_accessed" in meta:
+                session.last_accessed = datetime.fromisoformat(meta["last_accessed"])
+
+            session.touch()
+
+            # Add to local cache
+            with self._lock:
+                # Evict oldest if needed
+                while len(self._sessions) >= self.max_sessions:
+                    oldest_id, oldest_session = self._sessions.popitem(last=False)
+                    try:
+                        oldest_session.pdf_doc.close()
+                    except Exception:
+                        pass
+                    logger.debug(f"Evicted session {oldest_id} from local cache")
+
+                self._sessions[document_id] = session
+                self._sessions.move_to_end(document_id)
+
+            logger.info(f"Loaded session {document_id} from Redis")
+            return session
+
+        except Exception as e:
+            logger.error(f"Error loading session from Redis: {e}")
+            return None
 
     def get_session_required(self, document_id: str) -> DocumentSession:
         """
         Get session or raise error.
+
+        Note: Only checks local cache. Use preload_session() first
+        for Redis-backed sessions.
 
         Args:
             document_id: Document identifier.
@@ -199,6 +433,21 @@ class DocumentSessionManager:
         if not session:
             raise KeyError(f"Document session not found: {document_id}")
         return session
+
+    async def preload_session(self, document_id: str) -> bool:
+        """
+        Ensure session is loaded into local cache.
+
+        Call this before using sync methods if Redis is enabled.
+
+        Args:
+            document_id: Document identifier.
+
+        Returns:
+            bool: True if session is available.
+        """
+        session = await self.get_session_async(document_id)
+        return session is not None
 
     def delete_session(self, document_id: str) -> bool:
         """
@@ -218,12 +467,34 @@ class DocumentSessionManager:
                 except Exception as e:
                     logger.warning(f"Error closing document: {e}")
                 logger.info(f"Deleted session for document {document_id}")
-                return True
-            return False
+
+        # Also delete from Redis
+        if self.use_redis:
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(self._delete_from_redis(document_id))
+            except Exception:
+                pass
+
+        return session is not None
+
+    async def _delete_from_redis(self, document_id: str) -> None:
+        """Delete session from Redis."""
+        redis_client = await self._get_redis()
+        if redis_client:
+            try:
+                await redis_client.delete(
+                    self._pdf_key(document_id),
+                    self._graph_key(document_id),
+                    self._meta_key(document_id),
+                )
+            except Exception as e:
+                logger.warning(f"Failed to delete from Redis: {e}")
 
     def list_sessions(self, owner_id: Optional[str] = None) -> list[dict[str, Any]]:
         """
-        List active sessions.
+        List active sessions from local cache.
 
         Args:
             owner_id: Filter by owner (None for all).
@@ -292,6 +563,27 @@ class DocumentSessionManager:
                 history.history.pop(0)
                 history.current_index -= 1
 
+    async def save_session_to_redis(self, document_id: str) -> bool:
+        """
+        Save current session state to Redis.
+
+        Call after document modifications to persist changes.
+
+        Args:
+            document_id: Document identifier.
+
+        Returns:
+            bool: True if saved.
+        """
+        session = self.get_session(document_id)
+        if not session:
+            return False
+
+        # Get current PDF bytes
+        pdf_bytes = session.pdf_doc.tobytes()
+
+        return await self._save_to_redis(document_id, session, pdf_bytes)
+
     def clear_all(self) -> None:
         """Close all sessions and clear memory."""
         with self._lock:
@@ -300,11 +592,10 @@ class DocumentSessionManager:
             logger.info("Cleared all document sessions")
 
     def _cleanup_old_sessions(self) -> None:
-        """Remove sessions older than timeout."""
-        cutoff = now_utc()
-        from datetime import timedelta
-        cutoff = cutoff - timedelta(minutes=self.session_timeout_minutes)
+        """Remove sessions older than timeout or LRU eviction."""
+        cutoff = now_utc() - timedelta(minutes=self.session_timeout_minutes)
 
+        # First try to remove expired sessions
         old_sessions = [
             doc_id
             for doc_id, session in self._sessions.items()
@@ -312,10 +603,24 @@ class DocumentSessionManager:
         ]
 
         for doc_id in old_sessions:
-            self.delete_session(doc_id)
+            session = self._sessions.pop(doc_id, None)
+            if session:
+                try:
+                    session.pdf_doc.close()
+                except Exception:
+                    pass
 
         if old_sessions:
             logger.info(f"Cleaned up {len(old_sessions)} old sessions")
+
+        # If still at capacity, remove oldest (LRU)
+        while len(self._sessions) >= self.max_sessions:
+            oldest_id, oldest_session = self._sessions.popitem(last=False)
+            try:
+                oldest_session.pdf_doc.close()
+            except Exception:
+                pass
+            logger.debug(f"Evicted LRU session {oldest_id}")
 
 
 # Global session manager instance

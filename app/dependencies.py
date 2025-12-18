@@ -59,6 +59,8 @@ async def get_document_session(
     """
     Get document session or raise 404.
 
+    Loads from Redis if not in local cache.
+
     Args:
         document_id: Document identifier from path.
 
@@ -70,13 +72,29 @@ async def get_document_session(
     """
     from fastapi import HTTPException, status
 
-    session = document_sessions.get_session(document_id)
+    # Try async loading (checks local cache then Redis)
+    session = await document_sessions.get_session_async(document_id)
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Document not found: {document_id}",
         )
     return session
+
+
+async def preload_document_session(document_id: str) -> bool:
+    """
+    Preload document session from Redis to local cache.
+
+    Use this in endpoints before calling sync service methods.
+
+    Args:
+        document_id: Document identifier.
+
+    Returns:
+        bool: True if session is available.
+    """
+    return await document_sessions.preload_session(document_id)
 
 
 DocumentSessionDep = Annotated[DocumentSession, Depends(get_document_session)]

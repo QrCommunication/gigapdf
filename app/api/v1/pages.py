@@ -10,6 +10,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
+from app.dependencies import preload_document_session
 from app.middleware.auth import OptionalUser
 from app.middleware.request_id import get_request_id
 from app.schemas.requests.pages import (
@@ -66,6 +67,9 @@ async def get_page(
 ) -> APIResponse[dict]:
     """Get a specific page."""
     start_time = time.time()
+
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
 
     page = document_service.get_page(
         document_id=document_id,
@@ -138,6 +142,9 @@ async def get_page_preview(
     user: OptionalUser = None,
 ) -> Response:
     """Get page preview image."""
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     image_data, content_type = document_service.get_page_preview(
         document_id=document_id,
         page_number=page_number,
@@ -206,6 +213,9 @@ async def add_page(
     """Add a new page to the document."""
     start_time = time.time()
 
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     source = request.source
     width = source.get("dimensions", {}).get("width", 612)
     height = source.get("dimensions", {}).get("height", 792)
@@ -258,6 +268,9 @@ async def delete_page(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Delete a page from the document."""
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     new_page_count = document_service.delete_page(
         document_id=document_id,
         page_number=page_number,
@@ -308,6 +321,9 @@ async def reorder_pages(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Reorder pages in the document."""
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     pages = document_service.reorder_pages(
         document_id=document_id,
         new_order=request.new_order,
@@ -361,6 +377,9 @@ async def rotate_page(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Rotate a page."""
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     page = document_service.rotate_page(
         document_id=document_id,
         page_number=page_number,
@@ -413,6 +432,9 @@ async def resize_page(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Resize a page."""
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     # Would need implementation in document service
     # Placeholder response
     return APIResponse(
@@ -453,6 +475,9 @@ async def extract_pages(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Extract pages to a new document."""
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     # Would need implementation in document service
     # Placeholder response
     return APIResponse(

@@ -461,7 +461,9 @@
         "cancel": "Cancel",
         "create": "Create",
         "creating": "Creating..."
-      }
+      },
+      "moving": "Moving...",
+      "dropHere": "Drop here to move"
     },
     "errors": {
       "loadFailed": "Failed to load documents. Please try again.",

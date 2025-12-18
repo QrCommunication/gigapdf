@@ -89,7 +89,7 @@ class DocumentService:
                 include_previews=generate_previews,
             )
 
-            # Create session
+            # Create session with PDF bytes for Redis storage
             session = document_sessions.create_session(
                 document_id=document_id,
                 pdf_doc=pdf_doc,
@@ -97,6 +97,7 @@ class DocumentService:
                 owner_id=owner_id,
                 filename=safe_filename,
                 file_size=len(file_data),
+                pdf_bytes=file_data,
             )
 
             logger.info(f"Document uploaded: {document_id} ({safe_filename})")

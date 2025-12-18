@@ -97,8 +97,13 @@ export function DocumentExplorer({
   useEffect(() => {
     const loadFolderStats = async () => {
       const currentFolders = folders.filter(
-        (folder) => folder.parentId === currentFolderId
+        (folder) => folder.parentId === currentFolderId && folder.id
       );
+
+      if (currentFolders.length === 0) {
+        setFolderStats({});
+        return;
+      }
 
       const statsPromises = currentFolders.map(async (folder) => {
         try {

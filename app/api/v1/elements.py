@@ -10,6 +10,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
+from app.dependencies import preload_document_session
 from app.middleware.auth import OptionalUser
 from app.middleware.request_id import get_request_id
 from app.models.elements import ElementType
@@ -123,6 +124,9 @@ async def list_elements(
     """List elements on a page with pagination."""
     start_time = time.time()
 
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     element_type = ElementType(type) if type else None
 
     # Get all elements matching criteria
@@ -180,6 +184,9 @@ async def get_element(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Get a specific element."""
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
     element, page_number = element_service.get_element(
         document_id=document_id,
         element_id=element_id,

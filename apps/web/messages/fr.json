@@ -461,7 +461,9 @@
         "cancel": "Annuler",
         "create": "Créer",
         "creating": "Création..."
-      }
+      },
+      "moving": "Déplacement...",
+      "dropHere": "Déposez ici pour déplacer"
     },
     "errors": {
       "loadFailed": "Échec du chargement des documents. Veuillez réessayer.",
