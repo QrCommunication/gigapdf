@@ -50,6 +50,13 @@ log_info "Cleaning turbo cache..."
 rm -rf .turbo packages/*/.turbo apps/*/.turbo
 
 # =============================================================================
+# 1.6 Create .env symlinks for apps
+# =============================================================================
+log_info "Creating .env symlinks..."
+ln -sf /opt/gigapdf/.env /opt/gigapdf/apps/web/.env
+ln -sf /opt/gigapdf/.env /opt/gigapdf/apps/admin/.env
+
+# =============================================================================
 # 2. Python Virtual Environment & Dependencies
 # =============================================================================
 log_info "Setting up Python environment..."
