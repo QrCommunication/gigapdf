@@ -47,6 +47,8 @@ import {
   ArrowDown,
   ArrowUpDown,
   Folder,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { DragItem, FolderStats, SelectionItem } from "./document-explorer";
@@ -324,6 +326,10 @@ export function DocumentTable({
     );
   };
 
+  const isItemSelected = (type: "document" | "folder", id: string) => {
+    return selectedItems.some(item => item.type === type && item.id === id);
+  };
+
   const SortableHeader = ({
     field,
     children,
@@ -353,6 +359,7 @@ export function DocumentTable({
         <Table>
           <TableHeader>
             <TableRow>
+              {selectionMode && <TableHead className="w-[50px]"></TableHead>}
               <SortableHeader field="name">{t("table.name")}</SortableHeader>
               <SortableHeader field="size">{t("table.size")}</SortableHeader>
               <SortableHeader field="createdAt">{t("table.created")}</SortableHeader>
@@ -370,25 +377,52 @@ export function DocumentTable({
                 (draggedItem.type === "folder" && draggedItem.id !== folder.id)
               );
 
+              const isFolderSelected = isItemSelected("folder", folder.id);
+
               return (
                 <TableRow
                   key={`folder-${folder.id}`}
                   className={cn(
                     "cursor-pointer hover:bg-muted/50 transition-colors",
-                    isDropTarget && canDrop && "bg-primary/10 ring-2 ring-primary ring-inset"
+                    isDropTarget && canDrop && "bg-primary/10 ring-2 ring-primary ring-inset",
+                    isFolderSelected && "bg-primary/5"
                   )}
-                  onClick={() => onFolderClick?.(folder.id)}
+                  onClick={() => {
+                    if (selectionMode) {
+                      onSelect?.({ type: "folder", id: folder.id, name: folder.name });
+                    } else {
+                      onFolderClick?.(folder.id);
+                    }
+                  }}
                   onDragOver={(e) => onDragOver?.(e, folder.id)}
                   onDragLeave={onDragLeave}
                   onDrop={(e) => onDrop?.(e, folder.id)}
-                  draggable
+                  draggable={!selectionMode}
                   onDragStart={(e) => {
+                    if (selectionMode) return;
                     e.dataTransfer.effectAllowed = "move";
                     e.dataTransfer.setData("application/json", JSON.stringify({ type: "folder", id: folder.id }));
                     onDragStart?.({ type: "folder", id: folder.id, name: folder.name });
                   }}
                   onDragEnd={onDragEnd}
                 >
+                  {selectionMode && (
+                    <TableCell className="w-[50px]">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelect?.({ type: "folder", id: folder.id, name: folder.name });
+                        }}
+                        className="p-1 hover:bg-muted rounded"
+                      >
+                        {isFolderSelected ? (
+                          <CheckSquare className="h-5 w-5 text-primary" />
+                        ) : (
+                          <Square className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </button>
+                    </TableCell>
+                  )}
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Folder className="h-5 w-5 text-yellow-500" />
@@ -439,29 +473,60 @@ export function DocumentTable({
             {/* Documents */}
             {documents.map((doc) => {
               const isDragging = draggedItem?.type === "document" && draggedItem?.id === doc.id;
+              const isDocSelected = isItemSelected("document", doc.id);
 
               return (
                 <TableRow
                   key={doc.id}
                   className={cn(
-                    "group cursor-grab active:cursor-grabbing",
-                    isDragging && "opacity-50 bg-primary/5"
+                    "group",
+                    !selectionMode && "cursor-grab active:cursor-grabbing",
+                    isDragging && "opacity-50 bg-primary/5",
+                    isDocSelected && "bg-primary/5"
                   )}
-                  draggable
+                  draggable={!selectionMode}
                   onDragStart={(e) => {
+                    if (selectionMode) return;
                     e.dataTransfer.effectAllowed = "move";
                     e.dataTransfer.setData("application/json", JSON.stringify({ type: "document", id: doc.id }));
                     onDragStart?.({ type: "document", id: doc.id, name: doc.name });
                   }}
                   onDragEnd={onDragEnd}
+                  onClick={() => {
+                    if (selectionMode) {
+                      onSelect?.({ type: "document", id: doc.id, name: doc.name });
+                    }
+                  }}
                 >
+                  {selectionMode && (
+                    <TableCell className="w-[50px]">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelect?.({ type: "document", id: doc.id, name: doc.name });
+                        }}
+                        className="p-1 hover:bg-muted rounded"
+                      >
+                        {isDocSelected ? (
+                          <CheckSquare className="h-5 w-5 text-primary" />
+                        ) : (
+                          <Square className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </button>
+                    </TableCell>
+                  )}
                   <TableCell>
                     <div
                       className="flex items-center gap-2 cursor-pointer"
-                      onClick={() => handleOpenEditor(doc)}
+                      onClick={(e) => {
+                        if (!selectionMode) {
+                          e.stopPropagation();
+                          handleOpenEditor(doc);
+                        }
+                      }}
                     >
                       <FileText className="h-5 w-5 text-red-500" />
-                      <span className="font-medium hover:underline">{doc.name}</span>
+                      <span className={cn("font-medium", !selectionMode && "hover:underline")}>{doc.name}</span>
                       {loadingId === doc.id && (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       )}
