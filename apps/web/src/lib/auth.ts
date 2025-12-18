@@ -30,7 +30,7 @@ export const auth = betterAuth({
     },
   },
   emailVerification: {
-    sendOnSignUp: true,
+    sendOnSignUp: false, // Temporarily disabled for debugging
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
       const locale = "fr";
