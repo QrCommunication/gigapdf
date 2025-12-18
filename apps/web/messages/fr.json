@@ -463,7 +463,11 @@
         "creating": "Création..."
       },
       "moving": "Déplacement...",
-      "dropHere": "Déposez ici pour déplacer"
+      "dropHere": "Déposez ici pour déplacer",
+      "back": "Précédent",
+      "forward": "Suivant",
+      "home": "Accueil",
+      "refresh": "Actualiser"
     },
     "errors": {
       "loadFailed": "Échec du chargement des documents. Veuillez réessayer.",

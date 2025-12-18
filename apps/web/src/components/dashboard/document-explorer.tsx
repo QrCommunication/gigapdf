@@ -15,7 +15,7 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@giga-pdf/ui";
-import { Grid3X3, List, FolderPlus, Loader2 } from "lucide-react";
+import { Grid3X3, List, FolderPlus, Loader2, GripVertical } from "lucide-react";
 import { DocumentGrid } from "./document-grid";
 import { DocumentTable, SortField, SortDirection } from "./document-table";
 import { FolderBreadcrumb, BreadcrumbFolder } from "./folder-breadcrumb";
@@ -192,10 +192,12 @@ export function DocumentExplorer({
 
   // Drag and Drop handlers
   const handleDragStart = useCallback((item: DragItem) => {
+    console.log("Drag started:", item);
     setDraggedItem(item);
   }, []);
 
   const handleDragEnd = useCallback(() => {
+    console.log("Drag ended");
     setDraggedItem(null);
     setDragOverFolderId(null);
   }, []);
@@ -203,14 +205,17 @@ export function DocumentExplorer({
   const handleDragOver = useCallback((e: React.DragEvent, folderId: string | null) => {
     e.preventDefault();
     e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
 
     // Don't allow dropping onto self if dragging a folder
     if (draggedItem?.type === "folder" && draggedItem.id === folderId) {
       return;
     }
 
-    setDragOverFolderId(folderId);
-  }, [draggedItem]);
+    if (dragOverFolderId !== folderId) {
+      setDragOverFolderId(folderId);
+    }
+  }, [draggedItem, dragOverFolderId]);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -221,11 +226,13 @@ export function DocumentExplorer({
     }
   }, []);
 
-  const handleDrop = useCallback(async (e: React.DragEvent, targetFolderId: string | null) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDrop = useCallback(async (targetFolderId: string | null) => {
+    console.log("Drop on folder:", targetFolderId, "draggedItem:", draggedItem);
 
-    if (!draggedItem || moving) return;
+    if (!draggedItem || moving) {
+      setDragOverFolderId(null);
+      return;
+    }
 
     // Don't drop onto self
     if (draggedItem.type === "folder" && draggedItem.id === targetFolderId) {
@@ -250,6 +257,7 @@ export function DocumentExplorer({
 
     try {
       setMoving(true);
+      console.log("Moving", draggedItem.type, draggedItem.id, "to folder", targetFolderId);
 
       if (draggedItem.type === "document") {
         await api.moveDocument(draggedItem.id, targetFolderId);
@@ -257,9 +265,11 @@ export function DocumentExplorer({
         await api.moveFolder(draggedItem.id, targetFolderId);
       }
 
+      console.log("Move successful");
       onRefresh();
     } catch (error) {
       console.error("Failed to move item:", error);
+      alert("Failed to move item. Please try again.");
     } finally {
       setMoving(false);
       setDraggedItem(null);
@@ -286,37 +296,58 @@ export function DocumentExplorer({
 
   return (
     <div className="space-y-4">
+      {/* Drag indicator overlay */}
+      {draggedItem && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+          <div className="bg-primary text-primary-foreground px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
+            <GripVertical className="h-4 w-4" />
+            <span className="text-sm font-medium">
+              {t("moving")}: {draggedItem.name}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         {/* Breadcrumb - also a drop target for moving to parent folders */}
         <div
-          className={`transition-colors rounded-lg ${
-            draggedItem && dragOverFolderId === "breadcrumb-root"
-              ? "bg-primary/20 ring-2 ring-primary"
+          className={`transition-all duration-200 rounded-lg p-1 -m-1 ${
+            draggedItem && !dragOverFolderId
+              ? "ring-2 ring-dashed ring-primary/50 bg-primary/5"
+              : ""
+          } ${
+            draggedItem && dragOverFolderId === "root"
+              ? "ring-2 ring-primary bg-primary/10"
               : ""
           }`}
           onDragOver={(e) => {
-            if (draggedItem) {
+            if (draggedItem && currentFolderId) {
               e.preventDefault();
-              setDragOverFolderId("breadcrumb-root");
+              e.dataTransfer.dropEffect = "move";
+              setDragOverFolderId("root");
             }
           }}
           onDragLeave={(e) => {
             e.preventDefault();
-            if (dragOverFolderId === "breadcrumb-root") {
+            if (dragOverFolderId === "root") {
               setDragOverFolderId(null);
             }
           }}
-          onDrop={(e) => handleDrop(e, null)}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (currentFolderId) {
+              // Find parent of current folder
+              const currentFolder = folders.find(f => f.id === currentFolderId);
+              handleDrop(currentFolder?.parentId || null);
+            }
+          }}
         >
           <FolderBreadcrumb
             folders={breadcrumbPath}
             onNavigate={onFolderNavigate}
             draggedItem={draggedItem}
-            onDrop={(folderId) => {
-              const syntheticEvent = { preventDefault: () => {}, stopPropagation: () => {} } as React.DragEvent;
-              handleDrop(syntheticEvent, folderId);
-            }}
+            onDrop={(folderId) => handleDrop(folderId)}
           />
         </div>
 
@@ -348,41 +379,54 @@ export function DocumentExplorer({
 
       {/* Content */}
       {viewMode === "grid" ? (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {/* Folders Grid */}
           {currentFolders.length > 0 && (
-            <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-              {sortedFolders
-                .filter((f) => f.parentId === currentFolderId)
-                .map((folder) => (
-                  <DraggableFolderCard
-                    key={folder.id}
-                    folder={folder}
-                    stats={folderStats[folder.id]}
-                    onClick={() => onFolderNavigate(folder.id)}
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    isDraggedOver={dragOverFolderId === folder.id}
-                    isDragging={draggedItem?.type === "folder" && draggedItem?.id === folder.id}
-                    formatSize={formatSize}
-                  />
-                ))}
+            <div>
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">
+                Dossiers ({currentFolders.length})
+              </h3>
+              <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                {sortedFolders
+                  .filter((f) => f.parentId === currentFolderId)
+                  .map((folder) => (
+                    <DraggableFolderCard
+                      key={folder.id}
+                      folder={folder}
+                      stats={folderStats[folder.id]}
+                      onClick={() => onFolderNavigate(folder.id)}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={(e) => handleDragOver(e, folder.id)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={() => handleDrop(folder.id)}
+                      isDraggedOver={dragOverFolderId === folder.id}
+                      isDragging={draggedItem?.type === "folder" && draggedItem?.id === folder.id}
+                      formatSize={formatSize}
+                      canDrop={draggedItem !== null && !(draggedItem.type === "folder" && draggedItem.id === folder.id)}
+                    />
+                  ))}
+              </div>
             </div>
           )}
 
           {/* Documents Grid */}
-          <DocumentGrid
-            documents={sortedDocuments.filter(
-              (d) => (d.folderId || null) === currentFolderId
-            )}
-            onDelete={onRefresh}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            draggedItem={draggedItem}
-          />
+          {currentDocuments.length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">
+                Documents ({currentDocuments.length})
+              </h3>
+              <DocumentGrid
+                documents={sortedDocuments.filter(
+                  (d) => (d.folderId || null) === currentFolderId
+                )}
+                onDelete={onRefresh}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                draggedItem={draggedItem}
+              />
+            </div>
+          )}
         </div>
       ) : (
         <DocumentTable
@@ -400,7 +444,10 @@ export function DocumentExplorer({
           onDragEnd={handleDragEnd}
           onDragOver={handleDragOver}
           onDragLeave={() => setDragOverFolderId(null)}
-          onDrop={handleDrop}
+          onDrop={(e, folderId) => {
+            e.preventDefault();
+            handleDrop(folderId);
+          }}
           draggedItem={draggedItem}
           dragOverFolderId={dragOverFolderId}
           formatSize={formatSize}
@@ -410,32 +457,47 @@ export function DocumentExplorer({
       {/* Empty State */}
       {currentDocuments.length === 0 && currentFolders.length === 0 && (
         <div
-          className={`flex flex-col items-center justify-center py-12 text-center border-2 border-dashed rounded-lg transition-colors ${
-            draggedItem ? "border-primary bg-primary/5" : "border-transparent"
+          className={`flex flex-col items-center justify-center py-12 text-center border-2 border-dashed rounded-lg transition-all duration-200 ${
+            draggedItem
+              ? "border-primary bg-primary/5 scale-[1.01]"
+              : "border-muted-foreground/25"
+          } ${
+            dragOverFolderId === "empty-state"
+              ? "border-primary bg-primary/10 ring-2 ring-primary"
+              : ""
           }`}
           onDragOver={(e) => {
             if (draggedItem) {
               e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
               setDragOverFolderId("empty-state");
             }
           }}
-          onDragLeave={() => setDragOverFolderId(null)}
-          onDrop={(e) => handleDrop(e, currentFolderId)}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            setDragOverFolderId(null);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            handleDrop(currentFolderId);
+          }}
         >
           <h3 className="text-lg font-semibold">{t("emptyFolder")}</h3>
           <p className="text-muted-foreground">{t("emptyFolderDescription")}</p>
           {draggedItem && (
-            <p className="mt-2 text-sm text-primary">{t("dropHere") || "Drop here to move"}</p>
+            <p className="mt-4 text-sm font-medium text-primary animate-pulse">
+              {t("dropHere")}
+            </p>
           )}
         </div>
       )}
 
       {/* Moving indicator */}
       {moving && (
-        <div className="fixed inset-0 bg-background/50 flex items-center justify-center z-50">
-          <div className="bg-card p-4 rounded-lg shadow-lg flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>{t("moving") || "Moving..."}</span>
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-card p-6 rounded-lg shadow-xl flex items-center gap-3 border">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <span className="text-lg font-medium">{t("moving")}</span>
           </div>
         </div>
       )}
@@ -505,50 +567,86 @@ function DraggableFolderCard({
   isDraggedOver,
   isDragging,
   formatSize,
+  canDrop,
 }: {
   folder: Folder;
   stats?: FolderStats;
   onClick: () => void;
   onDragStart: (item: DragItem) => void;
   onDragEnd: () => void;
-  onDragOver: (e: React.DragEvent, folderId: string | null) => void;
+  onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
-  onDrop: (e: React.DragEvent, folderId: string | null) => void;
+  onDrop: () => void;
   isDraggedOver: boolean;
   isDragging: boolean;
   formatSize: (bytes: number) => string;
+  canDrop: boolean;
 }) {
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", JSON.stringify({ type: "folder", id: folder.id, name: folder.name }));
+    // Set drag image
+    const target = e.currentTarget as HTMLElement;
+    e.dataTransfer.setDragImage(target, target.offsetWidth / 2, target.offsetHeight / 2);
+    onDragStart({ type: "folder", id: folder.id, name: folder.name });
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDrop();
+  };
+
   return (
     <div
       draggable
-      onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = "move";
-        onDragStart({ type: "folder", id: folder.id, name: folder.name });
-      }}
+      onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
-      onDragOver={(e) => onDragOver(e, folder.id)}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onDragOver(e);
+      }}
       onDragLeave={onDragLeave}
-      onDrop={(e) => onDrop(e, folder.id)}
-      onClick={onClick}
+      onDrop={handleDrop}
+      onClick={(e) => {
+        // Don't navigate if we just dropped something
+        if (!isDraggedOver) {
+          onClick();
+        }
+      }}
       className={`
         flex flex-col items-center gap-2 p-4 rounded-lg border bg-card
-        hover:bg-accent transition-all cursor-pointer select-none
-        ${isDraggedOver ? "ring-2 ring-primary bg-primary/10 scale-105" : ""}
-        ${isDragging ? "opacity-50 scale-95" : ""}
+        transition-all duration-200 cursor-pointer select-none
+        hover:bg-accent hover:shadow-md
+        ${isDraggedOver ? "ring-2 ring-primary bg-primary/10 scale-105 shadow-lg" : ""}
+        ${isDragging ? "opacity-50 scale-95 ring-2 ring-primary/50" : ""}
+        ${canDrop && !isDraggedOver ? "ring-1 ring-dashed ring-primary/30" : ""}
       `}
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 24 24"
         fill="currentColor"
-        className={`h-12 w-12 transition-colors ${isDraggedOver ? "text-primary" : "text-yellow-500"}`}
+        className={`h-12 w-12 transition-all duration-200 ${
+          isDraggedOver
+            ? "text-primary scale-110"
+            : isDragging
+              ? "text-muted-foreground"
+              : "text-yellow-500"
+        }`}
       >
         <path d="M19.5 21a3 3 0 003-3v-4.5a3 3 0 00-3-3h-15a3 3 0 00-3 3V18a3 3 0 003 3h15zM1.5 10.146V6a3 3 0 013-3h5.379a2.25 2.25 0 011.59.659l2.122 2.121c.14.141.331.22.53.22H19.5a3 3 0 013 3v1.146A4.483 4.483 0 0019.5 9h-15a4.483 4.483 0 00-3 1.146z" />
       </svg>
-      <span className="text-sm font-medium truncate max-w-full">{folder.name}</span>
+      <span className="text-sm font-medium truncate max-w-full text-center">{folder.name}</span>
       {stats && (
         <span className="text-xs text-muted-foreground">
           {stats.document_count} {stats.document_count === 1 ? "doc" : "docs"} • {formatSize(stats.total_size_bytes)}
+        </span>
+      )}
+      {isDraggedOver && (
+        <span className="text-xs font-medium text-primary animate-pulse">
+          Drop here
         </span>
       )}
     </div>

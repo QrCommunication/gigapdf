@@ -463,7 +463,11 @@
         "creating": "Creating..."
       },
       "moving": "Moving...",
-      "dropHere": "Drop here to move"
+      "dropHere": "Drop here to move",
+      "back": "Back",
+      "forward": "Forward",
+      "home": "Home",
+      "refresh": "Refresh"
     },
     "errors": {
       "loadFailed": "Failed to load documents. Please try again.",

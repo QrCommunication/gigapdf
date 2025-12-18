@@ -2,11 +2,22 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter, useSearchParams } from "next/navigation";
 import { DocumentExplorer, ViewMode } from "@/components/dashboard/document-explorer";
 import { SortField, SortDirection } from "@/components/dashboard/document-table";
 import { BreadcrumbFolder } from "@/components/dashboard/folder-breadcrumb";
 import { Button, Input, Skeleton } from "@giga-pdf/ui";
-import { Plus, Search, Upload, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Upload,
+  ChevronLeft,
+  ChevronRight,
+  ArrowLeft,
+  ArrowRight,
+  Home,
+  RefreshCw,
+} from "lucide-react";
 import { api, StoredDocument } from "@/lib/api";
 
 interface Document {
@@ -28,7 +39,16 @@ interface Folder {
 
 export default function DocumentsPage() {
   const t = useTranslations("documents");
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Get current folder from URL
+  const currentFolderId = searchParams?.get("folder") || null;
+
+  // Navigation history for custom back/forward
+  const [navigationHistory, setNavigationHistory] = useState<(string | null)[]>([null]);
+  const [historyIndex, setHistoryIndex] = useState(0);
 
   // Data states
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -49,8 +69,7 @@ export default function DocumentsPage() {
   const [sortField, setSortField] = useState<SortField>("updatedAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
-  // Folder navigation
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  // Breadcrumb path
   const [breadcrumbPath, setBreadcrumbPath] = useState<BreadcrumbFolder[]>([]);
 
   // Load view preferences from localStorage
@@ -113,10 +132,10 @@ export default function DocumentsPage() {
       setLoading(true);
       setError(null);
 
-      // Load documents
+      // Load documents for current folder
       const response = await api.listDocuments({
         page,
-        per_page: 50, // Load more for folder view
+        per_page: 50,
         search: debouncedSearch || undefined,
         folder_id: currentFolderId || undefined,
       });
@@ -209,15 +228,73 @@ export default function DocumentsPage() {
     await api.createFolder(name, parentId);
   };
 
-  const handleFolderNavigate = (folderId: string | null) => {
-    setCurrentFolderId(folderId);
+  // Navigate to folder using URL
+  const handleFolderNavigate = useCallback((folderId: string | null) => {
+    // Update navigation history
+    const newHistory = [...navigationHistory.slice(0, historyIndex + 1), folderId];
+    setNavigationHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+
+    // Update URL
+    if (folderId) {
+      router.push(`/documents?folder=${folderId}`);
+    } else {
+      router.push("/documents");
+    }
     setPage(1);
-  };
+  }, [router, navigationHistory, historyIndex]);
+
+  // Custom back navigation
+  const handleBack = useCallback(() => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      const folderId = navigationHistory[newIndex];
+      setHistoryIndex(newIndex);
+
+      if (folderId) {
+        router.push(`/documents?folder=${folderId}`);
+      } else {
+        router.push("/documents");
+      }
+    }
+  }, [historyIndex, navigationHistory, router]);
+
+  // Custom forward navigation
+  const handleForward = useCallback(() => {
+    if (historyIndex < navigationHistory.length - 1) {
+      const newIndex = historyIndex + 1;
+      const folderId = navigationHistory[newIndex];
+      setHistoryIndex(newIndex);
+
+      if (folderId) {
+        router.push(`/documents?folder=${folderId}`);
+      } else {
+        router.push("/documents");
+      }
+    }
+  }, [historyIndex, navigationHistory, router]);
+
+  // Go to root
+  const handleGoHome = useCallback(() => {
+    handleFolderNavigate(null);
+  }, [handleFolderNavigate]);
+
+  // Refresh
+  const handleRefresh = useCallback(() => {
+    loadDocuments();
+  }, [loadDocuments]);
 
   const handleSortChange = (field: SortField, direction: SortDirection) => {
     setSortField(field);
     setSortDirection(direction);
   };
+
+  // Get current path string for address bar
+  const getCurrentPath = useCallback(() => {
+    if (!currentFolderId) return "/";
+    const path = breadcrumbPath.map((f) => f.name).join("/");
+    return "/" + path;
+  }, [currentFolderId, breadcrumbPath]);
 
   // Filter documents for current folder when not searching
   const displayDocuments = debouncedSearch
@@ -228,8 +305,11 @@ export default function DocumentsPage() {
     ? []
     : folders.filter((folder) => folder.parentId === currentFolderId);
 
+  const canGoBack = historyIndex > 0;
+  const canGoForward = historyIndex < navigationHistory.length - 1;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <input
         ref={fileInputRef}
         type="file"
@@ -265,23 +345,73 @@ export default function DocumentsPage() {
         </Button>
       </div>
 
+      {/* Navigation Bar - File Explorer Style */}
+      <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg border">
+        {/* Navigation buttons */}
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleBack}
+            disabled={!canGoBack}
+            title={t("explorer.back")}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleForward}
+            disabled={!canGoForward}
+            title={t("explorer.forward")}
+          >
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleGoHome}
+            disabled={!currentFolderId}
+            title={t("explorer.home")}
+          >
+            <Home className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleRefresh}
+            disabled={loading}
+            title={t("explorer.refresh")}
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
+
+        {/* Address bar */}
+        <div className="flex-1 flex items-center gap-2 px-3 py-1.5 bg-background rounded border min-w-0">
+          <span className="text-sm text-muted-foreground truncate">
+            {getCurrentPath()}
+          </span>
+        </div>
+
+        {/* Search */}
+        <div className="relative w-64">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder={t("search")}
+            className="pl-10 h-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
       {/* Error */}
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
           {error}
         </div>
       )}
-
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder={t("search")}
-          className="pl-10"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
 
       {/* Content */}
       {loading ? (
