@@ -187,8 +187,18 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
         height: 792,
         rotation: 0,
       },
+      mediaBox: {
+        x: 0,
+        y: 0,
+        width: 612,
+        height: 792,
+      },
+      cropBox: null,
       elements: [],
-      preview: null,
+      preview: {
+        thumbnailUrl: null,
+        fullUrl: null,
+      },
     };
 
     const updatedPages = [...document.pages, newPage];
