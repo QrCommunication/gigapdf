@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { Button } from "@giga-pdf/ui";
 import { FileText, Home, Settings, CreditCard, LogOut, Menu, Building2 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -42,9 +43,17 @@ export default function DashboardLayout(props: { children?: React.ReactNode }) {
             isSidebarOpen ? "translate-x-0" : "-translate-x-full"
           )}
         >
-          <div className="flex h-16 items-center gap-2 border-b px-6">
-            <FileText className="h-6 w-6" />
-            <span className="text-xl font-bold">GigaPDF</span>
+          <div className="flex h-16 items-center border-b px-6">
+            <Link href="/dashboard" className="flex items-center">
+              <Image
+                src="/logo.png"
+                alt="GigaPDF"
+                width={120}
+                height={54}
+                className="h-8 w-auto"
+                priority
+              />
+            </Link>
           </div>
           <nav className="space-y-1 p-4">
             {navItems.map((item) => {

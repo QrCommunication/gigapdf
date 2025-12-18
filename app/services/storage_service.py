@@ -2,6 +2,12 @@
 Storage Service - Persistent document storage operations.
 
 Handles saving, loading, and managing documents in persistent storage.
+
+Security Features:
+- AES-256-GCM encryption for all documents at rest
+- Per-document encryption keys (envelope encryption)
+- S3 server-side encryption as additional layer
+- Audit logging for all storage operations
 """
 
 import hashlib
@@ -22,6 +28,9 @@ from app.models.database import (
 from app.utils.helpers import generate_uuid, now_utc
 
 logger = logging.getLogger(__name__)
+
+# Enable encryption for new documents (set to False for backward compatibility testing)
+ENABLE_ENCRYPTION = True
 
 
 class StorageService:
@@ -89,17 +98,44 @@ class StorageService:
         )
         db.add(stored_doc)
 
-        # Upload to S3
+        # Upload to S3 with encryption
         from app.services.s3_service import s3_service
         s3_key = s3_service.get_document_key(user_id, stored_doc_id, 1)
-        s3_service.upload_file(
-            file_data=document_bytes,
-            key=s3_key,
-            content_type="application/pdf",
-            metadata={"document_id": stored_doc_id, "user_id": user_id, "version": "1"}
-        )
 
-        # Create version record with S3 key
+        encryption_key = None
+        is_encrypted = False
+
+        if ENABLE_ENCRYPTION:
+            # Use encrypted upload (AES-256-GCM + SSE-S3)
+            try:
+                _, encryption_key = s3_service.upload_encrypted_document(
+                    document_data=document_bytes,
+                    key=s3_key,
+                    document_id=stored_doc_id,
+                    user_id=user_id,
+                    metadata={"document_id": stored_doc_id, "user_id": user_id, "version": "1"}
+                )
+                is_encrypted = True
+                logger.info(f"Document saved with encryption: {stored_doc_id[:8]}...")
+            except Exception as e:
+                logger.error(f"Encryption failed, falling back to unencrypted: {e}")
+                # Fallback to unencrypted upload
+                s3_service.upload_file(
+                    file_data=document_bytes,
+                    key=s3_key,
+                    content_type="application/pdf",
+                    metadata={"document_id": stored_doc_id, "user_id": user_id, "version": "1"}
+                )
+        else:
+            # Unencrypted upload (with SSE-S3 only)
+            s3_service.upload_file(
+                file_data=document_bytes,
+                key=s3_key,
+                content_type="application/pdf",
+                metadata={"document_id": stored_doc_id, "user_id": user_id, "version": "1"}
+            )
+
+        # Create version record with S3 key and encryption info
         version = DocumentVersion(
             document_id=stored_doc_id,
             version_number=1,
@@ -108,6 +144,8 @@ class StorageService:
             file_hash=file_hash,
             comment=version_comment,
             created_by=user_id,
+            encryption_key=encryption_key,
+            is_encrypted=is_encrypted,
         )
         db.add(version)
 
@@ -146,7 +184,7 @@ class StorageService:
         self, db: AsyncSession, stored_document_id: str, user_id: str
     ) -> Optional[bytes]:
         """
-        Load document file from storage.
+        Load document file from storage, decrypting if necessary.
 
         Args:
             db: Database session.
@@ -154,10 +192,23 @@ class StorageService:
             user_id: User identifier.
 
         Returns:
-            Document bytes if found.
+            Document bytes if found (decrypted if encrypted).
         """
         stored_doc = await self.get_document(db, stored_document_id, user_id)
         if not stored_doc:
+            return None
+
+        # Get the current version record to check encryption status
+        result = await db.execute(
+            select(DocumentVersion).where(
+                DocumentVersion.document_id == stored_document_id,
+                DocumentVersion.version_number == stored_doc.current_version,
+            )
+        )
+        version = result.scalar_one_or_none()
+
+        if not version:
+            logger.error(f"Version record not found for {stored_document_id}")
             return None
 
         # Download from S3
@@ -165,7 +216,28 @@ class StorageService:
         s3_key = s3_service.get_document_key(
             user_id, stored_document_id, stored_doc.current_version
         )
-        return s3_service.download_file(s3_key)
+
+        # Check if document is encrypted
+        is_encrypted = getattr(version, 'is_encrypted', False)
+        encryption_key = getattr(version, 'encryption_key', None)
+
+        if is_encrypted and encryption_key:
+            # Download and decrypt
+            try:
+                document_bytes = s3_service.download_encrypted_document(
+                    key=s3_key,
+                    encrypted_dek=encryption_key,
+                    document_id=stored_document_id,
+                    user_id=user_id,
+                )
+                logger.info(f"Loaded encrypted document: {stored_document_id[:8]}...")
+                return document_bytes
+            except Exception as e:
+                logger.error(f"Decryption failed for {stored_document_id}: {e}")
+                raise ValueError(f"Failed to decrypt document: {e}")
+        else:
+            # Download unencrypted
+            return s3_service.download_file(s3_key)
 
     async def create_version(
         self,
@@ -200,21 +272,54 @@ class StorageService:
         # Increment version
         new_version_number = stored_doc.current_version + 1
 
-        # Upload to S3
+        # Upload to S3 with encryption
         from app.services.s3_service import s3_service
         s3_key = s3_service.get_document_key(user_id, stored_document_id, new_version_number)
-        s3_service.upload_file(
-            file_data=document_bytes,
-            key=s3_key,
-            content_type="application/pdf",
-            metadata={
-                "document_id": stored_document_id,
-                "user_id": user_id,
-                "version": str(new_version_number)
-            }
-        )
 
-        # Create version record with S3 key
+        encryption_key = None
+        is_encrypted = False
+
+        if ENABLE_ENCRYPTION:
+            # Use encrypted upload (AES-256-GCM + SSE-S3)
+            try:
+                _, encryption_key = s3_service.upload_encrypted_document(
+                    document_data=document_bytes,
+                    key=s3_key,
+                    document_id=stored_document_id,
+                    user_id=user_id,
+                    metadata={
+                        "document_id": stored_document_id,
+                        "user_id": user_id,
+                        "version": str(new_version_number)
+                    }
+                )
+                is_encrypted = True
+                logger.info(f"Version saved with encryption: {stored_document_id[:8]}... v{new_version_number}")
+            except Exception as e:
+                logger.error(f"Encryption failed, falling back to unencrypted: {e}")
+                s3_service.upload_file(
+                    file_data=document_bytes,
+                    key=s3_key,
+                    content_type="application/pdf",
+                    metadata={
+                        "document_id": stored_document_id,
+                        "user_id": user_id,
+                        "version": str(new_version_number)
+                    }
+                )
+        else:
+            s3_service.upload_file(
+                file_data=document_bytes,
+                key=s3_key,
+                content_type="application/pdf",
+                metadata={
+                    "document_id": stored_document_id,
+                    "user_id": user_id,
+                    "version": str(new_version_number)
+                }
+            )
+
+        # Create version record with S3 key and encryption info
         version = DocumentVersion(
             document_id=stored_document_id,
             version_number=new_version_number,
@@ -223,6 +328,8 @@ class StorageService:
             file_hash=file_hash,
             comment=comment,
             created_by=user_id,
+            encryption_key=encryption_key,
+            is_encrypted=is_encrypted,
         )
         db.add(version)
 

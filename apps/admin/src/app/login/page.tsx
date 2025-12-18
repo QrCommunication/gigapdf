@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, Loader2 } from "lucide-react";
+import Image from "next/image";
+import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { signIn } from "@/lib/auth-client";
 import { LanguageSwitcher } from "@/components/language-switcher";
@@ -49,9 +50,14 @@ export default function LoginPage() {
       </div>
       <div className="w-full max-w-md space-y-8">
         <div className="flex flex-col items-center">
-          <div className="rounded-full bg-primary p-4">
-            <Shield className="h-12 w-12 text-primary-foreground" />
-          </div>
+          <Image
+            src="/logo.png"
+            alt="GigaPDF"
+            width={180}
+            height={81}
+            className="h-12 w-auto"
+            priority
+          />
           <h2 className="mt-6 text-3xl font-bold">{t("title")}</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             {t("subtitle")}

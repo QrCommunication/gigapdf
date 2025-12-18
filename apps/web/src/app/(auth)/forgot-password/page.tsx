@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { forgotPassword } from "@/lib/auth-client";
+import { forgetPassword } from "@/lib/auth-client";
 import { Button } from "@giga-pdf/ui";
 import { Input } from "@giga-pdf/ui";
 import { Label } from "@giga-pdf/ui";
@@ -26,7 +26,7 @@ export default function ForgotPasswordPage() {
     setIsLoading(true);
 
     try {
-      const result = await forgotPassword({
+      const result = await forgetPassword({
         email,
         redirectTo: "/reset-password",
       });

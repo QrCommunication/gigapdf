@@ -2,6 +2,7 @@
 
 import { Bell, LogOut, User } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { LanguageSwitcher } from "@/components/language-switcher";
 
@@ -13,7 +14,17 @@ export function AdminHeader() {
       <div className="flex h-16 items-center px-6">
         <div className="flex flex-1 items-center justify-between">
           <div className="flex items-center gap-4">
-            <h1 className="text-xl font-semibold">GigaPDF Admin</h1>
+            <Link href="/dashboard" className="flex items-center gap-3">
+              <Image
+                src="/logo.png"
+                alt="GigaPDF"
+                width={120}
+                height={54}
+                className="h-8 w-auto"
+                priority
+              />
+              <span className="text-sm font-medium text-muted-foreground">Admin</span>
+            </Link>
           </div>
 
           <div className="flex items-center gap-4">

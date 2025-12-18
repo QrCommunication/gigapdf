@@ -2,11 +2,17 @@
 S3 Storage Service - Scaleway/AWS S3-compatible storage operations.
 
 Handles file uploads, downloads, and management for persistent document storage.
+
+Security Features:
+- Server-Side Encryption (SSE-S3) for all uploads
+- Application-level AES-256-GCM encryption (envelope encryption)
+- Secure presigned URLs with expiration
+- Audit logging for all operations
 """
 
 import logging
 import os
-from typing import Optional, BinaryIO
+from typing import Optional, BinaryIO, Tuple
 from io import BytesIO
 
 import boto3
@@ -66,15 +72,17 @@ class S3Service:
         key: str,
         content_type: str = "application/pdf",
         metadata: Optional[dict] = None,
+        server_side_encryption: bool = True,
     ) -> dict:
         """
-        Upload a file to S3.
+        Upload a file to S3 with server-side encryption.
 
         Args:
             file_data: File bytes to upload.
             key: S3 object key (path in bucket).
             content_type: MIME type of the file.
             metadata: Optional metadata to attach to the object.
+            server_side_encryption: Enable SSE-S3 encryption (default: True).
 
         Returns:
             dict with upload result including ETag and key.
@@ -83,6 +91,11 @@ class S3Service:
             extra_args = {
                 'ContentType': content_type,
             }
+
+            # Enable server-side encryption (SSE-S3)
+            if server_side_encryption:
+                extra_args['ServerSideEncryption'] = 'AES256'
+
             if metadata:
                 extra_args['Metadata'] = {k: str(v) for k, v in metadata.items()}
 
@@ -94,7 +107,10 @@ class S3Service:
                 **extra_args
             )
 
-            logger.info(f"Uploaded file to S3: {key} ({len(file_data)} bytes)")
+            logger.info(
+                f"Uploaded file to S3: {key} ({len(file_data)} bytes) "
+                f"[SSE: {'AES256' if server_side_encryption else 'none'}]"
+            )
 
             return {
                 'key': key,
@@ -102,11 +118,124 @@ class S3Service:
                 'bucket': self.bucket_name,
                 'size': len(file_data),
                 'url': f"{self.endpoint_url}/{self.bucket_name}/{key}",
+                'encryption': 'AES256' if server_side_encryption else None,
             }
 
         except ClientError as e:
             logger.error(f"S3 upload failed for {key}: {e}")
             raise
+
+    def upload_encrypted_document(
+        self,
+        document_data: bytes,
+        key: str,
+        document_id: str,
+        user_id: str,
+        metadata: Optional[dict] = None,
+    ) -> Tuple[dict, str]:
+        """
+        Upload a document with application-level encryption + SSE-S3.
+
+        This provides two layers of encryption:
+        1. Application-level AES-256-GCM (envelope encryption)
+        2. S3 server-side encryption (SSE-S3)
+
+        Args:
+            document_data: Plaintext document bytes.
+            key: S3 object key.
+            document_id: Document identifier for encryption AAD.
+            user_id: User identifier for encryption AAD.
+            metadata: Optional metadata.
+
+        Returns:
+            Tuple of (upload result dict, encrypted DEK as base64 string).
+        """
+        from app.services.encryption_service import (
+            encryption_service,
+            encode_encrypted_key
+        )
+
+        # Encrypt the document at application level
+        encrypted_data, encrypted_dek = encryption_service.encrypt_document(
+            document_data,
+            document_id,
+            user_id
+        )
+
+        # Add encryption metadata
+        encryption_metadata = {
+            'encrypted': 'true',
+            'encryption_version': '1',
+            'original_size': str(len(document_data)),
+        }
+        if metadata:
+            encryption_metadata.update(metadata)
+
+        # Upload with SSE-S3
+        result = self.upload_file(
+            encrypted_data,
+            key,
+            content_type='application/octet-stream',  # Encrypted data
+            metadata=encryption_metadata,
+            server_side_encryption=True,
+        )
+
+        # Encode DEK for database storage
+        encoded_dek = encode_encrypted_key(encrypted_dek)
+
+        logger.info(
+            f"Uploaded encrypted document: {key} "
+            f"(original: {len(document_data)} bytes, encrypted: {len(encrypted_data)} bytes)"
+        )
+
+        return result, encoded_dek
+
+    def download_encrypted_document(
+        self,
+        key: str,
+        encrypted_dek: str,
+        document_id: str,
+        user_id: str,
+    ) -> bytes:
+        """
+        Download and decrypt a document.
+
+        Args:
+            key: S3 object key.
+            encrypted_dek: Base64-encoded encrypted DEK from database.
+            document_id: Document identifier for decryption.
+            user_id: User identifier for decryption.
+
+        Returns:
+            Decrypted document bytes.
+        """
+        from app.services.encryption_service import (
+            encryption_service,
+            decode_encrypted_key
+        )
+
+        # Download encrypted data from S3
+        encrypted_data = self.download_file(key)
+        if encrypted_data is None:
+            return None
+
+        # Decode the DEK
+        dek_bytes = decode_encrypted_key(encrypted_dek)
+
+        # Decrypt the document
+        plaintext = encryption_service.decrypt_document(
+            encrypted_data,
+            dek_bytes,
+            document_id,
+            user_id
+        )
+
+        logger.info(
+            f"Downloaded and decrypted document: {key} "
+            f"(encrypted: {len(encrypted_data)} bytes, decrypted: {len(plaintext)} bytes)"
+        )
+
+        return plaintext
 
     def download_file(self, key: str) -> bytes:
         """

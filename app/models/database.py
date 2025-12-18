@@ -112,6 +112,14 @@ class DocumentVersion(Base):
         DateTime(timezone=True), default=func.now(), nullable=False
     )
 
+    # Encryption fields for AES-256-GCM at rest encryption
+    encryption_key: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="Base64-encoded encrypted DEK for this version"
+    )
+    is_encrypted: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, comment="Whether document is encrypted at rest"
+    )
+
     # Relationships
     document: Mapped["StoredDocument"] = relationship(
         "StoredDocument", back_populates="versions"

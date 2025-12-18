@@ -20,7 +20,7 @@ export const auth = betterAuth({
     sendResetPassword: async ({ user, url }) => {
       try {
         // Get user locale preference (default to French)
-        const locale = "fr";
+        const locale = (user as { locale?: string }).locale || "fr";
         const { subject, html } = getPasswordResetEmailTemplate(url, locale);
 
         await sendEmail({
@@ -39,7 +39,8 @@ export const auth = betterAuth({
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
       try {
-        const locale = "fr";
+        // Get user locale preference (default to French)
+        const locale = (user as { locale?: string }).locale || "fr";
         const { subject, html } = getVerificationEmailTemplate(url, locale);
 
         await sendEmail({

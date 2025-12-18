@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@giga-pdf/ui";
 import { useTranslations } from "next-intl";
 import {
@@ -104,10 +105,16 @@ export default function HomePage() {
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <FileText className="h-6 w-6" />
-            <span className="text-xl font-bold">GigaPDF</span>
-          </div>
+          <Link href="/" className="flex items-center">
+            <Image
+              src="/logo.png"
+              alt="GigaPDF"
+              width={140}
+              height={63}
+              className="h-10 w-auto"
+              priority
+            />
+          </Link>
           <nav className="hidden md:flex items-center gap-6">
             <a href="#features" className="text-sm text-muted-foreground hover:text-foreground">
               {t("nav.features")}
@@ -435,9 +442,14 @@ export default function HomePage() {
         <div className="container mx-auto px-4">
           <div className="grid gap-8 md:grid-cols-4 max-w-6xl mx-auto">
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <FileText className="h-6 w-6" />
-                <span className="text-xl font-bold">GigaPDF</span>
+              <div className="mb-4">
+                <Image
+                  src="/logo.png"
+                  alt="GigaPDF"
+                  width={120}
+                  height={54}
+                  className="h-8 w-auto"
+                />
               </div>
               <p className="text-sm text-muted-foreground mb-4">
                 {t("landing.footer.tagline")}
