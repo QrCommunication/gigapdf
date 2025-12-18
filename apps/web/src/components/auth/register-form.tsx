@@ -55,8 +55,8 @@ export function RegisterForm() {
         setError(result.error.message || t("errors.generic"));
         setIsLoading(false);
       } else {
-        // Use window.location for a full page navigation to ensure cookies are set
-        window.location.href = "/dashboard";
+        // Redirect to verify-email page with the email as a param
+        window.location.href = `/verify-email?email=${encodeURIComponent(email)}`;
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : t("errors.generic");

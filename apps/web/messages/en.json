@@ -201,6 +201,7 @@
         "invalidCredentials": "Invalid email or password",
         "emailRequired": "Email is required",
         "passwordRequired": "Password is required",
+        "emailNotVerified": "Your email is not verified",
         "generic": "An error occurred during sign in"
       }
     },
@@ -270,6 +271,34 @@
         "passwordTooShort": "Password must be at least 8 characters",
         "passwordMismatch": "Passwords do not match",
         "invalidToken": "Invalid or expired reset link",
+        "generic": "An error occurred"
+      }
+    },
+    "verifyEmail": {
+      "title": "Verify your email",
+      "description": "We've sent a verification email to your address. Please click the link to activate your account.",
+      "checkSpam": "If you don't see it, check your spam folder.",
+      "resendTitle": "Didn't receive the email?",
+      "resendDescription": "Enter your email address to receive a new verification link.",
+      "email": "Email",
+      "emailPlaceholder": "name@example.com",
+      "submit": "Resend email",
+      "submitting": "Sending...",
+      "success": {
+        "title": "Email sent!",
+        "description": "A new verification email has been sent to your address."
+      },
+      "verified": {
+        "title": "Email verified!",
+        "description": "Your email has been verified successfully. You can now sign in.",
+        "goToLogin": "Sign in"
+      },
+      "backToLogin": "Back to sign in",
+      "errors": {
+        "emailRequired": "Email is required",
+        "emailNotFound": "No account found with this email",
+        "alreadyVerified": "This email is already verified",
+        "tooManyRequests": "Too many attempts. Please try again in a few minutes.",
         "generic": "An error occurred"
       }
     }

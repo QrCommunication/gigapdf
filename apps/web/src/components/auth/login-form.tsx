@@ -42,7 +42,17 @@ export function LoginForm() {
       });
 
       if (result.error) {
-        setError(result.error.message || t("errors.invalidCredentials"));
+        const errorMessage = result.error.message || "";
+        // Check if email is not verified
+        if (
+          errorMessage.toLowerCase().includes("not verified") ||
+          errorMessage.toLowerCase().includes("email verification")
+        ) {
+          // Redirect to verify-email page
+          window.location.href = `/verify-email?email=${encodeURIComponent(email)}`;
+          return;
+        }
+        setError(errorMessage || t("errors.invalidCredentials"));
         setIsLoading(false);
       } else {
         // Use window.location for a full page navigation to ensure cookies are set

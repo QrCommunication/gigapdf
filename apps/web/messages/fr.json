@@ -201,6 +201,7 @@
         "invalidCredentials": "Email ou mot de passe invalide",
         "emailRequired": "L'email est requis",
         "passwordRequired": "Le mot de passe est requis",
+        "emailNotVerified": "Votre email n'est pas vérifié",
         "generic": "Une erreur s'est produite lors de la connexion"
       }
     },
@@ -270,6 +271,34 @@
         "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
         "passwordMismatch": "Les mots de passe ne correspondent pas",
         "invalidToken": "Lien de réinitialisation invalide ou expiré",
+        "generic": "Une erreur s'est produite"
+      }
+    },
+    "verifyEmail": {
+      "title": "Vérifiez votre email",
+      "description": "Nous avons envoyé un email de vérification à votre adresse. Veuillez cliquer sur le lien pour activer votre compte.",
+      "checkSpam": "Si vous ne le voyez pas, vérifiez vos spams.",
+      "resendTitle": "Vous n'avez pas reçu l'email ?",
+      "resendDescription": "Entrez votre adresse email pour recevoir un nouveau lien de vérification.",
+      "email": "Email",
+      "emailPlaceholder": "nom@exemple.com",
+      "submit": "Renvoyer l'email",
+      "submitting": "Envoi en cours...",
+      "success": {
+        "title": "Email envoyé !",
+        "description": "Un nouvel email de vérification a été envoyé à votre adresse."
+      },
+      "verified": {
+        "title": "Email vérifié !",
+        "description": "Votre email a été vérifié avec succès. Vous pouvez maintenant vous connecter.",
+        "goToLogin": "Se connecter"
+      },
+      "backToLogin": "Retour à la connexion",
+      "errors": {
+        "emailRequired": "L'email est requis",
+        "emailNotFound": "Aucun compte trouvé avec cet email",
+        "alreadyVerified": "Cet email est déjà vérifié",
+        "tooManyRequests": "Trop de tentatives. Veuillez réessayer dans quelques minutes.",
         "generic": "Une erreur s'est produite"
       }
     }
