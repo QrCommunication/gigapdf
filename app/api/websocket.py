@@ -25,12 +25,15 @@ settings = get_settings()
 
 # Configure Redis client manager with TLS support if needed
 def get_redis_manager():
-    """Create Redis manager with proper TLS configuration."""
+    """Create Redis manager with proper TLS configuration.
+
+    Follows redis-py SSL connection pattern:
+    https://redis.readthedocs.io/en/stable/examples/ssl_connection_examples.html
+    """
     redis_url = settings.socketio_message_queue
 
     # Check if URL has ssl_ca_certs parameter (needs special handling)
     if "ssl_ca_certs=" in redis_url:
-        import ssl
         from urllib.parse import urlparse, parse_qs
 
         # Parse URL and extract ssl_ca_certs
@@ -41,20 +44,21 @@ def get_redis_manager():
         # Rebuild URL without query params
         clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
 
-        # Create SSL context
-        ssl_context = ssl.create_default_context(cafile=ca_certs)
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_REQUIRED
-
+        # Pass SSL options via redis_options as per python-socketio docs
+        # https://github.com/miguelgrinberg/python-socketio/issues/318
         return socketio.AsyncRedisManager(
             clean_url,
-            redis_options={"ssl": ssl_context}
+            redis_options={
+                "ssl_cert_reqs": "required",
+                "ssl_ca_certs": ca_certs,
+            }
         )
     else:
         return socketio.AsyncRedisManager(redis_url)
 
 try:
     client_manager = get_redis_manager()
+    logger.info("Socket.IO Redis manager initialized")
 except Exception as e:
     logger.warning(f"Failed to create Redis manager: {e}. Using in-memory mode.")
     client_manager = None
