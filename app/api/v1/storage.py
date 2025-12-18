@@ -1382,33 +1382,35 @@ async def create_folder(
 
         # Create folder
         folder_id = generate_uuid()
+        created_at = now_utc()
         folder = Folder(
             id=folder_id,
             name=request.name,
             owner_id=user.user_id,
             parent_id=request.parent_id,
             path=path,
+            created_at=created_at,
         )
         session.add(folder)
         # Session commits automatically on exit
 
-        processing_time = int((time.time() - start_time) * 1000)
+    processing_time = int((time.time() - start_time) * 1000)
 
-        return APIResponse(
-            success=True,
-            data={
-                "folder_id": folder_id,
-                "name": request.name,
-                "parent_id": request.parent_id,
-                "path": path,
-                "created_at": folder.created_at.isoformat(),
-            },
-            meta=MetaInfo(
-                request_id=get_request_id(),
-                timestamp=now_utc(),
-                processing_time_ms=processing_time,
-            ),
-        )
+    return APIResponse(
+        success=True,
+        data={
+            "folder_id": folder_id,
+            "name": request.name,
+            "parent_id": request.parent_id,
+            "path": path,
+            "created_at": created_at.isoformat(),
+        },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
 
 
 @router.delete(
