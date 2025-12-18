@@ -10,6 +10,22 @@ import type {
 } from "@giga-pdf/types";
 import type { Canvas as FabricCanvas, FabricObject } from "fabric";
 
+// API base URL for image loading
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/**
+ * Resolve image URL - prepend API base URL if it's a relative path
+ */
+function resolveImageUrl(url: string): string {
+  if (!url) return "";
+  // If already absolute URL, return as-is
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
+    return url;
+  }
+  // Prepend API base URL for relative paths
+  return `${API_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
 export interface EditorCanvasHandle {
   /** Ajouter une image au canvas */
   addImage: (dataUrl: string, width: number, height: number) => void;
@@ -575,19 +591,27 @@ export function EditorCanvas({
       case "image": {
         // ImageElement structure - images loaded asynchronously
         if (element.source?.dataUrl) {
-          FabricImage.fromURL(element.source.dataUrl).then((img: FabricObject) => {
-            const originalWidth = element.source.originalDimensions?.width || 100;
-            const originalHeight = element.source.originalDimensions?.height || 100;
-            img.set({
-              ...baseOptions,
-              scaleX: element.bounds.width / originalWidth,
-              scaleY: element.bounds.height / originalHeight,
-              opacity: element.style?.opacity ?? 1,
+          const imageUrl = resolveImageUrl(element.source.dataUrl);
+          console.log("[EditorCanvas] Loading image:", imageUrl);
+
+          FabricImage.fromURL(imageUrl, { crossOrigin: "anonymous" })
+            .then((img: FabricObject) => {
+              const originalWidth = element.source.originalDimensions?.width || 100;
+              const originalHeight = element.source.originalDimensions?.height || 100;
+              img.set({
+                ...baseOptions,
+                scaleX: element.bounds.width / originalWidth,
+                scaleY: element.bounds.height / originalHeight,
+                opacity: element.style?.opacity ?? 1,
+              });
+              (img as FabricObjectWithData).data = { elementId: element.elementId };
+              fabricRef.current?.add(img);
+              fabricRef.current?.renderAll();
+              console.log("[EditorCanvas] Image loaded successfully:", element.elementId);
+            })
+            .catch((err) => {
+              console.error("[EditorCanvas] Failed to load image:", imageUrl, err);
             });
-            (img as FabricObjectWithData).data = { elementId: element.elementId };
-            fabricRef.current?.add(img);
-            fabricRef.current?.renderAll();
-          });
         }
         return null;
       }
@@ -710,19 +734,35 @@ export function EditorCanvas({
       if (!fabricRef.current) return;
       const canvas = fabricRef.current;
 
+      console.log("[EditorCanvas] Loading page:", pageData.pageId);
+      console.log("[EditorCanvas] Page dimensions:", pageData.dimensions);
+      console.log("[EditorCanvas] Elements count:", pageData.elements?.length ?? 0);
+
       // Nettoyer le canvas
       canvas.clear();
       canvas.backgroundColor = "#ffffff";
 
+      // Log element types
+      if (pageData.elements?.length) {
+        const typeCounts: Record<string, number> = {};
+        pageData.elements.forEach((el) => {
+          typeCounts[el.type] = (typeCounts[el.type] || 0) + 1;
+        });
+        console.log("[EditorCanvas] Element types:", typeCounts);
+      }
+
       // Charger chaque élément de la page
-      pageData.elements.forEach((element) => {
+      (pageData.elements || []).forEach((element) => {
+        console.log("[EditorCanvas] Processing element:", element.type, element.elementId);
         const obj = elementToFabricObject(element, fabricModule);
         if (obj) {
           (obj as FabricObjectWithData).data = { elementId: element.elementId };
           canvas.add(obj);
+          console.log("[EditorCanvas] Added element to canvas:", element.type);
         }
       });
 
+      console.log("[EditorCanvas] Canvas objects count:", canvas.getObjects().length);
       canvas.renderAll();
     },
     []

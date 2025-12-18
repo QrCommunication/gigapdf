@@ -108,23 +108,30 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       // Récupérer le document complet avec pages et éléments
       const docData = await api.getDocument(docId);
 
+      // Debug: log raw API response
+      console.log("[useDocument] Raw API response:", docData);
+      const pagesArray = docData.pages as Array<Record<string, unknown>>;
+      console.log("[useDocument] First page:", pagesArray?.[0]);
+      console.log("[useDocument] First page elements:", pagesArray?.[0]?.elements);
+      console.log("[useDocument] First element:", (pagesArray?.[0]?.elements as unknown[])?.[0]);
+
       // Convertir les données en types stricts
+      // Note: API returns camelCase (by_alias=True)
+      const metadata = docData.metadata || {};
       const doc: DocumentObject = {
-        documentId: docData.document_id,
+        documentId: (docData as Record<string, unknown>).documentId as string || docData.document_id,
         metadata: {
-          title: (docData.metadata?.title as string) || docName || "Sans titre",
-          author: (docData.metadata?.author as string) || null,
-          subject: (docData.metadata?.subject as string) || null,
-          keywords: (docData.metadata?.keywords as string[]) || [],
-          creator: (docData.metadata?.creator as string) || null,
-          producer: (docData.metadata?.producer as string) || null,
-          creationDate: (docData.metadata?.creation_date as string) || null,
-          modificationDate:
-            (docData.metadata?.modification_date as string) || null,
-          pageCount:
-            (docData.metadata?.page_count as number) || docData.pages.length,
-          pdfVersion: (docData.metadata?.pdf_version as string) || "1.4",
-          isEncrypted: (docData.metadata?.is_encrypted as boolean) || false,
+          title: (metadata.title as string) || docName || "Sans titre",
+          author: (metadata.author as string) || null,
+          subject: (metadata.subject as string) || null,
+          keywords: (metadata.keywords as string[]) || [],
+          creator: (metadata.creator as string) || null,
+          producer: (metadata.producer as string) || null,
+          creationDate: (metadata.creationDate as string) || (metadata.creation_date as string) || null,
+          modificationDate: (metadata.modificationDate as string) || (metadata.modification_date as string) || null,
+          pageCount: (metadata.pageCount as number) || (metadata.page_count as number) || docData.pages.length,
+          pdfVersion: (metadata.pdfVersion as string) || (metadata.pdf_version as string) || "1.4",
+          isEncrypted: (metadata.isEncrypted as boolean) || (metadata.is_encrypted as boolean) || false,
           permissions: {
             print: true,
             modify: true,
