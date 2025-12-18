@@ -609,7 +609,7 @@ function DraggableFolderCard({
       }}
       onDragLeave={onDragLeave}
       onDrop={handleDrop}
-      onClick={(e) => {
+      onClick={() => {
         // Don't navigate if we just dropped something
         if (!isDraggedOver) {
           onClick();
