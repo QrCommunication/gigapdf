@@ -41,6 +41,7 @@ export function Logo({ className, showText = true, size = "md", href }: LogoProp
           height={Math.round(width * 0.45)}
           className="h-auto"
           priority
+          unoptimized
         />
       ) : (
         <Image
@@ -50,6 +51,7 @@ export function Logo({ className, showText = true, size = "md", href }: LogoProp
           height={sizes[size].icon}
           className="h-auto"
           priority
+          unoptimized
         />
       )}
     </div>
@@ -74,6 +76,7 @@ export function LogoIcon({ className, size = 24 }: { className?: string; size?: 
       width={size}
       height={size}
       className={cn("h-auto", className)}
+      unoptimized
     />
   );
 }
