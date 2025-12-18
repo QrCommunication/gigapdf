@@ -269,31 +269,30 @@ All responses follow a standard format:
 
     # CORS middleware
     # Note: When allow_credentials=True, we cannot use "*" for allow_origins
-    # We must specify explicit origins
-    cors_origins = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",  # Admin app
-        "http://127.0.0.1:3001",
-        "http://localhost:3002",  # Alternative port
-        "http://127.0.0.1:3002",
-        "http://localhost:3003",
-        "http://127.0.0.1:3003",
-    ] if settings.is_development else [
-        settings.frontend_url,
-        "https://giga-pdf.com",
-        "https://www.giga-pdf.com",
-        "https://admin.giga-pdf.com",
-        "https://api.giga-pdf.com",
-    ]
-
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # In development, we use allow_origin_regex to allow all localhost ports
+    if settings.is_development:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    else:
+        cors_origins = [
+            settings.frontend_url,
+            "https://giga-pdf.com",
+            "https://www.giga-pdf.com",
+            "https://admin.giga-pdf.com",
+            "https://api.giga-pdf.com",
+        ]
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     # Request ID middleware
     app.add_middleware(RequestIDMiddleware)

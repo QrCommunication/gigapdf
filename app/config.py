@@ -45,12 +45,14 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # -------------------------------------------------------------------------
-    # Authentication (External JWT)
+    # Authentication (External JWT or Better Auth)
     # -------------------------------------------------------------------------
     auth_jwt_public_key: str = ""
     auth_jwt_algorithm: str = "RS256"
     auth_jwt_issuer: str = ""
     auth_jwt_audience: str = "giga-pdf"
+    # Better Auth session validation URL (e.g., https://giga-pdf.com/api/auth/get-session)
+    auth_session_url: str = ""
 
     # -------------------------------------------------------------------------
     # Storage

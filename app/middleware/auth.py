@@ -135,6 +135,44 @@ async def decode_jwt_token(token: str) -> dict:
         raise AuthInvalidError(f"Token validation failed: {str(e)}")
 
 
+async def validate_session_with_better_auth(token: str, session_url: str) -> dict:
+    """
+    Validate a session token by calling Better Auth's session endpoint.
+
+    Args:
+        token: The session token to validate.
+        session_url: The Better Auth session validation URL.
+
+    Returns:
+        dict: Session data including user info.
+
+    Raises:
+        AuthInvalidError: If session is invalid.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            # Better Auth expects the session token in a cookie or Authorization header
+            response = await client.get(
+                session_url,
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10.0,
+            )
+
+            if response.status_code != 200:
+                logger.warning(f"Better Auth session validation failed: {response.status_code}")
+                raise AuthInvalidError("Session validation failed")
+
+            data = response.json()
+            if not data or not data.get("user"):
+                raise AuthInvalidError("Invalid session")
+
+            return data
+
+    except httpx.RequestError as e:
+        logger.error(f"Better Auth request failed: {e}")
+        raise AuthInvalidError("Session validation service unavailable")
+
+
 async def get_current_user(
     authorization: Annotated[Optional[str], Header()] = None,
 ) -> CurrentUser:
@@ -173,7 +211,29 @@ async def get_current_user(
             roles=["user"],
         )
 
-    # Production: Validate JWT token
+    # Better Auth session validation mode
+    if settings.auth_session_url:
+        logger.debug("Using Better Auth session validation")
+        session_data = await validate_session_with_better_auth(token, settings.auth_session_url)
+        user = session_data.get("user", {})
+        return CurrentUser(
+            user_id=user.get("id", ""),
+            email=user.get("email"),
+            name=user.get("name"),
+            roles=["user"],
+        )
+
+    # Fallback: Accept token as user ID (for simple auth scenarios)
+    if not settings.auth_jwt_public_key or settings.auth_jwt_public_key == "CONFIGURE_YOUR_JWT_PUBLIC_KEY":
+        logger.debug(f"No JWT config: Using token as user ID: {token}")
+        return CurrentUser(
+            user_id=token,
+            email=None,
+            name=None,
+            roles=["user"],
+        )
+
+    # Production with JWT: Validate JWT token
     claims = await decode_jwt_token(token)
 
     return CurrentUser.from_claims(claims)
