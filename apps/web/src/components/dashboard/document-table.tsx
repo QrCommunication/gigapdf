@@ -49,7 +49,7 @@ import {
   Folder,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { DragItem, FolderStats } from "./document-explorer";
+import { DragItem, FolderStats, SelectionItem } from "./document-explorer";
 import { cn } from "@/lib/utils";
 
 export type SortField = "name" | "size" | "createdAt" | "updatedAt";
@@ -84,12 +84,15 @@ interface DocumentTableProps {
   onFolderClick?: (folderId: string) => void;
   onDragStart?: (item: DragItem) => void;
   onDragEnd?: () => void;
-  onDragOver?: (e: React.DragEvent, folderId: string) => void;
+  onDragOver?: (e: React.DragEvent, folderId: string | null) => void;
   onDragLeave?: () => void;
-  onDrop?: (e: React.DragEvent, folderId: string) => void;
+  onDrop?: (e: React.DragEvent, folderId: string | null) => void;
   draggedItem?: DragItem | null;
   dragOverFolderId?: string | null;
   formatSize?: (bytes: number) => string;
+  selectionMode?: boolean;
+  selectedItems?: SelectionItem[];
+  onSelect?: (item: SelectionItem) => void;
 }
 
 export function DocumentTable({
@@ -110,6 +113,9 @@ export function DocumentTable({
   draggedItem,
   dragOverFolderId,
   formatSize,
+  selectionMode = false,
+  selectedItems = [],
+  onSelect,
 }: DocumentTableProps) {
   const router = useRouter();
   const t = useTranslations("documents");

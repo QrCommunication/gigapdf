@@ -15,7 +15,7 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@giga-pdf/ui";
-import { Grid3X3, List, FolderPlus, Loader2, GripVertical } from "lucide-react";
+import { Grid3X3, List, FolderPlus, Loader2, GripVertical, CheckSquare, Square, XCircle, FolderInput } from "lucide-react";
 import { DocumentGrid } from "./document-grid";
 import { DocumentTable, SortField, SortDirection } from "./document-table";
 import { FolderBreadcrumb, BreadcrumbFolder } from "./folder-breadcrumb";
@@ -70,6 +70,13 @@ interface DragItem {
   name: string;
 }
 
+// Selection item
+interface SelectionItem {
+  type: "document" | "folder";
+  id: string;
+  name: string;
+}
+
 export function DocumentExplorer({
   documents,
   folders,
@@ -92,6 +99,11 @@ export function DocumentExplorer({
   const [draggedItem, setDraggedItem] = useState<DragItem | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
+
+  // Multi-selection state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<SelectionItem[]>([]);
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
 
   // Load folder stats for current folders
   useEffect(() => {
@@ -127,6 +139,11 @@ export function DocumentExplorer({
 
     loadFolderStats();
   }, [folders, currentFolderId]);
+
+  // Clear selection when navigating
+  useEffect(() => {
+    setSelectedItems([]);
+  }, [currentFolderId]);
 
   // Sort documents and folders
   const sortedDocuments = [...documents].sort((a, b) => {
@@ -190,6 +207,68 @@ export function DocumentExplorer({
     }
   };
 
+  // Selection handlers
+  const toggleItemSelection = useCallback((item: SelectionItem) => {
+    setSelectedItems(prev => {
+      const exists = prev.find(i => i.type === item.type && i.id === item.id);
+      if (exists) {
+        return prev.filter(i => !(i.type === item.type && i.id === item.id));
+      } else {
+        return [...prev, item];
+      }
+    });
+  }, []);
+
+  const isItemSelected = useCallback((type: "document" | "folder", id: string) => {
+    return selectedItems.some(item => item.type === type && item.id === id);
+  }, [selectedItems]);
+
+  const selectAllInCurrentFolder = useCallback(() => {
+    const currentDocs = documents.filter(d => (d.folderId || null) === currentFolderId);
+    const currentFoldersItems = folders.filter(f => f.parentId === currentFolderId);
+
+    const allItems: SelectionItem[] = [
+      ...currentDocs.map(d => ({ type: "document" as const, id: d.id, name: d.name })),
+      ...currentFoldersItems.map(f => ({ type: "folder" as const, id: f.id, name: f.name })),
+    ];
+
+    setSelectedItems(allItems);
+  }, [documents, folders, currentFolderId]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedItems([]);
+    setSelectionMode(false);
+  }, []);
+
+  // Move selected items to a folder
+  const moveSelectedToFolder = useCallback(async (targetFolderId: string | null) => {
+    if (selectedItems.length === 0) return;
+
+    try {
+      setMoving(true);
+
+      for (const item of selectedItems) {
+        if (item.type === "document") {
+          await api.moveDocument(item.id, targetFolderId);
+        } else if (item.type === "folder") {
+          // Don't move folder into itself
+          if (item.id !== targetFolderId) {
+            await api.moveFolder(item.id, targetFolderId);
+          }
+        }
+      }
+
+      clearSelection();
+      onRefresh();
+    } catch (error) {
+      console.error("Failed to move items:", error);
+      alert("Failed to move some items. Please try again.");
+    } finally {
+      setMoving(false);
+      setMoveDialogOpen(false);
+    }
+  }, [selectedItems, clearSelection, onRefresh]);
+
   // Drag and Drop handlers
   const handleDragStart = useCallback((item: DragItem) => {
     console.log("Drag started:", item);
@@ -202,7 +281,7 @@ export function DocumentExplorer({
     setDragOverFolderId(null);
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent, folderId: string | null) => {
+  const handleDragOverFolder = useCallback((e: React.DragEvent, folderId: string) => {
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
@@ -217,26 +296,23 @@ export function DocumentExplorer({
     }
   }, [draggedItem, dragOverFolderId]);
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    // Only clear if leaving to a non-child element
-    const relatedTarget = e.relatedTarget as HTMLElement;
-    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
-      setDragOverFolderId(null);
-    }
+  const handleDragLeaveFolder = useCallback(() => {
+    setDragOverFolderId(null);
   }, []);
 
-  const handleDrop = useCallback(async (targetFolderId: string | null) => {
+  const handleDropOnFolder = useCallback(async (e: React.DragEvent, targetFolderId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     console.log("Drop on folder:", targetFolderId, "draggedItem:", draggedItem);
+    setDragOverFolderId(null);
 
     if (!draggedItem || moving) {
-      setDragOverFolderId(null);
       return;
     }
 
     // Don't drop onto self
     if (draggedItem.type === "folder" && draggedItem.id === targetFolderId) {
-      setDragOverFolderId(null);
       return;
     }
 
@@ -244,13 +320,11 @@ export function DocumentExplorer({
     if (draggedItem.type === "document") {
       const doc = documents.find(d => d.id === draggedItem.id);
       if (doc && (doc.folderId || null) === targetFolderId) {
-        setDragOverFolderId(null);
         return;
       }
     } else if (draggedItem.type === "folder") {
       const folder = folders.find(f => f.id === draggedItem.id);
       if (folder && folder.parentId === targetFolderId) {
-        setDragOverFolderId(null);
         return;
       }
     }
@@ -273,7 +347,6 @@ export function DocumentExplorer({
     } finally {
       setMoving(false);
       setDraggedItem(null);
-      setDragOverFolderId(null);
     }
   }, [draggedItem, moving, documents, folders, onRefresh]);
 
@@ -284,6 +357,15 @@ export function DocumentExplorer({
   const currentFolders = folders.filter(
     (folder) => folder.parentId === currentFolderId
   );
+
+  // Get available folders for move dialog (exclude current folder and selected folders)
+  const availableFoldersForMove = folders.filter(f => {
+    // Don't show folders that are selected
+    if (selectedItems.some(item => item.type === "folder" && item.id === f.id)) {
+      return false;
+    }
+    return true;
+  });
 
   // Format file size
   const formatSize = (bytes: number): string => {
@@ -308,51 +390,82 @@ export function DocumentExplorer({
         </div>
       )}
 
+      {/* Selection Bar */}
+      {selectionMode && (
+        <div className="flex items-center gap-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+          <span className="text-sm font-medium">
+            {selectedItems.length} {t("selected")}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={selectAllInCurrentFolder}
+            >
+              <CheckSquare className="h-4 w-4 mr-2" />
+              {t("selectAll")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMoveDialogOpen(true)}
+              disabled={selectedItems.length === 0}
+            >
+              <FolderInput className="h-4 w-4 mr-2" />
+              {t("moveSelected")}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearSelection}
+            >
+              <XCircle className="h-4 w-4 mr-2" />
+              {t("cancelSelection")}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        {/* Breadcrumb - also a drop target for moving to parent folders */}
-        <div
-          className={`transition-all duration-200 rounded-lg p-1 -m-1 ${
-            draggedItem && !dragOverFolderId
-              ? "ring-2 ring-dashed ring-primary/50 bg-primary/5"
-              : ""
-          } ${
-            draggedItem && dragOverFolderId === "root"
-              ? "ring-2 ring-primary bg-primary/10"
-              : ""
-          }`}
-          onDragOver={(e) => {
-            if (draggedItem && currentFolderId) {
-              e.preventDefault();
-              e.dataTransfer.dropEffect = "move";
-              setDragOverFolderId("root");
+        {/* Breadcrumb */}
+        <FolderBreadcrumb
+          folders={breadcrumbPath}
+          onNavigate={onFolderNavigate}
+          draggedItem={draggedItem}
+          onDrop={(folderId) => {
+            if (draggedItem) {
+              handleDropOnFolder({ preventDefault: () => {}, stopPropagation: () => {} } as React.DragEvent, folderId || "");
             }
           }}
-          onDragLeave={(e) => {
-            e.preventDefault();
-            if (dragOverFolderId === "root") {
-              setDragOverFolderId(null);
-            }
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            if (currentFolderId) {
-              // Find parent of current folder
-              const currentFolder = folders.find(f => f.id === currentFolderId);
-              handleDrop(currentFolder?.parentId || null);
-            }
-          }}
-        >
-          <FolderBreadcrumb
-            folders={breadcrumbPath}
-            onNavigate={onFolderNavigate}
-            draggedItem={draggedItem}
-            onDrop={(folderId) => handleDrop(folderId)}
-          />
-        </div>
+        />
 
         {/* Actions */}
         <div className="flex items-center gap-2">
+          <Button
+            variant={selectionMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              if (selectionMode) {
+                clearSelection();
+              } else {
+                setSelectionMode(true);
+              }
+            }}
+          >
+            {selectionMode ? (
+              <>
+                <XCircle className="h-4 w-4 mr-2" />
+                {t("exitSelection")}
+              </>
+            ) : (
+              <>
+                <CheckSquare className="h-4 w-4 mr-2" />
+                {t("select")}
+              </>
+            )}
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -390,20 +503,27 @@ export function DocumentExplorer({
                 {sortedFolders
                   .filter((f) => f.parentId === currentFolderId)
                   .map((folder) => (
-                    <DraggableFolderCard
+                    <FolderCard
                       key={folder.id}
                       folder={folder}
                       stats={folderStats[folder.id]}
-                      onClick={() => onFolderNavigate(folder.id)}
+                      onNavigate={() => {
+                        if (!selectionMode) {
+                          onFolderNavigate(folder.id);
+                        }
+                      }}
                       onDragStart={handleDragStart}
                       onDragEnd={handleDragEnd}
-                      onDragOver={(e) => handleDragOver(e, folder.id)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={() => handleDrop(folder.id)}
+                      onDragOver={(e) => handleDragOverFolder(e, folder.id)}
+                      onDragLeave={handleDragLeaveFolder}
+                      onDrop={(e) => handleDropOnFolder(e, folder.id)}
                       isDraggedOver={dragOverFolderId === folder.id}
                       isDragging={draggedItem?.type === "folder" && draggedItem?.id === folder.id}
                       formatSize={formatSize}
                       canDrop={draggedItem !== null && !(draggedItem.type === "folder" && draggedItem.id === folder.id)}
+                      selectionMode={selectionMode}
+                      isSelected={isItemSelected("folder", folder.id)}
+                      onSelect={() => toggleItemSelection({ type: "folder", id: folder.id, name: folder.name })}
                     />
                   ))}
               </div>
@@ -424,6 +544,9 @@ export function DocumentExplorer({
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 draggedItem={draggedItem}
+                selectionMode={selectionMode}
+                selectedItems={selectedItems}
+                onSelect={toggleItemSelection}
               />
             </div>
           )}
@@ -442,15 +565,19 @@ export function DocumentExplorer({
           onFolderClick={onFolderNavigate}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
-          onDragOver={handleDragOver}
-          onDragLeave={() => setDragOverFolderId(null)}
+          onDragOver={(e, folderId) => {
+            if (folderId) handleDragOverFolder(e, folderId);
+          }}
+          onDragLeave={handleDragLeaveFolder}
           onDrop={(e, folderId) => {
-            e.preventDefault();
-            handleDrop(folderId);
+            if (folderId) handleDropOnFolder(e, folderId);
           }}
           draggedItem={draggedItem}
           dragOverFolderId={dragOverFolderId}
           formatSize={formatSize}
+          selectionMode={selectionMode}
+          selectedItems={selectedItems}
+          onSelect={toggleItemSelection}
         />
       )}
 
@@ -461,25 +588,18 @@ export function DocumentExplorer({
             draggedItem
               ? "border-primary bg-primary/5 scale-[1.01]"
               : "border-muted-foreground/25"
-          } ${
-            dragOverFolderId === "empty-state"
-              ? "border-primary bg-primary/10 ring-2 ring-primary"
-              : ""
           }`}
           onDragOver={(e) => {
             if (draggedItem) {
               e.preventDefault();
               e.dataTransfer.dropEffect = "move";
-              setDragOverFolderId("empty-state");
             }
-          }}
-          onDragLeave={(e) => {
-            e.preventDefault();
-            setDragOverFolderId(null);
           }}
           onDrop={(e) => {
             e.preventDefault();
-            handleDrop(currentFolderId);
+            if (draggedItem && currentFolderId) {
+              handleDropOnFolder(e, currentFolderId);
+            }
           }}
         >
           <h3 className="text-lg font-semibold">{t("emptyFolder")}</h3>
@@ -497,7 +617,7 @@ export function DocumentExplorer({
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-card p-6 rounded-lg shadow-xl flex items-center gap-3 border">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            <span className="text-lg font-medium">{t("moving")}</span>
+            <span className="text-lg font-medium">{t("movingItems")}</span>
           </div>
         </div>
       )}
@@ -550,15 +670,71 @@ export function DocumentExplorer({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Move Dialog */}
+      <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("moveDialog.title")}</DialogTitle>
+            <DialogDescription>
+              {t("moveDialog.description", { count: selectedItems.length })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 max-h-[300px] overflow-auto">
+            {/* Root option */}
+            <button
+              onClick={() => moveSelectedToFolder(null)}
+              className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-accent text-left"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="h-6 w-6 text-blue-500"
+              >
+                <path d="M19.5 21a3 3 0 003-3v-4.5a3 3 0 00-3-3h-15a3 3 0 00-3 3V18a3 3 0 003 3h15zM1.5 10.146V6a3 3 0 013-3h5.379a2.25 2.25 0 011.59.659l2.122 2.121c.14.141.331.22.53.22H19.5a3 3 0 013 3v1.146A4.483 4.483 0 0019.5 9h-15a4.483 4.483 0 00-3 1.146z" />
+              </svg>
+              <span className="font-medium">{t("moveDialog.root")}</span>
+            </button>
+
+            {/* Folder list */}
+            {availableFoldersForMove.map((folder) => (
+              <button
+                key={folder.id}
+                onClick={() => moveSelectedToFolder(folder.id)}
+                className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-accent text-left"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="h-6 w-6 text-yellow-500"
+                >
+                  <path d="M19.5 21a3 3 0 003-3v-4.5a3 3 0 00-3-3h-15a3 3 0 00-3 3V18a3 3 0 003 3h15zM1.5 10.146V6a3 3 0 013-3h5.379a2.25 2.25 0 011.59.659l2.122 2.121c.14.141.331.22.53.22H19.5a3 3 0 013 3v1.146A4.483 4.483 0 0019.5 9h-15a4.483 4.483 0 00-3 1.146z" />
+                </svg>
+                <span>{folder.name}</span>
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setMoveDialogOpen(false)}
+            >
+              {t("moveDialog.cancel")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-// Draggable Folder Card for Grid View
-function DraggableFolderCard({
+// Folder Card Component
+function FolderCard({
   folder,
   stats,
-  onClick,
+  onNavigate,
   onDragStart,
   onDragEnd,
   onDragOver,
@@ -568,62 +744,89 @@ function DraggableFolderCard({
   isDragging,
   formatSize,
   canDrop,
+  selectionMode,
+  isSelected,
+  onSelect,
 }: {
   folder: Folder;
   stats?: FolderStats;
-  onClick: () => void;
+  onNavigate: () => void;
   onDragStart: (item: DragItem) => void;
   onDragEnd: () => void;
   onDragOver: (e: React.DragEvent) => void;
-  onDragLeave: (e: React.DragEvent) => void;
-  onDrop: () => void;
+  onDragLeave: () => void;
+  onDrop: (e: React.DragEvent) => void;
   isDraggedOver: boolean;
   isDragging: boolean;
   formatSize: (bytes: number) => string;
   canDrop: boolean;
+  selectionMode: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
 }) {
   const handleDragStart = (e: React.DragEvent) => {
+    if (selectionMode) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", JSON.stringify({ type: "folder", id: folder.id, name: folder.name }));
-    // Set drag image
     const target = e.currentTarget as HTMLElement;
     e.dataTransfer.setDragImage(target, target.offsetWidth / 2, target.offsetHeight / 2);
     onDragStart({ type: "folder", id: folder.id, name: folder.name });
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    onDrop();
+
+    if (selectionMode) {
+      onSelect();
+    } else {
+      onNavigate();
+    }
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!selectionMode) {
+      onNavigate();
+    }
   };
 
   return (
     <div
-      draggable
+      draggable={!selectionMode}
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onDragOver(e);
-      }}
+      onDragOver={onDragOver}
       onDragLeave={onDragLeave}
-      onDrop={handleDrop}
-      onClick={() => {
-        // Don't navigate if we just dropped something
-        if (!isDraggedOver) {
-          onClick();
-        }
-      }}
+      onDrop={onDrop}
+      onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
       className={`
-        flex flex-col items-center gap-2 p-4 rounded-lg border bg-card
+        relative flex flex-col items-center gap-2 p-4 rounded-lg border bg-card
         transition-all duration-200 cursor-pointer select-none
         hover:bg-accent hover:shadow-md
         ${isDraggedOver ? "ring-2 ring-primary bg-primary/10 scale-105 shadow-lg" : ""}
         ${isDragging ? "opacity-50 scale-95 ring-2 ring-primary/50" : ""}
         ${canDrop && !isDraggedOver ? "ring-1 ring-dashed ring-primary/30" : ""}
+        ${isSelected ? "ring-2 ring-primary bg-primary/10" : ""}
       `}
     >
+      {/* Selection checkbox */}
+      {selectionMode && (
+        <div className="absolute top-2 left-2">
+          {isSelected ? (
+            <CheckSquare className="h-5 w-5 text-primary" />
+          ) : (
+            <Square className="h-5 w-5 text-muted-foreground" />
+          )}
+        </div>
+      )}
+
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 24 24"
@@ -654,4 +857,4 @@ function DraggableFolderCard({
 }
 
 // Export the DragItem type for use in other components
-export type { DragItem, DragItemType, FolderStats };
+export type { DragItem, DragItemType, FolderStats, SelectionItem };

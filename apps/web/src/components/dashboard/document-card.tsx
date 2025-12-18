@@ -42,6 +42,8 @@ import {
   Pencil,
   Copy,
   Check,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { DragItem } from "./document-explorer";
@@ -58,6 +60,9 @@ interface DocumentCardProps {
   onDragStart?: (item: DragItem) => void;
   onDragEnd?: () => void;
   isDragging?: boolean;
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onSelect?: () => void;
 }
 
 export function DocumentCard({
@@ -71,6 +76,9 @@ export function DocumentCard({
   onDragStart,
   onDragEnd,
   isDragging,
+  selectionMode = false,
+  isSelected = false,
+  onSelect,
 }: DocumentCardProps) {
   const router = useRouter();
   const t = useTranslations("documents.card");
@@ -259,6 +267,10 @@ export function DocumentCard({
   };
 
   const handleDragStart = (e: React.DragEvent) => {
+    if (selectionMode) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("application/json", JSON.stringify({ type: "document", id }));
     onDragStart?.({ type: "document", id, name: documentName });
@@ -268,20 +280,40 @@ export function DocumentCard({
     onDragEnd?.();
   };
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (selectionMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelect?.();
+    }
+  };
+
   return (
     <>
       <Card
         className={cn(
-          "group transition-shadow hover:shadow-lg cursor-grab active:cursor-grabbing",
-          isDragging && "opacity-50 ring-2 ring-primary"
+          "group transition-shadow hover:shadow-lg",
+          !selectionMode && "cursor-grab active:cursor-grabbing",
+          selectionMode && "cursor-pointer",
+          isDragging && "opacity-50 ring-2 ring-primary",
+          isSelected && "ring-2 ring-primary bg-primary/5"
         )}
-        draggable
+        draggable={!selectionMode}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
+        onClick={handleCardClick}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <div className="flex items-center space-x-2 min-w-0 flex-1">
-            <FileText className="h-5 w-5 flex-shrink-0 text-red-500" />
+            {selectionMode ? (
+              isSelected ? (
+                <CheckSquare className="h-5 w-5 flex-shrink-0 text-primary" />
+              ) : (
+                <Square className="h-5 w-5 flex-shrink-0 text-muted-foreground" />
+              )
+            ) : (
+              <FileText className="h-5 w-5 flex-shrink-0 text-red-500" />
+            )}
             <h3 className="font-semibold truncate" title={documentName}>
               {documentName}
             </h3>

@@ -463,11 +463,24 @@
         "creating": "Creating..."
       },
       "moving": "Moving...",
+      "movingItems": "Moving items...",
       "dropHere": "Drop here to move",
       "back": "Back",
       "forward": "Forward",
       "home": "Home",
-      "refresh": "Refresh"
+      "refresh": "Refresh",
+      "select": "Select",
+      "exitSelection": "Cancel",
+      "selected": "selected",
+      "selectAll": "Select all",
+      "moveSelected": "Move",
+      "cancelSelection": "Cancel",
+      "moveDialog": {
+        "title": "Move to",
+        "description": "Choose a destination folder for {count} item(s)",
+        "root": "Root (My Documents)",
+        "cancel": "Cancel"
+      }
     },
     "errors": {
       "loadFailed": "Failed to load documents. Please try again.",

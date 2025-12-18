@@ -463,11 +463,24 @@
         "creating": "Création..."
       },
       "moving": "Déplacement...",
+      "movingItems": "Déplacement en cours...",
       "dropHere": "Déposez ici pour déplacer",
       "back": "Précédent",
       "forward": "Suivant",
       "home": "Accueil",
-      "refresh": "Actualiser"
+      "refresh": "Actualiser",
+      "select": "Sélectionner",
+      "exitSelection": "Annuler",
+      "selected": "sélectionné(s)",
+      "selectAll": "Tout sélectionner",
+      "moveSelected": "Déplacer",
+      "cancelSelection": "Annuler",
+      "moveDialog": {
+        "title": "Déplacer vers",
+        "description": "Choisissez un dossier de destination pour {count} élément(s)",
+        "root": "Racine (Mes documents)",
+        "cancel": "Annuler"
+      }
     },
     "errors": {
       "loadFailed": "Échec du chargement des documents. Veuillez réessayer.",

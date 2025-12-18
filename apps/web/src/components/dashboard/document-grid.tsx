@@ -1,7 +1,7 @@
 "use client";
 
 import { DocumentCard } from "./document-card";
-import { DragItem } from "./document-explorer";
+import { DragItem, SelectionItem } from "./document-explorer";
 
 interface Document {
   id: string;
@@ -17,6 +17,9 @@ interface DocumentGridProps {
   onDragStart?: (item: DragItem) => void;
   onDragEnd?: () => void;
   draggedItem?: DragItem | null;
+  selectionMode?: boolean;
+  selectedItems?: SelectionItem[];
+  onSelect?: (item: SelectionItem) => void;
 }
 
 export function DocumentGrid({
@@ -25,10 +28,17 @@ export function DocumentGrid({
   onDragStart,
   onDragEnd,
   draggedItem,
+  selectionMode = false,
+  selectedItems = [],
+  onSelect,
 }: DocumentGridProps) {
   if (documents.length === 0) {
     return null;
   }
+
+  const isSelected = (id: string) => {
+    return selectedItems.some(item => item.type === "document" && item.id === id);
+  };
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -44,6 +54,9 @@ export function DocumentGrid({
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           isDragging={draggedItem?.type === "document" && draggedItem?.id === doc.id}
+          selectionMode={selectionMode}
+          isSelected={isSelected(doc.id)}
+          onSelect={() => onSelect?.({ type: "document", id: doc.id, name: doc.name })}
         />
       ))}
     </div>
