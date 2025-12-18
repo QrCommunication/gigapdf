@@ -312,10 +312,11 @@ All responses follow a standard format:
     # Include Webhooks router (at root level for stable URLs)
     app.include_router(webhooks_router, prefix="/webhooks", tags=["Webhooks"])
 
-    # Mount WebSocket server
+    # Mount WebSocket server at root with /socket.io path
+    # This allows clients to connect directly to /socket.io/
     sio_app = get_socketio_app()
-    app.mount("/ws", sio_app)
-    logger.info("WebSocket server mounted at /ws")
+    app.mount("/", sio_app)
+    logger.info("WebSocket server mounted at / (path: /socket.io)")
 
     # Health check endpoint
     @app.get("/health", tags=["Health"])

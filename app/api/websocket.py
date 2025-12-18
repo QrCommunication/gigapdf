@@ -72,6 +72,8 @@ sio = socketio.AsyncServer(
 )
 
 # Create ASGI app
+# Mounted at "/" in FastAPI with socketio_path="/socket.io"
+# See: https://github.com/fastapi/fastapi/issues/3666
 sio_app = socketio.ASGIApp(
     socketio_server=sio,
     socketio_path="/socket.io",
