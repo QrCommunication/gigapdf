@@ -10,12 +10,18 @@ export interface ApiConfig {
 // Support both Vite (VITE_*) and Next.js (NEXT_PUBLIC_*) environment variables
 const getEnvVar = (viteKey: string, nextKey: string, defaultValue: string): string => {
   // Try Vite first (for Vite-based apps)
-  if (typeof import.meta !== 'undefined' && import.meta.env?.[viteKey]) {
-    return import.meta.env[viteKey];
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    const viteEnv = import.meta.env as Record<string, string | undefined>;
+    if (viteEnv[viteKey]) {
+      return viteEnv[viteKey]!;
+    }
   }
   // Try Next.js (for Next.js apps) - check if process.env exists in browser
-  if (typeof process !== 'undefined' && process.env?.[nextKey]) {
-    return process.env[nextKey];
+  if (typeof process !== 'undefined' && process.env) {
+    const nextEnv = process.env as Record<string, string | undefined>;
+    if (nextEnv[nextKey]) {
+      return nextEnv[nextKey]!;
+    }
   }
   return defaultValue;
 };
