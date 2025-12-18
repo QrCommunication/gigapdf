@@ -105,6 +105,21 @@ pnpm build
 cd ../..
 
 # =============================================================================
+# 7. Copy static files to standalone directories
+# =============================================================================
+log_info "Copying static files to standalone directories..."
+
+# Web app
+mkdir -p /opt/gigapdf/apps/web/.next/standalone/apps/web/.next
+cp -r /opt/gigapdf/apps/web/.next/static /opt/gigapdf/apps/web/.next/standalone/apps/web/.next/
+cp -r /opt/gigapdf/apps/web/public /opt/gigapdf/apps/web/.next/standalone/apps/web/ 2>/dev/null || true
+
+# Admin app
+mkdir -p /opt/gigapdf/apps/admin/.next/standalone/apps/admin/.next
+cp -r /opt/gigapdf/apps/admin/.next/static /opt/gigapdf/apps/admin/.next/standalone/apps/admin/.next/
+cp -r /opt/gigapdf/apps/admin/public /opt/gigapdf/apps/admin/.next/standalone/apps/admin/ 2>/dev/null || true
+
+# =============================================================================
 # 8. Database Migrations
 # =============================================================================
 log_info "Running database migrations..."
