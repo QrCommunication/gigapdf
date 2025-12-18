@@ -542,38 +542,47 @@ export function EditorCanvas({
   ): FabricObject | null => {
     const { Rect, Circle, Ellipse, Triangle, Line, IText, FabricImage } = fabricModule;
 
+    // Base options from the new Element structure
     const baseOptions = {
-      left: element.position.x,
-      top: element.position.y,
-      angle: element.position.rotation || 0,
-      opacity: element.style?.opacity ?? 1,
+      left: element.bounds.x,
+      top: element.bounds.y,
+      angle: element.transform.rotation || 0,
+      scaleX: element.transform.scaleX || 1,
+      scaleY: element.transform.scaleY || 1,
+      skewX: element.transform.skewX || 0,
+      skewY: element.transform.skewY || 0,
       selectable: !element.locked,
+      visible: element.visible,
     };
 
     switch (element.type) {
       case "text": {
-        const textEl = element as Element & {
-          content: { text: string; fontSize: number; fontFamily: string };
-        };
-        return new IText(textEl.content?.text || "Text", {
+        // TextElement structure
+        return new IText(element.content || "Text", {
           ...baseOptions,
-          fontSize: textEl.content?.fontSize || 16,
-          fontFamily: textEl.content?.fontFamily || "Arial",
-          fill: element.style?.fillColor || "#000000",
+          fontSize: element.style.fontSize || 16,
+          fontFamily: element.style.fontFamily || "Arial",
+          fontWeight: element.style.fontWeight || "normal",
+          fontStyle: element.style.fontStyle || "normal",
+          fill: element.style.color || "#000000",
+          opacity: element.style.opacity ?? 1,
+          textAlign: element.style.textAlign || "left",
+          lineHeight: element.style.lineHeight || 1.2,
+          charSpacing: element.style.letterSpacing || 0,
         });
       }
 
       case "image": {
-        // Les images seront chargées de manière asynchrone
-        const imgEl = element as Element & {
-          content: { src: string; width: number; height: number };
-        };
-        if (imgEl.content?.src) {
-          FabricImage.fromURL(imgEl.content.src).then((img: FabricObject) => {
+        // ImageElement structure - images loaded asynchronously
+        if (element.source?.dataUrl) {
+          FabricImage.fromURL(element.source.dataUrl).then((img: FabricObject) => {
+            const originalWidth = element.source.originalDimensions?.width || 100;
+            const originalHeight = element.source.originalDimensions?.height || 100;
             img.set({
               ...baseOptions,
-              scaleX: (imgEl.content?.width || 100) / ((img as unknown as { width: number }).width || 100),
-              scaleY: (imgEl.content?.height || 100) / ((img as unknown as { height: number }).height || 100),
+              scaleX: element.bounds.width / originalWidth,
+              scaleY: element.bounds.height / originalHeight,
+              opacity: element.style?.opacity ?? 1,
             });
             (img as FabricObjectWithData).data = { elementId: element.elementId };
             fabricRef.current?.add(img);
@@ -584,45 +593,43 @@ export function EditorCanvas({
       }
 
       case "shape": {
-        const shapeEl = element as Element & {
-          content: { shapeType: ShapeType; width: number; height: number };
-        };
+        // ShapeElement structure
         const shapeOptions = {
           ...baseOptions,
-          fill: element.style?.fillColor || "transparent",
-          stroke: element.style?.strokeColor || "#000000",
-          strokeWidth: element.style?.strokeWidth || 2,
+          fill: element.style.fillColor || "transparent",
+          stroke: element.style.strokeColor || "#000000",
+          strokeWidth: element.style.strokeWidth || 2,
+          opacity: element.style.fillOpacity ?? 1,
         };
+        const width = element.bounds.width || 100;
+        const height = element.bounds.height || 100;
 
-        switch (shapeEl.content?.shapeType) {
+        switch (element.shapeType) {
           case "rectangle":
             return new Rect({
               ...shapeOptions,
-              width: shapeEl.content?.width || 100,
-              height: shapeEl.content?.height || 100,
+              width,
+              height,
             });
           case "circle":
             return new Circle({
               ...shapeOptions,
-              radius: (shapeEl.content?.width || 100) / 2,
+              radius: width / 2,
             });
           case "ellipse":
             return new Ellipse({
               ...shapeOptions,
-              rx: (shapeEl.content?.width || 100) / 2,
-              ry: (shapeEl.content?.height || 50) / 2,
+              rx: width / 2,
+              ry: height / 2,
             });
           case "line":
           case "arrow":
-            return new Line(
-              [0, 0, shapeEl.content?.width || 100, 0],
-              shapeOptions
-            );
+            return new Line([0, 0, width, 0], shapeOptions);
           case "triangle":
             return new Triangle({
               ...shapeOptions,
-              width: shapeEl.content?.width || 100,
-              height: shapeEl.content?.height || 100,
+              width,
+              height,
             });
           default:
             return new Rect({
@@ -634,43 +641,40 @@ export function EditorCanvas({
       }
 
       case "annotation": {
-        const annoEl = element as Element & {
-          content: {
-            annotationType: AnnotationType;
-            width: number;
-            height: number;
-          };
+        // AnnotationElement structure
+        const annoOptions = {
+          ...baseOptions,
+          opacity: element.style?.opacity ?? 1,
         };
-        switch (annoEl.content?.annotationType) {
+        const annoWidth = element.bounds.width || 100;
+        const annoHeight = element.bounds.height || 20;
+        const annoColor = element.style?.color || "#ff0000";
+
+        switch (element.annotationType) {
           case "highlight":
             return new Rect({
-              ...baseOptions,
-              width: annoEl.content?.width || 100,
-              height: annoEl.content?.height || 20,
+              ...annoOptions,
+              width: annoWidth,
+              height: annoHeight,
               fill: "rgba(255, 255, 0, 0.3)",
               stroke: "transparent",
             });
           case "underline":
-            return new Line(
-              [0, 0, annoEl.content?.width || 100, 0],
-              {
-                ...baseOptions,
-                stroke: "#ff0000",
-                strokeWidth: 2,
-              }
-            );
+            return new Line([0, 0, annoWidth, 0], {
+              ...annoOptions,
+              stroke: annoColor,
+              strokeWidth: 2,
+            });
           case "strikethrough":
-            return new Line(
-              [0, 0, annoEl.content?.width || 100, 0],
-              {
-                ...baseOptions,
-                stroke: "#ff0000",
-                strokeWidth: 1,
-              }
-            );
+          case "strikeout":
+            return new Line([0, 0, annoWidth, 0], {
+              ...annoOptions,
+              stroke: annoColor,
+              strokeWidth: 1,
+            });
           case "note":
             return new Rect({
-              ...baseOptions,
+              ...annoOptions,
               width: 30,
               height: 30,
               fill: "#ffeb3b",
@@ -679,7 +683,7 @@ export function EditorCanvas({
             });
           case "comment":
             return new Circle({
-              ...baseOptions,
+              ...annoOptions,
               radius: 15,
               fill: "#2196f3",
               stroke: "#1976d2",
@@ -687,9 +691,9 @@ export function EditorCanvas({
             });
           default:
             return new Rect({
-              ...baseOptions,
-              width: 100,
-              height: 20,
+              ...annoOptions,
+              width: annoWidth,
+              height: annoHeight,
               fill: "rgba(255, 255, 0, 0.3)",
             });
         }
