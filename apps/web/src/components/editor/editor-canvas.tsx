@@ -296,7 +296,7 @@ export function EditorCanvas({
 
     // Import dynamique de Fabric.js pour éviter les erreurs SSR
     import("fabric").then((fabricModule) => {
-      const { Canvas, Rect, Circle, Ellipse, Triangle, Line, IText, Group, FabricText, FabricImage } = fabricModule;
+      const { Canvas, Rect, Circle, Ellipse, Triangle, Line, IText, Group, FabricText } = fabricModule;
 
       if (fabricRef.current) {
         fabricRef.current.dispose();
