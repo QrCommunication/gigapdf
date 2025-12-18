@@ -16,12 +16,11 @@ export function AuthGuard({ children, requireEmailVerification = false }: AuthGu
   const [isTokenReady, setIsTokenReady] = useState(false);
 
   // Compute the token value from session - this runs synchronously on each render
+  // We always use the user ID for API calls. The FastAPI backend accepts the user ID
+  // directly when Better Auth session validation is not configured.
+  // For production with proper JWT, this would need to be updated to use session.session.token
   const tokenValue = useMemo(() => {
-    if (session?.session?.token) {
-      return session.session.token;
-    } else if (session?.user?.id) {
-      // If no JWT token, use user ID as fallback for dev mode
-      // In production, this should be a proper JWT
+    if (session?.user?.id) {
       return session.user.id;
     }
     return null;
