@@ -604,6 +604,9 @@
       "title": "Erreur de chargement",
       "backToDocuments": "Retour aux documents"
     },
+    "shortcuts": {
+      "hint": "Appuyez sur ? pour voir les raccourcis clavier"
+    },
     "toolbar": {
       "save": "Enregistrer",
       "undo": "Annuler",
@@ -628,7 +631,19 @@
       "underline": "Souligné",
       "alignLeft": "Aligner à gauche",
       "alignCenter": "Centrer",
-      "alignRight": "Aligner à droite"
+      "alignRight": "Aligner à droite",
+      "rectangle": "Rectangle",
+      "circle": "Cercle",
+      "triangle": "Triangle",
+      "line": "Ligne",
+      "arrow": "Flèche",
+      "highlight": "Surligner",
+      "note": "Note",
+      "comment": "Commentaire",
+      "colors": "Couleurs",
+      "strokeColor": "Couleur du contour",
+      "fillColor": "Couleur de remplissage",
+      "strokeWidth": "Épaisseur du contour"
     },
     "tools": {
       "select": "Sélectionner",
@@ -644,6 +659,7 @@
       "title": "Pages",
       "add": "Ajouter une page",
       "delete": "Supprimer la page",
+      "duplicate": "Dupliquer la page",
       "moveUp": "Déplacer vers le haut",
       "moveDown": "Déplacer vers le bas",
       "pageNumber": "Page {number}",

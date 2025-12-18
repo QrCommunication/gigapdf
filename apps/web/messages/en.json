@@ -604,6 +604,9 @@
       "title": "Loading Error",
       "backToDocuments": "Back to documents"
     },
+    "shortcuts": {
+      "hint": "Press ? to view keyboard shortcuts"
+    },
     "toolbar": {
       "save": "Save",
       "undo": "Undo",
@@ -628,7 +631,19 @@
       "underline": "Underline",
       "alignLeft": "Align left",
       "alignCenter": "Center",
-      "alignRight": "Align right"
+      "alignRight": "Align right",
+      "rectangle": "Rectangle",
+      "circle": "Circle",
+      "triangle": "Triangle",
+      "line": "Line",
+      "arrow": "Arrow",
+      "highlight": "Highlight",
+      "note": "Note",
+      "comment": "Comment",
+      "colors": "Colors",
+      "strokeColor": "Stroke color",
+      "fillColor": "Fill color",
+      "strokeWidth": "Stroke width"
     },
     "tools": {
       "select": "Select",
@@ -644,6 +659,7 @@
       "title": "Pages",
       "add": "Add page",
       "delete": "Delete page",
+      "duplicate": "Duplicate page",
       "moveUp": "Move up",
       "moveDown": "Move down",
       "pageNumber": "Page {number}",
