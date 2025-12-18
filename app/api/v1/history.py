@@ -128,7 +128,7 @@ async def undo(
         data={
             "undone_actions": undone_actions,
             "current_index": history.current_index,
-            "document": document.model_dump(),
+            "document": document.model_dump(by_alias=True),
         },
         meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
     )
@@ -175,7 +175,7 @@ async def redo(
         data={
             "redone_actions": redone_actions,
             "current_index": history.current_index,
-            "document": document.model_dump(),
+            "document": document.model_dump(by_alias=True),
         },
         meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
     )

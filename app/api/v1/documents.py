@@ -166,7 +166,7 @@ async def upload_document(
         data={
             "document_id": document_id,
             "status": "ready",
-            "document": document.model_dump(),
+            "document": document.model_dump(by_alias=True),
         },
         meta=MetaInfo(
             request_id=get_request_id(),
@@ -226,7 +226,7 @@ async def get_document(
 
     return APIResponse(
         success=True,
-        data=document.model_dump(),
+        data=document.model_dump(by_alias=True),
         meta=MetaInfo(
             request_id=get_request_id(),
             timestamp=now_utc(),

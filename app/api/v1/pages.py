@@ -77,7 +77,7 @@ async def get_page(
 
     return APIResponse(
         success=True,
-        data=page.model_dump(),
+        data=page.model_dump(by_alias=True),
         meta=MetaInfo(
             request_id=get_request_id(),
             timestamp=now_utc(),
@@ -225,7 +225,7 @@ async def add_page(
     return APIResponse(
         success=True,
         data={
-            "page": page.model_dump(),
+            "page": page.model_dump(by_alias=True),
             "new_page_count": doc.metadata.page_count,
         },
         meta=MetaInfo(
@@ -320,7 +320,7 @@ async def reorder_pages(
                 {
                     "page_id": p.page_id,
                     "page_number": p.page_number,
-                    "dimensions": p.dimensions.model_dump(),
+                    "dimensions": p.dimensions.model_dump(by_alias=True),
                 }
                 for p in pages
             ]
@@ -369,7 +369,7 @@ async def rotate_page(
 
     return APIResponse(
         success=True,
-        data=page.model_dump(),
+        data=page.model_dump(by_alias=True),
         meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
     )
 

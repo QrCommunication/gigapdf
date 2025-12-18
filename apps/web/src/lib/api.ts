@@ -452,6 +452,55 @@ class APIClient {
     );
   }
 
+  async moveDocument(documentId: string, folderId: string | null): Promise<{
+    stored_document_id: string;
+    folder_id: string | null;
+    moved: boolean;
+  }> {
+    const response = await this.request<APIResponse<{
+      stored_document_id: string;
+      folder_id: string | null;
+      moved: boolean;
+    }>>(`/api/v1/storage/documents/${documentId}/move`, {
+      method: "PATCH",
+      body: JSON.stringify({ folder_id: folderId }),
+    });
+    return response.data;
+  }
+
+  async moveFolder(folderId: string, parentId: string | null): Promise<{
+    folder_id: string;
+    parent_id: string | null;
+    path: string;
+    moved: boolean;
+  }> {
+    const response = await this.request<APIResponse<{
+      folder_id: string;
+      parent_id: string | null;
+      path: string;
+      moved: boolean;
+    }>>(`/api/v1/storage/folders/${folderId}/move`, {
+      method: "PATCH",
+      body: JSON.stringify({ parent_id: parentId }),
+    });
+    return response.data;
+  }
+
+  async getFolderStats(folderId: string): Promise<{
+    folder_id: string;
+    total_size_bytes: number;
+    document_count: number;
+    folder_count: number;
+  }> {
+    const response = await this.request<APIResponse<{
+      folder_id: string;
+      total_size_bytes: number;
+      document_count: number;
+      folder_count: number;
+    }>>(`/api/v1/storage/folders/${folderId}/stats`);
+    return response.data;
+  }
+
   // ===== Organization/Tenant API =====
 
   async getMyOrganizations(userId: string): Promise<OrganizationMembership[]> {

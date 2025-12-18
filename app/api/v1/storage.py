@@ -1549,3 +1549,385 @@ async def delete_folder(
                 processing_time_ms=processing_time,
             ),
         )
+
+
+class MoveDocumentRequest(BaseModel):
+    """Request to move a document to a folder."""
+
+    folder_id: Optional[str] = Field(
+        default=None,
+        description="Target folder ID (null for root)",
+    )
+
+
+@router.patch(
+    "/documents/{stored_document_id}/move",
+    response_model=APIResponse[dict],
+    summary="Move document to folder",
+    description="""
+Move a document to a different folder.
+
+## Path Parameters
+- **stored_document_id**: Document identifier (UUID v4)
+
+## Request Body
+```json
+{
+  "folder_id": "660e8400-e29b-41d4-a716-446655440001"
+}
+```
+
+## Example (curl)
+```bash
+curl -X PATCH "http://localhost:8000/api/v1/storage/documents/{stored_document_id}/move" \\
+  -H "Authorization: Bearer <token>" \\
+  -H "Content-Type: application/json" \\
+  -d '{"folder_id": "660e8400-e29b-41d4-a716-446655440001"}'
+```
+
+## Example (JavaScript)
+```javascript
+// Move a document to a folder
+const response = await fetch(
+  `/api/v1/storage/documents/${documentId}/move`,
+  {
+    method: 'PATCH',
+    headers: {
+      'Authorization': 'Bearer <token>',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ folder_id: targetFolderId })
+  }
+);
+```
+""",
+    responses={
+        200: {"description": "Document moved successfully"},
+        404: {"description": "Document or folder not found"},
+    },
+)
+async def move_document(
+    stored_document_id: str,
+    request: MoveDocumentRequest,
+    user: AuthenticatedUser,
+) -> APIResponse[dict]:
+    """Move document to a folder."""
+    start_time = time.time()
+
+    from app.models.database import StoredDocument, Folder
+    from app.core.database import get_db_session
+    from sqlalchemy import select
+
+    async with get_db_session() as session:
+        # Get document
+        result = await session.execute(
+            select(StoredDocument).where(
+                StoredDocument.id == stored_document_id,
+                StoredDocument.owner_id == user.user_id,
+                StoredDocument.is_deleted == False,
+            )
+        )
+        document = result.scalar_one_or_none()
+
+        if not document:
+            from app.middleware.error_handler import NotFoundError
+            raise NotFoundError(f"Document not found: {stored_document_id}")
+
+        # Verify target folder exists (if provided)
+        if request.folder_id:
+            folder_result = await session.execute(
+                select(Folder).where(
+                    Folder.id == request.folder_id,
+                    Folder.owner_id == user.user_id,
+                )
+            )
+            folder = folder_result.scalar_one_or_none()
+            if not folder:
+                from app.middleware.error_handler import NotFoundError
+                raise NotFoundError(f"Folder not found: {request.folder_id}")
+
+        # Move document
+        old_folder_id = document.folder_id
+        document.folder_id = request.folder_id
+        document.updated_at = now_utc()
+
+    # Log the move activity
+    await activity_service.log_activity(
+        user_id=user.user_id,
+        action=ActivityAction.MOVE,
+        document_id=stored_document_id,
+        user_email=user.email,
+        extra_data={"old_folder_id": old_folder_id, "new_folder_id": request.folder_id},
+    )
+
+    processing_time = int((time.time() - start_time) * 1000)
+
+    return APIResponse(
+        success=True,
+        data={
+            "stored_document_id": stored_document_id,
+            "folder_id": request.folder_id,
+            "moved": True,
+        },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
+
+
+class MoveFolderRequest(BaseModel):
+    """Request to move a folder to another folder."""
+
+    parent_id: Optional[str] = Field(
+        default=None,
+        description="Target parent folder ID (null for root)",
+    )
+
+
+@router.patch(
+    "/folders/{folder_id}/move",
+    response_model=APIResponse[dict],
+    summary="Move folder to another folder",
+    description="""
+Move a folder to a different parent folder.
+
+## Path Parameters
+- **folder_id**: Folder identifier (UUID v4)
+
+## Request Body
+```json
+{
+  "parent_id": "660e8400-e29b-41d4-a716-446655440001"
+}
+```
+
+## Example (curl)
+```bash
+curl -X PATCH "http://localhost:8000/api/v1/storage/folders/{folder_id}/move" \\
+  -H "Authorization: Bearer <token>" \\
+  -H "Content-Type: application/json" \\
+  -d '{"parent_id": "660e8400-e29b-41d4-a716-446655440001"}'
+```
+
+## Example (JavaScript)
+```javascript
+// Move a folder to another folder
+const response = await fetch(
+  `/api/v1/storage/folders/${folderId}/move`,
+  {
+    method: 'PATCH',
+    headers: {
+      'Authorization': 'Bearer <token>',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ parent_id: targetFolderId })
+  }
+);
+```
+""",
+    responses={
+        200: {"description": "Folder moved successfully"},
+        400: {"description": "Cannot move folder into itself or its descendant"},
+        404: {"description": "Folder not found"},
+    },
+)
+async def move_folder(
+    folder_id: str,
+    request: MoveFolderRequest,
+    user: AuthenticatedUser,
+) -> APIResponse[dict]:
+    """Move folder to another folder."""
+    start_time = time.time()
+
+    from app.models.database import Folder
+    from app.core.database import get_db_session
+    from sqlalchemy import select
+
+    # Can't move folder into itself
+    if folder_id == request.parent_id:
+        from app.middleware.error_handler import InvalidOperationError
+        raise InvalidOperationError("Cannot move folder into itself")
+
+    async with get_db_session() as session:
+        # Get folder to move
+        result = await session.execute(
+            select(Folder).where(
+                Folder.id == folder_id,
+                Folder.owner_id == user.user_id,
+            )
+        )
+        folder = result.scalar_one_or_none()
+
+        if not folder:
+            from app.middleware.error_handler import NotFoundError
+            raise NotFoundError(f"Folder not found: {folder_id}")
+
+        # Verify target parent folder exists (if provided)
+        new_path = "/"
+        if request.parent_id:
+            parent_result = await session.execute(
+                select(Folder).where(
+                    Folder.id == request.parent_id,
+                    Folder.owner_id == user.user_id,
+                )
+            )
+            parent_folder = parent_result.scalar_one_or_none()
+            if not parent_folder:
+                from app.middleware.error_handler import NotFoundError
+                raise NotFoundError(f"Parent folder not found: {request.parent_id}")
+
+            # Check if target is a descendant of the folder being moved
+            if parent_folder.path.startswith(folder.path + folder.id + "/"):
+                from app.middleware.error_handler import InvalidOperationError
+                raise InvalidOperationError("Cannot move folder into its own descendant")
+
+            new_path = f"{parent_folder.path}{parent_folder.id}/"
+
+        # Update folder
+        old_parent_id = folder.parent_id
+        old_path = folder.path
+        folder.parent_id = request.parent_id
+        folder.path = new_path
+        folder.updated_at = now_utc()
+
+        # Update paths of all descendants
+        descendants_result = await session.execute(
+            select(Folder).where(
+                Folder.owner_id == user.user_id,
+                Folder.path.startswith(old_path + folder_id + "/"),
+            )
+        )
+        descendants = descendants_result.scalars().all()
+
+        for descendant in descendants:
+            # Replace old path prefix with new path prefix
+            descendant.path = descendant.path.replace(
+                old_path + folder_id + "/",
+                new_path + folder_id + "/",
+                1
+            )
+
+    processing_time = int((time.time() - start_time) * 1000)
+
+    return APIResponse(
+        success=True,
+        data={
+            "folder_id": folder_id,
+            "parent_id": request.parent_id,
+            "path": new_path,
+            "moved": True,
+        },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
+
+
+@router.get(
+    "/folders/{folder_id}/stats",
+    response_model=APIResponse[dict],
+    summary="Get folder statistics",
+    description="""
+Get statistics for a folder including total size and document count (recursive).
+
+## Path Parameters
+- **folder_id**: Folder identifier (UUID v4)
+
+## Example (curl)
+```bash
+curl -X GET "http://localhost:8000/api/v1/storage/folders/{folder_id}/stats" \\
+  -H "Authorization: Bearer <token>"
+```
+
+## Example (JavaScript)
+```javascript
+// Get folder statistics
+const response = await fetch(
+  `/api/v1/storage/folders/${folderId}/stats`,
+  {
+    method: 'GET',
+    headers: { 'Authorization': 'Bearer <token>' }
+  }
+);
+const stats = await response.json();
+// stats.data = { folder_id, total_size_bytes, document_count, folder_count }
+```
+""",
+    responses={
+        200: {"description": "Folder statistics retrieved successfully"},
+        404: {"description": "Folder not found"},
+    },
+)
+async def get_folder_stats(
+    folder_id: str,
+    user: AuthenticatedUser,
+) -> APIResponse[dict]:
+    """Get folder statistics (size, document count, etc.)."""
+    start_time = time.time()
+
+    from app.models.database import Folder, StoredDocument
+    from app.core.database import get_db_session
+    from sqlalchemy import select, func
+
+    async with get_db_session() as session:
+        # Get folder
+        result = await session.execute(
+            select(Folder).where(
+                Folder.id == folder_id,
+                Folder.owner_id == user.user_id,
+            )
+        )
+        folder = result.scalar_one_or_none()
+
+        if not folder:
+            from app.middleware.error_handler import NotFoundError
+            raise NotFoundError(f"Folder not found: {folder_id}")
+
+        # Get all folders in this subtree (including the folder itself)
+        folder_ids = [folder_id]
+        descendants_result = await session.execute(
+            select(Folder.id).where(
+                Folder.owner_id == user.user_id,
+                Folder.path.startswith(folder.path + folder_id + "/"),
+            )
+        )
+        folder_ids.extend([f[0] for f in descendants_result.all()])
+
+        # Count subfolders (excluding the folder itself)
+        subfolder_count = len(folder_ids) - 1
+
+        # Get document stats for all folders in subtree
+        stats_result = await session.execute(
+            select(
+                func.count(StoredDocument.id),
+                func.coalesce(func.sum(StoredDocument.file_size_bytes), 0)
+            ).where(
+                StoredDocument.owner_id == user.user_id,
+                StoredDocument.folder_id.in_(folder_ids),
+                StoredDocument.is_deleted == False,
+            )
+        )
+        stats = stats_result.one()
+        document_count = stats[0] or 0
+        total_size = stats[1] or 0
+
+    processing_time = int((time.time() - start_time) * 1000)
+
+    return APIResponse(
+        success=True,
+        data={
+            "folder_id": folder_id,
+            "total_size_bytes": total_size,
+            "document_count": document_count,
+            "folder_count": subfolder_count,
+        },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )

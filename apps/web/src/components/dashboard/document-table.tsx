@@ -49,6 +49,8 @@ import {
   Folder,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { DragItem, FolderStats } from "./document-explorer";
+import { cn } from "@/lib/utils";
 
 export type SortField = "name" | "size" | "createdAt" | "updatedAt";
 export type SortDirection = "asc" | "desc";
@@ -73,23 +75,41 @@ interface FolderItem {
 interface DocumentTableProps {
   documents: Document[];
   folders?: FolderItem[];
+  folderStats?: Record<string, FolderStats>;
   sortField: SortField;
   sortDirection: SortDirection;
   onSort: (field: SortField) => void;
   onDelete?: () => void;
   onRename?: (id: string, newName: string) => void;
   onFolderClick?: (folderId: string) => void;
+  onDragStart?: (item: DragItem) => void;
+  onDragEnd?: () => void;
+  onDragOver?: (e: React.DragEvent, folderId: string) => void;
+  onDragLeave?: () => void;
+  onDrop?: (e: React.DragEvent, folderId: string) => void;
+  draggedItem?: DragItem | null;
+  dragOverFolderId?: string | null;
+  formatSize?: (bytes: number) => string;
 }
 
 export function DocumentTable({
   documents,
   folders = [],
+  folderStats = {},
   sortField,
   sortDirection,
   onSort,
   onDelete,
   onRename,
   onFolderClick,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  draggedItem,
+  dragOverFolderId,
+  formatSize,
 }: DocumentTableProps) {
   const router = useRouter();
   const t = useTranslations("documents");
@@ -336,63 +356,111 @@ export function DocumentTable({
           </TableHeader>
           <TableBody>
             {/* Folders first */}
-            {folders.map((folder) => (
-              <TableRow
-                key={`folder-${folder.id}`}
-                className="cursor-pointer hover:bg-muted/50"
-                onClick={() => onFolderClick?.(folder.id)}
-              >
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Folder className="h-5 w-5 text-yellow-500" />
-                    <span className="font-medium">{folder.name}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-muted-foreground">--</TableCell>
-                <TableCell className="text-muted-foreground">
-                  {formatDate(folder.createdAt)}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {formatDate(folder.updatedAt)}
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem>
-                        <Pencil className="mr-2 h-4 w-4" />
-                        {tCard("menu.rename")}
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="text-destructive">
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {tCard("menu.delete")}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
+            {folders.map((folder) => {
+              const stats = folderStats[folder.id];
+              const isDropTarget = dragOverFolderId === folder.id;
+              const canDrop = draggedItem && (
+                draggedItem.type === "document" ||
+                (draggedItem.type === "folder" && draggedItem.id !== folder.id)
+              );
+
+              return (
+                <TableRow
+                  key={`folder-${folder.id}`}
+                  className={cn(
+                    "cursor-pointer hover:bg-muted/50 transition-colors",
+                    isDropTarget && canDrop && "bg-primary/10 ring-2 ring-primary ring-inset"
+                  )}
+                  onClick={() => onFolderClick?.(folder.id)}
+                  onDragOver={(e) => onDragOver?.(e, folder.id)}
+                  onDragLeave={onDragLeave}
+                  onDrop={(e) => onDrop?.(e, folder.id)}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("application/json", JSON.stringify({ type: "folder", id: folder.id }));
+                    onDragStart?.({ type: "folder", id: folder.id, name: folder.name });
+                  }}
+                  onDragEnd={onDragEnd}
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Folder className="h-5 w-5 text-yellow-500" />
+                      <span className="font-medium">{folder.name}</span>
+                      {stats && stats.document_count > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          ({stats.document_count} {stats.document_count === 1 ? "doc" : "docs"})
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {stats && stats.total_size_bytes > 0
+                      ? (formatSize ? formatSize(stats.total_size_bytes) : formatBytes(stats.total_size_bytes))
+                      : "--"
+                    }
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(folder.createdAt)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(folder.updatedAt)}
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          {tCard("menu.rename")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-destructive">
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          {tCard("menu.delete")}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
 
             {/* Documents */}
-            {documents.map((doc) => (
-              <TableRow key={doc.id} className="group">
-                <TableCell>
-                  <div
-                    className="flex items-center gap-2 cursor-pointer"
-                    onClick={() => handleOpenEditor(doc)}
-                  >
-                    <FileText className="h-5 w-5 text-red-500" />
-                    <span className="font-medium hover:underline">{doc.name}</span>
-                    {loadingId === doc.id && (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    )}
-                  </div>
-                </TableCell>
+            {documents.map((doc) => {
+              const isDragging = draggedItem?.type === "document" && draggedItem?.id === doc.id;
+
+              return (
+                <TableRow
+                  key={doc.id}
+                  className={cn(
+                    "group cursor-grab active:cursor-grabbing",
+                    isDragging && "opacity-50 bg-primary/5"
+                  )}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("application/json", JSON.stringify({ type: "document", id: doc.id }));
+                    onDragStart?.({ type: "document", id: doc.id, name: doc.name });
+                  }}
+                  onDragEnd={onDragEnd}
+                >
+                  <TableCell>
+                    <div
+                      className="flex items-center gap-2 cursor-pointer"
+                      onClick={() => handleOpenEditor(doc)}
+                    >
+                      <FileText className="h-5 w-5 text-red-500" />
+                      <span className="font-medium hover:underline">{doc.name}</span>
+                      {loadingId === doc.id && (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      )}
+                    </div>
+                  </TableCell>
                 <TableCell className="text-muted-foreground">
                   {formatBytes(doc.size)}
                 </TableCell>
@@ -471,9 +539,10 @@ export function DocumentTable({
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

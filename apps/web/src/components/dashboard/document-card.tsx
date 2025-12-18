@@ -44,6 +44,8 @@ import {
   Check,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { DragItem } from "./document-explorer";
+import { cn } from "@/lib/utils";
 
 interface DocumentCardProps {
   id: string;
@@ -53,6 +55,9 @@ interface DocumentCardProps {
   updatedAt: Date;
   onDelete?: () => void;
   onRename?: (newName: string) => void;
+  onDragStart?: (item: DragItem) => void;
+  onDragEnd?: () => void;
+  isDragging?: boolean;
 }
 
 export function DocumentCard({
@@ -63,6 +68,9 @@ export function DocumentCard({
   updatedAt,
   onDelete,
   onRename,
+  onDragStart,
+  onDragEnd,
+  isDragging,
 }: DocumentCardProps) {
   const router = useRouter();
   const t = useTranslations("documents.card");
@@ -250,9 +258,27 @@ export function DocumentCard({
     setRenameDialogOpen(true);
   };
 
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("application/json", JSON.stringify({ type: "document", id }));
+    onDragStart?.({ type: "document", id, name: documentName });
+  };
+
+  const handleDragEnd = () => {
+    onDragEnd?.();
+  };
+
   return (
     <>
-      <Card className="group transition-shadow hover:shadow-lg">
+      <Card
+        className={cn(
+          "group transition-shadow hover:shadow-lg cursor-grab active:cursor-grabbing",
+          isDragging && "opacity-50 ring-2 ring-primary"
+        )}
+        draggable
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <div className="flex items-center space-x-2 min-w-0 flex-1">
             <FileText className="h-5 w-5 flex-shrink-0 text-red-500" />

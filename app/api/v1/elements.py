@@ -144,13 +144,13 @@ async def list_elements(
     return APIResponse(
         success=True,
         data={
-            "elements": [e.model_dump() for e in paginated_elements],
+            "elements": [e.model_dump(by_alias=True) for e in paginated_elements],
             "pagination": PaginationInfo(
                 total=total,
                 page=page,
                 per_page=per_page,
                 total_pages=total_pages,
-            ).model_dump(),
+            ).model_dump(by_alias=True),
         },
         meta=MetaInfo(
             request_id=get_request_id(),
@@ -188,7 +188,7 @@ async def get_element(
     return APIResponse(
         success=True,
         data={
-            "element": element.model_dump(),
+            "element": element.model_dump(by_alias=True),
             "page_number": page_number,
         },
         meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
@@ -316,7 +316,7 @@ async def create_element(
 
     return APIResponse(
         success=True,
-        data=element.model_dump(),
+        data=element.model_dump(by_alias=True),
         meta=MetaInfo(
             request_id=get_request_id(),
             timestamp=now_utc(),
@@ -372,7 +372,7 @@ async def update_element(
 
     return APIResponse(
         success=True,
-        data=element.model_dump(),
+        data=element.model_dump(by_alias=True),
         meta=MetaInfo(
             request_id=get_request_id(),
             timestamp=now_utc(),
@@ -460,7 +460,7 @@ async def move_element(
 
     return APIResponse(
         success=True,
-        data=element.model_dump(),
+        data=element.model_dump(by_alias=True),
         meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
     )
 
@@ -509,7 +509,7 @@ async def duplicate_element(
 
     return APIResponse(
         success=True,
-        data=element.model_dump(),
+        data=element.model_dump(by_alias=True),
         meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
     )
 
