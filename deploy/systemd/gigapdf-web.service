@@ -1,0 +1,24 @@
+[Unit]
+Description=GigaPDF Next.js Web Frontend
+After=network.target
+
+[Service]
+Type=simple
+User=gigapdf
+Group=gigapdf
+WorkingDirectory=/opt/gigapdf/apps/web
+Environment="NODE_ENV=production"
+Environment="PORT=3000"
+EnvironmentFile=/opt/gigapdf/.env
+ExecStart=/usr/bin/node /opt/gigapdf/apps/web/.next/standalone/apps/web/server.js
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/gigapdf/web.log
+StandardError=append:/var/log/gigapdf/web-error.log
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

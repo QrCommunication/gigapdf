@@ -78,6 +78,9 @@ uploads/
 storage/
 temp/
 
+# Deploy (keep scripts, ignore secrets)
+deploy/.env.production
+
 # Celery
 celerybeat-schedule
 celerybeat.pid

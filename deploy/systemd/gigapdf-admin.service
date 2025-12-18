@@ -1,0 +1,24 @@
+[Unit]
+Description=GigaPDF Next.js Admin Panel
+After=network.target
+
+[Service]
+Type=simple
+User=gigapdf
+Group=gigapdf
+WorkingDirectory=/opt/gigapdf/apps/admin
+Environment="NODE_ENV=production"
+Environment="PORT=3001"
+EnvironmentFile=/opt/gigapdf/.env
+ExecStart=/usr/bin/node /opt/gigapdf/apps/admin/.next/standalone/apps/admin/server.js
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/gigapdf/admin.log
+StandardError=append:/var/log/gigapdf/admin-error.log
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

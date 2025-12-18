@@ -6,6 +6,8 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   transpilePackages: ["@giga-pdf/ui", "@giga-pdf/types", "@giga-pdf/api"],
+  output: "standalone",
+  basePath: process.env.NODE_ENV === "production" ? "/admin" : "",
   experimental: {
     optimizePackageImports: ["@giga-pdf/ui"],
   },

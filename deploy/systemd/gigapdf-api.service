@@ -1,0 +1,27 @@
+[Unit]
+Description=GigaPDF FastAPI Backend
+After=network.target
+
+[Service]
+Type=simple
+User=gigapdf
+Group=gigapdf
+WorkingDirectory=/opt/gigapdf
+Environment="PATH=/opt/gigapdf/.venv/bin"
+EnvironmentFile=/opt/gigapdf/.env
+ExecStart=/opt/gigapdf/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/gigapdf/api.log
+StandardError=append:/var/log/gigapdf/api-error.log
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/gigapdf /var/lib/gigapdf /var/log/gigapdf
+
+[Install]
+WantedBy=multi-user.target
