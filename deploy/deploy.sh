@@ -73,7 +73,19 @@ log_info "Building shared packages..."
 pnpm build:packages
 
 # =============================================================================
-# 5. Build Next.js Applications
+# 5. Generate Prisma clients
+# =============================================================================
+log_info "Generating Prisma clients..."
+cd apps/web
+pnpm db:generate || log_warn "Web Prisma generate skipped"
+cd ../..
+
+cd apps/admin
+pnpm db:generate || log_warn "Admin Prisma generate skipped"
+cd ../..
+
+# =============================================================================
+# 6. Build Next.js Applications
 # =============================================================================
 log_info "Building Next.js Web application..."
 cd apps/web
@@ -86,22 +98,20 @@ pnpm build
 cd ../..
 
 # =============================================================================
-# 6. Database Migrations
+# 8. Database Migrations
 # =============================================================================
 log_info "Running database migrations..."
 source .venv/bin/activate
 cd "$APP_DIR"
 alembic upgrade head || log_warn "Alembic migrations skipped or failed"
 
-# Prisma migrations for Next.js apps
-log_info "Running Prisma migrations..."
+# Prisma push for Next.js apps
+log_info "Running Prisma push..."
 cd apps/web
-pnpm db:generate
 pnpm db:push || log_warn "Web Prisma push skipped"
 cd ../..
 
 cd apps/admin
-pnpm db:generate
 pnpm db:push || log_warn "Admin Prisma push skipped"
 cd ../..
 
