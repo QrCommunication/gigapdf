@@ -301,6 +301,7 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       if (pageIndex < 0 || pageIndex >= document.pages.length) return;
 
       const pageToDuplicate = document.pages[pageIndex];
+      if (!pageToDuplicate) return;
 
       // Créer une copie profonde de la page avec un nouvel ID
       const duplicatedPage: PageObject = {
