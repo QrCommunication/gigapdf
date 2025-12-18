@@ -90,16 +90,8 @@ export function DocumentCard({
   const [sessionDocId, setSessionDocId] = useState<string | null>(null);
 
   const handleOpenEditor = async () => {
-    try {
-      setLoading(true);
-      const result = await api.loadDocument(id);
-      router.push(`/editor/${result.document_id}`);
-    } catch (err) {
-      console.error("Failed to load document:", err);
-      alert(t("errors.loadFailed"));
-    } finally {
-      setLoading(false);
-    }
+    // Navigate to editor with stored document ID (not session ID)
+    router.push(`/editor/${id}`);
   };
 
   const handleDownload = async () => {

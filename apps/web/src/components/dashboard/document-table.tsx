@@ -118,16 +118,8 @@ export function DocumentTable({
   const [sessionDocId, setSessionDocId] = useState<string | null>(null);
 
   const handleOpenEditor = async (doc: Document) => {
-    try {
-      setLoadingId(doc.id);
-      const result = await api.loadDocument(doc.id);
-      router.push(`/editor/${result.document_id}`);
-    } catch (err) {
-      console.error("Failed to load document:", err);
-      alert(tCard("errors.loadFailed"));
-    } finally {
-      setLoadingId(null);
-    }
+    // Navigate to editor with stored document ID (not session ID)
+    router.push(`/editor/${doc.id}`);
   };
 
   const handleDownload = async (doc: Document) => {
