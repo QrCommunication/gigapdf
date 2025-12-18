@@ -7,9 +7,10 @@ import { setAuthToken } from "@/lib/api";
 
 interface AuthGuardProps {
   children: ReactNode;
+  requireEmailVerification?: boolean;
 }
 
-export function AuthGuard({ children }: AuthGuardProps) {
+export function AuthGuard({ children, requireEmailVerification = false }: AuthGuardProps) {
   const { data: session, isPending } = useSession();
   const router = useRouter();
   const [isTokenReady, setIsTokenReady] = useState(false);
@@ -30,6 +31,12 @@ export function AuthGuard({ children }: AuthGuardProps) {
   useEffect(() => {
     if (!isPending) {
       if (tokenValue) {
+        // Check if email verification is required
+        if (requireEmailVerification && session?.user && !session.user.emailVerified) {
+          const email = session.user.email || "";
+          router.push(`/verify-email?email=${encodeURIComponent(email)}`);
+          return;
+        }
         setAuthToken(tokenValue);
         setIsTokenReady(true);
       } else if (!session) {
@@ -38,7 +45,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
         router.push("/login");
       }
     }
-  }, [isPending, session, tokenValue, router]);
+  }, [isPending, session, tokenValue, router, requireEmailVerification]);
 
   // Show loading while pending or while waiting for token to be ready
   if (isPending || (session && !isTokenReady)) {
@@ -50,6 +57,11 @@ export function AuthGuard({ children }: AuthGuardProps) {
   }
 
   if (!session) {
+    return null;
+  }
+
+  // If email verification required but not verified, don't render children
+  if (requireEmailVerification && !session.user?.emailVerified) {
     return null;
   }
 
