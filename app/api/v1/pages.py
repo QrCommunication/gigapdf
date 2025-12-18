@@ -91,6 +91,64 @@ async def get_page(
 
 
 @router.get(
+    "/{page_number}/images/{image_xref}",
+    summary="Get page image",
+    description="""
+Retrieve an embedded image from a page.
+
+## Path Parameters
+- **document_id**: Document identifier
+- **page_number**: Page number (1-indexed)
+- **image_xref**: Image cross-reference number
+
+## Example (curl)
+```bash
+curl -X GET "http://localhost:8000/api/v1/documents/{document_id}/pages/1/images/7" \\
+  -H "Authorization: Bearer <token>" \\
+  -o image.png
+```
+
+## Example (JavaScript)
+```javascript
+// Display image in an img element
+const img = document.getElementById('pdf-image');
+img.src = `/api/v1/documents/${documentId}/pages/1/images/${xref}`;
+```
+""",
+    responses={
+        200: {
+            "description": "Image data",
+            "content": {
+                "image/png": {},
+                "image/jpeg": {},
+            },
+        },
+    },
+)
+async def get_page_image(
+    document_id: str,
+    page_number: int,
+    image_xref: int,
+    user: OptionalUser = None,
+) -> Response:
+    """Get an embedded image from a page."""
+    # Preload session from Redis if needed
+    await preload_document_session(document_id)
+
+    image_data, content_type = document_service.get_page_image(
+        document_id=document_id,
+        page_number=page_number,
+        image_xref=image_xref,
+    )
+
+    return Response(
+        content=image_data,
+        media_type=content_type,
+        headers={"Content-Length": str(len(image_data))},
+    )
+
+
+@router.get(
     "/{page_number}/preview",
     summary="Get page preview",
     description="""
