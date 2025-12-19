@@ -15,6 +15,9 @@ import {
   AlertCircle,
   Wifi,
   WifiOff,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 
 import { useDocument } from "@/hooks/use-document";
@@ -72,7 +75,55 @@ export default function EditorPage() {
     deletePage,
     reorderPages,
     duplicatePage,
+    setName,
   } = useDocument({ storedDocumentId });
+
+  // État pour l'édition du nom
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState(name);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus input quand on passe en mode édition
+  useEffect(() => {
+    if (isEditingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [isEditingName]);
+
+  // Mettre à jour editedName quand name change
+  useEffect(() => {
+    setEditedName(name);
+  }, [name]);
+
+  // Handlers pour le renommage
+  const handleStartRename = useCallback(() => {
+    setEditedName(name);
+    setIsEditingName(true);
+  }, [name]);
+
+  const handleCancelRename = useCallback(() => {
+    setEditedName(name);
+    setIsEditingName(false);
+  }, [name]);
+
+  const handleConfirmRename = useCallback(() => {
+    const trimmedName = editedName.trim();
+    if (trimmedName && trimmedName !== name) {
+      setName(trimmedName);
+      setDirty(true);
+      saveWithPriority("immediate");
+    }
+    setIsEditingName(false);
+  }, [editedName, name, setName, setDirty, saveWithPriority]);
+
+  const handleNameKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleConfirmRename();
+    } else if (e.key === "Escape") {
+      handleCancelRename();
+    }
+  }, [handleConfirmRename, handleCancelRename]);
 
   // Sauvegarde hybride (immédiate pour actions critiques, debounced pour modifications mineures)
   const {
@@ -463,10 +514,46 @@ export default function EditorPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-base font-semibold">
-              {name || t("untitled")}
-              {isDirty && <span className="ml-1 text-muted-foreground">*</span>}
-            </h1>
+            {isEditingName ? (
+              <div className="flex items-center gap-1">
+                <input
+                  ref={nameInputRef}
+                  type="text"
+                  value={editedName}
+                  onChange={(e) => setEditedName(e.target.value)}
+                  onKeyDown={handleNameKeyDown}
+                  onBlur={handleConfirmRename}
+                  className="text-base font-semibold bg-transparent border-b-2 border-primary outline-none px-1 py-0.5 min-w-[200px]"
+                  placeholder={t("untitled")}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={handleConfirmRename}
+                  title={t("confirm")}
+                >
+                  <Check className="h-3.5 w-3.5 text-green-600" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={handleCancelRename}
+                  title={t("cancel")}
+                >
+                  <X className="h-3.5 w-3.5 text-red-600" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 group cursor-pointer" onClick={handleStartRename}>
+                <h1 className="text-base font-semibold hover:text-primary transition-colors">
+                  {name || t("untitled")}
+                  {isDirty && <span className="ml-1 text-muted-foreground">*</span>}
+                </h1>
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">
               {t("pageIndicator", {
                 current: currentPageIndex + 1,

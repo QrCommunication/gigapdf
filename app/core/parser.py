@@ -281,32 +281,42 @@ class PDFParser:
         self, page: fitz.Page, page_height: float
     ) -> list[TextElement]:
         """
-        Extract text elements from page.
+        Extract text elements from page with full styling.
 
-        Uses text blocks for structured text extraction.
+        Uses rawdict for detailed style extraction including:
+        - Font family, size, weight, style
+        - Color and opacity
+        - Text decorations (underline, strikethrough)
+        - Links (internal and external)
         """
         elements = []
 
-        # Get text blocks with position info
-        blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
+        # Get links for this page to associate with text
+        links = self._get_page_links(page)
+
+        # Get text with detailed styling using rawdict
+        # FLAGS: preserve whitespace, preserve ligatures, preserve images positions
+        flags = fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_PRESERVE_LIGATURES
+        blocks = page.get_text("rawdict", flags=flags).get("blocks", [])
 
         for block in blocks:
-            if block["type"] != 0:  # Skip non-text blocks
+            if block.get("type") != 0:  # Skip non-text blocks
                 continue
 
             for line in block.get("lines", []):
+                line_dir = line.get("dir", (1, 0))  # Text direction
+                writing_mode = "vertical-rl" if abs(line_dir[0]) < 0.5 else "horizontal-tb"
+
                 for span in line.get("spans", []):
-                    text = span.get("text", "").strip()
-                    if not text:
+                    text = span.get("text", "")
+                    if not text.strip():
                         continue
 
-                    # Get bounding box
-                    # PyMuPDF's get_text() returns coordinates in web-style format
-                    # (origin top-left, Y increases downward) - no conversion needed
+                    # Get bounding box - PyMuPDF uses top-left origin
                     bbox = span.get("bbox", [0, 0, 0, 0])
                     bounds = Rect(
                         x=bbox[0],
-                        y=bbox[1],  # Already in web coordinates (top-left origin)
+                        y=bbox[1],
                         width=bbox[2] - bbox[0],
                         height=bbox[3] - bbox[1],
                     )
@@ -316,9 +326,35 @@ class PDFParser:
                     font_size = span.get("size", 12)
                     color = self._int_to_hex_color(span.get("color", 0))
 
-                    # Determine font weight and style
-                    font_weight = "bold" if "bold" in font_name.lower() else "normal"
-                    font_style = "italic" if "italic" in font_name.lower() else "normal"
+                    # Get span flags for styling
+                    span_flags = span.get("flags", 0)
+                    # Flags: superscript=1, italic=2, serif=4, monospace=8, bold=16
+
+                    # Determine styles from flags and font name
+                    is_bold = bool(span_flags & 16) or "bold" in font_name.lower()
+                    is_italic = bool(span_flags & 2) or "italic" in font_name.lower() or "oblique" in font_name.lower()
+                    is_superscript = bool(span_flags & 1)
+
+                    font_weight = "bold" if is_bold else "normal"
+                    font_style = "italic" if is_italic else "normal"
+                    vertical_align = "superscript" if is_superscript else "baseline"
+
+                    # Check for underline/strikethrough (not in flags, check annotations)
+                    # These are typically rendered as separate drawing elements
+
+                    # Find associated link
+                    link_url = None
+                    link_page = None
+                    span_rect = fitz.Rect(bbox)
+                    for link in links:
+                        if link["rect"].intersects(span_rect):
+                            if link.get("uri"):
+                                link_url = link["uri"]
+                            elif link.get("page") is not None:
+                                link_page = link["page"] + 1  # Convert to 1-indexed
+
+                    # Get origin point for baseline positioning
+                    origin = span.get("origin", (bbox[0], bbox[3]))
 
                     element = TextElement(
                         element_id=generate_uuid(),
@@ -336,12 +372,30 @@ class PDFParser:
                             font_weight=font_weight,
                             font_style=font_style,
                             color=color,
+                            writing_mode=writing_mode,
+                            vertical_align=vertical_align,
+                            original_font=font_name,  # Preserve original font name
                         ),
                         transform=Transform(),
+                        link_url=link_url,
+                        link_page=link_page,
                     )
                     elements.append(element)
 
         return elements
+
+    def _get_page_links(self, page: fitz.Page) -> list[dict]:
+        """Extract all links from a page."""
+        links = []
+        for link in page.get_links():
+            link_info = {
+                "rect": fitz.Rect(link.get("from", [0, 0, 0, 0])),
+                "uri": link.get("uri"),
+                "page": link.get("page"),
+                "kind": link.get("kind"),
+            }
+            links.append(link_info)
+        return links
 
     def _extract_image_elements(
         self, page: fitz.Page, page_number: int, page_height: float

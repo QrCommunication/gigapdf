@@ -78,6 +78,17 @@ class TextStyle(CamelCaseModel):
     line_height: float = Field(default=1.2, ge=0.5, description="Line height multiplier")
     letter_spacing: float = Field(default=0.0, description="Letter spacing in points")
     writing_mode: Literal["horizontal-tb", "vertical-rl"] = Field(default="horizontal-tb")
+    # Additional text decorations
+    underline: bool = Field(default=False, description="Underline decoration")
+    strikethrough: bool = Field(default=False, description="Strikethrough decoration")
+    background_color: Optional[str] = Field(
+        default=None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Text background/highlight color"
+    )
+    vertical_align: Literal["baseline", "superscript", "subscript"] = Field(
+        default="baseline", description="Vertical alignment for super/subscript"
+    )
+    # Original font info for 1:1 rendering
+    original_font: Optional[str] = Field(default=None, description="Original PDF font name")
 
 
 class TextElement(ElementBase):
@@ -89,6 +100,9 @@ class TextElement(ElementBase):
     ocr_confidence: Optional[float] = Field(
         default=None, ge=0, le=100, description="OCR confidence score if from OCR"
     )
+    # Link support for clickable text
+    link_url: Optional[str] = Field(default=None, description="External URL if text is a link")
+    link_page: Optional[int] = Field(default=None, description="Internal page number if text is a link")
 
 
 # =============================================================================

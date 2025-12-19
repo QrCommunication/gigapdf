@@ -573,19 +573,41 @@ export function EditorCanvas({
 
     switch (element.type) {
       case "text": {
-        // TextElement structure
-        return new IText(element.content || "Text", {
+        // TextElement structure with full styling
+        const textObj = new IText(element.content || "Text", {
           ...baseOptions,
           fontSize: element.style.fontSize || 16,
-          fontFamily: element.style.fontFamily || "Arial",
+          fontFamily: element.style.originalFont || element.style.fontFamily || "Arial",
           fontWeight: element.style.fontWeight || "normal",
           fontStyle: element.style.fontStyle || "normal",
           fill: element.style.color || "#000000",
           opacity: element.style.opacity ?? 1,
           textAlign: element.style.textAlign || "left",
           lineHeight: element.style.lineHeight || 1.2,
-          charSpacing: element.style.letterSpacing || 0,
+          charSpacing: (element.style.letterSpacing || 0) * 10, // Convert to Fabric units
+          underline: element.style.underline || false,
+          linethrough: element.style.strikethrough || false,
+          textBackgroundColor: element.style.backgroundColor || "",
         });
+
+        // Store link info for click handling
+        if (element.linkUrl || element.linkPage) {
+          (textObj as FabricObjectWithData).data = {
+            ...((textObj as FabricObjectWithData).data || {}),
+            elementId: element.elementId,
+            linkUrl: element.linkUrl,
+            linkPage: element.linkPage,
+          };
+          // Style links with underline and blue color if not already styled
+          if (!element.style.underline) {
+            textObj.set({
+              underline: true,
+              fill: element.style.color || "#0066cc",
+            });
+          }
+        }
+
+        return textObj;
       }
 
       case "image": {
