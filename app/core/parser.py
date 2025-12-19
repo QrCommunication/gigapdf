@@ -578,6 +578,7 @@ class PDFParser:
                     # Determine shape type based on items
                     items = drawing.get("items", [])
                     shape_type = ShapeType.RECTANGLE
+                    corner_radius = 0.0
 
                     # Check if it's a line (height or width is 0 or very small)
                     width = rect.x1 - rect.x0
@@ -587,6 +588,13 @@ class PDFParser:
                         shape_type = ShapeType.LINE
                     elif width < 1 and height > 1:
                         shape_type = ShapeType.LINE
+                    else:
+                        # Detect rounded rectangle by checking for curve commands
+                        corner_radius = self._detect_corner_radius(items, width, height)
+                        # If corner radius is >= half the smaller dimension, it's an ellipse/pill
+                        min_dim = min(width, height)
+                        if corner_radius > 0 and corner_radius >= min_dim / 2 - 1:
+                            shape_type = ShapeType.ELLIPSE
 
                     # Create bounds - PyMuPDF uses top-left origin
                     bounds = Rect(
@@ -606,7 +614,7 @@ class PDFParser:
                             height=bounds.height,
                         ),
                         shape_type=shape_type,
-                        geometry=ShapeGeometry(),
+                        geometry=ShapeGeometry(corner_radius=corner_radius),
                         style=ShapeStyle(
                             fill_color=fill_color,
                             fill_opacity=1.0 if fill_color else 0.0,
@@ -627,6 +635,67 @@ class PDFParser:
 
         logger.info(f"Extracted {len(elements)} vector drawings from page")
         return elements
+
+    def _detect_corner_radius(self, items: list, width: float, height: float) -> float:
+        """
+        Detect corner radius from drawing path items.
+
+        In PDF, rounded rectangles are drawn with Bezier curves at corners.
+        This analyzes the curve commands to estimate the corner radius.
+        """
+        if not items:
+            return 0.0
+
+        # Count curve commands (type "c" for cubic Bezier)
+        curve_items = [item for item in items if item[0] == "c"]
+
+        # A rounded rectangle typically has 4 curves (one per corner)
+        # A pill/stadium shape also has curves
+        if not curve_items:
+            return 0.0
+
+        # Estimate corner radius from curve control points
+        # A cubic Bezier curve for a quarter circle has specific geometry
+        # The distance from the curve start to the first control point approximates the radius
+
+        try:
+            # Analyze first curve to estimate radius
+            for item in curve_items:
+                # item format: ("c", p1, p2, p3) where p1, p2, p3 are control points
+                if len(item) >= 4:
+                    # Get the control points
+                    p1 = item[1]  # First control point
+                    p2 = item[2]  # Second control point
+                    p3 = item[3]  # End point (on the curve)
+
+                    # For a quarter-circle Bezier, the radius is approximately
+                    # the distance from start point to first control point * (1 / 0.5523)
+                    # But for simplicity, we use the max delta of control points
+
+                    # Estimate radius from the curve extent
+                    if isinstance(p1, fitz.Point) and isinstance(p3, fitz.Point):
+                        dx = abs(p1.x - p3.x)
+                        dy = abs(p1.y - p3.y)
+                        estimated_radius = max(dx, dy)
+
+                        # For a true quarter-circle, the radius would be close to
+                        # the control point distance. Use the smaller of width/height
+                        # constraints to limit unreasonable values
+                        max_radius = min(width, height) / 2
+                        return min(estimated_radius, max_radius)
+
+            # Fallback: if we have curves, assume it's a rounded shape
+            # Estimate radius as min(width, height) / 2 for pill shapes
+            # or a smaller value for rounded rectangles
+            if len(curve_items) >= 4:
+                # Likely a rounded rectangle with 4 corners
+                # Estimate smaller radius
+                return min(width, height) / 4
+
+        except Exception as e:
+            logger.debug(f"Error detecting corner radius: {e}")
+
+        return 0.0
 
     def _extract_form_fields(
         self, page: fitz.Page, page_height: float

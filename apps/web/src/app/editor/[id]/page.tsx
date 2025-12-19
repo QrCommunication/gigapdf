@@ -705,7 +705,7 @@ export default function EditorPage() {
         {/* Canvas */}
         <main
           ref={canvasRef}
-          className="flex-1 overflow-hidden relative"
+          className="flex-1 overflow-auto relative"
           onMouseMove={handleMouseMove}
         >
           <EditorCanvas
