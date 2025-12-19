@@ -33,6 +33,13 @@ export interface TextStyle {
   lineHeight: number;
   letterSpacing: number;
   writingMode: "horizontal-tb" | "vertical-rl";
+  // Additional text decorations
+  underline: boolean;
+  strikethrough: boolean;
+  backgroundColor: string | null;
+  verticalAlign: "baseline" | "superscript" | "subscript";
+  // Original font info for 1:1 rendering
+  originalFont: string | null;
 }
 
 export interface TextElement extends ElementBase {
@@ -40,6 +47,9 @@ export interface TextElement extends ElementBase {
   content: string;
   style: TextStyle;
   ocrConfidence: number | null;
+  // Link support for clickable text
+  linkUrl: string | null;
+  linkPage: number | null;
 }
 
 // ============= Image Element =============

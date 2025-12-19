@@ -178,6 +178,12 @@ export function EditorCanvas({
           lineHeight?: number;
           charSpacing?: number;
         };
+        const textObjWithStyles = textObj as typeof textObj & {
+          underline?: boolean;
+          linethrough?: boolean;
+          textBackgroundColor?: string;
+        };
+        const data = (obj as FabricObjectWithData).data;
         return {
           ...baseElement,
           type: "text" as const,
@@ -193,8 +199,16 @@ export function EditorCanvas({
             lineHeight: textObj.lineHeight || 1.2,
             letterSpacing: textObj.charSpacing || 0,
             writingMode: "horizontal-tb" as const,
+            // New text decorations
+            underline: textObjWithStyles.underline || false,
+            strikethrough: textObjWithStyles.linethrough || false,
+            backgroundColor: textObjWithStyles.textBackgroundColor || null,
+            verticalAlign: "baseline" as const,
+            originalFont: null,
           },
           ocrConfidence: null,
+          linkUrl: (data?.linkUrl as string) || null,
+          linkPage: (data?.linkPage as number) || null,
         };
       }
 
