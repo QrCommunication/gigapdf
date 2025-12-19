@@ -367,6 +367,10 @@ class DocumentSessionManager:
             # Rebuild session
             pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             scene_graph = DocumentObject.model_validate_json(graph_json)
+
+            # Register document with pdf_engine for save operations
+            from app.core.pdf_engine import pdf_engine
+            pdf_engine._documents[document_id] = pdf_doc
             meta = json.loads(meta_json) if meta_json else {}
 
             session = DocumentSession(
