@@ -102,12 +102,11 @@ export interface Plan {
 }
 
 export interface Folder {
-  id: string;
+  folder_id: string;
   name: string;
   parent_id: string | null;
   path: string;
   created_at: string;
-  updated_at: string;
 }
 
 class APIClient {

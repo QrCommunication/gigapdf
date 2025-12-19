@@ -553,9 +553,7 @@ export function DocumentExplorer({
               <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
                 {sortedFolders
                   .filter((f) => f.parentId === currentFolderId)
-                  .map((folder) => {
-                    console.log("Rendering FolderCard, folder:", folder, "folder.id:", folder.id);
-                    return (
+                  .map((folder) => (
                     <FolderCard
                       key={folder.id}
                       folder={folder}
@@ -579,8 +577,7 @@ export function DocumentExplorer({
                       isSelected={isItemSelected("folder", folder.id)}
                       onSelect={() => toggleItemSelection({ type: "folder", id: folder.id, name: folder.name })}
                     />
-                  );
-                  })}
+                  ))}
               </div>
             </div>
           )}
@@ -892,7 +889,6 @@ function FolderCard({
   const handleLocalDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log("FolderCard drop, folder:", folder, "folder.id:", folder?.id);
     onDrop(e);
   };
 

@@ -159,12 +159,12 @@ export default function DocumentsPage() {
       try {
         const foldersResponse = await api.listFolders();
         const transformedFolders: Folder[] = foldersResponse.folders.map(
-          (folder: { id: string; name: string; parent_id: string | null; created_at: string; updated_at: string }) => ({
-            id: folder.id,
+          (folder) => ({
+            id: folder.folder_id,
             name: folder.name,
             parentId: folder.parent_id,
             createdAt: new Date(folder.created_at),
-            updatedAt: new Date(folder.updated_at),
+            updatedAt: new Date(folder.created_at), // API doesn't return updated_at, use created_at
           })
         );
         setFolders(transformedFolders);
