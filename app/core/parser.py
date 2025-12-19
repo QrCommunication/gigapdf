@@ -189,6 +189,11 @@ class PDFParser:
         text_elements = []
         image_elements = []
 
+        # Extract vector drawings first (backgrounds, borders, shapes)
+        # These should be rendered BEFORE text/images to appear as backgrounds
+        drawing_elements = self._extract_drawings(page)
+        elements.extend(drawing_elements)
+
         if extract_text:
             text_elements = self._extract_text_elements(page, page_height)
             elements.extend(text_elements)
@@ -474,6 +479,95 @@ class PDFParser:
                 logger.warning(f"Failed to extract annotation: {e}")
                 continue
 
+        return elements
+
+    def _extract_drawings(self, page: fitz.Page) -> list[ShapeElement]:
+        """
+        Extract vector drawings (rectangles, lines, paths) from page.
+
+        These include background colors, borders, and decorative elements.
+        PyMuPDF uses top-left origin coordinates.
+        """
+        elements = []
+
+        try:
+            drawings = page.get_drawings()
+
+            for drawing in drawings:
+                try:
+                    rect = drawing.get("rect")
+                    if not rect:
+                        continue
+
+                    # Get fill and stroke colors
+                    fill_tuple = drawing.get("fill")
+                    stroke_tuple = drawing.get("color")
+                    stroke_width = drawing.get("width", 0) or 0
+
+                    # Convert color tuples to hex
+                    fill_color = None
+                    if fill_tuple:
+                        fill_color = self._tuple_to_hex_color(fill_tuple)
+
+                    stroke_color = None
+                    if stroke_tuple:
+                        stroke_color = self._tuple_to_hex_color(stroke_tuple)
+
+                    # Skip if no visible fill or stroke
+                    if not fill_color and not stroke_color:
+                        continue
+
+                    # Determine shape type based on items
+                    items = drawing.get("items", [])
+                    shape_type = ShapeType.RECTANGLE
+
+                    # Check if it's a line (height or width is 0 or very small)
+                    width = rect.x1 - rect.x0
+                    height = rect.y1 - rect.y0
+
+                    if height < 1 and width > 1:
+                        shape_type = ShapeType.LINE
+                    elif width < 1 and height > 1:
+                        shape_type = ShapeType.LINE
+
+                    # Create bounds - PyMuPDF uses top-left origin
+                    bounds = Rect(
+                        x=rect.x0,
+                        y=rect.y0,
+                        width=max(width, 1),  # Ensure minimum width for lines
+                        height=max(height, 1),  # Ensure minimum height for lines
+                    )
+
+                    element = ShapeElement(
+                        element_id=generate_uuid(),
+                        type=ElementType.SHAPE,
+                        bounds=Bounds(
+                            x=bounds.x,
+                            y=bounds.y,
+                            width=bounds.width,
+                            height=bounds.height,
+                        ),
+                        shape_type=shape_type,
+                        geometry=ShapeGeometry(),
+                        style=ShapeStyle(
+                            fill_color=fill_color,
+                            fill_opacity=1.0 if fill_color else 0.0,
+                            stroke_color=stroke_color,
+                            stroke_width=stroke_width if stroke_color else 0,
+                            stroke_opacity=1.0 if stroke_color else 0.0,
+                        ),
+                        transform=Transform(),
+                    )
+                    elements.append(element)
+
+                except Exception as e:
+                    logger.warning(f"Failed to extract drawing: {e}")
+                    continue
+
+        except Exception as e:
+            logger.warning(f"Failed to get drawings from page: {e}")
+
+        logger.info(f"Extracted {len(elements)} vector drawings from page")
         return elements
 
     def _extract_form_fields(
