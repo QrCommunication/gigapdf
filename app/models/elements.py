@@ -172,9 +172,9 @@ class ShapeStyle(CamelCaseModel):
     )
     fill_opacity: float = Field(default=1.0, ge=0, le=1)
     stroke_color: Optional[str] = Field(
-        default="#000000", pattern=r"^#[0-9A-Fa-f]{6}$", description="Stroke color (hex)"
+        default=None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Stroke color (hex)"
     )
-    stroke_width: float = Field(default=1.0, ge=0, description="Stroke width in points")
+    stroke_width: float = Field(default=0.0, ge=0, description="Stroke width in points")
     stroke_opacity: float = Field(default=1.0, ge=0, le=1)
     stroke_dash_array: list[float] = Field(
         default_factory=list, description="Dash pattern for stroke"

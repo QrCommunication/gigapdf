@@ -618,12 +618,16 @@ export function EditorCanvas({
 
       case "shape": {
         // ShapeElement structure
+        // Only show stroke if explicitly defined with color and width > 0
+        const hasStroke = element.style.strokeColor && element.style.strokeWidth > 0;
         const shapeOptions = {
           ...baseOptions,
           fill: element.style.fillColor || "transparent",
-          stroke: element.style.strokeColor || "#000000",
-          strokeWidth: element.style.strokeWidth || 2,
+          stroke: hasStroke ? element.style.strokeColor : "transparent",
+          strokeWidth: hasStroke ? element.style.strokeWidth : 0,
           opacity: element.style.fillOpacity ?? 1,
+          rx: element.geometry?.cornerRadius || 0,  // Border radius support
+          ry: element.geometry?.cornerRadius || 0,
         };
         const width = element.bounds.width || 100;
         const height = element.bounds.height || 100;
