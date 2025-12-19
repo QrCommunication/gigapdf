@@ -3,6 +3,7 @@ PDF Parser - Converts PDF content to scene graph representation.
 
 Extracts text, images, shapes, annotations, and form fields
 from PDF pages and converts them to our internal model format.
+Includes automatic OCR for scanned/rasterized PDFs.
 """
 
 import base64
@@ -12,6 +13,7 @@ from typing import Any, Optional
 
 import fitz  # PyMuPDF
 
+from app.core.ocr import ocr_processor
 from app.models.bookmarks import BookmarkDestination, BookmarkObject, BookmarkStyle
 from app.models.document import (
     DocumentMetadata,
@@ -75,6 +77,8 @@ class PDFParser:
         extract_text: bool = True,
         extract_images: bool = True,
         include_previews: bool = True,
+        enable_ocr: bool = True,
+        ocr_languages: str = "fra+eng",
     ) -> DocumentObject:
         """
         Parse entire document into scene graph.
@@ -84,6 +88,8 @@ class PDFParser:
             extract_text: Extract text elements.
             extract_images: Extract image elements.
             include_previews: Generate preview URLs.
+            enable_ocr: Enable OCR for pages with no text but images.
+            ocr_languages: Tesseract language codes (e.g., "fra+eng").
 
         Returns:
             DocumentObject: Complete document representation.
@@ -102,6 +108,8 @@ class PDFParser:
                 extract_text=extract_text,
                 extract_images=extract_images,
                 include_previews=include_previews,
+                enable_ocr=enable_ocr,
+                ocr_languages=ocr_languages,
             )
             pages.append(page)
 
@@ -130,6 +138,8 @@ class PDFParser:
         extract_text: bool = True,
         extract_images: bool = True,
         include_previews: bool = True,
+        enable_ocr: bool = True,
+        ocr_languages: str = "fra+eng",
     ) -> PageObject:
         """
         Parse a single page into scene graph.
@@ -140,6 +150,8 @@ class PDFParser:
             extract_text: Extract text elements.
             extract_images: Extract image elements.
             include_previews: Generate preview URLs.
+            enable_ocr: Enable OCR for pages with no text but images.
+            ocr_languages: Tesseract language codes.
 
         Returns:
             PageObject: Page representation.
@@ -174,6 +186,8 @@ class PDFParser:
 
         # Extract elements
         elements = []
+        text_elements = []
+        image_elements = []
 
         if extract_text:
             text_elements = self._extract_text_elements(page, page_height)
@@ -182,6 +196,28 @@ class PDFParser:
         if extract_images:
             image_elements = self._extract_image_elements(page, page_number, page_height)
             elements.extend(image_elements)
+
+        # OCR fallback: if no text was extracted but images exist, run OCR
+        if enable_ocr and len(text_elements) == 0 and len(image_elements) > 0:
+            if ocr_processor.is_available:
+                logger.info(
+                    f"Page {page_number}: No text found but has images, running OCR..."
+                )
+                ocr_elements = ocr_processor.process_page(
+                    page=page,
+                    page_number=page_number,
+                    languages=ocr_languages,
+                    confidence_threshold=50.0,  # Lower threshold for better coverage
+                )
+                if ocr_elements:
+                    logger.info(
+                        f"Page {page_number}: OCR extracted {len(ocr_elements)} text elements"
+                    )
+                    elements.extend(ocr_elements)
+            else:
+                logger.warning(
+                    f"Page {page_number}: OCR needed but Tesseract not available"
+                )
 
         # Extract annotations
         annotation_elements = self._extract_annotations(page, page_height)
