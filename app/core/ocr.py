@@ -14,7 +14,7 @@ from PIL import Image
 
 from app.config import get_settings
 from app.models.elements import Bounds, TextElement, TextStyle, Transform, ElementType
-from app.utils.coordinates import pdf_rect_to_web
+from app.utils.coordinates import Rect
 from app.utils.helpers import generate_uuid
 
 logger = logging.getLogger(__name__)
@@ -103,30 +103,25 @@ class OCRProcessor:
                 if not text or confidence < confidence_threshold:
                     continue
 
-                # Get bounding box (in image coordinates)
+                # Get bounding box (in image/web coordinates - Y=0 at top)
                 x = data["left"][i]
                 y = data["top"][i]
                 w = data["width"][i]
                 h = data["height"][i]
 
-                # Scale back to PDF coordinates
+                # Scale back to PDF points (image was rendered at 300 DPI)
                 scale = 72 / 300
-                pdf_x = x * scale
-                pdf_y = y * scale
-                pdf_w = w * scale
-                pdf_h = h * scale
+                web_x = x * scale
+                web_y = y * scale
+                web_w = w * scale
+                web_h = h * scale
 
-                # Convert to web coordinates
-                web_rect = pdf_rect_to_web(
-                    pdf_x,
-                    page_height - pdf_y - pdf_h,  # Adjust for PDF coords
-                    pdf_x + pdf_w,
-                    page_height - pdf_y,
-                    page_height,
-                )
+                # Tesseract already returns web coordinates (top-left origin)
+                # No need to flip - just use the scaled values directly
+                web_rect = Rect(x=web_x, y=web_y, width=web_w, height=web_h)
 
                 # Estimate font size from height
-                font_size = max(8, min(72, pdf_h * 0.8))
+                font_size = max(8, min(72, web_h * 0.8))
 
                 element = TextElement(
                     element_id=generate_uuid(),
