@@ -885,15 +885,19 @@ function FolderCard({
     }
   };
 
+  // Handle drop on this folder with proper folder ID
+  const handleLocalDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log("FolderCard drop, folder.id:", folder.id);
+    onDrop(e);
+  };
+
   return (
     <div
       draggable={!selectionMode}
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
-      onDragEnter={onDragEnter}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       className={`
@@ -906,9 +910,18 @@ function FolderCard({
         ${isSelected ? "ring-2 ring-primary bg-primary/10" : ""}
       `}
     >
-      {/* Selection checkbox - pointer-events-none to not interfere with drag */}
+      {/* Drop zone overlay - captures all drag events */}
+      <div
+        className="absolute inset-0 z-10"
+        onDragEnter={onDragEnter}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={handleLocalDrop}
+      />
+
+      {/* Selection checkbox */}
       {selectionMode && (
-        <div className="absolute top-2 left-2 pointer-events-none">
+        <div className="absolute top-2 left-2 z-20 pointer-events-none">
           {isSelected ? (
             <CheckSquare className="h-5 w-5 text-primary" />
           ) : (
@@ -917,8 +930,8 @@ function FolderCard({
         </div>
       )}
 
-      {/* All content wrapped with pointer-events-none to ensure drag events reach parent */}
-      <div className="flex flex-col items-center gap-2 pointer-events-none">
+      {/* Content - z-0 so drop zone overlay captures events */}
+      <div className="flex flex-col items-center gap-2 relative z-0 pointer-events-none">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
