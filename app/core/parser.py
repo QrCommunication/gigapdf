@@ -308,7 +308,11 @@ class PDFParser:
                 writing_mode = "vertical-rl" if abs(line_dir[0]) < 0.5 else "horizontal-tb"
 
                 for span in line.get("spans", []):
+                    # Get text - try 'text' field first, fallback to reconstructing from 'chars'
                     text = span.get("text", "")
+                    if not text and "chars" in span:
+                        # Reconstruct text from individual characters (newer PyMuPDF versions)
+                        text = "".join(char.get("c", "") for char in span.get("chars", []))
                     if not text.strip():
                         continue
 
