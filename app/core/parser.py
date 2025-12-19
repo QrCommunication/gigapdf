@@ -46,7 +46,7 @@ from app.models.elements import (
 )
 from app.models.layers import LayerObject
 from app.models.page import Dimensions, MediaBox, PageObject, PagePreview
-from app.utils.coordinates import pdf_rect_to_web
+from app.utils.coordinates import Rect
 from app.utils.helpers import generate_uuid, now_utc
 
 logger = logging.getLogger(__name__)
@@ -296,9 +296,14 @@ class PDFParser:
                         continue
 
                     # Get bounding box
+                    # PyMuPDF's get_text() returns coordinates in web-style format
+                    # (origin top-left, Y increases downward) - no conversion needed
                     bbox = span.get("bbox", [0, 0, 0, 0])
-                    bounds = pdf_rect_to_web(
-                        bbox[0], bbox[1], bbox[2], bbox[3], page_height
+                    bounds = Rect(
+                        x=bbox[0],
+                        y=bbox[1],  # Already in web coordinates (top-left origin)
+                        width=bbox[2] - bbox[0],
+                        height=bbox[3] - bbox[1],
                     )
 
                     # Extract font info
@@ -357,8 +362,13 @@ class PDFParser:
                     continue
 
                 rect = img_rects[0]  # Use first occurrence
-                bounds = pdf_rect_to_web(
-                    rect.x0, rect.y0, rect.x1, rect.y1, page_height
+                # PyMuPDF's get_image_rects() returns coordinates in web-style format
+                # (origin top-left, Y increases downward) - no conversion needed
+                bounds = Rect(
+                    x=rect.x0,
+                    y=rect.y0,  # Already in web coordinates
+                    width=rect.x1 - rect.x0,
+                    height=rect.y1 - rect.y0,
                 )
 
                 # Determine format
@@ -420,10 +430,13 @@ class PDFParser:
                 if annot_type not in type_map:
                     continue
 
-                # Get bounds
+                # Get bounds - PyMuPDF uses top-left origin, no conversion needed
                 rect = annot.rect
-                bounds = pdf_rect_to_web(
-                    rect.x0, rect.y0, rect.x1, rect.y1, page_height
+                bounds = Rect(
+                    x=rect.x0,
+                    y=rect.y0,
+                    width=rect.x1 - rect.x0,
+                    height=rect.y1 - rect.y0,
                 )
 
                 # Get colors
@@ -486,10 +499,13 @@ class PDFParser:
                 if widget_type not in field_type_map:
                     continue
 
-                # Get bounds
+                # Get bounds - PyMuPDF uses top-left origin, no conversion needed
                 rect = widget.rect
-                bounds = pdf_rect_to_web(
-                    rect.x0, rect.y0, rect.x1, rect.y1, page_height
+                bounds = Rect(
+                    x=rect.x0,
+                    y=rect.y0,
+                    width=rect.x1 - rect.x0,
+                    height=rect.y1 - rect.y0,
                 )
 
                 # Get value
