@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
-import type { DocumentObject, PageObject } from "@giga-pdf/types";
+import type { DocumentObject, PageObject, BookmarkObject, LayerObject, EmbeddedFileObject } from "@giga-pdf/types";
 
 export interface UseDocumentOptions {
   /** ID du document stocké (S3) - si fourni, charge depuis le stockage */
@@ -48,6 +48,12 @@ export interface UseDocumentReturn {
   duplicatePage: (pageIndex: number) => void;
   /** Mettre à jour le nom du document */
   setName: (name: string) => void;
+  /** Table des matières (signets) */
+  outlines: BookmarkObject[];
+  /** Calques du document */
+  layers: LayerObject[];
+  /** Fichiers embarqués */
+  embeddedFiles: EmbeddedFileObject[];
 }
 
 // Génère un ID unique pour les nouvelles pages
@@ -118,6 +124,17 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       // Convertir les données en types stricts
       // Note: API returns camelCase (by_alias=True)
       const metadata = docData.metadata || {};
+      const rawData = docData as Record<string, unknown>;
+
+      // Extract outlines (TOC/bookmarks)
+      const outlines = (rawData.outlines || rawData.bookmarks || []) as BookmarkObject[];
+
+      // Extract layers (OCG)
+      const layers = (rawData.layers || []) as LayerObject[];
+
+      // Extract embedded files
+      const embeddedFiles = (rawData.embeddedFiles || rawData.embedded_files || []) as EmbeddedFileObject[];
+
       const doc: DocumentObject = {
         documentId: (docData as Record<string, unknown>).documentId as string || docData.document_id,
         metadata: {
@@ -144,10 +161,10 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
           },
         },
         pages: docData.pages as unknown as PageObject[],
-        outlines: [],
+        outlines: outlines,
         namedDestinations: {},
-        embeddedFiles: [],
-        layers: [],
+        embeddedFiles: embeddedFiles,
+        layers: layers,
       };
 
       setDocument(doc);
@@ -352,6 +369,11 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
   const pages = document?.pages || [];
   const currentPage = pages[currentPageIndex] || null;
 
+  // Outlines, layers, embedded files
+  const outlines = document?.outlines || [];
+  const layers = document?.layers || [];
+  const embeddedFiles = document?.embeddedFiles || [];
+
   return {
     document,
     name,
@@ -371,5 +393,8 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     reorderPages,
     duplicatePage,
     setName,
+    outlines,
+    layers,
+    embeddedFiles,
   };
 }

@@ -30,6 +30,7 @@ import {
   PropertiesPanel,
   CollaborationOverlay,
   CollaboratorsList,
+  DocumentInfoSidebar,
 } from "@/components/editor";
 import type { EditorCanvasHandle } from "@/components/editor/editor-canvas";
 
@@ -76,6 +77,9 @@ export default function EditorPage() {
     reorderPages,
     duplicatePage,
     setName,
+    outlines,
+    layers,
+    embeddedFiles,
   } = useDocument({ storedDocumentId });
 
   // État pour l'édition du nom
@@ -290,6 +294,46 @@ export default function EditorPage() {
     // TODO: Implémenter l'export
     window.open(`/api/documents/${documentId}/download`, "_blank");
   }, [documentId]);
+
+  // Handler pour la navigation TOC
+  const handleNavigateToPage = useCallback((pageNumber: number) => {
+    goToPage(pageNumber - 1); // pageNumber is 1-indexed, goToPage expects 0-indexed
+  }, [goToPage]);
+
+  // Handler pour la visibilité des calques
+  const handleLayerVisibilityChange = useCallback((layerId: string, visible: boolean) => {
+    console.log("Layer visibility changed:", layerId, visible);
+    // TODO: Implémenter la logique de changement de visibilité des calques
+    setDirty(true);
+    saveWithPriority("debounced");
+  }, [setDirty, saveWithPriority]);
+
+  // Handler pour le verrouillage des calques
+  const handleLayerLockChange = useCallback((layerId: string, locked: boolean) => {
+    console.log("Layer lock changed:", layerId, locked);
+    // TODO: Implémenter la logique de verrouillage des calques
+    setDirty(true);
+    saveWithPriority("debounced");
+  }, [setDirty, saveWithPriority]);
+
+  // Handler pour le téléchargement de fichiers embarqués
+  const handleDownloadFile = useCallback((file: { dataUrl: string; name: string }) => {
+    const link = document.createElement("a");
+    link.href = file.dataUrl;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, []);
+
+  // Handler pour les clics sur les liens hypertexte
+  const handleHyperlinkClick = useCallback((linkUrl?: string | null, linkPage?: number | null) => {
+    if (linkUrl) {
+      window.open(linkUrl, "_blank");
+    } else if (linkPage) {
+      goToPage(linkPage - 1); // linkPage is 1-indexed
+    }
+  }, [goToPage]);
 
   // Handler pour l'ajout d'image
   const handleAddImage = useCallback(() => {
@@ -679,6 +723,7 @@ export default function EditorPage() {
             onSelectionChanged={handleSelectionChanged}
             onZoomChanged={setZoom}
             onCanvasReady={setCanvasHandle}
+            onHyperlinkClick={handleHyperlinkClick}
           />
 
           {/* Overlay des curseurs des collaborateurs */}
@@ -695,6 +740,18 @@ export default function EditorPage() {
           onElementUpdate={handleElementUpdate}
           pageInfo={pageInfo}
           zoom={zoom}
+        />
+
+        {/* Document info sidebar (TOC, Layers, Embedded Files) */}
+        <DocumentInfoSidebar
+          outlines={outlines}
+          layers={layers}
+          embeddedFiles={embeddedFiles}
+          onNavigateToPage={handleNavigateToPage}
+          onLayerVisibilityChange={handleLayerVisibilityChange}
+          onLayerLockChange={handleLayerLockChange}
+          onDownloadFile={handleDownloadFile}
+          currentPageIndex={currentPageIndex}
         />
       </div>
 

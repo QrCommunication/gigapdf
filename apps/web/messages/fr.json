@@ -480,6 +480,14 @@
         "description": "Choisissez un dossier de destination pour {count} élément(s)",
         "root": "Racine (Mes documents)",
         "cancel": "Annuler"
+      },
+      "deleteSelected": "Supprimer",
+      "deleting": "Suppression...",
+      "deleteDialog": {
+        "title": "Confirmer la suppression",
+        "description": "Voulez-vous vraiment supprimer {count} élément(s) ? Cette action est irréversible.",
+        "confirm": "Supprimer",
+        "cancel": "Annuler"
       }
     },
     "errors": {
@@ -705,6 +713,25 @@
       "bookmarks": "Signets",
       "annotations": "Annotations",
       "layers": "Calques"
+    },
+    "documentInfo": "Info document",
+    "expand": "Développer",
+    "collapse": "Réduire",
+    "confirm": "Confirmer",
+    "cancel": "Annuler",
+    "toc": {
+      "title": "Table des matières"
+    },
+    "layers": {
+      "title": "Calques",
+      "show": "Afficher le calque",
+      "hide": "Masquer le calque",
+      "lock": "Verrouiller le calque",
+      "unlock": "Déverrouiller le calque"
+    },
+    "attachments": {
+      "title": "Pièces jointes",
+      "download": "Télécharger le fichier"
     },
     "exportDialog": {
       "title": "Exporter le document",

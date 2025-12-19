@@ -78,6 +78,8 @@ export interface EditorCanvasProps {
   onZoomChanged?: (zoom: number) => void;
   /** Callback appelé lorsque le canvas est prêt avec les méthodes exposées */
   onCanvasReady?: (handle: EditorCanvasHandle) => void;
+  /** Callback pour les clics sur les liens hypertexte */
+  onHyperlinkClick?: (linkUrl?: string | null, linkPage?: number | null) => void;
 }
 
 // Génère un ID unique
@@ -111,6 +113,7 @@ export function EditorCanvas({
   onSelectionChanged,
   onZoomChanged,
   onCanvasReady,
+  onHyperlinkClick,
 }: EditorCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -537,6 +540,16 @@ export function EditorCanvas({
           const delta = event.deltaY > 0 ? -0.1 : 0.1;
           const newZoom = Math.min(4, Math.max(0.25, zoom + delta));
           onZoomChanged?.(newZoom);
+        }
+      });
+
+      // Double-click for hyperlinks
+      canvas.on("mouse:dblclick", (e) => {
+        if (!e.target) return;
+        const obj = e.target as FabricObjectWithData;
+        const data = obj.data;
+        if (data?.linkUrl || data?.linkPage) {
+          onHyperlinkClick?.(data.linkUrl as string | null, data.linkPage as number | null);
         }
       });
 

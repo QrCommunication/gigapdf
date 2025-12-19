@@ -15,7 +15,7 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@giga-pdf/ui";
-import { Grid3X3, List, FolderPlus, Loader2, GripVertical, CheckSquare, Square, XCircle, FolderInput } from "lucide-react";
+import { Grid3X3, List, FolderPlus, Loader2, GripVertical, CheckSquare, Square, XCircle, FolderInput, Trash2 } from "lucide-react";
 import { DocumentGrid } from "./document-grid";
 import { DocumentTable, SortField, SortDirection } from "./document-table";
 import { FolderBreadcrumb, BreadcrumbFolder } from "./folder-breadcrumb";
@@ -104,6 +104,8 @@ export function DocumentExplorer({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState<SelectionItem[]>([]);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Load folder stats for current folders
   useEffect(() => {
@@ -269,6 +271,32 @@ export function DocumentExplorer({
     }
   }, [selectedItems, clearSelection, onRefresh]);
 
+  // Delete selected items
+  const deleteSelectedItems = useCallback(async () => {
+    if (selectedItems.length === 0) return;
+
+    try {
+      setDeleting(true);
+
+      for (const item of selectedItems) {
+        if (item.type === "document") {
+          await api.deleteDocument(item.id);
+        } else if (item.type === "folder") {
+          await api.deleteFolder(item.id);
+        }
+      }
+
+      clearSelection();
+      onRefresh();
+    } catch (error) {
+      console.error("Failed to delete items:", error);
+      alert("Failed to delete some items. Please try again.");
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+    }
+  }, [selectedItems, clearSelection, onRefresh]);
+
   // Drag and Drop handlers
   const handleDragStart = useCallback((item: DragItem) => {
     console.log("Drag started:", item);
@@ -299,6 +327,20 @@ export function DocumentExplorer({
   const handleDragLeaveFolder = useCallback(() => {
     setDragOverFolderId(null);
   }, []);
+
+  const handleDragEnterFolder = useCallback((e: React.DragEvent, folderId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Don't allow dropping onto self if dragging a folder
+    if (draggedItem?.type === "folder" && draggedItem.id === folderId) {
+      return;
+    }
+
+    if (dragOverFolderId !== folderId) {
+      setDragOverFolderId(folderId);
+    }
+  }, [draggedItem, dragOverFolderId]);
 
   const handleDropOnFolder = useCallback(async (e: React.DragEvent, targetFolderId: string) => {
     e.preventDefault();
@@ -415,6 +457,15 @@ export function DocumentExplorer({
               {t("moveSelected")}
             </Button>
             <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setDeleteDialogOpen(true)}
+              disabled={selectedItems.length === 0}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              {t("deleteSelected")}
+            </Button>
+            <Button
               variant="ghost"
               size="sm"
               onClick={clearSelection}
@@ -514,6 +565,7 @@ export function DocumentExplorer({
                       }}
                       onDragStart={handleDragStart}
                       onDragEnd={handleDragEnd}
+                      onDragEnter={(e) => handleDragEnterFolder(e, folder.id)}
                       onDragOver={(e) => handleDragOverFolder(e, folder.id)}
                       onDragLeave={handleDragLeaveFolder}
                       onDrop={(e) => handleDropOnFolder(e, folder.id)}
@@ -726,6 +778,41 @@ export function DocumentExplorer({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("deleteDialog.title")}</DialogTitle>
+            <DialogDescription>
+              {t("deleteDialog.description", { count: selectedItems.length })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleting}
+            >
+              {t("deleteDialog.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={deleteSelectedItems}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t("deleting")}
+                </>
+              ) : (
+                t("deleteDialog.confirm")
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -737,6 +824,7 @@ function FolderCard({
   onNavigate,
   onDragStart,
   onDragEnd,
+  onDragEnter,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -753,6 +841,7 @@ function FolderCard({
   onNavigate: () => void;
   onDragStart: (item: DragItem) => void;
   onDragEnd: () => void;
+  onDragEnter: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent) => void;
@@ -801,6 +890,7 @@ function FolderCard({
       draggable={!selectionMode}
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
+      onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -816,9 +906,9 @@ function FolderCard({
         ${isSelected ? "ring-2 ring-primary bg-primary/10" : ""}
       `}
     >
-      {/* Selection checkbox */}
+      {/* Selection checkbox - pointer-events-none to not interfere with drag */}
       {selectionMode && (
-        <div className="absolute top-2 left-2">
+        <div className="absolute top-2 left-2 pointer-events-none">
           {isSelected ? (
             <CheckSquare className="h-5 w-5 text-primary" />
           ) : (
@@ -827,31 +917,34 @@ function FolderCard({
         </div>
       )}
 
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        className={`h-12 w-12 transition-all duration-200 ${
-          isDraggedOver
-            ? "text-primary scale-110"
-            : isDragging
-              ? "text-muted-foreground"
-              : "text-yellow-500"
-        }`}
-      >
-        <path d="M19.5 21a3 3 0 003-3v-4.5a3 3 0 00-3-3h-15a3 3 0 00-3 3V18a3 3 0 003 3h15zM1.5 10.146V6a3 3 0 013-3h5.379a2.25 2.25 0 011.59.659l2.122 2.121c.14.141.331.22.53.22H19.5a3 3 0 013 3v1.146A4.483 4.483 0 0019.5 9h-15a4.483 4.483 0 00-3 1.146z" />
-      </svg>
-      <span className="text-sm font-medium truncate max-w-full text-center">{folder.name}</span>
-      {stats && (
-        <span className="text-xs text-muted-foreground">
-          {stats.document_count} {stats.document_count === 1 ? "doc" : "docs"} • {formatSize(stats.total_size_bytes)}
-        </span>
-      )}
-      {isDraggedOver && (
-        <span className="text-xs font-medium text-primary animate-pulse">
-          Drop here
-        </span>
-      )}
+      {/* All content wrapped with pointer-events-none to ensure drag events reach parent */}
+      <div className="flex flex-col items-center gap-2 pointer-events-none">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          className={`h-12 w-12 transition-all duration-200 ${
+            isDraggedOver
+              ? "text-primary scale-110"
+              : isDragging
+                ? "text-muted-foreground"
+                : "text-yellow-500"
+          }`}
+        >
+          <path d="M19.5 21a3 3 0 003-3v-4.5a3 3 0 00-3-3h-15a3 3 0 00-3 3V18a3 3 0 003 3h15zM1.5 10.146V6a3 3 0 013-3h5.379a2.25 2.25 0 011.59.659l2.122 2.121c.14.141.331.22.53.22H19.5a3 3 0 013 3v1.146A4.483 4.483 0 0019.5 9h-15a4.483 4.483 0 00-3 1.146z" />
+        </svg>
+        <span className="text-sm font-medium truncate max-w-full text-center">{folder.name}</span>
+        {stats && (
+          <span className="text-xs text-muted-foreground">
+            {stats.document_count} {stats.document_count === 1 ? "doc" : "docs"} • {formatSize(stats.total_size_bytes)}
+          </span>
+        )}
+        {isDraggedOver && (
+          <span className="text-xs font-medium text-primary animate-pulse">
+            Drop here
+          </span>
+        )}
+      </div>
     </div>
   );
 }

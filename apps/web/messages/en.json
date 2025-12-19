@@ -480,6 +480,14 @@
         "description": "Choose a destination folder for {count} item(s)",
         "root": "Root (My Documents)",
         "cancel": "Cancel"
+      },
+      "deleteSelected": "Delete",
+      "deleting": "Deleting...",
+      "deleteDialog": {
+        "title": "Confirm deletion",
+        "description": "Are you sure you want to delete {count} item(s)? This action cannot be undone.",
+        "confirm": "Delete",
+        "cancel": "Cancel"
       }
     },
     "errors": {
@@ -705,6 +713,25 @@
       "bookmarks": "Bookmarks",
       "annotations": "Annotations",
       "layers": "Layers"
+    },
+    "documentInfo": "Document Info",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "toc": {
+      "title": "Table of Contents"
+    },
+    "layers": {
+      "title": "Layers",
+      "show": "Show layer",
+      "hide": "Hide layer",
+      "lock": "Lock layer",
+      "unlock": "Unlock layer"
+    },
+    "attachments": {
+      "title": "Attachments",
+      "download": "Download file"
     },
     "exportDialog": {
       "title": "Export Document",
