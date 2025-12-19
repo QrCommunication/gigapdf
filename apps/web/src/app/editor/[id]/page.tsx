@@ -83,6 +83,27 @@ export default function EditorPage() {
   const [editedName, setEditedName] = useState(name);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
+  // Sauvegarde hybride (immédiate pour actions critiques, debounced pour modifications mineures)
+  const {
+    saving,
+    saveError,
+    lastSaved,
+    save,
+    saveWithPriority,
+    pendingChanges,
+  } = useDocumentSave({
+    documentId,
+    storedDocumentId,
+    name,
+    isDirty,
+    autoSaveInterval: 30000, // Auto-save toutes les 30s comme filet de sécurité
+    debounceDelay: 2000, // 2s de debounce pour modifications mineures
+    setDirty,
+    onSaved: (id) => {
+      console.log("Document sauvegardé:", id);
+    },
+  });
+
   // Focus input quand on passe en mode édition
   useEffect(() => {
     if (isEditingName && nameInputRef.current) {
@@ -124,27 +145,6 @@ export default function EditorPage() {
       handleCancelRename();
     }
   }, [handleConfirmRename, handleCancelRename]);
-
-  // Sauvegarde hybride (immédiate pour actions critiques, debounced pour modifications mineures)
-  const {
-    saving,
-    saveError,
-    lastSaved,
-    save,
-    saveWithPriority,
-    pendingChanges,
-  } = useDocumentSave({
-    documentId,
-    storedDocumentId,
-    name,
-    isDirty,
-    autoSaveInterval: 30000, // Auto-save toutes les 30s comme filet de sécurité
-    debounceDelay: 2000, // 2s de debounce pour modifications mineures
-    setDirty,
-    onSaved: (id) => {
-      console.log("Document sauvegardé:", id);
-    },
-  });
 
   // Collaboration temps réel
   const {
