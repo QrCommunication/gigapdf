@@ -1,6 +1,13 @@
-// Prisma schema for BetterAuth + GigaPDF
-// Better Auth tables are managed by Prisma
-// FastAPI/Alembic tables are marked with @@ignore to prevent Prisma from dropping them
+// =============================================================================
+// Prisma Schema for Better Auth
+// =============================================================================
+// IMPORTANT: This schema is ONLY for generating Prisma Client types.
+// DO NOT use 'prisma db push' - it will delete Alembic-managed tables!
+//
+// Database migrations are handled by:
+// 1. Alembic - for FastAPI backend tables (stored_documents, plans, etc.)
+// 2. deploy/init-betterauth-tables.sql - for Better Auth tables
+// =============================================================================
 
 datasource db {
   provider = "postgresql"
@@ -8,108 +15,12 @@ datasource db {
 }
 
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["multiSchema"]
+  provider = "prisma-client-js"
 }
 
 // =============================================================================
-// Tables managed by Alembic (FastAPI backend) - DO NOT MODIFY
-// These are marked with @@ignore so Prisma knows they exist but doesn't manage them
-// =============================================================================
-
-model AlembicVersion {
-  version_num String @id @db.VarChar(255)
-
-  @@map("alembic_version")
-  @@ignore
-}
-
-model StoredDocument {
-  id String @id
-
-  @@map("stored_documents")
-  @@ignore
-}
-
-model DocumentVersion {
-  id String @id
-
-  @@map("document_versions")
-  @@ignore
-}
-
-model Folder {
-  id String @id
-
-  @@map("folders")
-  @@ignore
-}
-
-model Plan {
-  id String @id
-
-  @@map("plans")
-  @@ignore
-}
-
-model UserQuota {
-  id String @id
-
-  @@map("user_quotas")
-  @@ignore
-}
-
-model ActivityLog {
-  id String @id
-
-  @@map("activity_logs")
-  @@ignore
-}
-
-model Tenant {
-  id String @id
-
-  @@map("tenants")
-  @@ignore
-}
-
-model TenantMember {
-  id String @id
-
-  @@map("tenant_members")
-  @@ignore
-}
-
-model TenantInvitation {
-  id String @id
-
-  @@map("tenant_invitations")
-  @@ignore
-}
-
-model DocumentCollaborator {
-  id String @id
-
-  @@map("document_collaborators")
-  @@ignore
-}
-
-model DocumentShare {
-  id String @id
-
-  @@map("document_shares")
-  @@ignore
-}
-
-model ShareNotification {
-  id String @id
-
-  @@map("share_notifications")
-  @@ignore
-}
-
-// =============================================================================
-// Tables managed by Prisma (Better Auth) - These are actively managed
+// Better Auth Tables - Types for Prisma Client
+// Actual table creation is done via SQL script, not Prisma migrations
 // =============================================================================
 
 model User {

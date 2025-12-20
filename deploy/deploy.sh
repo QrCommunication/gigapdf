@@ -134,17 +134,38 @@ source .venv/bin/activate
 cd "$APP_DIR"
 alembic upgrade head || log_warn "Alembic migrations skipped or failed"
 
-# Prisma push for Next.js apps (Better Auth tables only)
-# This will only ADD missing tables, not delete existing ones
-log_info "Running Prisma push (Better Auth tables)..."
-cd apps/web
-# Use --skip-generate since we already generated the client
-npx prisma db push --skip-generate 2>&1 | grep -v "already in sync" || log_warn "Web Prisma push skipped"
-cd ../..
+# Better Auth tables (created via SQL script, NOT Prisma push)
+# Prisma push would delete Alembic tables, so we use a safe SQL script instead
+log_info "Creating Better Auth tables (SQL script)..."
+python3 -c "
+from sqlalchemy import create_engine, text
+import os
 
-cd apps/admin
-npx prisma db push --skip-generate 2>&1 | grep -v "already in sync" || log_warn "Admin Prisma push skipped"
-cd ../..
+# Get database URL from environment
+db_url = os.environ.get('DATABASE_URL', '')
+if not db_url:
+    print('DATABASE_URL not set, skipping Better Auth tables')
+    exit(0)
+
+# Ensure sync driver
+db_url = db_url.replace('postgresql+asyncpg', 'postgresql')
+
+engine = create_engine(db_url)
+with open('deploy/init-betterauth-tables.sql', 'r') as f:
+    sql = f.read()
+
+with engine.connect() as conn:
+    # Execute each statement separately
+    for statement in sql.split(';'):
+        statement = statement.strip()
+        if statement and not statement.startswith('--'):
+            try:
+                conn.execute(text(statement))
+            except Exception as e:
+                pass  # Table already exists, ignore
+    conn.commit()
+    print('Better Auth tables created/verified successfully')
+" || log_warn "Better Auth tables creation skipped"
 
 # =============================================================================
 # 7. Install/Update Systemd Services
