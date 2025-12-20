@@ -118,7 +118,7 @@ def upgrade() -> None:
             sa.Column('title', sa.Text(), nullable=False),
             sa.Column('message', sa.Text(), nullable=True),
             sa.Column(
-                'metadata',
+                'extra_data',
                 postgresql.JSONB(astext_type=sa.Text()),
                 nullable=True,
                 comment='Additional notification data'

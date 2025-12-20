@@ -67,7 +67,7 @@ class NotificationService:
                 message=message,
                 document_id=document_id,
                 share_invitation_id=share_invitation_id,
-                metadata=metadata,
+                extra_data=metadata,
                 is_read=False,
             )
 
@@ -133,7 +133,7 @@ class NotificationService:
                         "id": n.document.id,
                         "name": n.document.name,
                     } if n.document else None,
-                    "metadata": n.metadata,
+                    "metadata": n.extra_data,
                     "is_read": n.is_read,
                     "created_at": n.created_at.isoformat() if n.created_at else None,
                 }
