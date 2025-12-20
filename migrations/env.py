@@ -40,26 +40,31 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
-def ensure_alembic_version_column_size(connection) -> None:
+def ensure_alembic_version_table(connection) -> None:
     """
-    Ensure alembic_version.version_num column can hold longer revision IDs.
+    Ensure alembic_version table exists with proper column size.
 
-    Default is VARCHAR(32) which is too short for descriptive revision names.
-    This function resizes it to VARCHAR(255) if needed.
+    Default Alembic creates VARCHAR(32) which is too short for descriptive revision names.
+    This function creates or resizes it to VARCHAR(255).
     """
     inspector = inspect(connection)
 
     # Check if alembic_version table exists
     if "alembic_version" not in inspector.get_table_names():
+        # Create with proper size from the start
+        connection.execute(
+            text("CREATE TABLE alembic_version (version_num VARCHAR(255) NOT NULL, CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))")
+        )
+        connection.commit()
         return
 
-    # Check current column size
+    # Table exists - check current column size and resize if needed
     columns = inspector.get_columns("alembic_version")
     for col in columns:
         if col["name"] == "version_num":
             # Get the column type length
             col_type = str(col["type"])
-            if "VARCHAR(32)" in col_type.upper():
+            if "VARCHAR(32)" in col_type.upper() or "VARCHAR(128)" in col_type.upper():
                 # Resize to 255
                 connection.execute(
                     text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(255)")
@@ -106,8 +111,8 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        # Ensure alembic_version column can hold long revision IDs
-        ensure_alembic_version_column_size(connection)
+        # Ensure alembic_version table exists with proper column size
+        ensure_alembic_version_table(connection)
 
         context.configure(
             connection=connection,

@@ -74,3 +74,14 @@ model Verification {
   @@index([identifier])
   @@map("verification")
 }
+
+// JWT plugin - stores JWKS keys for JWT signing
+model Jwks {
+  id         String    @id
+  publicKey  String
+  privateKey String
+  createdAt  DateTime
+  expiresAt  DateTime?
+
+  @@map("jwks")
+}

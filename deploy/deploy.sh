@@ -122,19 +122,28 @@ cp -r /opt/gigapdf/apps/admin/public /opt/gigapdf/apps/admin/.next/standalone/ap
 # =============================================================================
 # 8. Database Migrations
 # =============================================================================
-log_info "Running database migrations..."
+# IMPORTANT: Migration order matters!
+# 1. Alembic manages FastAPI tables (stored_documents, user_quotas, plans, etc.)
+# 2. Prisma manages Better Auth tables (users, sessions, accounts, verification, jwks)
+# Both share the same database but manage different tables.
+# NEVER run prisma db push with --accept-data-loss as it will delete Alembic tables!
+# =============================================================================
+
+log_info "Running Alembic migrations (FastAPI tables)..."
 source .venv/bin/activate
 cd "$APP_DIR"
 alembic upgrade head || log_warn "Alembic migrations skipped or failed"
 
-# Prisma push for Next.js apps
-log_info "Running Prisma push..."
+# Prisma push for Next.js apps (Better Auth tables only)
+# This will only ADD missing tables, not delete existing ones
+log_info "Running Prisma push (Better Auth tables)..."
 cd apps/web
-pnpm db:push || log_warn "Web Prisma push skipped"
+# Use --skip-generate since we already generated the client
+npx prisma db push --skip-generate 2>&1 | grep -v "already in sync" || log_warn "Web Prisma push skipped"
 cd ../..
 
 cd apps/admin
-pnpm db:push || log_warn "Admin Prisma push skipped"
+npx prisma db push --skip-generate 2>&1 | grep -v "already in sync" || log_warn "Admin Prisma push skipped"
 cd ../..
 
 # =============================================================================
