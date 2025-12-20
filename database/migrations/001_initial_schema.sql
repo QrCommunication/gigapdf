@@ -16,109 +16,111 @@
 
 -- ============================================================================
 -- 1. BETTERAUTH - WEB APP
+-- Note: Better Auth generates string IDs, not UUIDs. Use TEXT type.
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    "emailVerified" BOOLEAN DEFAULT FALSE,
-    name VARCHAR(255),
+    id TEXT PRIMARY KEY NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    "emailVerified" BOOLEAN NOT NULL DEFAULT false,
+    name TEXT,
     image TEXT,
-    locale VARCHAR(10) DEFAULT 'fr',
-    "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-    "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+    locale TEXT DEFAULT 'fr',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS accounts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    "userId" UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    "accountId" VARCHAR(255) NOT NULL,
-    "providerId" VARCHAR(255) NOT NULL,
+    id TEXT PRIMARY KEY NOT NULL,
+    "userId" TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    "accountId" TEXT NOT NULL,
+    "providerId" TEXT NOT NULL,
     "accessToken" TEXT,
     "refreshToken" TEXT,
-    "accessTokenExpiresAt" TIMESTAMPTZ,
-    "refreshTokenExpiresAt" TIMESTAMPTZ,
+    "accessTokenExpiresAt" TIMESTAMP(3),
+    "refreshTokenExpiresAt" TIMESTAMP(3),
     scope TEXT,
     password TEXT,
     "idToken" TEXT,
-    "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-    "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS accounts_userId_idx ON accounts("userId");
 
 CREATE TABLE IF NOT EXISTS sessions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    "userId" UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    token VARCHAR(255) UNIQUE NOT NULL,
-    "expiresAt" TIMESTAMPTZ NOT NULL,
-    "ipAddress" VARCHAR(255),
+    id TEXT PRIMARY KEY NOT NULL,
+    "userId" TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "ipAddress" TEXT,
     "userAgent" TEXT,
-    "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-    "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS sessions_userId_idx ON sessions("userId");
 
 CREATE TABLE IF NOT EXISTS verification (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    identifier VARCHAR(255) NOT NULL,
+    id TEXT PRIMARY KEY NOT NULL,
+    identifier TEXT NOT NULL,
     value TEXT NOT NULL,
-    "expiresAt" TIMESTAMPTZ NOT NULL,
-    "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-    "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS verification_identifier_idx ON verification(identifier);
 
 -- ============================================================================
 -- 2. BETTERAUTH - ADMIN APP
+-- Note: Better Auth generates string IDs, not UUIDs. Use TEXT type.
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS admin_users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    "emailVerified" BOOLEAN DEFAULT FALSE,
-    name VARCHAR(255),
+    id TEXT PRIMARY KEY NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    "emailVerified" BOOLEAN NOT NULL DEFAULT false,
+    name TEXT,
     image TEXT,
-    role VARCHAR(50) DEFAULT 'admin',
-    "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-    "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+    role TEXT NOT NULL DEFAULT 'admin',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS admin_accounts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    "userId" UUID NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
-    "accountId" VARCHAR(255) NOT NULL,
-    "providerId" VARCHAR(255) NOT NULL,
+    id TEXT PRIMARY KEY NOT NULL,
+    "userId" TEXT NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    "accountId" TEXT NOT NULL,
+    "providerId" TEXT NOT NULL,
     "accessToken" TEXT,
     "refreshToken" TEXT,
-    "accessTokenExpiresAt" TIMESTAMPTZ,
-    "refreshTokenExpiresAt" TIMESTAMPTZ,
+    "accessTokenExpiresAt" TIMESTAMP(3),
+    "refreshTokenExpiresAt" TIMESTAMP(3),
     scope TEXT,
     password TEXT,
     "idToken" TEXT,
-    "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-    "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS admin_accounts_userId_idx ON admin_accounts("userId");
 
 CREATE TABLE IF NOT EXISTS admin_sessions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    "userId" UUID NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
-    token VARCHAR(255) UNIQUE NOT NULL,
-    "expiresAt" TIMESTAMPTZ NOT NULL,
-    "ipAddress" VARCHAR(255),
+    id TEXT PRIMARY KEY NOT NULL,
+    "userId" TEXT NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "ipAddress" TEXT,
     "userAgent" TEXT,
-    "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-    "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS admin_sessions_userId_idx ON admin_sessions("userId");
 
 CREATE TABLE IF NOT EXISTS admin_verification (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    identifier VARCHAR(255) NOT NULL,
+    id TEXT PRIMARY KEY NOT NULL,
+    identifier TEXT NOT NULL,
     value TEXT NOT NULL,
-    "expiresAt" TIMESTAMPTZ NOT NULL,
-    "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-    "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS admin_verification_identifier_idx ON admin_verification(identifier);
 
