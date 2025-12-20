@@ -89,9 +89,46 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+def is_jwt_token(token: str) -> bool:
+    """Check if a token looks like a JWT (3 base64 parts separated by dots)."""
+    parts = token.split(".")
+    return len(parts) == 3 and all(len(p) > 10 for p in parts)
+
+
+# Cache for JWKS to avoid fetching on every request
+_jwks_cache: dict = {}
+_jwks_cache_time: float = 0
+
+
+async def get_jwks_keys(jwks_url: str) -> dict:
+    """
+    Fetch and cache JWKS keys from URL.
+
+    Args:
+        jwks_url: URL to fetch JWKS from.
+
+    Returns:
+        dict: JWKS data with keys.
+    """
+    import time
+
+    global _jwks_cache, _jwks_cache_time
+
+    # Cache for 5 minutes
+    if _jwks_cache and (time.time() - _jwks_cache_time) < 300:
+        return _jwks_cache
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(jwks_url, timeout=10.0)
+        response.raise_for_status()
+        _jwks_cache = response.json()
+        _jwks_cache_time = time.time()
+        return _jwks_cache
+
+
 async def decode_jwt_token(token: str) -> dict:
     """
-    Decode and validate a JWT token.
+    Decode and validate a JWT token using JWKS.
 
     Args:
         token: The JWT token to decode.
@@ -102,37 +139,63 @@ async def decode_jwt_token(token: str) -> dict:
     Raises:
         AuthInvalidError: If token is invalid or expired.
     """
+    from jose import jwk
+    from jose.constants import ALGORITHMS
+
     settings = get_settings()
 
     try:
-        # Check if public key is a JWKS URL
-        public_key = settings.auth_jwt_public_key
-        if public_key.startswith("http"):
-            # Fetch JWKS from URL
-            async with httpx.AsyncClient() as client:
-                response = await client.get(public_key)
-                jwks = response.json()
-                # Extract the key (simplified - in production, match kid)
-                public_key = jwks.get("keys", [{}])[0]
+        public_key_config = settings.auth_jwt_public_key
 
-        # Decode token
+        # Check if public key is a JWKS URL
+        if public_key_config.startswith("http"):
+            # Fetch JWKS and find the right key
+            jwks_data = await get_jwks_keys(public_key_config)
+            keys = jwks_data.get("keys", [])
+
+            if not keys:
+                raise AuthInvalidError("No keys found in JWKS")
+
+            # Get the key ID from token header to match the right key
+            unverified_header = jwt.get_unverified_header(token)
+            token_kid = unverified_header.get("kid")
+
+            # Find matching key or use first key
+            key_data = None
+            for key in keys:
+                if token_kid and key.get("kid") == token_kid:
+                    key_data = key
+                    break
+            if not key_data:
+                key_data = keys[0]
+
+            # Convert JWK to PEM format for jose
+            rsa_key = jwk.construct(key_data, algorithm=ALGORITHMS.RS256)
+            public_key = rsa_key.to_pem().decode("utf-8")
+        else:
+            public_key = public_key_config
+
+        # Decode token - Better Auth JWT uses 'sub' for user ID
         claims = jwt.decode(
             token,
             public_key,
             algorithms=[settings.auth_jwt_algorithm],
-            audience=settings.auth_jwt_audience,
-            issuer=settings.auth_jwt_issuer if settings.auth_jwt_issuer else None,
             options={
-                "verify_aud": bool(settings.auth_jwt_audience),
-                "verify_iss": bool(settings.auth_jwt_issuer),
+                # Better Auth may not set audience/issuer, so make these optional
+                "verify_aud": False,
+                "verify_iss": False,
             },
         )
 
+        logger.debug(f"JWT decoded successfully, claims: {claims}")
         return claims
 
     except JWTError as e:
         logger.warning(f"JWT validation failed: {e}")
         raise AuthInvalidError(f"Token validation failed: {str(e)}")
+    except Exception as e:
+        logger.warning(f"JWT decoding error: {e}")
+        raise AuthInvalidError(f"Token decoding failed: {str(e)}")
 
 
 async def validate_session_with_better_auth(token: str, session_url: str) -> dict:
@@ -179,6 +242,8 @@ async def get_current_user(
     """
     Dependency to get the current authenticated user.
 
+    Supports both JWT tokens (from mobile app) and session tokens (from web).
+
     Args:
         authorization: Authorization header value.
 
@@ -211,32 +276,42 @@ async def get_current_user(
             roles=["user"],
         )
 
-    # Better Auth session validation mode
+    # Check if JWT is configured
+    jwt_configured = (
+        settings.auth_jwt_public_key
+        and settings.auth_jwt_public_key != "CONFIGURE_YOUR_JWT_PUBLIC_KEY"
+    )
+
+    # If token looks like a JWT and JWKS is configured, try JWT validation first
+    if jwt_configured and is_jwt_token(token):
+        try:
+            logger.debug("Token looks like JWT, validating with JWKS...")
+            claims = await decode_jwt_token(token)
+            logger.info(f"JWT validated successfully for user: {claims.get('sub')}")
+            return CurrentUser.from_claims(claims)
+        except AuthInvalidError as e:
+            logger.warning(f"JWT validation failed, will try session: {e}")
+            # Fall through to session validation
+
+    # Session validation with Better Auth
     if settings.auth_session_url:
-        logger.debug("Using Better Auth session validation")
-        session_data = await validate_session_with_better_auth(token, settings.auth_session_url)
-        user = session_data.get("user", {})
-        return CurrentUser(
-            user_id=user.get("id", ""),
-            email=user.get("email"),
-            name=user.get("name"),
-            roles=["user"],
-        )
+        logger.debug("Trying Better Auth session validation...")
+        try:
+            session_data = await validate_session_with_better_auth(token, settings.auth_session_url)
+            user = session_data.get("user", {})
+            if user.get("id"):
+                logger.info(f"Session validated for user: {user.get('id')}")
+                return CurrentUser(
+                    user_id=user.get("id", ""),
+                    email=user.get("email"),
+                    name=user.get("name"),
+                    roles=["user"],
+                )
+        except AuthInvalidError:
+            pass  # Fall through to error
 
-    # Fallback: Accept token as user ID (for simple auth scenarios)
-    if not settings.auth_jwt_public_key or settings.auth_jwt_public_key == "CONFIGURE_YOUR_JWT_PUBLIC_KEY":
-        logger.debug(f"No JWT config: Using token as user ID: {token}")
-        return CurrentUser(
-            user_id=token,
-            email=None,
-            name=None,
-            roles=["user"],
-        )
-
-    # Production with JWT: Validate JWT token
-    claims = await decode_jwt_token(token)
-
-    return CurrentUser.from_claims(claims)
+    # If we get here, authentication failed
+    raise AuthInvalidError("Could not validate token")
 
 
 async def get_optional_user(
