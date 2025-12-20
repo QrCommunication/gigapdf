@@ -1,0 +1,79 @@
+{
+  "expo": {
+    "name": "GigaPDF",
+    "slug": "gigapdf-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "gigapdf",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a1a1a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gigapdf.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1a1a1a"
+      },
+      "package": "com.gigapdf.mobile",
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://giga-pdf.com"
+        }
+      ],
+      "expo-secure-store",
+      "expo-font",
+      "expo-web-browser",
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "L'application a besoin d'accéder à vos photos pour les convertir en PDF.",
+          "cameraPermission": "L'application a besoin d'accéder à votre caméra pour scanner des documents."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": "https://giga-pdf.com"
+      },
+      "googleOAuth": {
+        "clientId": "181209330808-4jjrhkd8baia69p2huvt1ae3idc6k47b.apps.googleusercontent.com",
+        "webClientId": "181209330808-a6t1cgnpm0klvdumkdg3o8u38i1f8fb6.apps.googleusercontent.com"
+      },
+      "eas": {
+        "projectId": "a94261ac-fa8e-4b12-9807-281161643485"
+      }
+    },
+    "owner": "ronylicha"
+  }
+}

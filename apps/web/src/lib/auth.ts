@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { expo } from "@better-auth/expo";
+import { jwt } from "better-auth/plugins/jwt";
 import { PrismaClient } from "@prisma/client";
 import {
   sendEmail,
@@ -65,8 +66,17 @@ export const auth = betterAuth({
   },
   secret: process.env.BETTER_AUTH_SECRET!,
   baseURL: process.env.BETTER_AUTH_URL!,
-  // Plugin Expo pour le support mobile (gère l'absence de header Origin)
-  plugins: [expo()],
+  // Plugins: Expo pour le support mobile + JWT pour l'authentification API
+  plugins: [
+    expo(),
+    jwt({
+      jwks: {
+        keyPairConfig: {
+          alg: "RS256",
+        },
+      },
+    }),
+  ],
   trustedOrigins: [
     process.env.NEXT_PUBLIC_APP_URL!,
     process.env.NEXT_PUBLIC_API_URL!,
@@ -78,13 +88,6 @@ export const auth = betterAuth({
       ? ["exp://*/*", "exp://192.168.*.*:*/*", "exp://localhost:*/*"]
       : []),
   ].filter(Boolean),
-  // JWT Configuration for FastAPI backend compatibility
-  jwt: {
-    enabled: true,
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
-    issuer: process.env.BETTER_AUTH_URL!,
-    audience: [process.env.NEXT_PUBLIC_API_URL!],
-  },
   // User hooks for sending welcome email
   user: {
     additionalFields: {
