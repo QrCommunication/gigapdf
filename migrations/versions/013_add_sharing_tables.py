@@ -36,8 +36,8 @@ def upgrade() -> None:
     if 'document_share_invitations' not in existing_tables:
         op.create_table(
             'document_share_invitations',
-            sa.Column('id', sa.Text(), nullable=False),
-            sa.Column('document_id', sa.Text(), nullable=False),
+            sa.Column('id', postgresql.UUID(as_uuid=False), nullable=False),
+            sa.Column('document_id', postgresql.UUID(as_uuid=False), nullable=False),
             sa.Column('inviter_id', sa.Text(), nullable=False),
             sa.Column('invitee_email', sa.Text(), nullable=False),
             sa.Column('invitee_user_id', sa.Text(), nullable=True),
@@ -105,7 +105,7 @@ def upgrade() -> None:
     if 'share_notifications' not in existing_tables:
         op.create_table(
             'share_notifications',
-            sa.Column('id', sa.Text(), nullable=False),
+            sa.Column('id', postgresql.UUID(as_uuid=False), nullable=False),
             sa.Column('user_id', sa.Text(), nullable=False),
             sa.Column(
                 'notification_type',
@@ -113,8 +113,8 @@ def upgrade() -> None:
                 nullable=False,
                 comment='Type: share_invitation, share_accepted, share_declined, share_revoked, permission_changed'
             ),
-            sa.Column('document_id', sa.Text(), nullable=True),
-            sa.Column('share_invitation_id', sa.Text(), nullable=True),
+            sa.Column('document_id', postgresql.UUID(as_uuid=False), nullable=True),
+            sa.Column('share_invitation_id', postgresql.UUID(as_uuid=False), nullable=True),
             sa.Column('title', sa.Text(), nullable=False),
             sa.Column('message', sa.Text(), nullable=True),
             sa.Column(
@@ -190,7 +190,7 @@ def upgrade() -> None:
         if 'invitation_id' not in columns:
             op.add_column(
                 'document_shares',
-                sa.Column('invitation_id', sa.Text(), nullable=True)
+                sa.Column('invitation_id', postgresql.UUID(as_uuid=False), nullable=True)
             )
             # Add foreign key constraint
             op.create_foreign_key(
