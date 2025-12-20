@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { expo } from "@better-auth/expo";
 import { PrismaClient } from "@prisma/client";
 import {
   sendEmail,
@@ -64,9 +65,18 @@ export const auth = betterAuth({
   },
   secret: process.env.BETTER_AUTH_SECRET!,
   baseURL: process.env.BETTER_AUTH_URL!,
+  // Plugin Expo pour le support mobile (gère l'absence de header Origin)
+  plugins: [expo()],
   trustedOrigins: [
     process.env.NEXT_PUBLIC_APP_URL!,
     process.env.NEXT_PUBLIC_API_URL!,
+    // Mobile app schemes
+    "gigapdf://",
+    "gigapdf://*",
+    // Expo development
+    ...(process.env.NODE_ENV === "development"
+      ? ["exp://*/*", "exp://192.168.*.*:*/*", "exp://localhost:*/*"]
+      : []),
   ].filter(Boolean),
   // JWT Configuration for FastAPI backend compatibility
   jwt: {
