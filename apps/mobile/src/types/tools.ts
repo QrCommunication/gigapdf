@@ -19,6 +19,7 @@ export interface PDFTool {
   color: string;
   route: string;
   isNew?: boolean;
+  isPremium?: boolean;
   apiEndpoint?: string; // Related API endpoint
 }
 

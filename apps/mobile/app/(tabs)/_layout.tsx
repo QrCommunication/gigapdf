@@ -78,13 +78,13 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="tools"
+        name="shared"
         options={{
-          title: 'Outils',
-          headerTitle: 'Outils PDF',
+          title: 'Partagés',
+          headerTitle: 'Partagés avec moi',
           tabBarIcon: ({ focused, color }: TabBarIconProps) => (
             <Ionicons
-              name={focused ? 'construct' : 'construct-outline'}
+              name={focused ? 'share-social' : 'share-social-outline'}
               size={IconSizes.md}
               color={color}
             />

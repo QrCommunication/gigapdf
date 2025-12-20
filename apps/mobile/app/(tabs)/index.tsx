@@ -16,7 +16,11 @@ import {
   Pressable,
   ActivityIndicator,
   TextInput,
+  Image,
 } from 'react-native';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
+import { BASE_URL } from '../../src/services/api';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -72,6 +76,17 @@ export default function DocumentsExplorerScreen() {
   const [newFolderName, setNewFolderName] = useState('');
   const [moveFolders, setMoveFolders] = useState<Folder[]>([]);
   const [moveTargetId, setMoveTargetId] = useState<string | null>(null);
+
+  // Document actions modal
+  const [showDocActionsModal, setShowDocActionsModal] = useState(false);
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [selectedDoc, setSelectedDoc] = useState<StoredDocument | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [shareEmail, setShareEmail] = useState('');
+  const [sharePermission, setSharePermission] = useState<'view' | 'edit'>('edit');
+  const [actionLoading, setActionLoading] = useState(false);
 
   // ==========================================================================
   // Data fetching
@@ -280,6 +295,138 @@ export default function DocumentsExplorerScreen() {
       Alert.alert('Erreur', 'Impossible de déplacer certains éléments');
     }
   }, [selectedDocuments, selectedFolders, moveTargetId, fetchData]);
+
+  // ==========================================================================
+  // Document Actions
+  // ==========================================================================
+
+  const openDocOptions = useCallback((doc: StoredDocument) => {
+    setSelectedDoc(doc);
+    setShowDocActionsModal(true);
+  }, []);
+
+  const handleDocDownload = useCallback(async () => {
+    if (!selectedDoc) return;
+    setShowDocActionsModal(false);
+    setActionLoading(true);
+
+    try {
+      const downloadUrl = `${BASE_URL}/api/v1/storage/documents/${selectedDoc.stored_document_id}/download`;
+      const fileUri = `${FileSystem.documentDirectory}${selectedDoc.name}`;
+
+      const downloadResult = await FileSystem.downloadAsync(downloadUrl, fileUri);
+
+      if (downloadResult.status === 200) {
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(downloadResult.uri, {
+            mimeType: 'application/pdf',
+            dialogTitle: 'Enregistrer le PDF',
+          });
+        } else {
+          Alert.alert('Succes', `Document telecharge dans ${fileUri}`);
+        }
+      }
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de telecharger le document');
+    } finally {
+      setActionLoading(false);
+    }
+  }, [selectedDoc]);
+
+  const handleDocRename = useCallback(() => {
+    if (!selectedDoc) return;
+    setShowDocActionsModal(false);
+    setRenameValue(selectedDoc.name.replace('.pdf', ''));
+    setShowRenameModal(true);
+  }, [selectedDoc]);
+
+  const confirmRename = useCallback(async () => {
+    if (!selectedDoc || !renameValue.trim()) return;
+    setActionLoading(true);
+
+    try {
+      const finalName = renameValue.trim().endsWith('.pdf')
+        ? renameValue.trim()
+        : `${renameValue.trim()}.pdf`;
+      await storageService.renameDocument(selectedDoc.stored_document_id, finalName);
+      setShowRenameModal(false);
+      fetchData();
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de renommer le document');
+    } finally {
+      setActionLoading(false);
+    }
+  }, [selectedDoc, renameValue, fetchData]);
+
+  const handleDocShare = useCallback(() => {
+    setShowDocActionsModal(false);
+    setShareEmail('');
+    setSharePermission('edit');
+    setShowShareModal(true);
+  }, []);
+
+  const confirmShare = useCallback(async () => {
+    if (!selectedDoc || !shareEmail.trim()) {
+      Alert.alert('Erreur', 'Veuillez entrer une adresse email');
+      return;
+    }
+    setActionLoading(true);
+
+    try {
+      const { sharingService } = await import('../../src/services/sharingService');
+      await sharingService.shareDocument({
+        document_id: selectedDoc.stored_document_id,
+        invitee_email: shareEmail.trim(),
+        permission: sharePermission,
+      });
+      Alert.alert('Succes', `Document partage avec ${shareEmail}`);
+      setShowShareModal(false);
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de partager le document');
+    } finally {
+      setActionLoading(false);
+    }
+  }, [selectedDoc, shareEmail, sharePermission]);
+
+  const handleDocExport = useCallback(() => {
+    setShowDocActionsModal(false);
+    setShowExportModal(true);
+  }, []);
+
+  const performExport = useCallback(async (format: string) => {
+    if (!selectedDoc) return;
+    setShowExportModal(false);
+    Alert.alert(
+      'Export en cours',
+      `Le document sera exporte en ${format.toUpperCase()}. Cette fonctionnalite arrive bientot.`
+    );
+  }, [selectedDoc]);
+
+  const handleDocDelete = useCallback(() => {
+    if (!selectedDoc) return;
+    setShowDocActionsModal(false);
+
+    Alert.alert(
+      'Supprimer le document',
+      `Etes-vous sur de vouloir supprimer "${selectedDoc.name}" ?`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await storageService.deleteDocuments([selectedDoc.stored_document_id]);
+              fetchData();
+            } catch (error) {
+              Alert.alert('Erreur', 'Impossible de supprimer le document');
+            }
+          },
+        },
+      ]
+    );
+  }, [selectedDoc, fetchData]);
 
   const handleImport = useCallback(async () => {
     try {
@@ -541,9 +688,7 @@ export default function DocumentsExplorerScreen() {
         {!selectionMode && (
           <TouchableOpacity
             style={styles.moreButton}
-            onPress={() => {
-              // TODO: Show document options
-            }}
+            onPress={() => openDocOptions(doc)}
           >
             <Ionicons name="ellipsis-vertical" size={20} color={colors.textTertiary} />
           </TouchableOpacity>
@@ -845,6 +990,224 @@ export default function DocumentsExplorerScreen() {
       {renderSortModal()}
       {renderNewFolderModal()}
       {renderMoveModal()}
+
+      {/* Document Actions Modal */}
+      <Modal
+        visible={showDocActionsModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDocActionsModal(false)}
+      >
+        <Pressable
+          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+          onPress={() => setShowDocActionsModal(false)}
+        >
+          <View style={[styles.docActionsModal, { backgroundColor: colors.surface }]}>
+            <View style={[styles.docActionsHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.docActionsTitle, { color: colors.text }]} numberOfLines={1}>
+                {selectedDoc?.name}
+              </Text>
+            </View>
+
+            <TouchableOpacity style={styles.docActionItem} onPress={() => {
+              setShowDocActionsModal(false);
+              if (selectedDoc) router.push(`/document/${selectedDoc.stored_document_id}`);
+            }}>
+              <Ionicons name="eye-outline" size={22} color={colors.text} />
+              <Text style={[styles.docActionText, { color: colors.text }]}>Apercu</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.docActionItem} onPress={handleDocDownload}>
+              <Ionicons name="download-outline" size={22} color={colors.text} />
+              <Text style={[styles.docActionText, { color: colors.text }]}>Telecharger</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.docActionItem} onPress={handleDocRename}>
+              <Ionicons name="pencil-outline" size={22} color={colors.text} />
+              <Text style={[styles.docActionText, { color: colors.text }]}>Renommer</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.docActionItem} onPress={handleDocShare}>
+              <Ionicons name="share-social-outline" size={22} color={colors.text} />
+              <Text style={[styles.docActionText, { color: colors.text }]}>Partager</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.docActionItem} onPress={handleDocExport}>
+              <Ionicons name="swap-horizontal-outline" size={22} color={colors.text} />
+              <Text style={[styles.docActionText, { color: colors.text }]}>Exporter</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+
+            <View style={[styles.docActionDivider, { backgroundColor: colors.border }]} />
+
+            <TouchableOpacity style={styles.docActionItem} onPress={handleDocDelete}>
+              <Ionicons name="trash-outline" size={22} color={colors.error} />
+              <Text style={[styles.docActionText, { color: colors.error }]}>Supprimer</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Rename Modal */}
+      <Modal
+        visible={showRenameModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRenameModal(false)}
+      >
+        <Pressable
+          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+          onPress={() => setShowRenameModal(false)}
+        >
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Renommer</Text>
+            <TextInput
+              style={[styles.textInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+              placeholder="Nom du document"
+              placeholderTextColor={colors.textTertiary}
+              value={renameValue}
+              onChangeText={setRenameValue}
+              autoFocus
+              selectTextOnFocus
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, { borderColor: colors.border }]}
+                onPress={() => setShowRenameModal(false)}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.textSecondary }]}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: colors.primary }]}
+                onPress={confirmRename}
+                disabled={actionLoading}
+              >
+                {actionLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { color: '#fff' }]}>Renommer</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Share Modal */}
+      <Modal
+        visible={showShareModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowShareModal(false)}
+      >
+        <Pressable
+          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+          onPress={() => setShowShareModal(false)}
+        >
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Partager le document</Text>
+            <TextInput
+              style={[styles.textInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+              placeholder="Adresse email"
+              placeholderTextColor={colors.textTertiary}
+              value={shareEmail}
+              onChangeText={setShareEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoFocus
+            />
+            <View style={styles.permissionRow}>
+              <Text style={[styles.permissionLabel, { color: colors.text }]}>Permission:</Text>
+              <View style={styles.permissionButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.permissionButton,
+                    { borderColor: colors.border },
+                    sharePermission === 'view' && { backgroundColor: colors.primary, borderColor: colors.primary },
+                  ]}
+                  onPress={() => setSharePermission('view')}
+                >
+                  <Text style={[styles.permissionButtonText, { color: sharePermission === 'view' ? '#fff' : colors.text }]}>
+                    Lecture
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.permissionButton,
+                    { borderColor: colors.border },
+                    sharePermission === 'edit' && { backgroundColor: colors.primary, borderColor: colors.primary },
+                  ]}
+                  onPress={() => setSharePermission('edit')}
+                >
+                  <Text style={[styles.permissionButtonText, { color: sharePermission === 'edit' ? '#fff' : colors.text }]}>
+                    Modifier
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, { borderColor: colors.border }]}
+                onPress={() => setShowShareModal(false)}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.textSecondary }]}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: colors.primary }]}
+                onPress={confirmShare}
+                disabled={actionLoading}
+              >
+                {actionLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { color: '#fff' }]}>Partager</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Export Modal */}
+      <Modal
+        visible={showExportModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowExportModal(false)}
+      >
+        <Pressable
+          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+          onPress={() => setShowExportModal(false)}
+        >
+          <View style={[styles.docActionsModal, { backgroundColor: colors.surface }]}>
+            <View style={[styles.docActionsHeader, { borderBottomColor: colors.border }]}>
+              <TouchableOpacity onPress={() => setShowExportModal(false)}>
+                <Ionicons name="arrow-back" size={22} color={colors.text} />
+              </TouchableOpacity>
+              <Text style={[styles.docActionsTitle, { color: colors.text, marginLeft: Spacing.sm }]}>
+                Exporter vers
+              </Text>
+            </View>
+
+            {[
+              { format: 'docx', label: 'Word (.docx)', icon: 'document-text' },
+              { format: 'xlsx', label: 'Excel (.xlsx)', icon: 'grid' },
+              { format: 'png', label: 'Images (.png)', icon: 'images' },
+              { format: 'html', label: 'HTML (.html)', icon: 'code-slash' },
+              { format: 'txt', label: 'Texte (.txt)', icon: 'document' },
+            ].map((item) => (
+              <TouchableOpacity
+                key={item.format}
+                style={styles.docActionItem}
+                onPress={() => performExport(item.format)}
+              >
+                <Ionicons name={item.icon as any} size={22} color={colors.text} />
+                <Text style={[styles.docActionText, { color: colors.text }]}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1029,6 +1392,64 @@ const styles = StyleSheet.create({
   },
   modalButtonText: {
     fontSize: Typography.md,
+    fontWeight: '500',
+  },
+  docActionsModal: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: Spacing.radiusLg,
+    borderTopRightRadius: Spacing.radiusLg,
+    paddingBottom: Spacing.xl,
+  },
+  docActionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  docActionsTitle: {
+    fontSize: Typography.md,
+    fontWeight: '600',
+    flex: 1,
+  },
+  docActionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.md,
+  },
+  docActionText: {
+    fontSize: Typography.md,
+    flex: 1,
+  },
+  docActionDivider: {
+    height: 1,
+    marginVertical: Spacing.xs,
+    marginHorizontal: Spacing.lg,
+  },
+  permissionRow: {
+    marginBottom: Spacing.md,
+  },
+  permissionLabel: {
+    fontSize: Typography.sm,
+    marginBottom: Spacing.xs,
+  },
+  permissionButtons: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  permissionButton: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    borderRadius: Spacing.radiusSm,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  permissionButtonText: {
+    fontSize: Typography.sm,
     fontWeight: '500',
   },
 });

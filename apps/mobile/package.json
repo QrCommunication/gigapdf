@@ -1,6 +1,6 @@
 {
   "name": "gigapdf-mobile",
-  "version": "0.5.0-alpha",
+  "version": "0.7.0-alpha",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -45,6 +45,7 @@
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
+    "react-native-svg": "^15.15.1",
     "react-native-toast-message": "^2.3.3",
     "zustand": "^5.0.2"
   },

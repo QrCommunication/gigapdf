@@ -187,9 +187,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         console.log('[Auth] Registration successful:', result.user.email);
 
         // Store the session token for API calls
-        if (result.session?.token) {
+        if (result.token) {
           console.log('[Auth] Storing session token for API');
-          await tokenManager.setAccessToken(result.session.token);
+          await tokenManager.setAccessToken(result.token);
         }
 
         set({

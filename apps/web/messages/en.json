@@ -888,6 +888,331 @@
       "loadFailed": "Failed to load shared documents. Please try again."
     }
   },
+  "legal": {
+    "about": {
+      "title": "About GigaPDF",
+      "lastUpdated": "Last updated",
+      "mission": {
+        "title": "Our mission",
+        "description": "GigaPDF's mission is to democratize PDF editing by offering a professional, accessible, and fully open source tool. We believe everyone should have access to quality tools for managing their PDF documents."
+      },
+      "openSource": {
+        "title": "Open Source",
+        "description": "GigaPDF is a 100% open source project under the MIT license. This means you can inspect the source code, contribute to the project, or even host it yourself on your own infrastructure.",
+        "features": {
+          "transparent": "Transparent and auditable source code",
+          "selfHost": "Free self-hosting option",
+          "contribute": "Active contributor community",
+          "mitLicense": "Permissive MIT license"
+        }
+      },
+      "company": {
+        "title": "The team",
+        "developer": {
+          "title": "Developer",
+          "description": "GigaPDF is developed and maintained by Rony Licha, a Full Stack developer with over 15 years of experience in web and mobile development."
+        },
+        "hosting": {
+          "title": "Hosting",
+          "description": "Our infrastructure is hosted at Scaleway, a European cloud provider ensuring the sovereignty of your data."
+        }
+      },
+      "contact": {
+        "title": "Contact us",
+        "email": "Email",
+        "phone": "Phone",
+        "formLink": "Use our contact form"
+      }
+    },
+    "privacy": {
+      "title": "Privacy Policy",
+      "lastUpdated": "Last updated",
+      "intro": {
+        "title": "Introduction",
+        "description": "At GigaPDF, we take the protection of your personal data very seriously. This privacy policy explains how we collect, use, and protect your information when you use our service."
+      },
+      "controller": {
+        "title": "Data controller"
+      },
+      "dataCollected": {
+        "title": "Data collected",
+        "account": {
+          "title": "Account data",
+          "email": "Email address",
+          "name": "First and last name",
+          "password": "Password (encrypted)"
+        },
+        "usage": {
+          "title": "Usage data",
+          "documents": "PDF documents you upload and create",
+          "logs": "Activity logs (logins, actions)",
+          "analytics": "Anonymized analytics data"
+        },
+        "technical": {
+          "title": "Technical data",
+          "ip": "IP address",
+          "browser": "Browser type",
+          "device": "Device information"
+        }
+      },
+      "purpose": {
+        "title": "Purpose of processing",
+        "service": "Provide and improve our services",
+        "security": "Ensure the security of your account",
+        "improvement": "Improve user experience",
+        "communication": "Communicate with you about your account",
+        "legal": "Comply with our legal obligations"
+      },
+      "legalBasis": {
+        "title": "Legal basis",
+        "contract": {
+          "title": "Contract performance",
+          "description": "To provide you with the requested services"
+        },
+        "consent": {
+          "title": "Consent",
+          "description": "For marketing communications (optional)"
+        },
+        "legitimate": {
+          "title": "Legitimate interest",
+          "description": "To improve our services and ensure security"
+        },
+        "legal": {
+          "title": "Legal obligation",
+          "description": "To comply with applicable laws"
+        }
+      },
+      "retention": {
+        "title": "Data retention",
+        "description": "We retain your data only for as long as necessary for the purposes for which it was collected.",
+        "account": "Account data: as long as your account is active",
+        "documents": "Documents: according to your retention settings",
+        "logs": "Logs: maximum 12 months"
+      },
+      "sharing": {
+        "title": "Data sharing",
+        "description": "We never sell your personal data. We may share it only with:",
+        "providers": {
+          "title": "Our service providers",
+          "hosting": "Server hosting (France/EU)",
+          "payment": "Payment processing"
+        }
+      },
+      "rights": {
+        "title": "Your rights",
+        "description": "In accordance with GDPR, you have the following rights:",
+        "access": {
+          "title": "Right of access",
+          "description": "Obtain a copy of your personal data"
+        },
+        "rectification": {
+          "title": "Right to rectification",
+          "description": "Correct your inaccurate data"
+        },
+        "erasure": {
+          "title": "Right to erasure",
+          "description": "Request deletion of your data"
+        },
+        "portability": {
+          "title": "Right to portability",
+          "description": "Receive your data in a structured format"
+        },
+        "objection": {
+          "title": "Right to object",
+          "description": "Object to certain processing"
+        },
+        "restriction": {
+          "title": "Right to restriction",
+          "description": "Restrict the processing of your data"
+        },
+        "exercise": "To exercise your rights, contact us at"
+      },
+      "cookies": {
+        "title": "Cookies",
+        "description": "We use essential cookies for the service to function.",
+        "essential": {
+          "title": "Essential cookies",
+          "description": "Necessary for the site to function (session, preferences)"
+        },
+        "functional": {
+          "title": "Functional cookies",
+          "description": "To remember your preferences (language, theme)"
+        }
+      },
+      "security": {
+        "title": "Security",
+        "description": "We implement appropriate technical and organizational measures to protect your data.",
+        "encryption": "Encryption of data in transit (HTTPS) and at rest",
+        "access": "Limited access to data on a need-to-know basis",
+        "monitoring": "Regular monitoring and auditing of our systems"
+      },
+      "openSource": {
+        "title": "Open Source and transparency",
+        "description": "Since GigaPDF is open source, you can audit our code to verify how we process your data. The source code is available on GitHub."
+      },
+      "changes": {
+        "title": "Changes to this policy",
+        "description": "We may update this policy from time to time. We will notify you of any significant changes by email or via a notification on the site."
+      },
+      "contact": {
+        "title": "Contact",
+        "description": "For any questions regarding this privacy policy, contact us:",
+        "cnil": "You can also file a complaint with the CNIL (French Data Protection Authority)"
+      }
+    },
+    "terms": {
+      "title": "Terms of Service",
+      "lastUpdated": "Last updated",
+      "intro": {
+        "title": "Introduction",
+        "description": "Welcome to GigaPDF. These terms of service govern your access to and use of the GigaPDF service. By using our service, you agree to these terms."
+      },
+      "definitions": {
+        "title": "Definitions",
+        "service": "The GigaPDF platform, including the website and applications",
+        "user": "Any person using the Service",
+        "content": "Any document, text, image, or data uploaded to the Service",
+        "publisher": "The publisher of the Service, Rony Licha"
+      },
+      "publisher": {
+        "title": "Service publisher",
+        "hosting": "Hosting provider"
+      },
+      "acceptance": {
+        "title": "Acceptance of terms",
+        "description": "By accessing or using GigaPDF, you agree to be bound by these terms. If you do not accept these terms, you must not use the service."
+      },
+      "service": {
+        "title": "Service description",
+        "description": "GigaPDF is a PDF document editing platform offering the following features:",
+        "features": {
+          "edit": "WYSIWYG PDF document editing",
+          "convert": "Conversion between different formats",
+          "storage": "Secure document storage",
+          "share": "Sharing and collaboration",
+          "api": "API access for developers"
+        }
+      },
+      "account": {
+        "title": "User account",
+        "description": "To use certain features, you must create an account. You are responsible for:",
+        "obligations": {
+          "accurate": "Providing accurate and up-to-date information",
+          "secure": "Maintaining the confidentiality of your credentials",
+          "notify": "Notifying us immediately of any unauthorized use",
+          "responsible": "All activities performed under your account"
+        }
+      },
+      "usage": {
+        "title": "Acceptable use",
+        "description": "You agree to use the service responsibly and in accordance with applicable laws.",
+        "prohibited": {
+          "title": "Prohibited uses",
+          "illegal": "Illegal or fraudulent activities",
+          "harmful": "Harmful, offensive, or defamatory content",
+          "infringing": "Violation of intellectual property rights",
+          "malware": "Distribution of malicious software",
+          "abuse": "Intentional server overload",
+          "reverse": "Reverse engineering of the service"
+        }
+      },
+      "content": {
+        "title": "Content ownership",
+        "ownership": "You retain all rights to the content you upload. GigaPDF does not claim any ownership rights to your content.",
+        "license": "You grant us a limited license to process, store, and display your content solely for the purpose of providing the service.",
+        "responsibility": "You are solely responsible for the content you upload and its compliance with applicable laws."
+      },
+      "openSource": {
+        "title": "Open Source license",
+        "description": "GigaPDF is open source software distributed under the MIT license.",
+        "license": "You can use, copy, modify, and distribute the source code",
+        "source": "The source code is available on GitHub",
+        "contributions": "Contributions are welcome under the same license terms"
+      },
+      "pricing": {
+        "title": "Pricing and payment",
+        "description": "GigaPDF offers free and paid plans.",
+        "free": "The free plan includes basic features with limits",
+        "paid": "Paid plans offer advanced features and higher limits",
+        "renewal": "Subscriptions are automatically renewed unless cancelled",
+        "cancellation": "You can cancel your subscription at any time"
+      },
+      "limitation": {
+        "title": "Limitation of liability",
+        "description": "To the extent permitted by law, GigaPDF shall not be liable for indirect, incidental, or consequential damages.",
+        "availability": "We do not guarantee 100% service availability",
+        "indirect": "We are not responsible for data or revenue loss",
+        "force": "We are not responsible for events beyond our control"
+      },
+      "warranty": {
+        "title": "Disclaimer of warranty",
+        "description": "The service is provided \"as is\" without warranty of any kind, express or implied. We do not guarantee that the service will be error-free or uninterrupted."
+      },
+      "termination": {
+        "title": "Termination",
+        "byUser": "You can terminate your account at any time from your settings.",
+        "byUs": "We may suspend or terminate your access in case of violation of these terms.",
+        "effect": "Upon termination, your data will be deleted in accordance with our privacy policy."
+      },
+      "modifications": {
+        "title": "Modifications to terms",
+        "description": "We may modify these terms at any time. Significant changes will be notified by email or on the site. Your continued use of the service after modification constitutes acceptance of the new terms."
+      },
+      "law": {
+        "title": "Governing law",
+        "description": "These terms are governed by French law.",
+        "jurisdiction": "Any dispute shall be submitted to the competent courts of Paris, France."
+      },
+      "contact": {
+        "title": "Contact",
+        "description": "For any questions regarding these terms:"
+      }
+    },
+    "contact": {
+      "title": "Contact us",
+      "subtitle": "Have a question, suggestion, or need help? Don't hesitate to contact us.",
+      "info": {
+        "title": "Contact information",
+        "email": {
+          "title": "Email",
+          "description": "For any general inquiries"
+        },
+        "phone": {
+          "title": "Phone",
+          "description": "Monday to Friday, 9am-6pm"
+        },
+        "address": {
+          "title": "Address"
+        },
+        "social": {
+          "title": "Social networks"
+        },
+        "company": {
+          "title": "Legal information"
+        }
+      },
+      "form": {
+        "title": "Send us a message",
+        "firstName": "First name",
+        "firstNamePlaceholder": "Your first name",
+        "lastName": "Last name",
+        "lastNamePlaceholder": "Your last name",
+        "email": "Email",
+        "emailPlaceholder": "your@email.com",
+        "subject": "Subject",
+        "subjectPlaceholder": "Subject of your message",
+        "message": "Message",
+        "messagePlaceholder": "Describe your request in detail...",
+        "send": "Send message",
+        "sending": "Sending...",
+        "success": {
+          "title": "Message sent!",
+          "description": "Thank you for your message. We will get back to you as soon as possible.",
+          "newMessage": "Send another message"
+        }
+      }
+    }
+  },
   "sharing": {
     "dialog": {
       "title": "Share document",

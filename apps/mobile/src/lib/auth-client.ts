@@ -37,9 +37,31 @@ export const {
   signUp,
   useSession,
   getSession,
-  forgetPassword,
-  changePassword,
 } = authClient;
+
+/**
+ * Forget Password - Request password reset email
+ */
+export async function forgetPassword({ email }: { email: string }): Promise<{ error?: { message: string } }> {
+  try {
+    const response = await fetch(`${AUTH_BASE_URL}/api/auth/forget-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      return { error: { message: data.message || 'Erreur lors de la reinitialisation' } };
+    }
+
+    return {};
+  } catch (error: any) {
+    return { error: { message: error.message || 'Erreur reseau' } };
+  }
+}
 
 /**
  * Get and store JWT token from session
