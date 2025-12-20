@@ -10,10 +10,14 @@
 #
 # Example: ./database/create-super-admin.sh admin@giga-pdf.com "MySecurePass123!" "Rony Licha"
 #
+# Note: For passwords with special characters like @!$, use single quotes:
+#       ./database/create-super-admin.sh admin@giga-pdf.com 'Pass@!word123' 'Admin'
+#
 # Requirements:
 # - curl
-# - jq (optional, for prettier output)
+# - psql (PostgreSQL client)
 # - ADMIN_URL environment variable or defaults to https://giga-pdf.com/admin
+# - DATABASE_URL environment variable (or .env file in project root)
 # =============================================================================
 
 set -e
@@ -39,8 +43,11 @@ if [ -z "$EMAIL" ] || [ -z "$PASSWORD" ] || [ -z "$NAME" ]; then
     echo ""
     echo "Usage: $0 <email> <password> <name>"
     echo ""
-    echo "Example:"
+    echo "Examples:"
     echo "  $0 admin@example.com 'MySecurePass123!' 'Admin Name'"
+    echo "  $0 admin@giga-pdf.com 'Pass@!word' 'Rony Licha'"
+    echo ""
+    echo "Note: For passwords with special characters, use single quotes!"
     echo ""
     echo "Environment variables:"
     echo "  ADMIN_URL    - Admin panel URL (default: https://giga-pdf.com/admin)"
@@ -55,18 +62,33 @@ echo "Name:  $NAME"
 echo "URL:   $ADMIN_URL"
 echo ""
 
-# Create JSON payload
-JSON_PAYLOAD=$(cat <<EOF
+# Load DATABASE_URL from .env if not set
+if [ -z "$DATABASE_URL" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+    if [ -f "$PROJECT_ROOT/.env" ]; then
+        source "$PROJECT_ROOT/.env"
+    elif [ -f "/opt/gigapdf/.env" ]; then
+        source "/opt/gigapdf/.env"
+    fi
+fi
+
+# Create JSON payload using a temp file to handle special characters
+TEMP_JSON=$(mktemp)
+cat > "$TEMP_JSON" << EOF
 {"email":"$EMAIL","password":"$PASSWORD","name":"$NAME"}
 EOF
-)
 
 # Step 1: Create user via Better Auth API
 echo -e "${YELLOW}Step 1: Creating user via Better Auth API...${NC}"
 
 RESPONSE=$(curl -s -X POST "${ADMIN_URL}/api/auth/sign-up/email" \
     -H "Content-Type: application/json" \
-    -d "$JSON_PAYLOAD")
+    -d @"$TEMP_JSON")
+
+# Clean up temp file
+rm -f "$TEMP_JSON"
 
 # Check for errors
 if echo "$RESPONSE" | grep -q '"error"'; then
@@ -98,28 +120,12 @@ echo ""
 echo -e "${YELLOW}Step 2: Updating role to super_admin...${NC}"
 
 if [ -z "$DATABASE_URL" ]; then
-    echo -e "${YELLOW}Warning: DATABASE_URL not set. Trying to load from .env...${NC}"
-
-    # Try to find and source .env file
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-    if [ -f "$PROJECT_ROOT/.env" ]; then
-        source "$PROJECT_ROOT/.env"
-    elif [ -f "/opt/gigapdf/.env" ]; then
-        source "/opt/gigapdf/.env"
-    fi
-fi
-
-if [ -z "$DATABASE_URL" ]; then
     echo -e "${YELLOW}DATABASE_URL not found. Please update role manually:${NC}"
     echo ""
     echo "  psql \$DATABASE_URL -c \"UPDATE admin_users SET role = 'super_admin' WHERE email = '$EMAIL';\""
     echo ""
 else
-    psql "$DATABASE_URL" -c "UPDATE admin_users SET role = 'super_admin' WHERE email = '$EMAIL';" 2>/dev/null
-
-    if [ $? -eq 0 ]; then
+    if psql "$DATABASE_URL" -c "UPDATE admin_users SET role = 'super_admin' WHERE email = '$EMAIL';" 2>/dev/null; then
         echo -e "${GREEN}Role updated to super_admin${NC}"
     else
         echo -e "${RED}Failed to update role. Please run manually:${NC}"
