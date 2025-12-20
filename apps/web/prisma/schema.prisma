@@ -1,5 +1,6 @@
-// Prisma schema for BetterAuth
-// Generated and cleaned up for better-auth v1.4
+// Prisma schema for BetterAuth + GigaPDF
+// Better Auth tables are managed by Prisma
+// FastAPI/Alembic tables are marked with @@ignore to prevent Prisma from dropping them
 
 datasource db {
   provider = "postgresql"
@@ -7,8 +8,109 @@ datasource db {
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
+
+// =============================================================================
+// Tables managed by Alembic (FastAPI backend) - DO NOT MODIFY
+// These are marked with @@ignore so Prisma knows they exist but doesn't manage them
+// =============================================================================
+
+model AlembicVersion {
+  version_num String @id @db.VarChar(255)
+
+  @@map("alembic_version")
+  @@ignore
+}
+
+model StoredDocument {
+  id String @id
+
+  @@map("stored_documents")
+  @@ignore
+}
+
+model DocumentVersion {
+  id String @id
+
+  @@map("document_versions")
+  @@ignore
+}
+
+model Folder {
+  id String @id
+
+  @@map("folders")
+  @@ignore
+}
+
+model Plan {
+  id String @id
+
+  @@map("plans")
+  @@ignore
+}
+
+model UserQuota {
+  id String @id
+
+  @@map("user_quotas")
+  @@ignore
+}
+
+model ActivityLog {
+  id String @id
+
+  @@map("activity_logs")
+  @@ignore
+}
+
+model Tenant {
+  id String @id
+
+  @@map("tenants")
+  @@ignore
+}
+
+model TenantMember {
+  id String @id
+
+  @@map("tenant_members")
+  @@ignore
+}
+
+model TenantInvitation {
+  id String @id
+
+  @@map("tenant_invitations")
+  @@ignore
+}
+
+model DocumentCollaborator {
+  id String @id
+
+  @@map("document_collaborators")
+  @@ignore
+}
+
+model DocumentShare {
+  id String @id
+
+  @@map("document_shares")
+  @@ignore
+}
+
+model ShareNotification {
+  id String @id
+
+  @@map("share_notifications")
+  @@ignore
+}
+
+// =============================================================================
+// Tables managed by Prisma (Better Auth) - These are actively managed
+// =============================================================================
 
 model User {
   id            String   @id @default(uuid())
