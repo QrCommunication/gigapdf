@@ -204,6 +204,7 @@
       "submitting": "Signing in...",
       "noAccount": "Don't have an account?",
       "signUp": "Sign up",
+      "continueWithGoogle": "Continue with Google",
       "errors": {
         "invalidCredentials": "Invalid email or password",
         "emailRequired": "Email is required",
@@ -230,6 +231,7 @@
       "submitting": "Creating account...",
       "hasAccount": "Already have an account?",
       "signIn": "Sign in",
+      "signUpWithGoogle": "Sign up with Google",
       "errors": {
         "nameRequired": "Name is required",
         "emailRequired": "Email is required",

@@ -204,6 +204,7 @@
       "submitting": "Connexion...",
       "noAccount": "Vous n'avez pas de compte ?",
       "signUp": "S'inscrire",
+      "continueWithGoogle": "Continuer avec Google",
       "errors": {
         "invalidCredentials": "Email ou mot de passe invalide",
         "emailRequired": "L'email est requis",
@@ -230,6 +231,7 @@
       "submitting": "Création du compte...",
       "hasAccount": "Vous avez déjà un compte ?",
       "signIn": "Se connecter",
+      "signUpWithGoogle": "S'inscrire avec Google",
       "errors": {
         "nameRequired": "Le nom est requis",
         "emailRequired": "L'email est requis",
