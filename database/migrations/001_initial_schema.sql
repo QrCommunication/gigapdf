@@ -1,11 +1,12 @@
 -- GigaPDF Complete Database Schema
--- Version: 1.0.0
+-- Version: 1.1.0
 -- Date: 2025-12-20
 --
 -- This script creates all tables needed by GigaPDF.
 -- It's idempotent - safe to run multiple times.
 --
 -- Tables are organized by module:
+-- 0. ENUM Types: Custom PostgreSQL types for SQLAlchemy compatibility
 -- 1. BetterAuth (Web App): users, accounts, sessions, verification
 -- 2. BetterAuth (Admin): admin_users, admin_accounts, admin_sessions, admin_verification
 -- 3. Core: folders, stored_documents, document_versions, document_shares
@@ -13,6 +14,24 @@
 -- 5. Jobs & Collaboration: async_jobs, collaboration_sessions, element_locks
 -- 6. Activity: activity_logs
 -- 7. Tenants: tenants, tenant_members, tenant_documents, tenant_invitations
+
+-- ============================================================================
+-- 0. ENUM TYPES (Required by SQLAlchemy models)
+-- ============================================================================
+
+-- TenantStatus enum for tenant.status column
+DO $$ BEGIN
+    CREATE TYPE tenantstatus AS ENUM ('active', 'suspended', 'trial', 'cancelled');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+-- TenantRole enum for tenant_members.role and tenant_invitations.role columns
+DO $$ BEGIN
+    CREATE TYPE tenantrole AS ENUM ('owner', 'admin', 'manager', 'member', 'viewer');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- ============================================================================
 -- 1. BETTERAUTH - WEB APP
@@ -356,7 +375,7 @@ CREATE TABLE IF NOT EXISTS tenants (
     postal_code VARCHAR(20),
     country VARCHAR(2),
     plan_id UUID REFERENCES plans(id),
-    status VARCHAR(20) DEFAULT 'trial' NOT NULL,
+    status tenantstatus DEFAULT 'trial' NOT NULL,
     trial_start_at TIMESTAMPTZ,
     trial_ends_at TIMESTAMPTZ,
     has_used_trial BOOLEAN DEFAULT FALSE NOT NULL,
@@ -383,7 +402,7 @@ CREATE TABLE IF NOT EXISTS tenant_members (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES user_quotas(id) ON DELETE CASCADE,
-    role VARCHAR(20) DEFAULT 'member' NOT NULL,
+    role tenantrole DEFAULT 'member' NOT NULL,
     is_active BOOLEAN DEFAULT TRUE NOT NULL,
     custom_permissions TEXT,
     joined_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
@@ -411,7 +430,7 @@ CREATE TABLE IF NOT EXISTS tenant_invitations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     email VARCHAR(255) NOT NULL,
-    role VARCHAR(20) DEFAULT 'member' NOT NULL,
+    role tenantrole DEFAULT 'member' NOT NULL,
     token VARCHAR(255) UNIQUE NOT NULL,
     invited_by_id UUID NOT NULL REFERENCES user_quotas(id),
     is_accepted BOOLEAN DEFAULT FALSE NOT NULL,
