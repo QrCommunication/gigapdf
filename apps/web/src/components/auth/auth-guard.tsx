@@ -1,8 +1,8 @@
 "use client";
 
-import { useSession } from "@/lib/auth-client";
+import { useSession, authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, ReactNode, useMemo } from "react";
+import { useEffect, useState, ReactNode, useCallback } from "react";
 import { setAuthToken } from "@/lib/api";
 
 interface AuthGuardProps {
@@ -15,35 +15,52 @@ export function AuthGuard({ children, requireEmailVerification = false }: AuthGu
   const router = useRouter();
   const [isTokenReady, setIsTokenReady] = useState(false);
 
-  // Compute the token value from session - this runs synchronously on each render
-  // Use the JWT token from Better Auth session for API authentication
-  const tokenValue = useMemo(() => {
-    // Better Auth provides the JWT token in session.session.token
-    if (session?.session?.token) {
-      return session.session.token;
-    }
-    return null;
-  }, [session]);
-
-  // Set the token synchronously when session changes
-  useEffect(() => {
-    if (!isPending) {
-      if (tokenValue) {
-        // Check if email verification is required
-        if (requireEmailVerification && session?.user && !session.user.emailVerified) {
-          const email = session.user.email || "";
-          router.push(`/verify-email?email=${encodeURIComponent(email)}`);
-          return;
-        }
-        setAuthToken(tokenValue);
-        setIsTokenReady(true);
-      } else if (!session) {
+  // Fetch JWT token from Better Auth
+  const fetchAndSetToken = useCallback(async () => {
+    try {
+      // Use the jwtClient plugin to get the JWT token
+      const { data, error } = await authClient.token();
+      if (error) {
+        console.error("[AuthGuard] Failed to get JWT token:", error);
         setAuthToken(null);
         setIsTokenReady(false);
-        router.push("/login");
+        return false;
       }
+      if (data?.token) {
+        console.log("[AuthGuard] JWT token obtained successfully");
+        setAuthToken(data.token);
+        setIsTokenReady(true);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("[AuthGuard] Error fetching token:", error);
+      setAuthToken(null);
+      setIsTokenReady(false);
+      return false;
     }
-  }, [isPending, session, tokenValue, router, requireEmailVerification]);
+  }, []);
+
+  // Handle session changes and token fetching
+  useEffect(() => {
+    if (isPending) return;
+
+    if (session?.user) {
+      // Check if email verification is required
+      if (requireEmailVerification && !session.user.emailVerified) {
+        const email = session.user.email || "";
+        router.push(`/verify-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
+      // Fetch JWT token for API calls
+      fetchAndSetToken();
+    } else {
+      // No session - clear token and redirect to login
+      setAuthToken(null);
+      setIsTokenReady(false);
+      router.push("/login");
+    }
+  }, [isPending, session, router, requireEmailVerification, fetchAndSetToken]);
 
   // Show loading while pending or while waiting for token to be ready
   if (isPending || (session && !isTokenReady)) {
