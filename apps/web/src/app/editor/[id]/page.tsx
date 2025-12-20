@@ -23,6 +23,7 @@ import {
 import { useDocument } from "@/hooks/use-document";
 import { useDocumentSave } from "@/hooks/use-document-save";
 import { useCollaboration } from "@/hooks/use-collaboration";
+import { api, type ElementCreateRequest } from "@/lib/api";
 import {
   EditorCanvas,
   EditorToolbar,
@@ -33,6 +34,66 @@ import {
   DocumentInfoSidebar,
 } from "@/components/editor";
 import type { EditorCanvasHandle } from "@/components/editor/editor-canvas";
+
+/**
+ * Convert a frontend Element to API ElementCreateRequest format.
+ * The API expects snake_case for some fields.
+ */
+function convertToApiElement(element: Element): ElementCreateRequest {
+  const base: ElementCreateRequest = {
+    type: element.type,
+    bounds: {
+      x: element.bounds.x,
+      y: element.bounds.y,
+      width: element.bounds.width,
+      height: element.bounds.height,
+    },
+  };
+
+  // Add transform if present
+  if (element.transform) {
+    base.transform = {
+      rotation: element.transform.rotation,
+      scaleX: element.transform.scaleX,
+      scaleY: element.transform.scaleY,
+      skewX: element.transform.skewX,
+      skewY: element.transform.skewY,
+    };
+  }
+
+  // Add layer_id if present
+  if (element.layerId) {
+    base.layer_id = element.layerId;
+  }
+
+  // Handle type-specific fields
+  switch (element.type) {
+    case "text":
+      base.content = element.content;
+      base.style = element.style as unknown as Record<string, unknown>;
+      break;
+    case "shape":
+      base.shape_type = element.shapeType;
+      base.style = element.style as unknown as Record<string, unknown>;
+      break;
+    case "annotation":
+      base.annotation_type = element.annotationType;
+      base.content = element.content;
+      base.style = element.style as unknown as Record<string, unknown>;
+      break;
+    case "form_field":
+      base.field_type = element.fieldType;
+      base.field_name = element.fieldName;
+      base.style = element.style as unknown as Record<string, unknown>;
+      break;
+    case "image":
+      // Images are handled separately with upload
+      base.style = element.style as unknown as Record<string, unknown>;
+      break;
+  }
+
+  return base;
+}
 
 export default function EditorPage() {
   const params = useParams();
@@ -214,40 +275,76 @@ export default function EditorPage() {
   }, [canvasHandle, setDirty, saveWithPriority]);
 
   const handleElementAdded = useCallback(
-    (element: Element) => {
+    async (element: Element) => {
       console.log("Element added:", element);
       setDirty(true);
       // Émettre via WebSocket pour la collaboration
       emitElementCreate(element);
-      // Action critique → sauvegarde immédiate vers S3
+
+      // Persister l'élément dans le backend
+      if (documentId) {
+        const pageNumber = currentPageIndex + 1;
+        try {
+          const apiElement = convertToApiElement(element);
+          await api.createElement(documentId, pageNumber, apiElement);
+          console.log("[API] Element created in backend:", element.elementId);
+        } catch (error) {
+          console.error("[API] Failed to create element:", error);
+        }
+      }
+
+      // Sauvegarder le PDF vers S3
       saveWithPriority("immediate");
     },
-    [setDirty, emitElementCreate, saveWithPriority]
+    [setDirty, emitElementCreate, saveWithPriority, documentId, currentPageIndex]
   );
 
   const handleElementModified = useCallback(
-    (element: Element) => {
+    async (element: Element) => {
       console.log("Element modified:", element);
       setDirty(true);
       // Émettre via WebSocket pour la collaboration
       emitElementUpdate(element.elementId, element);
-      // Modification mineure → sauvegarde debounced (2s) vers S3
+
+      // Mettre à jour l'élément dans le backend
+      if (documentId) {
+        try {
+          const updates = convertToApiElement(element);
+          await api.updateElement(documentId, element.elementId, updates);
+          console.log("[API] Element updated in backend:", element.elementId);
+        } catch (error) {
+          console.error("[API] Failed to update element:", error);
+        }
+      }
+
+      // Sauvegarde debounced vers S3
       saveWithPriority("debounced");
     },
-    [setDirty, emitElementUpdate, saveWithPriority]
+    [setDirty, emitElementUpdate, saveWithPriority, documentId]
   );
 
   const handleElementRemoved = useCallback(
-    (elementId: string) => {
+    async (elementId: string) => {
       console.log("Element removed:", elementId);
       setDirty(true);
       setSelectedElementIds((prev) => prev.filter((id) => id !== elementId));
       // Émettre via WebSocket pour la collaboration
       emitElementDelete(elementId);
-      // Action critique → sauvegarde immédiate vers S3
+
+      // Supprimer l'élément du backend
+      if (documentId) {
+        try {
+          await api.deleteElement(documentId, elementId);
+          console.log("[API] Element deleted from backend:", elementId);
+        } catch (error) {
+          console.error("[API] Failed to delete element:", error);
+        }
+      }
+
+      // Sauvegarder le PDF vers S3
       saveWithPriority("immediate");
     },
-    [setDirty, emitElementDelete, saveWithPriority]
+    [setDirty, emitElementDelete, saveWithPriority, documentId]
   );
 
   // Gérer le mouvement du curseur pour la collaboration
@@ -267,15 +364,47 @@ export default function EditorPage() {
   }, []);
 
   const handleElementUpdate = useCallback(
-    (elementId: string, updates: Partial<Element>) => {
+    async (elementId: string, updates: Partial<Element>) => {
       console.log("Element update:", elementId, updates);
       setDirty(true);
       // Émettre via WebSocket pour la collaboration
       emitElementUpdate(elementId, updates as Element);
+
+      // Mettre à jour l'élément dans le backend
+      if (documentId) {
+        try {
+          // Convert only the provided updates to API format
+          const apiUpdates: Partial<ElementCreateRequest> = {};
+          if (updates.bounds) {
+            apiUpdates.bounds = {
+              x: updates.bounds.x,
+              y: updates.bounds.y,
+              width: updates.bounds.width,
+              height: updates.bounds.height,
+            };
+          }
+          if (updates.transform) {
+            apiUpdates.transform = updates.transform;
+          }
+          // Check for content property (exists on text, annotation elements)
+          if ("content" in updates && updates.content !== undefined) {
+            apiUpdates.content = updates.content as string;
+          }
+          // Check for style property
+          if ("style" in updates && updates.style) {
+            apiUpdates.style = updates.style as unknown as Record<string, unknown>;
+          }
+          await api.updateElement(documentId, elementId, apiUpdates);
+          console.log("[API] Element updated in backend:", elementId);
+        } catch (error) {
+          console.error("[API] Failed to update element:", error);
+        }
+      }
+
       // Modification via panel propriétés → sauvegarde debounced vers S3
       saveWithPriority("debounced");
     },
-    [setDirty, emitElementUpdate, saveWithPriority]
+    [setDirty, emitElementUpdate, saveWithPriority, documentId]
   );
 
   const handleFormatAction = useCallback(

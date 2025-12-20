@@ -385,6 +385,7 @@ async def list_stored_documents(
     tags: Optional[str] = Query(default=None),
 ) -> APIResponse[dict]:
     """List stored documents with pagination."""
+    import uuid
     start_time = time.time()
 
     from app.models.database import StoredDocument
@@ -399,8 +400,21 @@ async def list_stored_documents(
         )
 
         # Filter by folder
+        # - None (not provided): no filter, return all documents
+        # - '' (empty string): filter for root-level documents (folder_id IS NULL)
+        # - UUID: filter for specific folder
         if folder_id is not None:
-            base_query = base_query.where(StoredDocument.folder_id == folder_id)
+            if folder_id == '' or folder_id.lower() == 'null':
+                # Empty string or 'null' means filter for root-level documents (no folder)
+                base_query = base_query.where(StoredDocument.folder_id.is_(None))
+            else:
+                # Validate that folder_id is a valid UUID before querying
+                try:
+                    uuid.UUID(folder_id)  # Validate UUID format
+                    base_query = base_query.where(StoredDocument.folder_id == folder_id)
+                except ValueError:
+                    # Invalid UUID format - treat as root-level filter
+                    base_query = base_query.where(StoredDocument.folder_id.is_(None))
 
         # Search by name
         if search:

@@ -384,6 +384,97 @@ class APIClient {
     });
   }
 
+  // ===== Elements API =====
+
+  /**
+   * Create a new element on a page.
+   * The element is rendered directly to the PDF in the backend.
+   */
+  async createElement(
+    documentId: string,
+    pageNumber: number,
+    element: ElementCreateRequest
+  ): Promise<ElementResponse> {
+    const response = await this.request<APIResponse<ElementResponse>>(
+      `/api/v1/documents/${documentId}/pages/${pageNumber}/elements`,
+      {
+        method: "POST",
+        body: JSON.stringify(element),
+      }
+    );
+    return response.data;
+  }
+
+  /**
+   * Update an existing element.
+   */
+  async updateElement(
+    documentId: string,
+    elementId: string,
+    updates: Partial<ElementCreateRequest>
+  ): Promise<ElementResponse> {
+    const response = await this.request<APIResponse<ElementResponse>>(
+      `/api/v1/documents/${documentId}/elements/${elementId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+      }
+    );
+    return response.data;
+  }
+
+  /**
+   * Delete an element from the document.
+   */
+  async deleteElement(documentId: string, elementId: string): Promise<void> {
+    await this.request(
+      `/api/v1/documents/${documentId}/elements/${elementId}`,
+      { method: "DELETE" }
+    );
+  }
+
+  /**
+   * Get all elements on a page.
+   */
+  async getPageElements(
+    documentId: string,
+    pageNumber: number,
+    params: { type?: string; page?: number; per_page?: number } = {}
+  ): Promise<{ elements: ElementResponse[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (params.type) searchParams.set("type", params.type);
+    if (params.page) searchParams.set("page", params.page.toString());
+    if (params.per_page) searchParams.set("per_page", params.per_page.toString());
+
+    const response = await this.request<APIResponse<{
+      elements: ElementResponse[];
+      pagination: PaginationInfo;
+    }>>(`/api/v1/documents/${documentId}/pages/${pageNumber}/elements?${searchParams.toString()}`);
+    return response.data;
+  }
+
+  /**
+   * Batch operations for elements (create, update, delete multiple at once).
+   */
+  async batchElementOperations(
+    documentId: string,
+    operations: Array<{
+      action: "create" | "update" | "delete";
+      page_number?: number;
+      element_id?: string;
+      data?: Partial<ElementCreateRequest>;
+    }>
+  ): Promise<{ results: Array<{ success: boolean; element_id?: string; error?: string }>; failed_count: number }> {
+    const response = await this.request<APIResponse<{
+      results: Array<{ success: boolean; element_id?: string; error?: string }>;
+      failed_count: number;
+    }>>(`/api/v1/documents/${documentId}/elements/batch`, {
+      method: "POST",
+      body: JSON.stringify({ operations }),
+    });
+    return response.data;
+  }
+
   // ===== Quota API =====
 
   async getQuota(): Promise<QuotaSummary> {
@@ -1153,6 +1244,56 @@ export interface BillingUsage {
   };
   billing_entity_type: "user" | "tenant";
   is_in_trial: boolean;
+}
+
+// Element types for the Elements API
+export interface ElementBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ElementTransform {
+  rotation?: number;
+  scaleX?: number;
+  scaleY?: number;
+  skewX?: number;
+  skewY?: number;
+}
+
+export interface ElementCreateRequest {
+  type: "text" | "image" | "shape" | "annotation" | "form_field";
+  bounds: ElementBounds;
+  content?: string;
+  style?: Record<string, unknown>;
+  transform?: ElementTransform;
+  layer_id?: string;
+  // Type-specific fields
+  shape_type?: string;  // All shape types including circle, triangle, arrow, etc.
+  annotation_type?: string;  // All annotation types including comment, strikethrough, etc.
+  field_type?: "text" | "checkbox" | "radio" | "dropdown" | "listbox" | "signature" | "button";
+  field_name?: string;
+}
+
+export interface ElementResponse {
+  elementId: string;
+  type: "text" | "image" | "shape" | "annotation" | "form_field";
+  bounds: ElementBounds;
+  transform: ElementTransform;
+  layerId?: string | null;
+  locked: boolean;
+  visible: boolean;
+  // Type-specific fields
+  content?: string;
+  style?: Record<string, unknown>;
+  shapeType?: string;
+  annotationType?: string;
+  fieldType?: string;
+  fieldName?: string;
+  ocrConfidence?: number | null;
+  linkUrl?: string | null;
+  linkPage?: number | null;
 }
 
 // Sharing types
