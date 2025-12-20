@@ -181,6 +181,10 @@ def create_application() -> FastAPI:
             "description": "**Organization document sharing**. Share documents with team members, manage access levels (read/write).",
         },
         {
+            "name": "Sharing",
+            "description": "**Document sharing**. Share documents by email, manage invitations, create public links, and handle notifications.",
+        },
+        {
             "name": "Admin",
             "description": "**Admin endpoints** for system management: users, documents, jobs, tenants, and settings.",
         },

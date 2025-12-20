@@ -256,11 +256,118 @@ class UserQuota(Base):
     )
 
 
+class DocumentShareInvitation(Base):
+    """
+    Document share invitation for email-based sharing workflow.
+
+    When a user shares a document by email, an invitation is created.
+    The invitee can accept or decline the invitation.
+    """
+
+    __tablename__ = "document_share_invitations"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    document_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("stored_documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    inviter_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    invitee_email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    invitee_user_id: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, index=True  # Populated when user accepts/is found
+    )
+    token: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    permission: Mapped[str] = mapped_column(
+        String(20), default="edit"  # view, edit (default is edit per user request)
+    )
+    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending"  # pending, accepted, declined, revoked, expired
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    responded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), nullable=False
+    )
+
+    # Relationships
+    document: Mapped["StoredDocument"] = relationship(
+        "StoredDocument", backref="share_invitations"
+    )
+    shares: Mapped[list["DocumentShare"]] = relationship(
+        "DocumentShare", back_populates="invitation"
+    )
+
+    __table_args__ = (
+        Index("idx_share_invitations_document", "document_id"),
+        Index("idx_share_invitations_inviter", "inviter_id"),
+        Index("idx_share_invitations_invitee_email", "invitee_email"),
+        Index("idx_share_invitations_invitee_user", "invitee_user_id"),
+        Index("idx_share_invitations_status", "status"),
+        Index("idx_share_invitations_token", "token", unique=True),
+    )
+
+
+class ShareNotification(Base):
+    """
+    In-app notifications for sharing events.
+
+    Notifies users about share invitations, acceptances, revocations, etc.
+    """
+
+    __tablename__ = "share_notifications"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    notification_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+        # Types: share_invitation, share_accepted, share_declined, share_revoked, permission_changed
+    )
+    document_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("stored_documents.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    share_invitation_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("document_share_invitations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), nullable=False
+    )
+
+    # Relationships
+    document: Mapped[Optional["StoredDocument"]] = relationship(
+        "StoredDocument", backref="share_notifications"
+    )
+    invitation: Mapped[Optional["DocumentShareInvitation"]] = relationship(
+        "DocumentShareInvitation", backref="notifications"
+    )
+
+    __table_args__ = (
+        Index("idx_share_notifications_user", "user_id"),
+        Index("idx_share_notifications_read", "is_read"),
+        Index("idx_share_notifications_created", "created_at"),
+        Index("idx_share_notifications_user_unread", "user_id", "is_read"),
+    )
+
+
 class DocumentShare(Base):
     """
     Document sharing permissions.
 
     Allows sharing documents with other users.
+    Supports both direct shares and shares created via invitation workflow.
     """
 
     __tablename__ = "document_shares"
@@ -280,7 +387,7 @@ class DocumentShare(Base):
         String(64), nullable=True, unique=True  # For public links
     )
     permission: Mapped[str] = mapped_column(
-        String(20), default="view"  # view, comment, edit
+        String(20), default="edit"  # view, edit (default changed to edit)
     )
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -288,10 +395,28 @@ class DocumentShare(Base):
         DateTime(timezone=True), default=func.now(), nullable=False
     )
 
+    # New fields for enhanced sharing workflow
+    status: Mapped[str] = mapped_column(
+        String(20), default="active"  # active, revoked
+    )
+    invitation_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("document_share_invitations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    # Relationships
+    invitation: Mapped[Optional["DocumentShareInvitation"]] = relationship(
+        "DocumentShareInvitation", back_populates="shares"
+    )
+
     __table_args__ = (
         Index("idx_document_shares_document", "document_id"),
         Index("idx_document_shares_user", "shared_with_user_id"),
         Index("idx_document_shares_token", "share_token"),
+        Index("idx_document_shares_status", "status"),
     )
 
 

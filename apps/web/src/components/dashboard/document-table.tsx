@@ -41,8 +41,6 @@ import {
   Image,
   Share2,
   Pencil,
-  Copy,
-  Check,
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
@@ -53,6 +51,7 @@ import {
 import { api } from "@/lib/api";
 import { DragItem, FolderStats, SelectionItem } from "./document-explorer";
 import { cn } from "@/lib/utils";
+import { ShareDialog } from "@/components/sharing";
 
 export type SortField = "name" | "size" | "createdAt" | "updatedAt";
 export type SortDirection = "asc" | "desc";
@@ -141,8 +140,6 @@ export function DocumentTable({
   // Data states
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
-  const [shareUrl, setShareUrl] = useState("");
-  const [copied, setCopied] = useState(false);
   const [sessionDocId, setSessionDocId] = useState<string | null>(null);
 
   const handleOpenEditor = async (doc: Document) => {
@@ -218,30 +215,9 @@ export function DocumentTable({
     }
   };
 
-  const handleShare = async (doc: Document) => {
-    try {
-      setLoadingId(doc.id);
-      const result = await api.loadDocument(doc.id);
-      const shareableUrl = `${window.location.origin}/shared/${result.document_id}`;
-      setShareUrl(shareableUrl);
-      setSelectedDoc(doc);
-      setShareDialogOpen(true);
-    } catch (err) {
-      console.error("Failed to generate share link:", err);
-      alert(tCard("errors.shareFailed"));
-    } finally {
-      setLoadingId(null);
-    }
-  };
-
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
-    }
+  const handleShare = (doc: Document) => {
+    setSelectedDoc(doc);
+    setShareDialogOpen(true);
   };
 
   const handleExport = async (
@@ -694,32 +670,14 @@ export function DocumentTable({
       </Dialog>
 
       {/* Share Dialog */}
-      <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{tCard("shareDialog.title")}</DialogTitle>
-            <DialogDescription>{tCard("shareDialog.description")}</DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Label>{tCard("shareDialog.linkLabel")}</Label>
-            <div className="flex mt-2 gap-2">
-              <Input value={shareUrl} readOnly className="flex-1" />
-              <Button onClick={handleCopyLink} variant="outline" size="icon">
-                {copied ? (
-                  <Check className="h-4 w-4 text-green-500" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setShareDialogOpen(false)}>
-              {tCard("shareDialog.close")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {selectedDoc && (
+        <ShareDialog
+          open={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+          documentId={selectedDoc.id}
+          documentName={selectedDoc.name}
+        />
+      )}
 
       {/* Export Progress Dialog */}
       <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>

@@ -24,6 +24,7 @@ from app.api.v1 import (
     public_billing,
     quota,
     security,
+    sharing,
     storage,
     tenant_documents,
     text,
@@ -151,6 +152,12 @@ api_router.include_router(
     activity.router,
     prefix="/activity",
     tags=["Activity"],
+)
+
+api_router.include_router(
+    sharing.router,
+    prefix="/sharing",
+    tags=["Sharing"],
 )
 
 # Admin endpoints

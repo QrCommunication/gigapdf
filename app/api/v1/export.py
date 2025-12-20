@@ -336,6 +336,7 @@ async def get_export_result(
     user: OptionalUser = None,
 ) -> Response:
     """Get export result/download."""
+    import os
     from app.models.database import AsyncJob
     from app.core.database import get_db_session
     from sqlalchemy import select
@@ -354,13 +355,35 @@ async def get_export_result(
                 f"Job is not completed yet. Current status: {job.status}"
             )
 
-        if not job.result or "data" not in job.result:
+        if not job.result:
             from app.middleware.error_handler import NotFoundError
             raise NotFoundError("Export result has expired or is not available")
 
-        # Get the exported data
-        export_data = job.result["data"]
+        # Get export format and file path
         export_format = job.result.get("format", "zip")
+        file_path = job.result.get("file_path")
+
+        # Check for file_path (new approach) or legacy data
+        if file_path:
+            # New approach: read from saved file
+            if not os.path.exists(file_path):
+                from app.middleware.error_handler import NotFoundError
+                raise NotFoundError("Export file has expired or was deleted")
+
+            with open(file_path, "rb") as f:
+                file_bytes = f.read()
+        elif "data" in job.result:
+            # Legacy support for old exports with inline data
+            export_data = job.result["data"]
+            if isinstance(export_data, str):
+                file_bytes = export_data.encode("utf-8")
+            elif isinstance(export_data, bytes):
+                file_bytes = export_data
+            else:
+                file_bytes = bytes(export_data)
+        else:
+            from app.middleware.error_handler import NotFoundError
+            raise NotFoundError("Export result has expired or is not available")
 
         # Determine content type
         content_type_map = {
@@ -368,24 +391,17 @@ async def get_export_result(
             "jpeg": "image/jpeg",
             "webp": "image/webp",
             "svg": "image/svg+xml",
-            "html": "text/html",
-            "txt": "text/plain",
+            "html": "text/html; charset=utf-8",
+            "txt": "text/plain; charset=utf-8",
             "zip": "application/zip",
             "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }
         content_type = content_type_map.get(export_format, "application/octet-stream")
 
-        # Determine filename
+        # Determine filename from original format if available
+        original_format = job.result.get("original_format", export_format)
         filename = f"export_{document_id}.{export_format}"
-
-        # Convert data to bytes if needed
-        if isinstance(export_data, str):
-            file_bytes = export_data.encode("utf-8")
-        elif isinstance(export_data, bytes):
-            file_bytes = export_data
-        else:
-            file_bytes = bytes(export_data)
 
         return Response(
             content=file_bytes,

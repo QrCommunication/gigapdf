@@ -40,14 +40,13 @@ import {
   Image,
   Share2,
   Pencil,
-  Copy,
-  Check,
   CheckSquare,
   Square,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { DragItem } from "./document-explorer";
 import { cn } from "@/lib/utils";
+import { ShareDialog } from "@/components/sharing";
 
 interface DocumentCardProps {
   id: string;
@@ -101,8 +100,6 @@ export function DocumentCard({
   // Data states
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [newName, setNewName] = useState(name);
-  const [shareUrl, setShareUrl] = useState("");
-  const [copied, setCopied] = useState(false);
   const [sessionDocId, setSessionDocId] = useState<string | null>(null);
 
   const handleOpenEditor = async () => {
@@ -175,29 +172,8 @@ export function DocumentCard({
     }
   };
 
-  const handleShare = async () => {
-    try {
-      setLoading(true);
-      const result = await api.loadDocument(id);
-      const shareableUrl = `${window.location.origin}/shared/${result.document_id}`;
-      setShareUrl(shareableUrl);
-      setShareDialogOpen(true);
-    } catch (err) {
-      console.error("Failed to generate share link:", err);
-      alert(t("errors.shareFailed"));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
-    }
+  const handleShare = () => {
+    setShareDialogOpen(true);
   };
 
   const handleExport = async (format: "png" | "jpeg" | "html" | "txt" | "docx" | "xlsx") => {
@@ -496,38 +472,12 @@ export function DocumentCard({
       </Dialog>
 
       {/* Share Dialog */}
-      <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("shareDialog.title")}</DialogTitle>
-            <DialogDescription>
-              {t("shareDialog.description")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Label>{t("shareDialog.linkLabel")}</Label>
-            <div className="flex mt-2 gap-2">
-              <Input
-                value={shareUrl}
-                readOnly
-                className="flex-1"
-              />
-              <Button onClick={handleCopyLink} variant="outline" size="icon">
-                {copied ? (
-                  <Check className="h-4 w-4 text-green-500" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setShareDialogOpen(false)}>
-              {t("shareDialog.close")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ShareDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        documentId={id}
+        documentName={documentName}
+      />
 
       {/* Export Progress Dialog */}
       <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>

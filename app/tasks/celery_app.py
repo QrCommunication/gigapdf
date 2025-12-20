@@ -5,9 +5,16 @@ Configures Celery for async task processing including
 OCR, export, merge, and split operations.
 """
 
+import asyncio
+import logging
+from datetime import datetime, timezone
+
 from celery import Celery
+from celery.signals import task_postrun, task_failure
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -86,5 +93,100 @@ celery_app.conf.update(
             "task": "billing.cleanup_stale_subscriptions",
             "schedule": 86400.0,  # Every 24 hours
         },
+        # Cleanup expired export files
+        "cleanup-export-files": {
+            "task": "app.tasks.export_tasks.cleanup_expired_exports",
+            "schedule": 3600.0,  # Every hour
+        },
     },
 )
+
+
+# Signal handlers for updating job status in database
+def _run_async(coro):
+    """Run async coroutine in sync context."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If loop is already running, create task
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, coro)
+                return future.result(timeout=30)
+        else:
+            return loop.run_until_complete(coro)
+    except RuntimeError:
+        # No event loop, create new one
+        return asyncio.run(coro)
+
+
+async def _update_job_completed(celery_task_id: str, result: dict, state: str):
+    """Update job status in database after task completion."""
+    from app.core.database import get_db_session
+    from app.models.database import AsyncJob
+    from sqlalchemy import select
+
+    try:
+        async with get_db_session() as session:
+            stmt = select(AsyncJob).where(AsyncJob.celery_task_id == celery_task_id)
+            db_result = await session.execute(stmt)
+            job = db_result.scalar_one_or_none()
+
+            if job:
+                job.status = "completed" if state == "SUCCESS" else "failed"
+                job.progress = 100.0
+                job.completed_at = datetime.now(timezone.utc)
+
+                # Store result (file_path instead of binary data)
+                if isinstance(result, dict):
+                    # Remove binary data from result, keep file_path
+                    clean_result = {
+                        k: v for k, v in result.items()
+                        if k != "data" or not isinstance(v, bytes)
+                    }
+                    job.result = clean_result
+                else:
+                    job.result = {"status": "completed"}
+
+                await session.commit()
+                logger.info(f"Updated job {job.id} status to {job.status}")
+    except Exception as e:
+        logger.error(f"Failed to update job status for task {celery_task_id}: {e}")
+
+
+async def _update_job_failed(celery_task_id: str, error_message: str):
+    """Update job status when task fails."""
+    from app.core.database import get_db_session
+    from app.models.database import AsyncJob
+    from sqlalchemy import select
+
+    try:
+        async with get_db_session() as session:
+            stmt = select(AsyncJob).where(AsyncJob.celery_task_id == celery_task_id)
+            db_result = await session.execute(stmt)
+            job = db_result.scalar_one_or_none()
+
+            if job:
+                job.status = "failed"
+                job.error_message = error_message[:1000] if error_message else "Unknown error"
+                job.completed_at = datetime.now(timezone.utc)
+                await session.commit()
+                logger.error(f"Marked job {job.id} as failed: {error_message[:100]}")
+    except Exception as e:
+        logger.error(f"Failed to update job failure for task {celery_task_id}: {e}")
+
+
+@task_postrun.connect
+def task_postrun_handler(task_id, task, retval, state, **kwargs):
+    """Update job status in database after task completion."""
+    # Only handle export tasks
+    if task.name and task.name.startswith("app.tasks.export_tasks"):
+        logger.debug(f"Task {task_id} completed with state {state}")
+        _run_async(_update_job_completed(task_id, retval or {}, state))
+
+
+@task_failure.connect
+def task_failure_handler(task_id, exception, traceback, **kwargs):
+    """Update job status when task fails."""
+    logger.error(f"Task {task_id} failed: {exception}")
+    _run_async(_update_job_failed(task_id, str(exception)))

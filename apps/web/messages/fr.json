@@ -36,7 +36,8 @@
     "documents": "Documents",
     "organization": "Entreprise",
     "settings": "Paramètres",
-    "billing": "Facturation"
+    "billing": "Facturation",
+    "sharedWithMe": "Partagés avec moi"
   },
   "landing": {
     "badge": "Éditeur PDF Open Source",
@@ -833,6 +834,107 @@
       "requiredFields": "Veuillez remplir tous les champs obligatoires",
       "createFailed": "Erreur lors de la création de l'entreprise",
       "inviteFailed": "Erreur lors de l'envoi de l'invitation"
+    }
+  },
+  "shared": {
+    "title": "Partagés avec moi",
+    "subtitle": "Documents partagés avec vous par d'autres utilisateurs",
+    "totalCount": "{count} document(s) partagé(s)",
+    "search": "Rechercher...",
+    "refresh": "Actualiser",
+    "open": "Ouvrir",
+    "view": "Voir",
+    "filters": {
+      "all": "Tous les documents",
+      "individual": "Partages individuels",
+      "organization": "Partages entreprise"
+    },
+    "permissions": {
+      "view": "Lecture",
+      "edit": "Édition"
+    },
+    "source": {
+      "individual": "Personnel",
+      "organization": "Entreprise"
+    },
+    "menu": {
+      "preview": "Prévisualiser",
+      "download": "Télécharger",
+      "openEditor": "Ouvrir dans l'éditeur",
+      "remove": "Supprimer de la liste"
+    },
+    "noDocuments": {
+      "title": "Aucun document partagé",
+      "description": "Personne n'a encore partagé de document avec vous.",
+      "noResultsDescription": "Aucun document ne correspond à « {search} »"
+    },
+    "preview": {
+      "noPreview": "Aperçu non disponible",
+      "close": "Fermer"
+    },
+    "removeDialog": {
+      "title": "Supprimer de la liste",
+      "description": "Êtes-vous sûr de vouloir supprimer « {name} » de votre liste de documents partagés ?",
+      "cancel": "Annuler",
+      "confirm": "Supprimer",
+      "removing": "Suppression..."
+    },
+    "pagination": {
+      "page": "Page {current} sur {total}"
+    },
+    "errors": {
+      "loadFailed": "Échec du chargement des documents partagés. Veuillez réessayer."
+    }
+  },
+  "sharing": {
+    "dialog": {
+      "title": "Partager le document",
+      "description": "Partagez ce document avec d'autres personnes par email",
+      "email": "Adresse email",
+      "emailPlaceholder": "nom@exemple.com",
+      "emailRequired": "Veuillez entrer une adresse email",
+      "permission": "Permission",
+      "permissions": {
+        "view": "Lecture seule",
+        "edit": "Édition"
+      },
+      "message": "Message (optionnel)",
+      "messagePlaceholder": "Ajouter un message personnel...",
+      "share": "Partager",
+      "sharing": "Partage en cours...",
+      "cancel": "Annuler",
+      "success": "Invitation envoyée avec succès",
+      "error": "Échec de l'envoi de l'invitation"
+    },
+    "currentShares": {
+      "title": "Personnes ayant accès",
+      "owner": "Propriétaire",
+      "noShares": "Ce document n'est partagé avec personne",
+      "revokeAccess": "Révoquer l'accès",
+      "changePermission": "Modifier la permission"
+    },
+    "publicLink": {
+      "title": "Lien public",
+      "description": "Toute personne disposant du lien peut voir ce document",
+      "create": "Créer un lien public",
+      "revoke": "Désactiver le lien",
+      "copy": "Copier le lien",
+      "copied": "Lien copié !"
+    },
+    "invitations": {
+      "pending": "Invitations en attente",
+      "accept": "Accepter",
+      "decline": "Refuser",
+      "expired": "Expirée"
+    },
+    "notifications": {
+      "title": "Notifications",
+      "invitation": "Nouvelle invitation de partage",
+      "accepted": "Invitation acceptée",
+      "declined": "Invitation refusée",
+      "revoked": "Accès révoqué",
+      "markAsRead": "Marquer comme lu",
+      "markAllAsRead": "Tout marquer comme lu"
     }
   }
 }

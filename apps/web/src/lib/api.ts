@@ -759,6 +759,220 @@ class APIClient {
       { method: "DELETE" }
     );
   }
+
+  // ===== Sharing API =====
+
+  /**
+   * Share a document with another user by email.
+   */
+  async shareDocument(params: {
+    document_id: string;
+    invitee_email: string;
+    permission?: "view" | "edit";
+    message?: string;
+    expires_in_days?: number;
+  }): Promise<ShareInvitation> {
+    const response = await this.request<APIResponse<ShareInvitation>>(
+      "/api/v1/sharing/share",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          document_id: params.document_id,
+          invitee_email: params.invitee_email,
+          permission: params.permission || "edit",
+          message: params.message,
+          expires_in_days: params.expires_in_days || 7,
+        }),
+      }
+    );
+    return response.data;
+  }
+
+  /**
+   * Get documents shared with the current user.
+   */
+  async getSharedWithMe(params: {
+    page?: number;
+    per_page?: number;
+    source?: "direct" | "organization" | "all";
+  } = {}): Promise<SharedWithMeResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.page) searchParams.set("page", params.page.toString());
+    if (params.per_page) searchParams.set("per_page", params.per_page.toString());
+    if (params.source) searchParams.set("source", params.source);
+
+    const response = await this.request<APIResponse<SharedWithMeResponse>>(
+      `/api/v1/sharing/shared-with-me?${searchParams.toString()}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Get documents that the current user has shared.
+   */
+  async getSharedByMe(params: {
+    page?: number;
+    per_page?: number;
+  } = {}): Promise<SharedByMeResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.page) searchParams.set("page", params.page.toString());
+    if (params.per_page) searchParams.set("per_page", params.per_page.toString());
+
+    const response = await this.request<APIResponse<SharedByMeResponse>>(
+      `/api/v1/sharing/shared-by-me?${searchParams.toString()}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Get pending share invitations.
+   */
+  async getPendingInvitations(): Promise<{ invitations: PendingInvitation[]; count: number }> {
+    const response = await this.request<APIResponse<{ invitations: PendingInvitation[]; count: number }>>(
+      "/api/v1/sharing/invitations/pending"
+    );
+    return response.data;
+  }
+
+  /**
+   * Accept a share invitation.
+   */
+  async acceptInvitation(token: string): Promise<AcceptedShare> {
+    const response = await this.request<APIResponse<AcceptedShare>>(
+      `/api/v1/sharing/invitations/${token}/accept`,
+      { method: "POST" }
+    );
+    return response.data;
+  }
+
+  /**
+   * Decline a share invitation.
+   */
+  async declineInvitation(token: string): Promise<{ invitation_id: string; status: string }> {
+    const response = await this.request<APIResponse<{ invitation_id: string; status: string }>>(
+      `/api/v1/sharing/invitations/${token}/decline`,
+      { method: "POST" }
+    );
+    return response.data;
+  }
+
+  /**
+   * Revoke a document share.
+   */
+  async revokeShare(shareId: string): Promise<{ share_id: string; status: string }> {
+    const response = await this.request<APIResponse<{ share_id: string; status: string }>>(
+      `/api/v1/sharing/shares/${shareId}`,
+      { method: "DELETE" }
+    );
+    return response.data;
+  }
+
+  /**
+   * Update permission for a share.
+   */
+  async updateSharePermission(
+    shareId: string,
+    permission: "view" | "edit"
+  ): Promise<{ share_id: string; permission: string; old_permission: string }> {
+    const response = await this.request<APIResponse<{
+      share_id: string;
+      permission: string;
+      old_permission: string;
+    }>>(`/api/v1/sharing/shares/${shareId}/permission`, {
+      method: "PATCH",
+      body: JSON.stringify({ permission }),
+    });
+    return response.data;
+  }
+
+  /**
+   * Get all shares for a document.
+   */
+  async getDocumentShares(documentId: string): Promise<{ shares: DocumentShareInfo[]; count: number }> {
+    const response = await this.request<APIResponse<{ shares: DocumentShareInfo[]; count: number }>>(
+      `/api/v1/sharing/documents/${documentId}/shares`
+    );
+    return response.data;
+  }
+
+  /**
+   * Create a public link for a document.
+   */
+  async createPublicLink(
+    documentId: string,
+    expiresInDays?: number
+  ): Promise<PublicLinkResponse> {
+    const response = await this.request<APIResponse<PublicLinkResponse>>(
+      `/api/v1/sharing/documents/${documentId}/public-link`,
+      {
+        method: "POST",
+        body: JSON.stringify({ expires_in_days: expiresInDays }),
+      }
+    );
+    return response.data;
+  }
+
+  /**
+   * Revoke the public link for a document.
+   */
+  async revokePublicLink(documentId: string): Promise<{ status: string; share_id: string }> {
+    const response = await this.request<APIResponse<{ status: string; share_id: string }>>(
+      `/api/v1/sharing/documents/${documentId}/public-link`,
+      { method: "DELETE" }
+    );
+    return response.data;
+  }
+
+  /**
+   * Get notifications for the current user.
+   */
+  async getNotifications(params: {
+    page?: number;
+    per_page?: number;
+    unread_only?: boolean;
+  } = {}): Promise<NotificationsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.page) searchParams.set("page", params.page.toString());
+    if (params.per_page) searchParams.set("per_page", params.per_page.toString());
+    if (params.unread_only) searchParams.set("unread_only", "true");
+
+    const response = await this.request<APIResponse<NotificationsResponse>>(
+      `/api/v1/sharing/notifications?${searchParams.toString()}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Get unread notification count.
+   */
+  async getUnreadNotificationCount(): Promise<{ unread_count: number }> {
+    const response = await this.request<APIResponse<{ unread_count: number }>>(
+      "/api/v1/sharing/notifications/unread-count"
+    );
+    return response.data;
+  }
+
+  /**
+   * Mark a notification as read.
+   */
+  async markNotificationRead(notificationId: string): Promise<{ marked_as_read: boolean }> {
+    const response = await this.request<APIResponse<{ marked_as_read: boolean }>>(
+      `/api/v1/sharing/notifications/${notificationId}/read`,
+      { method: "POST" }
+    );
+    return response.data;
+  }
+
+  /**
+   * Mark all notifications as read.
+   */
+  async markAllNotificationsRead(): Promise<{ marked_count: number }> {
+    const response = await this.request<APIResponse<{ marked_count: number }>>(
+      "/api/v1/sharing/notifications/read-all",
+      { method: "POST" }
+    );
+    return response.data;
+  }
 }
 
 // Organization types
@@ -939,6 +1153,142 @@ export interface BillingUsage {
   };
   billing_entity_type: "user" | "tenant";
   is_in_trial: boolean;
+}
+
+// Sharing types
+export interface ShareInvitation {
+  invitation_id: string;
+  token: string;
+  invitee_email: string;
+  invitee_user_exists: boolean;
+  permission: "view" | "edit";
+  expires_at: string;
+  document_name: string;
+}
+
+export interface SharedWithMeDocument {
+  id: string;
+  name: string;
+  page_count: number;
+  file_size_bytes: number;
+  thumbnail_path: string | null;
+  created_at: string;
+  updated_at: string;
+  share_source: "direct" | "organization";
+  share_id?: string;
+  tenant_id?: string;
+  permission: "view" | "edit";
+  shared_at: string;
+  owner: {
+    user_id: string;
+    email: string | null;
+  };
+}
+
+export interface SharedWithMeResponse {
+  documents: SharedWithMeDocument[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface SharedByMeShare {
+  share_id: string;
+  document: {
+    id: string;
+    name: string;
+    page_count: number;
+    thumbnail_path: string | null;
+  };
+  shared_with: {
+    user_id: string | null;
+    email: string | null;
+  } | null;
+  is_public_link: boolean;
+  permission: "view" | "edit";
+  created_at: string;
+  expires_at: string | null;
+}
+
+export interface SharedByMeResponse {
+  shares: SharedByMeShare[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface PendingInvitation {
+  invitation_id: string;
+  token: string;
+  document: {
+    id: string;
+    name: string;
+    page_count: number;
+    thumbnail_path: string | null;
+  };
+  inviter: {
+    user_id: string;
+    email: string | null;
+  };
+  permission: "view" | "edit";
+  message: string | null;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface AcceptedShare {
+  share_id: string;
+  document_id: string;
+  document_name: string;
+  permission: "view" | "edit";
+}
+
+export interface DocumentShareInfo {
+  share_id?: string;
+  invitation_id?: string;
+  shared_with?: {
+    user_id: string | null;
+    email: string | null;
+  } | null;
+  invitee_email?: string;
+  is_public_link?: boolean;
+  share_token?: string;
+  permission: "view" | "edit";
+  status?: "pending" | "active";
+  created_at: string;
+  expires_at: string | null;
+}
+
+export interface PublicLinkResponse {
+  share_id: string;
+  token: string;
+  permission: "view";
+  expires_at: string | null;
+  already_existed: boolean;
+}
+
+export interface ShareNotification {
+  id: string;
+  type: string;
+  title: string;
+  message: string | null;
+  document: {
+    id: string;
+    name: string;
+  } | null;
+  metadata: Record<string, unknown> | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface NotificationsResponse {
+  notifications: ShareNotification[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
 }
 
 // Singleton instance

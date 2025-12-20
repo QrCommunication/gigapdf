@@ -23,3 +23,4 @@ export * from "./breadcrumb";
 export * from "./toggle-group";
 export * from "./table";
 export * from "./progress";
+export * from "./textarea";

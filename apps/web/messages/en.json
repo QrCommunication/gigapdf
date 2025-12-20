@@ -36,7 +36,8 @@
     "documents": "Documents",
     "organization": "Organization",
     "settings": "Settings",
-    "billing": "Billing"
+    "billing": "Billing",
+    "sharedWithMe": "Shared with me"
   },
   "landing": {
     "badge": "Open Source PDF Editor",
@@ -833,6 +834,107 @@
       "requiredFields": "Please fill in all required fields",
       "createFailed": "Failed to create organization",
       "inviteFailed": "Failed to send invitation"
+    }
+  },
+  "shared": {
+    "title": "Shared with me",
+    "subtitle": "Documents shared with you by other users",
+    "totalCount": "{count} shared document(s)",
+    "search": "Search...",
+    "refresh": "Refresh",
+    "open": "Open",
+    "view": "View",
+    "filters": {
+      "all": "All documents",
+      "individual": "Individual shares",
+      "organization": "Organization shares"
+    },
+    "permissions": {
+      "view": "View only",
+      "edit": "Can edit"
+    },
+    "source": {
+      "individual": "Personal",
+      "organization": "Organization"
+    },
+    "menu": {
+      "preview": "Preview",
+      "download": "Download",
+      "openEditor": "Open in editor",
+      "remove": "Remove from list"
+    },
+    "noDocuments": {
+      "title": "No shared documents",
+      "description": "No one has shared any documents with you yet.",
+      "noResultsDescription": "No documents match \"{search}\""
+    },
+    "preview": {
+      "noPreview": "Preview not available",
+      "close": "Close"
+    },
+    "removeDialog": {
+      "title": "Remove from list",
+      "description": "Are you sure you want to remove \"{name}\" from your shared documents?",
+      "cancel": "Cancel",
+      "confirm": "Remove",
+      "removing": "Removing..."
+    },
+    "pagination": {
+      "page": "Page {current} of {total}"
+    },
+    "errors": {
+      "loadFailed": "Failed to load shared documents. Please try again."
+    }
+  },
+  "sharing": {
+    "dialog": {
+      "title": "Share document",
+      "description": "Share this document with others via email",
+      "email": "Email address",
+      "emailPlaceholder": "name@example.com",
+      "emailRequired": "Please enter an email address",
+      "permission": "Permission",
+      "permissions": {
+        "view": "View only",
+        "edit": "Can edit"
+      },
+      "message": "Message (optional)",
+      "messagePlaceholder": "Add a personal message...",
+      "share": "Share",
+      "sharing": "Sharing...",
+      "cancel": "Cancel",
+      "success": "Invitation sent successfully",
+      "error": "Failed to send invitation"
+    },
+    "currentShares": {
+      "title": "People with access",
+      "owner": "Owner",
+      "noShares": "This document is not shared with anyone",
+      "revokeAccess": "Revoke access",
+      "changePermission": "Change permission"
+    },
+    "publicLink": {
+      "title": "Public link",
+      "description": "Anyone with the link can view this document",
+      "create": "Create public link",
+      "revoke": "Disable link",
+      "copy": "Copy link",
+      "copied": "Link copied!"
+    },
+    "invitations": {
+      "pending": "Pending invitations",
+      "accept": "Accept",
+      "decline": "Decline",
+      "expired": "Expired"
+    },
+    "notifications": {
+      "title": "Notifications",
+      "invitation": "New share invitation",
+      "accepted": "Invitation accepted",
+      "declined": "Invitation declined",
+      "revoked": "Access revoked",
+      "markAsRead": "Mark as read",
+      "markAllAsRead": "Mark all as read"
     }
   }
 }
