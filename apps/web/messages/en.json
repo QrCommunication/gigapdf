@@ -654,7 +654,9 @@
       "colors": "Colors",
       "strokeColor": "Stroke color",
       "fillColor": "Fill color",
-      "strokeWidth": "Stroke width"
+      "strokeWidth": "Stroke width",
+      "duplicate": "Duplicate",
+      "delete": "Delete"
     },
     "tools": {
       "select": "Select",

@@ -654,7 +654,9 @@
       "colors": "Couleurs",
       "strokeColor": "Couleur du contour",
       "fillColor": "Couleur de remplissage",
-      "strokeWidth": "Épaisseur du contour"
+      "strokeWidth": "Épaisseur du contour",
+      "duplicate": "Dupliquer",
+      "delete": "Supprimer"
     },
     "tools": {
       "select": "Sélectionner",
