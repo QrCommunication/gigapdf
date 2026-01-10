@@ -333,70 +333,75 @@ celery -A app.tasks.celery_app beat --loglevel=info
 
 ## Deployment
 
-### Ploi (SSH + Deploy)
+### Production deployment (server)
 
 ```bash
-# Login (first time)
-ploi login
+# On the server
+cd /opt/gigapdf
 
-# SSH into the server (read-only unless you explicitly confirm changes)
-ploi ssh ploi@giga-pdf.com
-
-# Deploy the latest code (adjust app name and server if needed)
-ploi deploy gigapdf production
-
-# Run migrations on the server
-ploi run gigapdf production "cd /home/ploi/gigapdf && alembic upgrade head"
+# Run the bundled deployment script (does everything below)
+bash deploy/deploy.sh
 ```
 
-### Docker (Recommended)
+What the script does:
+- Fixes permissions for `gigapdf` user and ensures `.env` is in place (symlinks into `apps/web` and `apps/admin`).
+- Installs Python deps into `.venv` and Node deps via `pnpm install --frozen-lockfile`.
+- Builds shared packages, Prisma clients, and both Next.js apps (web/admin).
+- Copies standalone `.next` output + static assets to the correct folders.
+- Runs Alembic migrations and initializes BetterAuth tables.
+- Installs/reloads systemd units (`gigapdf-api`, `gigapdf-web`, `gigapdf-admin`, `gigapdf-celery`, `gigapdf-celery-billing`) and restarts them.
+- Updates Nginx from `deploy/nginx.conf` and reloads if certificates are present.
+
+Health checks (local):
+```bash
+curl -I http://localhost:3000        # Web
+curl -I http://localhost:3001        # Admin
+curl -I http://localhost:8000/api/v1/health # API (FastAPI prefix)
+systemctl status gigapdf-*           # Services
+```
+
+### Manual steps (if you cannot run deploy.sh)
 
 ```bash
-docker-compose -f docker-compose.prod.yml up -d
+cd /opt/gigapdf
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+pnpm install --frozen-lockfile
+pnpm build:packages
+pnpm --filter web db:generate && pnpm --filter admin db:generate
+pnpm --filter web build && pnpm --filter admin build
+alembic upgrade head
+source .venv/bin/activate && set -a && source .env && set +a && \
+  python - <<'PY'
+from sqlalchemy import create_engine, text
+import os
+
+db_url = os.environ.get("DATABASE_URL", "")
+if db_url and "postgresql+asyncpg" in db_url:
+    db_url = db_url.replace("postgresql+asyncpg", "postgresql")
+
+if db_url:
+    engine = create_engine(db_url)
+    sql = open("deploy/init-betterauth-tables.sql").read()
+    with engine.connect() as conn:
+        for statement in sql.split(";"):
+            stmt = statement.strip()
+            if stmt and not stmt.startswith("--"):
+                try:
+                    conn.execute(text(stmt))
+                except Exception:
+                    pass
+        conn.commit()
+    print("Better Auth tables created")
+else:
+    print("DATABASE_URL not set, skipped")
+PY
+cp deploy/systemd/*.service /etc/systemd/system/ && systemctl daemon-reload
+systemctl restart gigapdf-api gigapdf-web gigapdf-admin gigapdf-celery gigapdf-celery-billing
+cp deploy/nginx.conf /etc/nginx/sites-available/gigapdf && nginx -t && systemctl reload nginx
 ```
 
-### Manual Deployment
-
-```bash
-# Build frontend
-pnpm build
-
-# Start with PM2
-pm2 start ecosystem.config.js
-```
-
-### Nginx Configuration
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-    }
-}
-
-server {
-    listen 443 ssl http2;
-    server_name api.your-domain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
+> Ensure Redis, PostgreSQL, Tesseract, and your S3-compatible storage are reachable before deploying.
 
 > **Complete deployment instructions:** See [Deployment Guide](docs/guides/DEPLOYMENT.md)
 

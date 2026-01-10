@@ -23,7 +23,7 @@ const appIcons = {
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("meta");
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://gigapdf.com";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://giga-pdf.com";
 
   return {
     title: {

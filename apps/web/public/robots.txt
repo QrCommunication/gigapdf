@@ -22,4 +22,4 @@ Allow: /terms
 Allow: /contact
 
 # Sitemap location
-Sitemap: https://gigapdf.com/sitemap.xml
+Sitemap: https://giga-pdf.com/sitemap.xml

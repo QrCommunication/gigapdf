@@ -69,6 +69,16 @@ model Verification {
   @@map("verification")
 }
 
+model Jwks {
+  id         String   @id
+  publicKey  String
+  privateKey String
+  createdAt  DateTime
+  expiresAt  DateTime?
+
+  @@map("jwks")
+}
+
 model activity_logs {
   id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   document_id      String?           @db.Uuid
