@@ -342,6 +342,28 @@ export function EditorCanvas({
     [isUpdatingHistory]
   );
 
+  // Update event handlers when they change
+  useEffect(() => {
+    if (!fabricRef.current) return;
+    const canvas = fabricRef.current;
+
+    // Remove old handlers
+    canvas.off("selection:created");
+    canvas.off("selection:updated");
+    canvas.off("selection:cleared");
+    canvas.off("object:modified");
+    canvas.off("object:added");
+    canvas.off("object:removed");
+
+    // Re-attach updated handlers
+    canvas.on("selection:created", handleSelectionChange);
+    canvas.on("selection:updated", handleSelectionChange);
+    canvas.on("selection:cleared", handleSelectionChange);
+    canvas.on("object:modified", handleObjectModified as (e: unknown) => void);
+    canvas.on("object:added", handleObjectAdded as (e: unknown) => void);
+    canvas.on("object:removed", handleObjectRemoved as (e: unknown) => void);
+  }, [handleSelectionChange, handleObjectModified, handleObjectAdded, handleObjectRemoved]);
+
   // Initialiser Fabric.js
   useEffect(() => {
     if (!canvasRef.current) return;
