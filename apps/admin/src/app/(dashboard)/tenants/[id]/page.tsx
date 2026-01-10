@@ -27,6 +27,7 @@ import {
   type TenantDocument,
   type TenantInvitation,
 } from "@/lib/api";
+import { useTranslations } from "next-intl";
 
 const roleColors: Record<string, string> = {
   owner: "bg-purple-100 text-purple-800",
@@ -40,6 +41,8 @@ export default function TenantDetailPage() {
   const params = useParams();
   const router = useRouter();
   const tenantId = params.id as string;
+  const t = useTranslations("tenants.detail");
+  const tCommon = useTranslations("common");
 
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [members, setMembers] = useState<TenantMember[]>([]);
@@ -67,43 +70,43 @@ export default function TenantDetailPage() {
       setInvitations(invitationsData.invitations);
     } catch (err) {
       console.error("Failed to fetch tenant:", err);
-      setError(err instanceof Error ? err.message : "Failed to load tenant");
+      setError(err instanceof Error ? err.message : t("errors.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, t]);
 
   useEffect(() => {
     fetchTenantData();
   }, [fetchTenantData]);
 
   const handleRemoveMember = async (memberId: string) => {
-    if (!confirm("Are you sure you want to remove this member?")) return;
+    if (!confirm(t("confirm.removeMember"))) return;
     try {
       await tenantsApi.removeMember(tenantId, memberId);
       setMembers(members.filter((m) => m.id !== memberId));
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to remove member");
+      alert(err instanceof Error ? err.message : t("errors.removeMemberFailed"));
     }
   };
 
   const handleCancelInvitation = async (invitationId: string) => {
-    if (!confirm("Are you sure you want to cancel this invitation?")) return;
+    if (!confirm(t("confirm.cancelInvitation"))) return;
     try {
       await tenantsApi.cancelInvitation(tenantId, invitationId);
       setInvitations(invitations.filter((i) => i.id !== invitationId));
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to cancel invitation");
+      alert(err instanceof Error ? err.message : t("errors.cancelInvitationFailed"));
     }
   };
 
   const handleUnshareDocument = async (documentId: string) => {
-    if (!confirm("Are you sure you want to remove this document from the organization?")) return;
+    if (!confirm(t("confirm.removeDocument"))) return;
     try {
       await tenantsApi.unshareDocument(tenantId, documentId);
       setDocuments(documents.filter((d) => d.document_id !== documentId));
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to remove document");
+      alert(err instanceof Error ? err.message : t("errors.removeDocumentFailed"));
     }
   };
 
@@ -119,12 +122,12 @@ export default function TenantDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center h-96 gap-4">
         <AlertCircle className="h-12 w-12 text-destructive" />
-        <p className="text-destructive">{error || "Tenant not found"}</p>
+        <p className="text-destructive">{error || t("errors.notFound")}</p>
         <button
           onClick={() => router.push("/tenants")}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
         >
-          Back to Tenants
+          {t("actions.backToTenants")}
         </button>
       </div>
     );
@@ -166,7 +169,7 @@ export default function TenantDetailPage() {
         <div className="rounded-lg border bg-card p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Users className="h-4 w-4" />
-            <span className="text-sm">Members</span>
+            <span className="text-sm">{t("overview.members")}</span>
           </div>
           <div className="text-2xl font-bold mt-1">
             {tenant.member_count}
@@ -176,14 +179,14 @@ export default function TenantDetailPage() {
         <div className="rounded-lg border bg-card p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
             <FileText className="h-4 w-4" />
-            <span className="text-sm">Documents</span>
+            <span className="text-sm">{t("overview.documents")}</span>
           </div>
           <div className="text-2xl font-bold mt-1">{tenant.document_count}</div>
         </div>
         <div className="rounded-lg border bg-card p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
             <HardDrive className="h-4 w-4" />
-            <span className="text-sm">Storage Used</span>
+            <span className="text-sm">{t("overview.storageUsed")}</span>
           </div>
           <div className="text-2xl font-bold mt-1">{tenant.storage_used_formatted}</div>
           <div className="w-full h-2 bg-secondary rounded-full overflow-hidden mt-2">
@@ -193,13 +196,13 @@ export default function TenantDetailPage() {
             />
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            of {tenant.storage_limit_formatted}
+            {t("overview.storageOf", { limit: tenant.storage_limit_formatted })}
           </p>
         </div>
         <div className="rounded-lg border bg-card p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Clock className="h-4 w-4" />
-            <span className="text-sm">Created</span>
+            <span className="text-sm">{t("overview.created")}</span>
           </div>
           <div className="text-lg font-medium mt-1">{formatDate(tenant.created_at)}</div>
         </div>
@@ -207,7 +210,7 @@ export default function TenantDetailPage() {
 
       {/* Contact Info */}
       <div className="rounded-lg border bg-card p-4">
-        <h3 className="font-semibold mb-3">Contact Information</h3>
+        <h3 className="font-semibold mb-3">{t("sections.contactInformation")}</h3>
         <div className="grid gap-4 md:grid-cols-3">
           <div className="flex items-center gap-2">
             <Mail className="h-4 w-4 text-muted-foreground" />
@@ -236,22 +239,25 @@ export default function TenantDetailPage() {
       {/* Tabs */}
       <div className="border-b">
         <nav className="flex gap-4">
-          {(["members", "documents", "invitations", "settings"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`pb-2 px-1 border-b-2 font-medium text-sm capitalize ${
-                activeTab === tab
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {tab}
-              {tab === "members" && ` (${members.length})`}
-              {tab === "documents" && ` (${documents.length})`}
-              {tab === "invitations" && invitations.length > 0 && ` (${invitations.length})`}
-            </button>
-          ))}
+          {(["members", "documents", "invitations", "settings"] as const).map((tab) => {
+            const label = t(`tabs.${tab}`);
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`pb-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === tab
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+                {tab === "members" && ` (${members.length})`}
+                {tab === "documents" && ` (${documents.length})`}
+                {tab === "invitations" && invitations.length > 0 && ` (${invitations.length})`}
+              </button>
+            );
+          })}
         </nav>
       </div>
 
@@ -261,33 +267,33 @@ export default function TenantDetailPage() {
         {activeTab === "members" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="font-semibold">Team Members</h3>
+              <h3 className="font-semibold">{t("sections.members")}</h3>
               <button className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 flex items-center gap-1">
                 <UserPlus className="h-4 w-4" />
-                Add Member
+                {t("actions.addMember")}
               </button>
             </div>
             {members.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No members yet. Add your first team member.
+                {t("empty.members")}
               </div>
             ) : (
               <div className="rounded-lg border">
                 <table className="w-full">
                   <thead className="bg-muted/50">
                     <tr>
-                      <th className="text-left p-3 font-medium">User</th>
-                      <th className="text-left p-3 font-medium">Role</th>
-                      <th className="text-left p-3 font-medium">Status</th>
-                      <th className="text-left p-3 font-medium">Joined</th>
-                      <th className="text-left p-3 font-medium">Actions</th>
+                      <th className="text-left p-3 font-medium">{t("table.user")}</th>
+                      <th className="text-left p-3 font-medium">{t("table.role")}</th>
+                      <th className="text-left p-3 font-medium">{t("table.status")}</th>
+                      <th className="text-left p-3 font-medium">{t("table.joined")}</th>
+                      <th className="text-left p-3 font-medium">{tCommon("actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {members.map((member) => (
                       <tr key={member.id} className="border-t">
                         <td className="p-3">
-                          <div className="font-medium">{member.user_email || "Unknown"}</div>
+                          <div className="font-medium">{member.user_email || t("labels.unknown")}</div>
                           <div className="text-xs text-muted-foreground font-mono">
                             {member.user_id.slice(0, 8)}...
                           </div>
@@ -299,7 +305,7 @@ export default function TenantDetailPage() {
                         </td>
                         <td className="p-3">
                           <Badge variant={member.is_active ? "default" : "secondary"}>
-                            {member.is_active ? "Active" : "Inactive"}
+                            {member.is_active ? t("labels.active") : t("labels.inactive")}
                           </Badge>
                         </td>
                         <td className="p-3 text-sm text-muted-foreground">
@@ -307,14 +313,14 @@ export default function TenantDetailPage() {
                         </td>
                         <td className="p-3">
                           <div className="flex items-center gap-2">
-                            <button className="p-1 hover:bg-accent rounded" title="Edit role">
+                            <button className="p-1 hover:bg-accent rounded" title={t("actions.editRole")}>
                               <Shield className="h-4 w-4" />
                             </button>
                             {member.role !== "owner" && (
                               <button
                                 onClick={() => handleRemoveMember(member.id)}
                                 className="p-1 hover:bg-accent rounded"
-                                title="Remove"
+                                title={t("actions.remove")}
                               >
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </button>
@@ -334,22 +340,22 @@ export default function TenantDetailPage() {
         {activeTab === "documents" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="font-semibold">Shared Documents</h3>
+              <h3 className="font-semibold">{t("sections.documents")}</h3>
             </div>
             {documents.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No documents shared with this organization yet.
+                {t("empty.documents")}
               </div>
             ) : (
               <div className="rounded-lg border">
                 <table className="w-full">
                   <thead className="bg-muted/50">
                     <tr>
-                      <th className="text-left p-3 font-medium">Document</th>
-                      <th className="text-left p-3 font-medium">Access Level</th>
-                      <th className="text-left p-3 font-medium">Shared By</th>
-                      <th className="text-left p-3 font-medium">Added</th>
-                      <th className="text-left p-3 font-medium">Actions</th>
+                      <th className="text-left p-3 font-medium">{t("table.document")}</th>
+                      <th className="text-left p-3 font-medium">{t("table.accessLevel")}</th>
+                      <th className="text-left p-3 font-medium">{t("table.sharedBy")}</th>
+                      <th className="text-left p-3 font-medium">{t("table.added")}</th>
+                      <th className="text-left p-3 font-medium">{tCommon("actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -367,7 +373,7 @@ export default function TenantDetailPage() {
                           </Badge>
                         </td>
                         <td className="p-3 text-sm">
-                          {doc.added_by_email || "Unknown"}
+                          {doc.added_by_email || t("labels.unknown")}
                         </td>
                         <td className="p-3 text-sm text-muted-foreground">
                           {formatDate(doc.added_at)}
@@ -376,7 +382,7 @@ export default function TenantDetailPage() {
                           <button
                             onClick={() => handleUnshareDocument(doc.document_id)}
                             className="p-1 hover:bg-accent rounded"
-                            title="Remove from organization"
+                            title={t("actions.removeFromOrganization")}
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </button>
@@ -394,26 +400,26 @@ export default function TenantDetailPage() {
         {activeTab === "invitations" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="font-semibold">Pending Invitations</h3>
+              <h3 className="font-semibold">{t("sections.invitations")}</h3>
               <button className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 flex items-center gap-1">
                 <Mail className="h-4 w-4" />
-                Send Invitation
+                {t("actions.sendInvitation")}
               </button>
             </div>
             {invitations.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No pending invitations.
+                {t("empty.invitations")}
               </div>
             ) : (
               <div className="rounded-lg border">
                 <table className="w-full">
                   <thead className="bg-muted/50">
                     <tr>
-                      <th className="text-left p-3 font-medium">Email</th>
-                      <th className="text-left p-3 font-medium">Role</th>
-                      <th className="text-left p-3 font-medium">Status</th>
-                      <th className="text-left p-3 font-medium">Expires</th>
-                      <th className="text-left p-3 font-medium">Actions</th>
+                      <th className="text-left p-3 font-medium">{t("table.email")}</th>
+                      <th className="text-left p-3 font-medium">{t("table.role")}</th>
+                      <th className="text-left p-3 font-medium">{t("table.status")}</th>
+                      <th className="text-left p-3 font-medium">{t("table.expires")}</th>
+                      <th className="text-left p-3 font-medium">{tCommon("actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -427,11 +433,11 @@ export default function TenantDetailPage() {
                         </td>
                         <td className="p-3">
                           {invitation.is_expired ? (
-                            <Badge variant="destructive">Expired</Badge>
+                            <Badge variant="destructive">{t("labels.expired")}</Badge>
                           ) : invitation.is_accepted ? (
-                            <Badge variant="default">Accepted</Badge>
+                            <Badge variant="default">{t("labels.accepted")}</Badge>
                           ) : (
-                            <Badge variant="secondary">Pending</Badge>
+                            <Badge variant="secondary">{t("labels.pending")}</Badge>
                           )}
                         </td>
                         <td className="p-3 text-sm text-muted-foreground">
@@ -442,7 +448,7 @@ export default function TenantDetailPage() {
                             <button
                               onClick={() => handleCancelInvitation(invitation.id)}
                               className="p-1 hover:bg-accent rounded"
-                              title="Cancel invitation"
+                              title={t("actions.cancelInvitation")}
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </button>
@@ -461,22 +467,22 @@ export default function TenantDetailPage() {
         {activeTab === "settings" && (
           <div className="space-y-6">
             <div className="rounded-lg border bg-card p-6">
-              <h3 className="font-semibold mb-4">Organization Settings</h3>
+              <h3 className="font-semibold mb-4">{t("sections.settings")}</h3>
               <div className="grid gap-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium">Allow Member Invites</p>
+                    <p className="font-medium">{t("settings.allowMemberInvites")}</p>
                     <p className="text-sm text-muted-foreground">
-                      Allow existing members to invite new members
+                      {t("settings.allowMemberInvitesDescription")}
                     </p>
                   </div>
                   <input type="checkbox" defaultChecked className="h-4 w-4" />
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium">Require 2FA</p>
+                    <p className="font-medium">{t("settings.require2fa")}</p>
                     <p className="text-sm text-muted-foreground">
-                      Require two-factor authentication for all members
+                      {t("settings.require2faDescription")}
                     </p>
                   </div>
                   <input type="checkbox" className="h-4 w-4" />
@@ -485,16 +491,16 @@ export default function TenantDetailPage() {
             </div>
 
             <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-6">
-              <h3 className="font-semibold text-destructive mb-2">Danger Zone</h3>
+              <h3 className="font-semibold text-destructive mb-2">{t("sections.dangerZone")}</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                These actions are irreversible. Please proceed with caution.
+                {t("settings.dangerZoneDescription")}
               </p>
               <div className="flex gap-2">
                 <button className="rounded-md border border-destructive px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/10">
-                  Suspend Organization
+                  {t("actions.suspendOrganization")}
                 </button>
                 <button className="rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90">
-                  Delete Organization
+                  {t("actions.deleteOrganization")}
                 </button>
               </div>
             </div>

@@ -13,8 +13,10 @@ import {
 } from "recharts";
 import { Loader2 } from "lucide-react";
 import { statsApi, type RevenueDataPoint } from "@/lib/api";
+import { useTranslations } from "next-intl";
 
 export function RevenueChart() {
+  const t = useTranslations("dashboard.charts.revenue");
   const [data, setData] = useState<RevenueDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,7 +39,7 @@ export function RevenueChart() {
   if (loading) {
     return (
       <div className="rounded-lg border bg-card p-6 shadow-sm">
-        <h3 className="mb-4 text-lg font-semibold">Revenue Overview</h3>
+        <h3 className="mb-4 text-lg font-semibold">{t("title")}</h3>
         <div className="flex items-center justify-center h-[300px]">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
@@ -47,10 +49,10 @@ export function RevenueChart() {
 
   return (
     <div className="rounded-lg border bg-card p-6 shadow-sm">
-      <h3 className="mb-4 text-lg font-semibold">Revenue Overview</h3>
+      <h3 className="mb-4 text-lg font-semibold">{t("title")}</h3>
       {data.length === 0 ? (
         <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-          No revenue data available
+          {t("noData")}
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={300}>
@@ -82,22 +84,22 @@ export function RevenueChart() {
                 borderRadius: "8px",
               }}
               formatter={(value: number, name: string) => {
-                if (name === "revenue") return [`€${value.toFixed(2)}`, "Revenue"];
-                return [value, "Subscribers"];
+                if (name === "revenue") return [`€${value.toFixed(2)}`, t("revenue")];
+                return [value, t("subscriptions")];
               }}
             />
             <Legend />
             <Bar
               yAxisId="left"
               dataKey="revenue"
-              name="Revenue"
+              name={t("revenue")}
               fill="hsl(var(--primary))"
               radius={[4, 4, 0, 0]}
             />
             <Bar
               yAxisId="right"
               dataKey="subscribers"
-              name="Subscribers"
+              name={t("subscriptions")}
               fill="hsl(217, 91%, 60%)"
               radius={[4, 4, 0, 0]}
             />

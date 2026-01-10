@@ -216,21 +216,25 @@ export default function SettingsPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <span className="text-muted-foreground">Provider:</span>
+                <span className="text-muted-foreground">{t("sections.storage.provider")}:</span>
                 <span className="ml-2 font-medium">{settings.storage_provider}</span>
               </div>
               <div>
-                <span className="text-muted-foreground">Bucket:</span>
-                <span className="ml-2 font-medium">{settings.storage_bucket || "Not configured"}</span>
+                <span className="text-muted-foreground">{t("sections.storage.bucketLabel")}:</span>
+                <span className="ml-2 font-medium">
+                  {settings.storage_bucket || t("sections.storage.notConfigured")}
+                </span>
               </div>
               <div>
-                <span className="text-muted-foreground">Region:</span>
-                <span className="ml-2 font-medium">{settings.storage_region || "Not configured"}</span>
+                <span className="text-muted-foreground">{t("sections.storage.regionLabel")}:</span>
+                <span className="ml-2 font-medium">
+                  {settings.storage_region || t("sections.storage.notConfigured")}
+                </span>
               </div>
               <div>
-                <span className="text-muted-foreground">Endpoint:</span>
+                <span className="text-muted-foreground">{t("sections.storage.endpointLabel")}:</span>
                 <span className="ml-2 font-medium font-mono text-xs">
-                  {settings.storage_endpoint || "Default"}
+                  {settings.storage_endpoint || t("sections.storage.defaultEndpoint")}
                 </span>
               </div>
             </div>
@@ -238,12 +242,16 @@ export default function SettingsPage() {
               <div className="rounded-md bg-secondary/50 p-4 mt-4">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-muted-foreground">Objects:</span>
-                    <span className="ml-2 font-medium">{storageInfo.object_count ?? "N/A"}</span>
+                    <span className="text-muted-foreground">{t("sections.storage.objectsLabel")}:</span>
+                    <span className="ml-2 font-medium">
+                      {storageInfo.object_count ?? t("sections.storage.notAvailable")}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Total Size:</span>
-                    <span className="ml-2 font-medium">{storageInfo.total_size_formatted ?? "N/A"}</span>
+                    <span className="text-muted-foreground">{t("sections.storage.totalSizeLabel")}:</span>
+                    <span className="ml-2 font-medium">
+                      {storageInfo.total_size_formatted ?? t("sections.storage.notAvailable")}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -279,7 +287,7 @@ export default function SettingsPage() {
                 defaultChecked={settings.enable_ocr}
                 className="rounded border-gray-300"
               />
-              <span className="text-sm">OCR</span>
+              <span className="text-sm">{t("sections.security.ocr")}</span>
             </label>
             <label className="flex items-center gap-3">
               <input

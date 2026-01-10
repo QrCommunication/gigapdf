@@ -70,7 +70,44 @@
     "settings": "Settings",
     "logout": "Logout",
     "notifications": "Notifications",
-    "superAdmin": "Super Admin"
+    "superAdmin": "Super Admin",
+    "adminLabel": "Admin"
+  },
+  "logs": {
+    "title": "System Logs",
+    "subtitle": "View system activity and errors",
+    "searchPlaceholder": "Search logs...",
+    "errors": {
+      "loadFailed": "Failed to load logs"
+    },
+    "stats": {
+      "info": "Info",
+      "success": "Success",
+      "warning": "Warning",
+      "error": "Error"
+    },
+    "filters": {
+      "allLevels": "All levels",
+      "allSources": "All sources",
+      "levels": {
+        "info": "Info",
+        "warning": "Warning",
+        "error": "Error",
+        "success": "Success"
+      },
+      "sources": {
+        "job": "Jobs",
+        "document": "Documents",
+        "user": "Users"
+      }
+    },
+    "table": {
+      "level": "Level",
+      "message": "Message",
+      "source": "Source",
+      "time": "Time",
+      "user": "User"
+    }
   },
   "auth": {
     "login": {
@@ -125,6 +162,7 @@
         "documents": "Documents",
         "users": "Users",
         "apiCalls": "API Calls",
+        "storage": "Storage (GB)",
         "noData": "No usage data available"
       },
       "revenue": {
@@ -190,6 +228,84 @@
       "documents": "Documents",
       "billing": "Billing",
       "settings": "Settings"
+    },
+    "detail": {
+      "errors": {
+        "loadFailed": "Failed to load organization",
+        "notFound": "Organization not found",
+        "removeMemberFailed": "Failed to remove member",
+        "cancelInvitationFailed": "Failed to cancel invitation",
+        "removeDocumentFailed": "Failed to remove document"
+      },
+      "confirm": {
+        "removeMember": "Are you sure you want to remove this member?",
+        "cancelInvitation": "Are you sure you want to cancel this invitation?",
+        "removeDocument": "Are you sure you want to remove this document from the organization?"
+      },
+      "actions": {
+        "backToTenants": "Back to Organizations",
+        "addMember": "Add Member",
+        "sendInvitation": "Send Invitation",
+        "editRole": "Edit role",
+        "remove": "Remove",
+        "removeFromOrganization": "Remove from organization",
+        "cancelInvitation": "Cancel invitation",
+        "suspendOrganization": "Suspend Organization",
+        "deleteOrganization": "Delete Organization"
+      },
+      "tabs": {
+        "members": "Members",
+        "documents": "Documents",
+        "invitations": "Invitations",
+        "settings": "Settings"
+      },
+      "sections": {
+        "members": "Team Members",
+        "documents": "Shared Documents",
+        "invitations": "Pending Invitations",
+        "settings": "Organization Settings",
+        "dangerZone": "Danger Zone",
+        "contactInformation": "Contact Information"
+      },
+      "empty": {
+        "members": "No members yet. Add your first team member.",
+        "documents": "No documents shared with this organization yet.",
+        "invitations": "No pending invitations."
+      },
+      "overview": {
+        "members": "Members",
+        "documents": "Documents",
+        "storageUsed": "Storage Used",
+        "created": "Created",
+        "storageOf": "of {limit}"
+      },
+      "table": {
+        "user": "User",
+        "role": "Role",
+        "status": "Status",
+        "joined": "Joined",
+        "document": "Document",
+        "accessLevel": "Access Level",
+        "sharedBy": "Shared By",
+        "added": "Added",
+        "email": "Email",
+        "expires": "Expires"
+      },
+      "labels": {
+        "unknown": "Unknown",
+        "active": "Active",
+        "inactive": "Inactive",
+        "expired": "Expired",
+        "accepted": "Accepted",
+        "pending": "Pending"
+      },
+      "settings": {
+        "allowMemberInvites": "Allow Member Invites",
+        "allowMemberInvitesDescription": "Allow existing members to invite new members",
+        "require2fa": "Require 2FA",
+        "require2faDescription": "Require two-factor authentication for all members",
+        "dangerZoneDescription": "These actions are irreversible. Please proceed with caution."
+      }
     },
     "status": {
       "active": "Active",
@@ -509,6 +625,7 @@
         "lockoutDuration": "Lockout Duration (minutes)",
         "requireEmailVerification": "Require Email Verification",
         "require2FA": "Require Two-Factor Authentication",
+        "ocr": "OCR",
         "allowedDomains": "Allowed Email Domains",
         "allowedDomainsPlaceholder": "Enter domains (one per line, leave empty for all)",
         "ipWhitelist": "IP Whitelist",
@@ -536,7 +653,15 @@
         "maxFileSize": "Max File Size (MB)",
         "allowedFileTypes": "Allowed File Types",
         "compressionEnabled": "Enable Compression",
-        "cdnUrl": "CDN URL (optional)"
+        "cdnUrl": "CDN URL (optional)",
+        "bucketLabel": "Bucket",
+        "regionLabel": "Region",
+        "endpointLabel": "Endpoint",
+        "objectsLabel": "Objects",
+        "totalSizeLabel": "Total Size",
+        "notConfigured": "Not configured",
+        "defaultEndpoint": "Default",
+        "notAvailable": "N/A"
       },
       "limits": {
         "title": "System Limits",

@@ -204,7 +204,7 @@ export function DocumentCard({
       }
 
       if (status.status === "failed") {
-        throw new Error(status.error || "Export failed");
+        throw new Error(status.error || t("errors.exportFailed"));
       }
 
       // Download result

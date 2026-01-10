@@ -6,7 +6,7 @@ import { locales, type Locale } from "@/i18n/config";
 
 export async function setLocale(locale: Locale) {
   if (!locales.includes(locale)) {
-    return { error: "Invalid locale" };
+    return { error: "invalid_locale" };
   }
 
   const cookieStore = await cookies();

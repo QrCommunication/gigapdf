@@ -70,13 +70,50 @@
     "settings": "Paramètres",
     "logout": "Déconnexion",
     "notifications": "Notifications",
-    "superAdmin": "Super Admin"
+    "superAdmin": "Super administrateur",
+    "adminLabel": "Admin"
+  },
+  "logs": {
+    "title": "Journaux système",
+    "subtitle": "Consultez l'activité et les erreurs du système",
+    "searchPlaceholder": "Rechercher dans les journaux...",
+    "errors": {
+      "loadFailed": "Impossible de charger les journaux"
+    },
+    "stats": {
+      "info": "Info",
+      "success": "Succès",
+      "warning": "Avertissement",
+      "error": "Erreur"
+    },
+    "filters": {
+      "allLevels": "Tous les niveaux",
+      "allSources": "Toutes les sources",
+      "levels": {
+        "info": "Info",
+        "warning": "Avertissement",
+        "error": "Erreur",
+        "success": "Succès"
+      },
+      "sources": {
+        "job": "Tâches",
+        "document": "Documents",
+        "user": "Utilisateurs"
+      }
+    },
+    "table": {
+      "level": "Niveau",
+      "message": "Message",
+      "source": "Source",
+      "time": "Heure",
+      "user": "Utilisateur"
+    }
   },
   "auth": {
     "login": {
-      "title": "Super Admin",
+      "title": "Super administrateur",
       "subtitle": "Connectez-vous avec votre compte super admin",
-      "email": "Email",
+      "email": "E-mail",
       "emailPlaceholder": "admin@exemple.com",
       "password": "Mot de passe",
       "passwordPlaceholder": "Entrez votre mot de passe",
@@ -125,6 +162,7 @@
         "documents": "Documents",
         "users": "Utilisateurs",
         "apiCalls": "Appels API",
+        "storage": "Stockage (Go)",
         "noData": "Aucune donnée d'utilisation disponible"
       },
       "revenue": {
@@ -191,6 +229,84 @@
       "billing": "Facturation",
       "settings": "Paramètres"
     },
+    "detail": {
+      "errors": {
+        "loadFailed": "Impossible de charger l'organisation",
+        "notFound": "Organisation introuvable",
+        "removeMemberFailed": "Impossible de supprimer le membre",
+        "cancelInvitationFailed": "Impossible d'annuler l'invitation",
+        "removeDocumentFailed": "Impossible de retirer le document"
+      },
+      "confirm": {
+        "removeMember": "Voulez-vous vraiment supprimer ce membre ?",
+        "cancelInvitation": "Voulez-vous vraiment annuler cette invitation ?",
+        "removeDocument": "Voulez-vous vraiment retirer ce document de l'organisation ?"
+      },
+      "actions": {
+        "backToTenants": "Retour aux organisations",
+        "addMember": "Ajouter un membre",
+        "sendInvitation": "Envoyer une invitation",
+        "editRole": "Modifier le rôle",
+        "remove": "Supprimer",
+        "removeFromOrganization": "Retirer de l'organisation",
+        "cancelInvitation": "Annuler l'invitation",
+        "suspendOrganization": "Suspendre l'organisation",
+        "deleteOrganization": "Supprimer l'organisation"
+      },
+      "tabs": {
+        "members": "Membres",
+        "documents": "Documents",
+        "invitations": "Invitations",
+        "settings": "Paramètres"
+      },
+      "sections": {
+        "members": "Membres de l'équipe",
+        "documents": "Documents partagés",
+        "invitations": "Invitations en attente",
+        "settings": "Paramètres de l'organisation",
+        "dangerZone": "Zone de danger",
+        "contactInformation": "Coordonnées de contact"
+      },
+      "empty": {
+        "members": "Aucun membre pour le moment. Ajoutez votre premier membre d'équipe.",
+        "documents": "Aucun document partagé avec cette organisation pour le moment.",
+        "invitations": "Aucune invitation en attente."
+      },
+      "overview": {
+        "members": "Membres",
+        "documents": "Documents",
+        "storageUsed": "Stockage utilisé",
+        "created": "Créée",
+        "storageOf": "sur {limit}"
+      },
+      "table": {
+        "user": "Utilisateur",
+        "role": "Rôle",
+        "status": "Statut",
+        "joined": "Rejoint",
+        "document": "Document",
+        "accessLevel": "Niveau d'accès",
+        "sharedBy": "Partagé par",
+        "added": "Ajouté",
+        "email": "E-mail",
+        "expires": "Expire"
+      },
+      "labels": {
+        "unknown": "Inconnu",
+        "active": "Actif",
+        "inactive": "Inactif",
+        "expired": "Expirée",
+        "accepted": "Acceptée",
+        "pending": "En attente"
+      },
+      "settings": {
+        "allowMemberInvites": "Autoriser les invitations des membres",
+        "allowMemberInvitesDescription": "Autoriser les membres existants à inviter de nouveaux membres",
+        "require2fa": "Exiger le 2FA",
+        "require2faDescription": "Exiger l'authentification à deux facteurs pour tous les membres",
+        "dangerZoneDescription": "Ces actions sont irréversibles. Procédez avec prudence."
+      }
+    },
     "status": {
       "active": "Actif",
       "trial": "Essai",
@@ -206,9 +322,9 @@
     "filters": {
       "role": "Rôle",
       "allRoles": "Tous les rôles",
-      "admin": "Admin",
+      "admin": "Administrateur",
       "user": "Utilisateur",
-      "superAdmin": "Super Admin",
+      "superAdmin": "Super administrateur",
       "status": "Statut",
       "allStatuses": "Tous les statuts",
       "active": "Actif",
@@ -217,7 +333,7 @@
     },
     "table": {
       "name": "Nom",
-      "email": "Email",
+      "email": "E-mail",
       "role": "Rôle",
       "tenant": "Organisation",
       "status": "Statut",
@@ -228,7 +344,7 @@
     "form": {
       "name": "Nom complet",
       "namePlaceholder": "Entrez le nom complet",
-      "email": "Email",
+      "email": "E-mail",
       "emailPlaceholder": "utilisateur@exemple.com",
       "password": "Mot de passe",
       "passwordPlaceholder": "Entrez le mot de passe",
@@ -257,8 +373,8 @@
       "pending": "En attente de vérification"
     },
     "role": {
-      "superAdmin": "Super Admin",
-      "admin": "Admin",
+      "superAdmin": "Super administrateur",
+      "admin": "Administrateur",
       "user": "Utilisateur"
     }
   },
@@ -359,7 +475,7 @@
     "filters": {
       "level": "Niveau",
       "allLevels": "Tous les niveaux",
-      "debug": "Debug",
+      "debug": "Débogage",
       "info": "Info",
       "warning": "Avertissement",
       "error": "Erreur",
@@ -380,7 +496,7 @@
       "details": "Détails"
     },
     "level": {
-      "debug": "Debug",
+      "debug": "Débogage",
       "info": "Info",
       "warning": "Avertissement",
       "error": "Erreur",
@@ -494,7 +610,7 @@
         "siteNamePlaceholder": "Entrez le nom du site",
         "siteUrl": "URL du site",
         "siteUrlPlaceholder": "https://exemple.com",
-        "supportEmail": "Email de support",
+        "supportEmail": "E-mail de support",
         "supportEmailPlaceholder": "support@exemple.com",
         "defaultLanguage": "Langue par défaut",
         "timezone": "Fuseau horaire",
@@ -507,24 +623,25 @@
         "sessionTimeout": "Expiration de session (minutes)",
         "maxLoginAttempts": "Tentatives de connexion max",
         "lockoutDuration": "Durée de verrouillage (minutes)",
-        "requireEmailVerification": "Vérification email obligatoire",
+        "requireEmailVerification": "Vérification e-mail obligatoire",
         "require2FA": "Authentification à deux facteurs obligatoire",
-        "allowedDomains": "Domaines email autorisés",
+        "ocr": "OCR",
+        "allowedDomains": "Domaines e-mail autorisés",
         "allowedDomainsPlaceholder": "Entrez les domaines (un par ligne, laisser vide pour tous)",
         "ipWhitelist": "Liste blanche IP",
         "ipWhitelistPlaceholder": "Entrez les adresses IP (une par ligne, laisser vide pour toutes)"
       },
       "email": {
-        "title": "Paramètres email",
-        "description": "Configuration SMTP et email",
+        "title": "Paramètres e-mail",
+        "description": "Configuration SMTP et e-mail",
         "smtpHost": "Hôte SMTP",
         "smtpPort": "Port SMTP",
         "smtpUser": "Nom d'utilisateur SMTP",
         "smtpPassword": "Mot de passe SMTP",
         "smtpEncryption": "Chiffrement",
-        "fromEmail": "Email expéditeur",
+        "fromEmail": "E-mail expéditeur",
         "fromName": "Nom expéditeur",
-        "testEmail": "Envoyer un email de test"
+        "testEmail": "Envoyer un e-mail de test"
       },
       "storage": {
         "title": "Paramètres de stockage",
@@ -532,11 +649,19 @@
         "provider": "Fournisseur de stockage",
         "local": "Local",
         "s3": "Amazon S3",
-        "gcs": "Google Cloud Storage",
+        "gcs": "Stockage Google Cloud",
         "maxFileSize": "Taille max des fichiers (Mo)",
         "allowedFileTypes": "Types de fichiers autorisés",
         "compressionEnabled": "Activer la compression",
-        "cdnUrl": "URL CDN (optionnel)"
+        "cdnUrl": "URL CDN (optionnel)",
+        "bucketLabel": "Bucket",
+        "regionLabel": "Région",
+        "endpointLabel": "Endpoint",
+        "objectsLabel": "Objets",
+        "totalSizeLabel": "Taille totale",
+        "notConfigured": "Non configuré",
+        "defaultEndpoint": "Par défaut",
+        "notAvailable": "N/A"
       },
       "limits": {
         "title": "Limites système",

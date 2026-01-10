@@ -33,11 +33,11 @@ export const sendVerificationEmail = async (params: { email: string }) => {
     });
     const data = await response.json();
     if (!response.ok) {
-      return { data: null, error: { message: data.message || "Failed to send verification email" } };
+      return { data: null, error: { message: data.message || "verification_email_failed" } };
     }
     return { data, error: null };
   } catch (error) {
-    return { data: null, error: { message: "Failed to send verification email" } };
+    return { data: null, error: { message: "verification_email_failed" } };
   }
 };
 
@@ -51,11 +51,11 @@ export const forgetPassword = async (params: { email: string; redirectTo?: strin
     });
     const data = await response.json();
     if (!response.ok) {
-      return { data: null, error: { message: data.message || "Failed to send reset email" } };
+      return { data: null, error: { message: data.message || "reset_email_failed" } };
     }
     return { data, error: null };
   } catch (error) {
-    return { data: null, error: { message: "Failed to send reset email" } };
+    return { data: null, error: { message: "reset_email_failed" } };
   }
 };
 
@@ -69,10 +69,10 @@ export const resetPassword = async (params: { newPassword: string; token?: strin
     });
     const data = await response.json();
     if (!response.ok) {
-      return { data: null, error: { message: data.message || "Failed to reset password" } };
+      return { data: null, error: { message: data.message || "password_reset_failed" } };
     }
     return { data, error: null };
   } catch (error) {
-    return { data: null, error: { message: "Failed to reset password" } };
+    return { data: null, error: { message: "password_reset_failed" } };
   }
 };

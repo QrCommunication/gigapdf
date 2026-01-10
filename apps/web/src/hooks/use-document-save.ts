@@ -97,7 +97,11 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
 
   // Fonction de sauvegarde vers S3
   const performSave = useCallback(
-    async (saveName: string, saveFolderId?: string | null): Promise<boolean> => {
+    async (
+      saveName: string,
+      saveFolderId?: string | null,
+      forceNewDocument: boolean = false
+    ): Promise<boolean> => {
       if (!documentId || savingRef.current) {
         return false;
       }
@@ -109,21 +113,31 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
       try {
         console.log("[Save] Sauvegarde vers S3...", { documentId, name: saveName });
 
-        const result = await api.saveDocument({
-          document_id: documentId,
-          name: saveName,
-          folder_id: saveFolderId ?? folderId,
-          tags,
-          version_comment: storedDocumentId ? "Mise à jour automatique" : undefined,
-        });
+        let storedId: string;
+
+        if (storedDocumentId && !forceNewDocument) {
+          const result = await api.createDocumentVersion(storedDocumentId, {
+            document_id: documentId,
+            comment: "Mise à jour automatique",
+          });
+          storedId = result.stored_document_id;
+        } else {
+          const result = await api.saveDocument({
+            document_id: documentId,
+            name: saveName,
+            folder_id: saveFolderId ?? folderId,
+            tags,
+          });
+          storedId = result.stored_document_id;
+        }
 
         setLastSaved(new Date());
         setPendingChanges(0);
         pendingChangesRef.current = 0;
         setDirty?.(false);
-        onSaved?.(result.stored_document_id);
+        onSaved?.(storedId);
 
-        console.log("[Save] Sauvegarde réussie:", result.stored_document_id);
+        console.log("[Save] Sauvegarde réussie:", storedId);
         return true;
       } catch (err) {
         const message = err instanceof Error ? err.message : "Erreur de sauvegarde";
@@ -156,7 +170,7 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
         clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
       }
-      return performSave(newName, newFolderId);
+      return performSave(newName, newFolderId, true);
     },
     [performSave]
   );

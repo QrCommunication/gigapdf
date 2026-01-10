@@ -1,10 +1,14 @@
 import { RegisterForm } from "@/components/auth/register-form";
-import { Metadata } from "next";
+import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = {
-  title: "Sign Up",
-  description: "Create a new GigaPDF account",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("auth.register.meta");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
 
 export default function RegisterPage() {
   return <RegisterForm />;

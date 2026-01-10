@@ -745,7 +745,7 @@ export default function EditorPage() {
           {/* Indicateur de connexion WebSocket */}
           <div
             className="flex items-center gap-1.5 text-xs text-muted-foreground"
-            title={isConnected ? "Connected" : "Disconnected"}
+            title={isConnected ? t("connection.connected") : t("connection.disconnected")}
           >
             {isConnected ? (
               <Wifi className="h-3.5 w-3.5 text-green-500" />

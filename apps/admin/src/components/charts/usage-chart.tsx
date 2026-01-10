@@ -13,8 +13,10 @@ import {
 } from "recharts";
 import { Loader2 } from "lucide-react";
 import { statsApi, type UsageDataPoint } from "@/lib/api";
+import { useTranslations } from "next-intl";
 
 export function UsageChart() {
+  const t = useTranslations("dashboard.charts.usage");
   const [data, setData] = useState<UsageDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,7 +40,7 @@ export function UsageChart() {
   if (loading) {
     return (
       <div className="rounded-lg border bg-card p-6 shadow-sm">
-        <h3 className="mb-4 text-lg font-semibold">Usage Overview</h3>
+        <h3 className="mb-4 text-lg font-semibold">{t("title")}</h3>
         <div className="flex items-center justify-center h-[300px]">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
@@ -48,10 +50,10 @@ export function UsageChart() {
 
   return (
     <div className="rounded-lg border bg-card p-6 shadow-sm">
-      <h3 className="mb-4 text-lg font-semibold">Usage Overview</h3>
+      <h3 className="mb-4 text-lg font-semibold">{t("title")}</h3>
       {data.length === 0 ? (
         <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-          No usage data available
+          {t("noData")}
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={300}>
@@ -83,8 +85,8 @@ export function UsageChart() {
                 borderRadius: "8px",
               }}
               formatter={(value: number, name: string) => {
-                if (name === "storage_gb") return [`${value} GB`, "Storage"];
-                return [value, "Documents"];
+                if (name === "storage_gb") return [`${value} GB`, t("storage")];
+                return [value, t("documents")];
               }}
             />
             <Legend />
@@ -92,7 +94,7 @@ export function UsageChart() {
               yAxisId="left"
               type="monotone"
               dataKey="documents"
-              name="Documents"
+              name={t("documents")}
               stroke="hsl(var(--primary))"
               strokeWidth={2}
               dot={false}
@@ -102,7 +104,7 @@ export function UsageChart() {
               yAxisId="right"
               type="monotone"
               dataKey="storage_gb"
-              name="Storage (GB)"
+              name={t("storage")}
               stroke="hsl(217, 91%, 60%)"
               strokeWidth={2}
               dot={false}

@@ -1,10 +1,14 @@
 import { VerifyEmailForm } from "@/components/auth/verify-email-form";
-import { Metadata } from "next";
+import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = {
-  title: "Verify Email",
-  description: "Verify your email address to activate your GigaPDF account",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("auth.verifyEmail.meta");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
 
 export default function VerifyEmailPage() {
   return <VerifyEmailForm />;

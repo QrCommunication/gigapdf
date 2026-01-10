@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useCallback, useState } from "react";
+import { useTranslations } from "next-intl";
 import type {
   PageObject,
   Tool,
@@ -115,6 +116,7 @@ export function EditorCanvas({
   onCanvasReady,
   onHyperlinkClick,
 }: EditorCanvasProps) {
+  const t = useTranslations("editor.canvas");
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricRef = useRef<FabricCanvas | null>(null);
@@ -367,7 +369,7 @@ export function EditorCanvas({
 
         switch (tool) {
           case "text": {
-            newObj = new IText("Texte", {
+            newObj = new IText(t("defaultText"), {
               left: pointer.x,
               top: pointer.y,
               fontSize: 16,
@@ -499,7 +501,7 @@ export function EditorCanvas({
                   ry: 4,
                 }),
                 // Texte placeholder
-                new FabricText("Champ de texte", {
+                new FabricText(t("textPlaceholder"), {
                   left: 10,
                   top: 8,
                   fontSize: 12,
@@ -517,7 +519,7 @@ export function EditorCanvas({
               formFieldType: "text",
               fieldName: `field_${Date.now()}`,
               required: false,
-              placeholder: "Champ de texte",
+              placeholder: t("textPlaceholder"),
             };
             newObj = formFieldGroup;
             break;
@@ -601,7 +603,7 @@ export function EditorCanvas({
     switch (element.type) {
       case "text": {
         // TextElement structure with full styling
-        const textObj = new IText(element.content || "Text", {
+        const textObj = new IText(element.content || t("defaultText"), {
           ...baseOptions,
           fontSize: element.style.fontSize || 16,
           fontFamily: element.style.originalFont || element.style.fontFamily || "Arial",

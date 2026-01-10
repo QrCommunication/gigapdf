@@ -61,6 +61,8 @@
 | PostgreSQL | 16+ | Database |
 | Redis | 7+ | Caching & queues |
 | pnpm | 9+ | Package management |
+| Tesseract | 5+ | OCR (optional) |
+| S3-Compatible | - | Document storage |
 
 ### Installation (5 minutes)
 
@@ -70,23 +72,27 @@ git clone https://github.com/your-org/gigapdf.git
 cd gigapdf
 
 # 2. Install dependencies
-python3.12 -m venv venv
-source venv/bin/activate
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 pnpm install
 
 # 3. Configure environment
 cp .env.example .env
-# Edit .env with your database credentials
+# Edit .env with your database credentials and S3 settings
 
-# 4. Setup database
+# 4. Setup database (schema + migrations)
+./database/setup.sh
 alembic upgrade head
-cd apps/web && npx prisma db push && cd ../..
 
-# 5. Build UI package
-pnpm --filter @giga-pdf/ui build
+# 5. Generate Prisma clients
+pnpm --filter web prisma db pull && pnpm --filter web prisma generate
+pnpm --filter admin prisma db pull && pnpm --filter admin prisma generate
 
-# 6. Start development servers (in separate terminals)
+# 6. Build shared packages
+pnpm build:packages
+
+# 7. Start development servers (in separate terminals)
 uvicorn app.main:app --reload --port 8000      # Backend API
 pnpm --filter web dev                           # Web app (port 3000)
 pnpm --filter admin dev                         # Admin panel (port 3001)
@@ -127,9 +133,11 @@ gigapdf/
 │   │   ├── src/components/     # React components
 │   │   └── prisma/             # Auth database schema
 │   │
-│   └── admin/                  # Admin Dashboard
-│       ├── src/app/            # Admin pages
-│       └── prisma/             # Admin database schema
+│   ├── admin/                  # Admin Dashboard
+│   │   ├── src/app/            # Admin pages
+│   │   └── prisma/             # Admin database schema
+│   │
+│   └── mobile/                 # Expo mobile app
 │
 ├── packages/
 │   ├── ui/                     # Shared UI components (shadcn/ui)
@@ -141,6 +149,7 @@ gigapdf/
 │   ├── s3/                     # Object storage client
 │   └── logger/                 # Logging utilities
 │
+├── database/                   # SQL bootstrap + setup scripts
 ├── migrations/                 # Alembic database migrations
 ├── tests/                      # Unit and integration tests
 └── docs/                       # Documentation
@@ -163,7 +172,7 @@ gigapdf/
 ## API Overview
 
 ### Interactive Documentation
-
+  
 Once the backend is running, access the API documentation:
 
 | URL | Description |
@@ -323,6 +332,22 @@ celery -A app.tasks.celery_app beat --loglevel=info
 ---
 
 ## Deployment
+
+### Ploi (SSH + Deploy)
+
+```bash
+# Login (first time)
+ploi login
+
+# SSH into the server (read-only unless you explicitly confirm changes)
+ploi ssh ploi@giga-pdf.com
+
+# Deploy the latest code (adjust app name and server if needed)
+ploi deploy gigapdf production
+
+# Run migrations on the server
+ploi run gigapdf production "cd /home/ploi/gigapdf && alembic upgrade head"
+```
 
 ### Docker (Recommended)
 

@@ -26,7 +26,7 @@
   },
   "nav": {
     "features": "Fonctionnalités",
-    "openSource": "Open Source",
+    "openSource": "Open source",
     "pricing": "Tarifs",
     "github": "GitHub",
     "signIn": "Connexion",
@@ -39,8 +39,16 @@
     "billing": "Facturation",
     "sharedWithMe": "Partagés avec moi"
   },
+  "meta": {
+    "title": {
+      "default": "GigaPDF - Éditeur PDF professionnel",
+      "template": "%s | GigaPDF"
+    },
+    "description": "Une plateforme WYSIWYG puissante d'édition PDF avec collaboration en temps réel",
+    "keywords": "PDF, éditeur, WYSIWYG, collaboration, documents"
+  },
   "landing": {
-    "badge": "Éditeur PDF Open Source",
+    "badge": "Éditeur PDF Open source",
     "starOnGithub": "Star sur GitHub",
     "hero": {
       "title": "Édition PDF Professionnelle",
@@ -72,7 +80,7 @@
     "openSource": {
       "title": "Construit par la communauté, pour la communauté",
       "description": "GigaPDF est 100% open source sous licence MIT. Inspectez le code, auto-hébergez, contribuez ou personnalisez selon vos besoins.",
-      "badge": "Open Source",
+      "badge": "Open source",
       "mitLicense": {
         "title": "Licence MIT",
         "description": "Utilisez-le comme vous voulez, commercialement ou personnellement. Sans aucune restriction."
@@ -116,7 +124,7 @@
           }
         },
         "starter": {
-          "name": "Starter",
+          "name": "Démarrage",
           "description": "Pour les particuliers et petites équipes",
           "cta": "Essai gratuit",
           "features": {
@@ -124,7 +132,7 @@
             "apiCalls": "10 000 appels API/mois",
             "documents": "500 documents",
             "editing": "Édition PDF avancée",
-            "support": "Support par email",
+            "support": "Support par e-mail",
             "trial": "Essai gratuit de 14 jours"
           }
         },
@@ -172,10 +180,10 @@
         "features": "Fonctionnalités",
         "pricing": "Tarifs",
         "documentation": "Documentation",
-        "changelog": "Changelog"
+        "changelog": "Journal des modifications"
       },
       "openSource": {
-        "title": "Open Source",
+        "title": "Open source",
         "repository": "Dépôt GitHub",
         "contributing": "Guide de contribution",
         "license": "Licence MIT",
@@ -192,9 +200,13 @@
   },
   "auth": {
     "login": {
+      "meta": {
+        "title": "Connexion",
+        "description": "Connectez-vous à votre compte GigaPDF"
+      },
       "title": "Bon retour",
       "description": "Connectez-vous à votre compte pour continuer",
-      "email": "Email",
+      "email": "E-mail",
       "emailPlaceholder": "nom@exemple.com",
       "password": "Mot de passe",
       "passwordPlaceholder": "Entrez votre mot de passe",
@@ -206,19 +218,23 @@
       "signUp": "S'inscrire",
       "continueWithGoogle": "Continuer avec Google",
       "errors": {
-        "invalidCredentials": "Email ou mot de passe invalide",
-        "emailRequired": "L'email est requis",
+        "invalidCredentials": "E-mail ou mot de passe invalide",
+        "emailRequired": "L'e-mail est requis",
         "passwordRequired": "Le mot de passe est requis",
-        "emailNotVerified": "Votre email n'est pas vérifié",
+        "emailNotVerified": "Votre e-mail n'est pas vérifié",
         "generic": "Une erreur s'est produite lors de la connexion"
       }
     },
     "register": {
+      "meta": {
+        "title": "Inscription",
+        "description": "Créez un nouveau compte GigaPDF"
+      },
       "title": "Créer un compte",
       "description": "Entrez vos informations pour commencer",
       "name": "Nom complet",
       "namePlaceholder": "Jean Dupont",
-      "email": "Email",
+      "email": "E-mail",
       "emailPlaceholder": "nom@exemple.com",
       "password": "Mot de passe",
       "passwordPlaceholder": "Créez un mot de passe",
@@ -234,31 +250,32 @@
       "signUpWithGoogle": "S'inscrire avec Google",
       "errors": {
         "nameRequired": "Le nom est requis",
-        "emailRequired": "L'email est requis",
-        "emailInvalid": "Adresse email invalide",
+        "emailRequired": "L'e-mail est requis",
+        "emailInvalid": "Adresse e-mail invalide",
         "passwordRequired": "Le mot de passe est requis",
         "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
         "passwordMismatch": "Les mots de passe ne correspondent pas",
         "termsRequired": "Vous devez accepter les conditions",
-        "emailExists": "Un compte avec cet email existe déjà",
+        "emailExists": "Un compte avec cet e-mail existe déjà",
         "generic": "Une erreur s'est produite lors de l'inscription"
       }
     },
     "forgotPassword": {
       "title": "Réinitialiser votre mot de passe",
-      "description": "Entrez votre email et nous vous enverrons un lien de réinitialisation",
-      "email": "Email",
+      "description": "Entrez votre e-mail et nous vous enverrons un lien de réinitialisation",
+      "email": "E-mail",
       "emailPlaceholder": "nom@exemple.com",
       "submit": "Envoyer le lien",
       "submitting": "Envoi...",
       "success": {
-        "title": "Vérifiez votre email",
-        "description": "Nous avons envoyé un lien de réinitialisation de mot de passe à votre adresse email."
+        "title": "Vérifiez votre e-mail",
+        "description": "Nous avons envoyé un lien de réinitialisation de mot de passe à votre adresse e-mail."
       },
       "backToLogin": "Retour à la connexion",
       "errors": {
-        "emailRequired": "L'email est requis",
-        "emailNotFound": "Aucun compte trouvé avec cet email",
+        "emailRequired": "L'e-mail est requis",
+        "emailNotFound": "Aucun compte trouvé avec cet e-mail",
+        "sendFailed": "Impossible d'envoyer l'e-mail de réinitialisation. Veuillez réessayer.",
         "generic": "Une erreur s'est produite"
       }
     },
@@ -284,30 +301,35 @@
       }
     },
     "verifyEmail": {
-      "title": "Vérifiez votre email",
-      "description": "Nous avons envoyé un email de vérification à votre adresse. Veuillez cliquer sur le lien pour activer votre compte.",
+      "meta": {
+        "title": "Vérifier l'e-mail",
+        "description": "Vérifiez votre adresse e-mail pour activer votre compte GigaPDF"
+      },
+      "title": "Vérifiez votre e-mail",
+      "description": "Nous avons envoyé un e-mail de vérification à votre adresse. Veuillez cliquer sur le lien pour activer votre compte.",
       "checkSpam": "Si vous ne le voyez pas, vérifiez vos spams.",
-      "resendTitle": "Vous n'avez pas reçu l'email ?",
-      "resendDescription": "Entrez votre adresse email pour recevoir un nouveau lien de vérification.",
-      "email": "Email",
+      "resendTitle": "Vous n'avez pas reçu l'e-mail ?",
+      "resendDescription": "Entrez votre adresse e-mail pour recevoir un nouveau lien de vérification.",
+      "email": "E-mail",
       "emailPlaceholder": "nom@exemple.com",
-      "submit": "Renvoyer l'email",
+      "submit": "Renvoyer l'e-mail",
       "submitting": "Envoi en cours...",
       "success": {
-        "title": "Email envoyé !",
-        "description": "Un nouvel email de vérification a été envoyé à votre adresse."
+        "title": "E-mail envoyé !",
+        "description": "Un nouvel e-mail de vérification a été envoyé à votre adresse."
       },
       "verified": {
-        "title": "Email vérifié !",
-        "description": "Votre email a été vérifié avec succès. Vous pouvez maintenant vous connecter.",
+        "title": "E-mail vérifié !",
+        "description": "Votre e-mail a été vérifié avec succès. Vous pouvez maintenant vous connecter.",
         "goToLogin": "Se connecter"
       },
       "backToLogin": "Retour à la connexion",
       "errors": {
-        "emailRequired": "L'email est requis",
-        "emailNotFound": "Aucun compte trouvé avec cet email",
-        "alreadyVerified": "Cet email est déjà vérifié",
+        "emailRequired": "L'e-mail est requis",
+        "emailNotFound": "Aucun compte trouvé avec cet e-mail",
+        "alreadyVerified": "Cet e-mail est déjà vérifié",
         "tooManyRequests": "Trop de tentatives. Veuillez réessayer dans quelques minutes.",
+        "sendFailed": "Impossible d'envoyer l'e-mail de vérification. Veuillez réessayer.",
         "generic": "Une erreur s'est produite"
       }
     }
@@ -416,6 +438,26 @@
         "shareFailed": "Échec de la génération du lien de partage. Veuillez réessayer."
       }
     },
+    "detail": {
+      "lastModified": "Dernière modification {date}",
+      "actions": {
+        "edit": "Modifier",
+        "download": "Télécharger",
+        "delete": "Supprimer"
+      },
+      "info": {
+        "title": "Informations du document",
+        "description": "Détails sur ce document",
+        "fileName": "Nom du fichier",
+        "fileSize": "Taille du fichier",
+        "created": "Créé le",
+        "lastModified": "Dernière modification"
+      },
+      "description": {
+        "title": "Description",
+        "subtitle": "Description et notes du document"
+      }
+    },
     "upload": {
       "title": "Importer un document",
       "dragDrop": "Glissez-déposez votre PDF ici",
@@ -491,6 +533,11 @@
         "description": "Voulez-vous vraiment supprimer {count} élément(s) ? Cette action est irréversible.",
         "confirm": "Supprimer",
         "cancel": "Annuler"
+      },
+      "errors": {
+        "moveItemsFailed": "Impossible de déplacer certains éléments. Veuillez réessayer.",
+        "deleteItemsFailed": "Impossible de supprimer certains éléments. Veuillez réessayer.",
+        "moveItemFailed": "Impossible de déplacer l'élément. Veuillez réessayer."
       }
     },
     "errors": {
@@ -505,7 +552,7 @@
       "title": "Profil",
       "description": "Gérez vos informations de compte",
       "name": "Nom",
-      "email": "Email",
+      "email": "E-mail",
       "avatar": "Photo de profil",
       "changeAvatar": "Changer la photo",
       "save": "Enregistrer",
@@ -534,7 +581,7 @@
       "themeDark": "Sombre",
       "themeSystem": "Système",
       "notifications": "Notifications",
-      "emailNotifications": "Notifications par email",
+      "emailNotifications": "Notifications par e-mail",
       "pushNotifications": "Notifications push"
     },
     "danger": {
@@ -593,7 +640,21 @@
     "setDefault": "Définir par défaut",
     "manageBillingPortal": "Gérer la facturation",
     "confirmCancel": "Êtes-vous sûr de vouloir annuler votre abonnement ? Vous conserverez l'accès jusqu'à la fin de votre période de facturation.",
-    "confirmRemovePaymentMethod": "Êtes-vous sûr de vouloir supprimer ce moyen de paiement ?"
+    "confirmRemovePaymentMethod": "Êtes-vous sûr de vouloir supprimer ce moyen de paiement ?",
+    "errors": {
+      "upgradeFailed": "Impossible de mettre à niveau l'abonnement. Veuillez réessayer.",
+      "cancelFailed": "Impossible d'annuler l'abonnement. Veuillez réessayer.",
+      "reactivateFailed": "Impossible de réactiver l'abonnement. Veuillez réessayer.",
+      "openPortalFailed": "Impossible d'ouvrir le portail de facturation. Veuillez réessayer.",
+      "removePaymentMethodFailed": "Impossible de supprimer le moyen de paiement. Veuillez réessayer.",
+      "setDefaultFailed": "Impossible de définir le moyen de paiement par défaut. Veuillez réessayer."
+    },
+    "features": {
+      "unlimitedDocuments": "Documents illimités",
+      "upToDocuments": "Jusqu'à {count} documents",
+      "unlimitedApiCalls": "Appels API illimités",
+      "apiCallsPerMonth": "{count} appels API/mois"
+    }
   },
   "editor": {
     "title": "Éditeur PDF",
@@ -611,6 +672,14 @@
     "pendingChanges": "modifications en attente",
     "pageIndicator": "Page {current} sur {total}",
     "collaborators": "{count, plural, =0 {Aucun collaborateur} one {1 collaborateur} other {{count} collaborateurs}}",
+    "connection": {
+      "connected": "Connecté",
+      "disconnected": "Déconnecté"
+    },
+    "canvas": {
+      "defaultText": "Texte",
+      "textPlaceholder": "Champ de texte"
+    },
     "error": {
       "title": "Erreur de chargement",
       "backToDocuments": "Retour aux documents"
@@ -656,7 +725,8 @@
       "fillColor": "Couleur de remplissage",
       "strokeWidth": "Épaisseur du contour",
       "duplicate": "Dupliquer",
-      "delete": "Supprimer"
+      "delete": "Supprimer",
+      "transparent": "Transparent"
     },
     "tools": {
       "select": "Sélectionner",
@@ -783,7 +853,7 @@
     "fields": {
       "name": "Nom de l'entreprise",
       "namePlaceholder": "Ma Société",
-      "email": "Email de contact",
+      "email": "E-mail de contact",
       "emailPlaceholder": "contact@masociete.com",
       "description": "Description",
       "descriptionPlaceholder": "Description de votre entreprise"
@@ -805,7 +875,7 @@
       "title": "Membres de l'équipe",
       "description": "Gérez les membres de votre entreprise",
       "invite": "Inviter",
-      "email": "Email",
+      "email": "E-mail",
       "role": "Rôle",
       "joined": "Membre depuis",
       "actions": "Actions"
@@ -814,15 +884,15 @@
       "title": "Invitations en attente",
       "description": "Invitations envoyées qui n'ont pas encore été acceptées",
       "empty": "Aucune invitation en attente",
-      "email": "Email",
+      "email": "E-mail",
       "role": "Rôle",
       "expires": "Expire le",
       "actions": "Actions"
     },
     "invite": {
       "title": "Inviter un membre",
-      "description": "Envoyez une invitation par email pour rejoindre votre entreprise",
-      "email": "Adresse email",
+      "description": "Envoyez une invitation par e-mail pour rejoindre votre entreprise",
+      "email": "Adresse e-mail",
       "emailPlaceholder": "membre@exemple.com",
       "role": "Rôle",
       "button": "Envoyer l'invitation"
@@ -899,7 +969,7 @@
         "description": "GigaPDF a pour mission de démocratiser l'édition PDF en offrant un outil professionnel, accessible et entièrement open source. Nous croyons que chacun devrait avoir accès à des outils de qualité pour gérer ses documents PDF."
       },
       "openSource": {
-        "title": "Open Source",
+        "title": "Open source",
         "description": "GigaPDF est un projet 100% open source sous licence MIT. Cela signifie que vous pouvez inspecter le code source, contribuer au projet, ou même l'héberger vous-même sur votre propre infrastructure.",
         "features": {
           "transparent": "Code source transparent et auditable",
@@ -921,7 +991,7 @@
       },
       "contact": {
         "title": "Nous contacter",
-        "email": "Email",
+        "email": "E-mail",
         "phone": "Téléphone",
         "formLink": "Utilisez notre formulaire de contact"
       }
@@ -940,7 +1010,7 @@
         "title": "Données collectées",
         "account": {
           "title": "Données de compte",
-          "email": "Adresse email",
+          "email": "Adresse e-mail",
           "name": "Nom et prénom",
           "password": "Mot de passe (chiffré)"
         },
@@ -1049,12 +1119,12 @@
         "monitoring": "Surveillance et audit réguliers de nos systèmes"
       },
       "openSource": {
-        "title": "Open Source et transparence",
+        "title": "Open source et transparence",
         "description": "GigaPDF étant open source, vous pouvez auditer notre code pour vérifier comment nous traitons vos données. Le code source est disponible sur GitHub."
       },
       "changes": {
         "title": "Modifications de cette politique",
-        "description": "Nous pouvons mettre à jour cette politique de temps en temps. Nous vous informerons de tout changement significatif par email ou via une notification sur le site."
+        "description": "Nous pouvons mettre à jour cette politique de temps en temps. Nous vous informerons de tout changement significatif par e-mail ou via une notification sur le site."
       },
       "contact": {
         "title": "Contact",
@@ -1125,7 +1195,7 @@
         "responsibility": "Vous êtes seul responsable du contenu que vous téléchargez et de sa conformité aux lois applicables."
       },
       "openSource": {
-        "title": "Licence Open Source",
+        "title": "Licence open source",
         "description": "GigaPDF est un logiciel open source distribué sous licence MIT.",
         "license": "Vous pouvez utiliser, copier, modifier et distribuer le code source",
         "source": "Le code source est disponible sur GitHub",
@@ -1158,7 +1228,7 @@
       },
       "modifications": {
         "title": "Modifications des conditions",
-        "description": "Nous pouvons modifier ces conditions à tout moment. Les modifications importantes seront notifiées par email ou sur le site. Votre utilisation continue du service après modification constitue une acceptation des nouvelles conditions."
+        "description": "Nous pouvons modifier ces conditions à tout moment. Les modifications importantes seront notifiées par e-mail ou sur le site. Votre utilisation continue du service après modification constitue une acceptation des nouvelles conditions."
       },
       "law": {
         "title": "Droit applicable",
@@ -1176,7 +1246,7 @@
       "info": {
         "title": "Informations de contact",
         "email": {
-          "title": "Email",
+          "title": "E-mail",
           "description": "Pour toute demande générale"
         },
         "phone": {
@@ -1199,8 +1269,8 @@
         "firstNamePlaceholder": "Votre prénom",
         "lastName": "Nom",
         "lastNamePlaceholder": "Votre nom",
-        "email": "Email",
-        "emailPlaceholder": "votre@email.com",
+        "email": "E-mail",
+        "emailPlaceholder": "votre@e-mail.com",
         "subject": "Sujet",
         "subjectPlaceholder": "Objet de votre message",
         "message": "Message",
@@ -1218,11 +1288,11 @@
   "sharing": {
     "dialog": {
       "title": "Partager le document",
-      "description": "Partagez ce document avec d'autres personnes par email",
-      "email": "Adresse email",
+      "description": "Partagez ce document avec d'autres personnes par e-mail",
+      "email": "Adresse e-mail",
       "emailPlaceholder": "nom@exemple.com",
-      "emailRequired": "Veuillez entrer une adresse email",
-      "permission": "Permission",
+      "emailRequired": "Veuillez entrer une adresse e-mail",
+      "permission": "Autorisation",
       "permissions": {
         "view": "Lecture seule",
         "edit": "Édition"
@@ -1240,7 +1310,7 @@
       "owner": "Propriétaire",
       "noShares": "Ce document n'est partagé avec personne",
       "revokeAccess": "Révoquer l'accès",
-      "changePermission": "Modifier la permission"
+      "changePermission": "Modifier l'autorisation"
     },
     "publicLink": {
       "title": "Lien public",

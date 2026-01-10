@@ -39,6 +39,14 @@
     "billing": "Billing",
     "sharedWithMe": "Shared with me"
   },
+  "meta": {
+    "title": {
+      "default": "GigaPDF - Professional PDF Editor",
+      "template": "%s | GigaPDF"
+    },
+    "description": "A powerful WYSIWYG PDF editing platform with real-time collaboration",
+    "keywords": "PDF, editor, WYSIWYG, collaboration, documents"
+  },
   "landing": {
     "badge": "Open Source PDF Editor",
     "starOnGithub": "Star on GitHub",
@@ -192,6 +200,10 @@
   },
   "auth": {
     "login": {
+      "meta": {
+        "title": "Sign In",
+        "description": "Sign in to your GigaPDF account"
+      },
       "title": "Welcome back",
       "description": "Sign in to your account to continue",
       "email": "Email",
@@ -214,6 +226,10 @@
       }
     },
     "register": {
+      "meta": {
+        "title": "Sign Up",
+        "description": "Create a new GigaPDF account"
+      },
       "title": "Create an account",
       "description": "Enter your details to get started",
       "name": "Full name",
@@ -259,6 +275,7 @@
       "errors": {
         "emailRequired": "Email is required",
         "emailNotFound": "No account found with this email",
+        "sendFailed": "Failed to send reset email. Please try again.",
         "generic": "An error occurred"
       }
     },
@@ -284,6 +301,10 @@
       }
     },
     "verifyEmail": {
+      "meta": {
+        "title": "Verify Email",
+        "description": "Verify your email address to activate your GigaPDF account"
+      },
       "title": "Verify your email",
       "description": "We've sent a verification email to your address. Please click the link to activate your account.",
       "checkSpam": "If you don't see it, check your spam folder.",
@@ -308,6 +329,7 @@
         "emailNotFound": "No account found with this email",
         "alreadyVerified": "This email is already verified",
         "tooManyRequests": "Too many attempts. Please try again in a few minutes.",
+        "sendFailed": "Failed to send verification email. Please try again.",
         "generic": "An error occurred"
       }
     }
@@ -416,6 +438,26 @@
         "shareFailed": "Failed to generate share link. Please try again."
       }
     },
+    "detail": {
+      "lastModified": "Last modified {date}",
+      "actions": {
+        "edit": "Edit",
+        "download": "Download",
+        "delete": "Delete"
+      },
+      "info": {
+        "title": "Document Information",
+        "description": "Details about this document",
+        "fileName": "File Name",
+        "fileSize": "File Size",
+        "created": "Created",
+        "lastModified": "Last Modified"
+      },
+      "description": {
+        "title": "Description",
+        "subtitle": "Document description and notes"
+      }
+    },
     "upload": {
       "title": "Upload Document",
       "dragDrop": "Drag and drop your PDF here",
@@ -491,6 +533,11 @@
         "description": "Are you sure you want to delete {count} item(s)? This action cannot be undone.",
         "confirm": "Delete",
         "cancel": "Cancel"
+      },
+      "errors": {
+        "moveItemsFailed": "Failed to move some items. Please try again.",
+        "deleteItemsFailed": "Failed to delete some items. Please try again.",
+        "moveItemFailed": "Failed to move item. Please try again."
       }
     },
     "errors": {
@@ -593,7 +640,21 @@
     "setDefault": "Set as default",
     "manageBillingPortal": "Manage billing",
     "confirmCancel": "Are you sure you want to cancel your subscription? You'll keep access until the end of your billing period.",
-    "confirmRemovePaymentMethod": "Are you sure you want to remove this payment method?"
+    "confirmRemovePaymentMethod": "Are you sure you want to remove this payment method?",
+    "errors": {
+      "upgradeFailed": "Failed to upgrade subscription. Please try again.",
+      "cancelFailed": "Failed to cancel subscription. Please try again.",
+      "reactivateFailed": "Failed to reactivate subscription. Please try again.",
+      "openPortalFailed": "Failed to open billing portal. Please try again.",
+      "removePaymentMethodFailed": "Failed to remove payment method. Please try again.",
+      "setDefaultFailed": "Failed to set default payment method. Please try again."
+    },
+    "features": {
+      "unlimitedDocuments": "Unlimited documents",
+      "upToDocuments": "Up to {count} documents",
+      "unlimitedApiCalls": "Unlimited API calls",
+      "apiCallsPerMonth": "{count} API calls/month"
+    }
   },
   "editor": {
     "title": "PDF Editor",
@@ -611,6 +672,14 @@
     "pendingChanges": "pending changes",
     "pageIndicator": "Page {current} of {total}",
     "collaborators": "{count, plural, =0 {No collaborators} one {1 collaborator} other {{count} collaborators}}",
+    "connection": {
+      "connected": "Connected",
+      "disconnected": "Disconnected"
+    },
+    "canvas": {
+      "defaultText": "Text",
+      "textPlaceholder": "Text field"
+    },
     "error": {
       "title": "Loading Error",
       "backToDocuments": "Back to documents"
@@ -656,7 +725,8 @@
       "fillColor": "Fill color",
       "strokeWidth": "Stroke width",
       "duplicate": "Duplicate",
-      "delete": "Delete"
+      "delete": "Delete",
+      "transparent": "Transparent"
     },
     "tools": {
       "select": "Select",

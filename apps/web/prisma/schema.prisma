@@ -1,40 +1,23 @@
-// =============================================================================
-// Prisma Schema for Better Auth
-// =============================================================================
-// IMPORTANT: This schema is ONLY for generating Prisma Client types.
-// DO NOT use 'prisma db push' - it will delete Alembic-managed tables!
-//
-// Database migrations are handled by:
-// 1. Alembic - for FastAPI backend tables (stored_documents, plans, etc.)
-// 2. deploy/init-betterauth-tables.sql - for Better Auth tables
-// =============================================================================
+generator client {
+  provider = "prisma-client-js"
+}
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
-// =============================================================================
-// Better Auth Tables - Types for Prisma Client
-// Actual table creation is done via SQL script, not Prisma migrations
-// =============================================================================
-
 model User {
-  id            String   @id @default(uuid())
-  email         String   @unique
-  emailVerified Boolean  @default(false)
+  id            String    @id @default(uuid())
+  email         String    @unique
+  emailVerified Boolean   @default(false)
   name          String?
   image         String?
-  locale        String   @default("fr")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  accounts Account[]
-  sessions Session[]
+  locale        String?   @default("fr")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+  accounts      Account[]
+  sessions      Session[]
 
   @@map("users")
 }
@@ -52,11 +35,10 @@ model Account {
   password              String?
   idToken               String?
   createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  updatedAt             DateTime  @default(now()) @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
+  @@index([userId], map: "accounts_userid_idx")
   @@map("accounts")
 }
 
@@ -68,11 +50,10 @@ model Session {
   ipAddress String?
   userAgent String?
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
+  @@index([userId], map: "sessions_userid_idx")
   @@map("sessions")
 }
 
@@ -82,19 +63,401 @@ model Verification {
   value      String
   expiresAt  DateTime
   createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  updatedAt  DateTime @default(now()) @updatedAt
 
   @@index([identifier])
   @@map("verification")
 }
 
-// JWT plugin - stores JWKS keys for JWT signing
-model Jwks {
-  id         String    @id
-  publicKey  String
-  privateKey String
-  createdAt  DateTime
-  expiresAt  DateTime?
+model activity_logs {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  document_id      String?           @db.Uuid
+  user_id          String            @db.VarChar(255)
+  user_email       String?           @db.VarChar(255)
+  user_name        String?           @db.VarChar(255)
+  action           String            @db.VarChar(50)
+  resource_type    String?           @default("document") @db.VarChar(50)
+  extra_data       Json?
+  ip_address       String?           @db.VarChar(45)
+  user_agent       String?           @db.VarChar(500)
+  tenant_id        String?           @db.Uuid
+  created_at       DateTime          @default(now()) @db.Timestamptz(6)
+  stored_documents stored_documents? @relation(fields: [document_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@map("jwks")
+  @@index([action], map: "idx_activity_logs_action")
+  @@index([created_at], map: "idx_activity_logs_created")
+  @@index([document_id], map: "idx_activity_logs_document")
+  @@index([document_id, created_at], map: "idx_activity_logs_document_created")
+  @@index([tenant_id], map: "idx_activity_logs_tenant")
+  @@index([user_id], map: "idx_activity_logs_user")
+}
+
+model admin_accounts {
+  id                    String      @id
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  idToken               String?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @default(now())
+  admin_users           admin_users @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "admin_accounts_userid_idx")
+}
+
+model admin_sessions {
+  id          String      @id
+  userId      String
+  token       String      @unique
+  expiresAt   DateTime
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @default(now())
+  admin_users admin_users @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "admin_sessions_userid_idx")
+}
+
+model admin_users {
+  id             String           @id
+  email          String           @unique
+  emailVerified  Boolean          @default(false)
+  name           String?
+  image          String?
+  role           String           @default("admin")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @default(now())
+  admin_accounts admin_accounts[]
+  admin_sessions admin_sessions[]
+}
+
+model admin_verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now())
+
+  @@index([identifier])
+}
+
+model async_jobs {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  celery_task_id String?   @db.VarChar(255)
+  job_type       String    @db.VarChar(50)
+  status         String?   @default("pending") @db.VarChar(20)
+  progress       Float?    @default(0.0)
+  document_id    String?   @db.Uuid
+  owner_id       String    @db.VarChar(255)
+  input_params   Json?
+  result         Json?
+  error_code     String?   @db.VarChar(50)
+  error_message  String?
+  started_at     DateTime? @db.Timestamptz(6)
+  completed_at   DateTime? @db.Timestamptz(6)
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([owner_id], map: "idx_async_jobs_owner")
+  @@index([status], map: "idx_async_jobs_status")
+  @@index([job_type], map: "idx_async_jobs_type")
+}
+
+model collaboration_sessions {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  document_id  String   @db.Uuid
+  user_id      String   @db.VarChar(255)
+  user_name    String   @db.VarChar(255)
+  user_color   String?  @default("#3B82F6") @db.VarChar(7)
+  socket_id    String?  @db.VarChar(255)
+  cursor_page  Int?
+  cursor_x     Float?
+  cursor_y     Float?
+  is_active    Boolean? @default(true)
+  joined_at    DateTime @default(now()) @db.Timestamptz(6)
+  last_seen_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([document_id, is_active], map: "idx_collab_sessions_active")
+  @@index([document_id], map: "idx_collab_sessions_document")
+}
+
+model document_shares {
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  document_id         String           @db.Uuid
+  shared_with_user_id String?          @db.VarChar(255)
+  share_token         String?          @unique @db.VarChar(64)
+  permission          String?          @default("view") @db.VarChar(20)
+  expires_at          DateTime?        @db.Timestamptz(6)
+  created_by          String           @db.VarChar(255)
+  created_at          DateTime         @default(now()) @db.Timestamptz(6)
+  stored_documents    stored_documents @relation(fields: [document_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([document_id], map: "idx_document_shares_document")
+  @@index([share_token], map: "idx_document_shares_token")
+  @@index([shared_with_user_id], map: "idx_document_shares_user")
+}
+
+model document_versions {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  document_id      String           @db.Uuid
+  version_number   Int
+  file_path        String           @db.VarChar(500)
+  file_size_bytes  Int?             @default(0)
+  file_hash        String           @db.VarChar(64)
+  comment          String?
+  created_by       String           @db.VarChar(255)
+  created_at       DateTime         @default(now()) @db.Timestamptz(6)
+  encryption_key   String?
+  is_encrypted     Boolean          @default(false)
+  stored_documents stored_documents @relation(fields: [document_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([document_id, version_number], map: "idx_document_versions_number")
+  @@index([document_id], map: "idx_document_versions_document")
+}
+
+model element_locks {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  document_id          String   @db.Uuid
+  element_id           String   @db.Uuid
+  locked_by_user_id    String   @db.VarChar(255)
+  locked_by_session_id String   @db.Uuid
+  locked_at            DateTime @default(now()) @db.Timestamptz(6)
+  expires_at           DateTime @db.Timestamptz(6)
+
+  @@unique([document_id, element_id], map: "idx_element_locks_element")
+  @@index([document_id], map: "idx_element_locks_document")
+}
+
+model folders {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String             @db.VarChar(255)
+  owner_id         String             @db.VarChar(255)
+  parent_id        String?            @db.Uuid
+  path             String?            @default("/") @db.VarChar(1000)
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime           @default(now()) @db.Timestamptz(6)
+  folders          folders?           @relation("foldersTofolders", fields: [parent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_folders    folders[]          @relation("foldersTofolders")
+  stored_documents stored_documents[]
+
+  @@index([owner_id], map: "idx_folders_owner")
+  @@index([parent_id], map: "idx_folders_parent")
+}
+
+model plans {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug                String    @unique(map: "idx_plans_slug") @db.VarChar(50)
+  name                String    @db.VarChar(100)
+  description         String?
+  price               Decimal?  @default(0) @db.Decimal(10, 2)
+  currency            String?   @default("EUR") @db.VarChar(3)
+  interval            String?   @default("month") @db.VarChar(10)
+  stripe_product_id   String?   @db.VarChar(255)
+  stripe_price_id     String?   @db.VarChar(255)
+  stripe_synced_at    DateTime? @db.Timestamptz(6)
+  storage_limit_bytes BigInt?   @default(5368709120)
+  api_calls_limit     Int?      @default(1000)
+  document_limit      Int?      @default(100)
+  is_tenant_plan      Boolean?  @default(false)
+  max_members         Int?      @default(1)
+  linked_tenant_id    String?   @db.Uuid
+  features            Json?
+  is_active           Boolean?  @default(true)
+  is_popular          Boolean?  @default(false)
+  display_order       Int?      @default(0)
+  cta_text            String?   @default("Get Started") @db.VarChar(50)
+  trial_days          Int?
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime  @default(now()) @db.Timestamptz(6)
+  tenants             tenants[]
+
+  @@index([is_active], map: "idx_plans_active")
+  @@index([linked_tenant_id], map: "idx_plans_linked_tenant")
+  @@index([display_order], map: "idx_plans_order")
+  @@index([is_tenant_plan], map: "idx_plans_tenant")
+}
+
+model stored_documents {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String              @db.VarChar(255)
+  owner_id          String              @db.VarChar(255)
+  folder_id         String?             @db.Uuid
+  page_count        Int?                @default(0)
+  current_version   Int?                @default(1)
+  file_size_bytes   Int?                @default(0)
+  mime_type         String?             @default("application/pdf") @db.VarChar(100)
+  tags              Json?               @default("[]")
+  metadata_cache    Json?
+  thumbnail_path    String?             @db.VarChar(500)
+  is_deleted        Boolean?            @default(false)
+  deleted_at        DateTime?           @db.Timestamptz(6)
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime            @default(now()) @db.Timestamptz(6)
+  activity_logs     activity_logs[]
+  document_shares   document_shares[]
+  document_versions document_versions[]
+  folders           folders?            @relation(fields: [folder_id], references: [id], onUpdate: NoAction)
+  tenant_documents  tenant_documents[]
+
+  @@index([is_deleted], map: "idx_stored_documents_deleted")
+  @@index([folder_id], map: "idx_stored_documents_folder")
+  @@index([owner_id], map: "idx_stored_documents_owner")
+}
+
+model tenant_documents {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id        String           @db.Uuid
+  document_id      String           @db.Uuid
+  added_by_id      String           @db.Uuid
+  access_level     String           @default("read") @db.VarChar(20)
+  added_at         DateTime         @default(now()) @db.Timestamptz(6)
+  user_quotas      user_quotas      @relation(fields: [added_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  stored_documents stored_documents @relation(fields: [document_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants          tenants          @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenant_id, document_id], map: "uq_tenant_document")
+  @@index([document_id], map: "ix_tenant_documents_document_id")
+  @@index([tenant_id], map: "ix_tenant_documents_tenant_id")
+}
+
+model tenant_invitations {
+  id                                                         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                                                  String       @db.Uuid
+  email                                                      String       @db.VarChar(255)
+  role                                                       tenantrole   @default(member)
+  token                                                      String       @unique @db.VarChar(255)
+  invited_by_id                                              String       @db.Uuid
+  is_accepted                                                Boolean      @default(false)
+  accepted_at                                                DateTime?    @db.Timestamptz(6)
+  accepted_by_id                                             String?      @db.Uuid
+  expires_at                                                 DateTime     @db.Timestamptz(6)
+  created_at                                                 DateTime     @default(now()) @db.Timestamptz(6)
+  user_quotas_tenant_invitations_accepted_by_idTouser_quotas user_quotas? @relation("tenant_invitations_accepted_by_idTouser_quotas", fields: [accepted_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user_quotas_tenant_invitations_invited_by_idTouser_quotas  user_quotas  @relation("tenant_invitations_invited_by_idTouser_quotas", fields: [invited_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tenants                                                    tenants      @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([email], map: "ix_tenant_invitations_email")
+  @@index([tenant_id], map: "ix_tenant_invitations_tenant_id")
+  @@index([token], map: "ix_tenant_invitations_token")
+}
+
+model tenant_members {
+  id                 String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id          String      @db.Uuid
+  user_id            String      @db.Uuid
+  role               tenantrole  @default(member)
+  is_active          Boolean     @default(true)
+  custom_permissions String?
+  joined_at          DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime    @default(now()) @db.Timestamptz(6)
+  last_active_at     DateTime?   @db.Timestamptz(6)
+  tenants            tenants     @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user_quotas        user_quotas @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenant_id, user_id], map: "uq_tenant_member")
+  @@index([role], map: "ix_tenant_members_role")
+  @@index([tenant_id], map: "ix_tenant_members_tenant_id")
+  @@index([user_id], map: "ix_tenant_members_user_id")
+}
+
+model tenants {
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                   String               @db.VarChar(255)
+  slug                   String               @unique @db.VarChar(100)
+  description            String?
+  logo_url               String?              @db.VarChar(500)
+  email                  String               @db.VarChar(255)
+  phone                  String?              @db.VarChar(50)
+  website                String?              @db.VarChar(255)
+  address_line1          String?              @db.VarChar(255)
+  address_line2          String?              @db.VarChar(255)
+  city                   String?              @db.VarChar(100)
+  state                  String?              @db.VarChar(100)
+  postal_code            String?              @db.VarChar(20)
+  country                String?              @db.VarChar(2)
+  plan_id                String?              @db.Uuid
+  status                 tenantstatus         @default(trial)
+  trial_start_at         DateTime?            @db.Timestamptz(6)
+  trial_ends_at          DateTime?            @db.Timestamptz(6)
+  has_used_trial         Boolean              @default(false)
+  stripe_customer_id     String?              @unique @db.VarChar(255)
+  stripe_subscription_id String?              @db.VarChar(255)
+  storage_limit_bytes    BigInt?              @default(5368709120)
+  storage_used_bytes     BigInt?              @default(0)
+  api_calls_limit        Int?                 @default(10000)
+  api_calls_used         Int?                 @default(0)
+  api_calls_reset_at     DateTime?            @db.Timestamptz(6)
+  document_limit         Int?                 @default(1000)
+  document_count         Int?                 @default(0)
+  max_members            Int?                 @default(5)
+  allow_member_invites   Boolean?             @default(true)
+  require_2fa            Boolean?             @default(false)
+  created_at             DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime             @default(now()) @db.Timestamptz(6)
+  tenant_documents       tenant_documents[]
+  tenant_invitations     tenant_invitations[]
+  tenant_members         tenant_members[]
+  plans                  plans?               @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([created_at], map: "ix_tenants_created_at")
+  @@index([slug], map: "ix_tenants_slug")
+  @@index([status], map: "ix_tenants_status")
+}
+
+model user_quotas {
+  id                                                                String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                                                           String               @unique @db.VarChar(255)
+  email                                                             String?              @db.VarChar(255)
+  storage_used_bytes                                                BigInt?              @default(0)
+  storage_limit_bytes                                               BigInt?              @default(5368709120)
+  document_count                                                    Int?                 @default(0)
+  document_limit                                                    Int?                 @default(1000)
+  api_calls_used                                                    Int?                 @default(0)
+  api_calls_limit                                                   Int?                 @default(1000)
+  api_calls_reset_at                                                DateTime             @default(now()) @db.Timestamptz(6)
+  plan_type                                                         String?              @default("free") @db.VarChar(20)
+  plan_expires_at                                                   DateTime?            @db.Timestamptz(6)
+  stripe_customer_id                                                String?              @unique @db.VarChar(255)
+  stripe_subscription_id                                            String?              @db.VarChar(255)
+  subscription_status                                               String?              @default("none") @db.VarChar(50)
+  current_period_end                                                DateTime?            @db.Timestamptz(6)
+  cancel_at_period_end                                              Boolean?             @default(false)
+  trial_start_at                                                    DateTime?            @db.Timestamptz(6)
+  trial_ends_at                                                     DateTime?            @db.Timestamptz(6)
+  has_used_trial                                                    Boolean?             @default(false)
+  is_suspended                                                      Boolean?             @default(false)
+  suspended_at                                                      DateTime?            @db.Timestamptz(6)
+  suspension_reason                                                 String?              @db.VarChar(255)
+  payment_failed_count                                              Int?                 @default(0)
+  last_payment_failed_at                                            DateTime?            @db.Timestamptz(6)
+  updated_at                                                        DateTime             @default(now()) @db.Timestamptz(6)
+  tenant_documents                                                  tenant_documents[]
+  tenant_invitations_tenant_invitations_accepted_by_idTouser_quotas tenant_invitations[] @relation("tenant_invitations_accepted_by_idTouser_quotas")
+  tenant_invitations_tenant_invitations_invited_by_idTouser_quotas  tenant_invitations[] @relation("tenant_invitations_invited_by_idTouser_quotas")
+  tenant_members                                                    tenant_members[]
+
+  @@index([stripe_customer_id], map: "idx_user_quotas_stripe")
+  @@index([user_id], map: "idx_user_quotas_user_id")
+}
+
+enum tenantrole {
+  owner
+  admin
+  manager
+  member
+  viewer
+}
+
+enum tenantstatus {
+  active
+  suspended
+  trial
+  cancelled
 }

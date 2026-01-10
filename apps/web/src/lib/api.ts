@@ -197,6 +197,24 @@ class APIClient {
     return response.data;
   }
 
+  async createDocumentVersion(
+    storedDocumentId: string,
+    params: {
+      document_id: string;
+      comment?: string;
+    }
+  ): Promise<{ stored_document_id: string; version: number; created_at: string }> {
+    const response = await this.request<APIResponse<{
+      stored_document_id: string;
+      version: number;
+      created_at: string;
+    }>>(`/api/v1/storage/documents/${storedDocumentId}/versions`, {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+    return response.data;
+  }
+
   async loadDocument(storedDocumentId: string): Promise<{
     document_id: string;
     stored_document_id: string;

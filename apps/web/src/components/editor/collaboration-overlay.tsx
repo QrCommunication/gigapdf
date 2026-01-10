@@ -196,7 +196,7 @@ export function CollaborationStatus({
         className={`h-2 w-2 rounded-full ${
           isConnected ? "bg-green-500" : "bg-red-500"
         }`}
-        title={isConnected ? "Connected" : "Disconnected"}
+        title={isConnected ? t("connection.connected") : t("connection.disconnected")}
       />
 
       {/* Compteur de collaborateurs */}

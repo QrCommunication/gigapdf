@@ -175,6 +175,7 @@ interface ColorPickerProps {
 }
 
 function ColorPicker({ color, onChange, label }: ColorPickerProps) {
+  const t = useTranslations("editor.toolbar");
   const presetColors = [
     "#000000",
     "#ffffff",
@@ -212,7 +213,7 @@ function ColorPicker({ color, onChange, label }: ColorPickerProps) {
             style={{
               backgroundColor: preset === "transparent" ? undefined : preset,
             }}
-            title={preset === "transparent" ? "Transparent" : preset}
+            title={preset === "transparent" ? t("transparent") : preset}
           />
         ))}
       </div>

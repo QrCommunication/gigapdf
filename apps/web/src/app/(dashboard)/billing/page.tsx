@@ -104,7 +104,7 @@ export default function BillingPage() {
       await loadBillingData();
     } catch (err) {
       console.error("Failed to upgrade:", err);
-      setError(err instanceof Error ? err.message : "Failed to upgrade");
+      setError(err instanceof Error ? err.message : t("errors.upgradeFailed"));
     } finally {
       setActionLoading(null);
     }
@@ -119,7 +119,7 @@ export default function BillingPage() {
       await loadBillingData();
     } catch (err) {
       console.error("Failed to cancel:", err);
-      setError(err instanceof Error ? err.message : "Failed to cancel");
+      setError(err instanceof Error ? err.message : t("errors.cancelFailed"));
     } finally {
       setActionLoading(null);
     }
@@ -132,7 +132,7 @@ export default function BillingPage() {
       await loadBillingData();
     } catch (err) {
       console.error("Failed to reactivate:", err);
-      setError(err instanceof Error ? err.message : "Failed to reactivate");
+      setError(err instanceof Error ? err.message : t("errors.reactivateFailed"));
     } finally {
       setActionLoading(null);
     }
@@ -147,7 +147,7 @@ export default function BillingPage() {
       window.location.href = session.url;
     } catch (err) {
       console.error("Failed to open portal:", err);
-      setError(err instanceof Error ? err.message : "Failed to open billing portal");
+      setError(err instanceof Error ? err.message : t("errors.openPortalFailed"));
       setActionLoading(null);
     }
   };
@@ -161,7 +161,7 @@ export default function BillingPage() {
       await loadBillingData();
     } catch (err) {
       console.error("Failed to remove payment method:", err);
-      setError(err instanceof Error ? err.message : "Failed to remove payment method");
+      setError(err instanceof Error ? err.message : t("errors.removePaymentMethodFailed"));
     } finally {
       setActionLoading(null);
     }
@@ -174,7 +174,7 @@ export default function BillingPage() {
       await loadBillingData();
     } catch (err) {
       console.error("Failed to set default:", err);
-      setError(err instanceof Error ? err.message : "Failed to set default payment method");
+      setError(err instanceof Error ? err.message : t("errors.setDefaultFailed"));
     } finally {
       setActionLoading(null);
     }
@@ -191,16 +191,16 @@ export default function BillingPage() {
 
     // Documents
     if (plan.document_limit === -1) {
-      features.push("Unlimited documents");
+      features.push(t("features.unlimitedDocuments"));
     } else {
-      features.push(`Up to ${plan.document_limit} documents`);
+      features.push(t("features.upToDocuments", { count: plan.document_limit }));
     }
 
     // API calls
     if (plan.api_calls_limit === -1) {
-      features.push("Unlimited API calls");
+      features.push(t("features.unlimitedApiCalls"));
     } else {
-      features.push(`${plan.api_calls_limit.toLocaleString()} API calls/month`);
+      features.push(t("features.apiCallsPerMonth", { count: plan.api_calls_limit.toLocaleString() }));
     }
 
     // Additional features from plan.features

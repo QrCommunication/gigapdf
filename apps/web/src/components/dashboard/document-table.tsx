@@ -249,7 +249,7 @@ export function DocumentTable({
       }
 
       if (status.status === "failed") {
-        throw new Error(status.error || "Export failed");
+        throw new Error(status.error || tCard("errors.exportFailed"));
       }
 
       const blob = await api.getExportResult(docId, job.job_id);

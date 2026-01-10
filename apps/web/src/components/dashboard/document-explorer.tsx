@@ -264,7 +264,7 @@ export function DocumentExplorer({
       onRefresh();
     } catch (error) {
       console.error("Failed to move items:", error);
-      alert("Failed to move some items. Please try again.");
+      alert(t("errors.moveItemsFailed"));
     } finally {
       setMoving(false);
       setMoveDialogOpen(false);
@@ -290,7 +290,7 @@ export function DocumentExplorer({
       onRefresh();
     } catch (error) {
       console.error("Failed to delete items:", error);
-      alert("Failed to delete some items. Please try again.");
+      alert(t("errors.deleteItemsFailed"));
     } finally {
       setDeleting(false);
       setDeleteDialogOpen(false);
@@ -385,7 +385,7 @@ export function DocumentExplorer({
       onRefresh();
     } catch (error) {
       console.error("Failed to move item:", error);
-      alert("Failed to move item. Please try again.");
+      alert(t("errors.moveItemFailed"));
     } finally {
       setMoving(false);
       setDraggedItem(null);

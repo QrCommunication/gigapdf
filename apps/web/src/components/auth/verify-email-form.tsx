@@ -51,7 +51,9 @@ export function VerifyEmailForm() {
 
       if (result.error) {
         const errorMessage = result.error.message || t("errors.generic");
-        if (errorMessage.toLowerCase().includes("already verified")) {
+        if (errorMessage === "verification_email_failed") {
+          setError(t("errors.sendFailed"));
+        } else if (errorMessage.toLowerCase().includes("already verified")) {
           setError(t("errors.alreadyVerified"));
         } else if (errorMessage.toLowerCase().includes("not found")) {
           setError(t("errors.emailNotFound"));

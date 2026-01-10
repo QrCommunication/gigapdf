@@ -32,7 +32,12 @@ export default function ForgotPasswordPage() {
       });
 
       if (result.error) {
-        setError(result.error.message || t("errors.generic"));
+        const message = result.error.message;
+        if (message === "reset_email_failed") {
+          setError(t("errors.sendFailed"));
+        } else {
+          setError(message || t("errors.generic"));
+        }
       } else {
         setSuccess(true);
       }

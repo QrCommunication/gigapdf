@@ -17,7 +17,7 @@ export function AdminHeader() {
           <div className="flex items-center gap-4">
             <Link href="/dashboard" className="flex items-center gap-3">
               <Logo size="sm" />
-              <span className="text-sm font-medium text-muted-foreground">Admin</span>
+              <span className="text-sm font-medium text-muted-foreground">{t("adminLabel")}</span>
             </Link>
           </div>
 
