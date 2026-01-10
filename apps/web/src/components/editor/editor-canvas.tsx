@@ -122,6 +122,20 @@ export function EditorCanvas({
   const fabricRef = useRef<FabricCanvas | null>(null);
   const previousPageRef = useRef<string | null>(null);
 
+  // Refs for callbacks to avoid stale closures in Fabric.js event handlers
+  const onElementAddedRef = useRef(onElementAdded);
+  const onElementModifiedRef = useRef(onElementModified);
+  const onElementRemovedRef = useRef(onElementRemoved);
+  const onSelectionChangedRef = useRef(onSelectionChanged);
+
+  // Update refs when props change
+  useEffect(() => {
+    onElementAddedRef.current = onElementAdded;
+    onElementModifiedRef.current = onElementModified;
+    onElementRemovedRef.current = onElementRemoved;
+    onSelectionChangedRef.current = onSelectionChanged;
+  }, [onElementAdded, onElementModified, onElementRemoved, onSelectionChanged]);
+
   // Historique pour undo/redo
   const [historyStack, setHistoryStack] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -277,28 +291,29 @@ export function EditorCanvas({
     []
   );
 
-  // Handlers d'événements
+  // Handlers d'événements - using refs to avoid stale closures
   const handleSelectionChange = useCallback(() => {
     if (!fabricRef.current) return;
     const activeObjects = fabricRef.current.getActiveObjects();
     const ids = activeObjects
       .map((obj) => (obj as FabricObjectWithData).data?.elementId)
       .filter(Boolean) as string[];
-    onSelectionChanged?.(ids);
-  }, [onSelectionChanged]);
+    onSelectionChangedRef.current?.(ids);
+  }, []);
 
   const handleObjectModified = useCallback(
     (e: { target?: FabricObject }) => {
       if (!e.target) return;
       const element = fabricObjectToElement(e.target as FabricObjectWithData);
       if (element) {
-        onElementModified?.(element);
+        console.log("[EditorCanvas] Object modified:", element.elementId, element.type);
+        onElementModifiedRef.current?.(element);
       }
       if (fabricRef.current) {
         saveHistory(fabricRef.current);
       }
     },
-    [fabricObjectToElement, onElementModified, saveHistory]
+    [fabricObjectToElement, saveHistory]
   );
 
   const handleObjectAdded = useCallback(
@@ -307,10 +322,11 @@ export function EditorCanvas({
       if (!e.target) return;
       const element = fabricObjectToElement(e.target as FabricObjectWithData);
       if (element) {
-        onElementAdded?.(element);
+        console.log("[EditorCanvas] Object added:", element.elementId, element.type);
+        onElementAddedRef.current?.(element);
       }
     },
-    [fabricObjectToElement, onElementAdded, isUpdatingHistory]
+    [fabricObjectToElement, isUpdatingHistory]
   );
 
   const handleObjectRemoved = useCallback(
@@ -319,10 +335,11 @@ export function EditorCanvas({
       if (!e.target) return;
       const elementId = (e.target as FabricObjectWithData).data?.elementId;
       if (elementId) {
-        onElementRemoved?.(elementId);
+        console.log("[EditorCanvas] Object removed:", elementId);
+        onElementRemovedRef.current?.(elementId);
       }
     },
-    [onElementRemoved, isUpdatingHistory]
+    [isUpdatingHistory]
   );
 
   // Initialiser Fabric.js
