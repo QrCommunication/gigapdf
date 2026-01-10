@@ -21,7 +21,7 @@ class DocumentPermissions(CamelCaseModel):
 
     print: bool = Field(default=True, description="Allow printing")
     modify: bool = Field(default=True, description="Allow modification")
-    copy: bool = Field(default=True, description="Allow copying content")
+    copy_content: bool = Field(default=True, alias="copy", description="Allow copying content")
     annotate: bool = Field(default=True, description="Allow adding annotations")
     fill_forms: bool = Field(default=True, description="Allow filling forms")
     extract: bool = Field(default=True, description="Allow content extraction")
