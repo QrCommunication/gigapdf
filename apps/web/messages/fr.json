@@ -41,11 +41,15 @@
   },
   "meta": {
     "title": {
-      "default": "GigaPDF - Éditeur PDF professionnel",
+      "default": "GigaPDF - Éditeur PDF Open Source, Collaboratif et Moderne",
       "template": "%s | GigaPDF"
     },
-    "description": "Une plateforme WYSIWYG puissante d'édition PDF avec collaboration en temps réel",
-    "keywords": "PDF, éditeur, WYSIWYG, collaboration, documents"
+    "description": "Éditeur PDF open source et gratuit avec collaboration en temps réel. Modifiez, annotez et fusionnez vos PDF facilement. Interface WYSIWYG intuitive. Auto-hébergeable sous licence MIT.",
+    "keywords": "éditeur PDF gratuit, éditeur PDF en ligne, modifier PDF, annoter PDF, fusionner PDF, PDF collaboratif, PDF open source, WYSIWYG PDF, édition PDF professionnelle, outil PDF gratuit, convertir PDF, signer PDF, GigaPDF",
+    "ogTitle": "GigaPDF - Éditeur PDF Open Source et Collaboratif",
+    "ogDescription": "Éditez vos PDF gratuitement avec GigaPDF. Collaboration en temps réel, annotations, fusion de documents. 100% open source.",
+    "twitterTitle": "GigaPDF - L'éditeur PDF open source",
+    "twitterDescription": "Modifiez, annotez et collaborez sur vos PDF en temps réel. Gratuit et open source."
   },
   "landing": {
     "badge": "Éditeur PDF Open source",

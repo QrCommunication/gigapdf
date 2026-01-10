@@ -23,6 +23,8 @@ const appIcons = {
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("meta");
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://gigapdf.com";
+
   return {
     title: {
       default: t("title.default"),
@@ -33,6 +35,52 @@ export async function generateMetadata(): Promise<Metadata> {
       .split(",")
       .map((keyword) => keyword.trim())
       .filter(Boolean),
+    authors: [{ name: "GigaPDF", url: baseUrl }],
+    creator: "GigaPDF",
+    publisher: "GigaPDF",
+    metadataBase: new URL(baseUrl),
+    alternates: {
+      canonical: "/",
+      languages: {
+        "fr": "/fr",
+        "en": "/en",
+      },
+    },
+    openGraph: {
+      type: "website",
+      locale: "fr_FR",
+      alternateLocale: "en_US",
+      url: baseUrl,
+      siteName: "GigaPDF",
+      title: t("ogTitle"),
+      description: t("ogDescription"),
+      images: [
+        {
+          url: "/og.png",
+          width: 1200,
+          height: 630,
+          alt: "GigaPDF - Éditeur PDF Open Source",
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: t("twitterTitle"),
+      description: t("twitterDescription"),
+      images: ["/og.png"],
+      creator: "@gigapdf",
+    },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-video-preview": -1,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+      },
+    },
     icons: appIcons,
     manifest: "/manifest.json",
   };

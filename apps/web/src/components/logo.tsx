@@ -11,16 +11,23 @@ interface LogoProps {
   showText?: boolean;
   size?: "sm" | "md" | "lg";
   href?: string;
+  variant?: "horizontal" | "stacked" | "icon";
 }
 
 const sizes = {
-  sm: { icon: 24, width: 100 },
-  md: { icon: 32, width: 140 },
-  lg: { icon: 48, width: 200 },
+  sm: { icon: 24, width: 100, height: 28 },
+  md: { icon: 32, width: 140, height: 40 },
+  lg: { icon: 48, width: 200, height: 56 },
 };
 
-export function Logo({ className, showText = true, size = "md", href = "/" }: LogoProps) {
-  const { width } = sizes[size];
+export function Logo({
+  className,
+  showText = true,
+  size = "md",
+  href = "/",
+  variant = "horizontal"
+}: LogoProps) {
+  const { width, height, icon } = sizes[size];
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -28,26 +35,38 @@ export function Logo({ className, showText = true, size = "md", href = "/" }: Lo
     setMounted(true);
   }, []);
 
-  // Use light logo as default during SSR to avoid hydration mismatch
-  const logoSrc = mounted && resolvedTheme === "dark" ? "/logo-dark.png" : "/logo.png";
+  const isDark = mounted && resolvedTheme === "dark";
+
+  // Select logo based on variant and theme
+  const getLogoSrc = () => {
+    if (!showText) {
+      return isDark ? "/logo-icon-dark.svg" : "/logo-icon-light.svg";
+    }
+    if (variant === "stacked") {
+      return isDark ? "/logo-stacked-dark.svg" : "/logo-stacked-light.svg";
+    }
+    return isDark ? "/logo-horizontal-dark.svg" : "/logo-horizontal-light.svg";
+  };
+
+  const logoSrc = getLogoSrc();
 
   const content = (
     <div className={cn("flex items-center gap-2", className)}>
       {showText ? (
         <Image
           src={logoSrc}
-          alt="GigaPDF"
+          alt="GigaPDF - Éditeur PDF Open Source"
           width={width}
-          height={Math.round(width * 0.45)}
+          height={height}
           className="h-auto"
           priority
         />
       ) : (
         <Image
-          src="/favicon-32x32.png"
+          src={logoSrc}
           alt="GigaPDF"
-          width={sizes[size].icon}
-          height={sizes[size].icon}
+          width={icon}
+          height={icon}
           className="h-auto"
           priority
         />
@@ -67,9 +86,20 @@ export function Logo({ className, showText = true, size = "md", href = "/" }: Lo
 }
 
 export function LogoIcon({ className, size = 24 }: { className?: string; size?: number }) {
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const logoSrc = mounted && resolvedTheme === "dark"
+    ? "/logo-icon-dark.svg"
+    : "/logo-icon-light.svg";
+
   return (
     <Image
-      src="/favicon-32x32.png"
+      src={logoSrc}
       alt="GigaPDF"
       width={size}
       height={size}

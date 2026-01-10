@@ -1,0 +1,25 @@
+# GigaPDF Robots.txt
+User-agent: *
+Allow: /
+
+# Disallow private/authenticated areas
+Disallow: /dashboard
+Disallow: /documents
+Disallow: /settings
+Disallow: /billing
+Disallow: /organization
+Disallow: /editor
+Disallow: /shared
+Disallow: /api/
+
+# Allow crawlers to find important pages
+Allow: /
+Allow: /login
+Allow: /register
+Allow: /about
+Allow: /privacy
+Allow: /terms
+Allow: /contact
+
+# Sitemap location
+Sitemap: https://gigapdf.com/sitemap.xml

@@ -41,11 +41,15 @@
   },
   "meta": {
     "title": {
-      "default": "GigaPDF - Professional PDF Editor",
+      "default": "GigaPDF - Open Source, Collaborative PDF Editor",
       "template": "%s | GigaPDF"
     },
-    "description": "A powerful WYSIWYG PDF editing platform with real-time collaboration",
-    "keywords": "PDF, editor, WYSIWYG, collaboration, documents"
+    "description": "Free open source PDF editor with real-time collaboration. Edit, annotate and merge PDFs easily. Intuitive WYSIWYG interface. Self-hostable under MIT license.",
+    "keywords": "free PDF editor, online PDF editor, edit PDF, annotate PDF, merge PDF, collaborative PDF, open source PDF, WYSIWYG PDF, professional PDF editing, free PDF tool, convert PDF, sign PDF, GigaPDF",
+    "ogTitle": "GigaPDF - Open Source Collaborative PDF Editor",
+    "ogDescription": "Edit your PDFs for free with GigaPDF. Real-time collaboration, annotations, document merging. 100% open source.",
+    "twitterTitle": "GigaPDF - The Open Source PDF Editor",
+    "twitterDescription": "Edit, annotate and collaborate on your PDFs in real-time. Free and open source."
   },
   "landing": {
     "badge": "Open Source PDF Editor",
