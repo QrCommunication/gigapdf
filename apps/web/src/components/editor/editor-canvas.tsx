@@ -127,6 +127,17 @@ export function EditorCanvas({
   const onElementModifiedRef = useRef(onElementModified);
   const onElementRemovedRef = useRef(onElementRemoved);
   const onSelectionChangedRef = useRef(onSelectionChanged);
+  const onZoomChangedRef = useRef(onZoomChanged);
+  const onHyperlinkClickRef = useRef(onHyperlinkClick);
+
+  // Refs for tool options to avoid stale closures
+  const toolRef = useRef(tool);
+  const shapeTypeRef = useRef(shapeType);
+  const annotationTypeRef = useRef(annotationType);
+  const strokeColorRef = useRef(strokeColor);
+  const fillColorRef = useRef(fillColor);
+  const strokeWidthRef = useRef(strokeWidth);
+  const zoomRef = useRef(zoom);
 
   // Update refs when props change
   useEffect(() => {
@@ -134,7 +145,16 @@ export function EditorCanvas({
     onElementModifiedRef.current = onElementModified;
     onElementRemovedRef.current = onElementRemoved;
     onSelectionChangedRef.current = onSelectionChanged;
-  }, [onElementAdded, onElementModified, onElementRemoved, onSelectionChanged]);
+    onZoomChangedRef.current = onZoomChanged;
+    onHyperlinkClickRef.current = onHyperlinkClick;
+    toolRef.current = tool;
+    shapeTypeRef.current = shapeType;
+    annotationTypeRef.current = annotationType;
+    strokeColorRef.current = strokeColor;
+    fillColorRef.current = fillColor;
+    strokeWidthRef.current = strokeWidth;
+    zoomRef.current = zoom;
+  });
 
   // Historique pour undo/redo
   const [historyStack, setHistoryStack] = useState<string[]>([]);
@@ -394,7 +414,7 @@ export function EditorCanvas({
       canvas.on("object:added", handleObjectAdded as (e: unknown) => void);
       canvas.on("object:removed", handleObjectRemoved as (e: unknown) => void);
 
-      // Mouse down for creating objects
+      // Mouse down for creating objects - using refs to get current values
       canvas.on("mouse:down", (e) => {
         if (!fabricRef.current || !e.scenePoint) return;
         const currentCanvas = fabricRef.current;
@@ -403,17 +423,25 @@ export function EditorCanvas({
         if (e.target) return;
 
         const pointer = e.scenePoint;
+        const currentTool = toolRef.current;
+        const currentShapeType = shapeTypeRef.current;
+        const currentAnnotationType = annotationTypeRef.current;
+        const currentStrokeColor = strokeColorRef.current;
+        const currentFillColor = fillColorRef.current;
+        const currentStrokeWidth = strokeWidthRef.current;
+
+        console.log("[EditorCanvas] mouse:down - tool:", currentTool);
 
         let newObj: FabricObject | null = null;
 
-        switch (tool) {
+        switch (currentTool) {
           case "text": {
             newObj = new IText(t("defaultText"), {
               left: pointer.x,
               top: pointer.y,
               fontSize: 16,
               fontFamily: "Arial",
-              fill: strokeColor,
+              fill: currentStrokeColor,
             });
             (newObj as FabricObjectWithData).data = { elementId: generateId() };
             break;
@@ -423,12 +451,12 @@ export function EditorCanvas({
             const shapeOptions = {
               left: pointer.x,
               top: pointer.y,
-              fill: fillColor,
-              stroke: strokeColor,
-              strokeWidth: strokeWidth,
+              fill: currentFillColor,
+              stroke: currentStrokeColor,
+              strokeWidth: currentStrokeWidth,
             };
 
-            switch (shapeType) {
+            switch (currentShapeType) {
               case "rectangle":
                 newObj = new Rect({
                   ...shapeOptions,
@@ -468,7 +496,7 @@ export function EditorCanvas({
           }
 
           case "annotation": {
-            switch (annotationType) {
+            switch (currentAnnotationType) {
               case "highlight":
                 newObj = new Rect({
                   left: pointer.x,
@@ -573,24 +601,24 @@ export function EditorCanvas({
         }
       });
 
-      // Mouse wheel for zoom
+      // Mouse wheel for zoom - using refs
       canvas.on("mouse:wheel", (opt) => {
         const event = opt.e as WheelEvent;
         if (event.ctrlKey || event.metaKey) {
           event.preventDefault();
           const delta = event.deltaY > 0 ? -0.1 : 0.1;
-          const newZoom = Math.min(4, Math.max(0.25, zoom + delta));
-          onZoomChanged?.(newZoom);
+          const newZoom = Math.min(4, Math.max(0.25, zoomRef.current + delta));
+          onZoomChangedRef.current?.(newZoom);
         }
       });
 
-      // Double-click for hyperlinks
+      // Double-click for hyperlinks - using refs
       canvas.on("mouse:dblclick", (e) => {
         if (!e.target) return;
         const obj = e.target as FabricObjectWithData;
         const data = obj.data;
         if (data?.linkUrl || data?.linkPage) {
-          onHyperlinkClick?.(data.linkUrl as string | null, data.linkPage as number | null);
+          onHyperlinkClickRef.current?.(data.linkUrl as string | null, data.linkPage as number | null);
         }
       });
 
