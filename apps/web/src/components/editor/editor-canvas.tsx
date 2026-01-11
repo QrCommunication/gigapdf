@@ -159,7 +159,7 @@ export function EditorCanvas({
   // Historique pour undo/redo
   const [historyStack, setHistoryStack] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
-  const [isUpdatingHistory, setIsUpdatingHistory] = useState(false);
+  const isUpdatingHistoryRef = useRef(false);
 
   // Sauvegarder l'état dans l'historique
   const saveHistory = useCallback(
@@ -338,20 +338,26 @@ export function EditorCanvas({
 
   const handleObjectAdded = useCallback(
     (e: { target?: FabricObject }) => {
-      if (isUpdatingHistory) return;
-      if (!e.target) return;
+      console.log("[EditorCanvas] object:added event fired, isUpdatingHistory:", isUpdatingHistoryRef.current);
+      if (isUpdatingHistoryRef.current) return;
+      if (!e.target) {
+        console.log("[EditorCanvas] object:added - no target");
+        return;
+      }
       const element = fabricObjectToElement(e.target as FabricObjectWithData);
       if (element) {
         console.log("[EditorCanvas] Object added:", element.elementId, element.type);
         onElementAddedRef.current?.(element);
+      } else {
+        console.log("[EditorCanvas] object:added - could not convert to element");
       }
     },
-    [fabricObjectToElement, isUpdatingHistory]
+    [fabricObjectToElement]
   );
 
   const handleObjectRemoved = useCallback(
     (e: { target?: FabricObject }) => {
-      if (isUpdatingHistory) return;
+      if (isUpdatingHistoryRef.current) return;
       if (!e.target) return;
       const elementId = (e.target as FabricObjectWithData).data?.elementId;
       if (elementId) {
@@ -359,7 +365,7 @@ export function EditorCanvas({
         onElementRemovedRef.current?.(elementId);
       }
     },
-    [isUpdatingHistory]
+    []
   );
 
   // Update event handlers when they change
@@ -434,18 +440,21 @@ export function EditorCanvas({
 
         let newObj: FabricObject | null = null;
 
-        switch (currentTool) {
-          case "text": {
-            newObj = new IText(t("defaultText"), {
-              left: pointer.x,
-              top: pointer.y,
-              fontSize: 16,
-              fontFamily: "Arial",
-              fill: currentStrokeColor,
-            });
-            (newObj as FabricObjectWithData).data = { elementId: generateId() };
-            break;
-          }
+        try {
+          switch (currentTool) {
+            case "text": {
+              console.log("[EditorCanvas] Creating IText with:", { pointer, strokeColor: currentStrokeColor });
+              newObj = new IText(t("defaultText") || "Text", {
+                left: pointer.x,
+                top: pointer.y,
+                fontSize: 16,
+                fontFamily: "Arial",
+                fill: currentStrokeColor,
+              });
+              (newObj as FabricObjectWithData).data = { elementId: generateId() };
+              console.log("[EditorCanvas] IText created successfully:", newObj);
+              break;
+            }
 
           case "shape": {
             const shapeOptions = {
@@ -591,13 +600,20 @@ export function EditorCanvas({
             newObj = formFieldGroup;
             break;
           }
+          }
+        } catch (error) {
+          console.error("[EditorCanvas] Error creating object:", error);
         }
 
         if (newObj) {
+          console.log("[EditorCanvas] Adding new object to canvas:", currentTool, (newObj as FabricObjectWithData).data?.elementId);
           currentCanvas.add(newObj);
           currentCanvas.setActiveObject(newObj);
           currentCanvas.renderAll();
           saveHistory(currentCanvas);
+          console.log("[EditorCanvas] Object added to canvas, total objects:", currentCanvas.getObjects().length);
+        } else {
+          console.log("[EditorCanvas] mouse:down - newObj is null for tool:", currentTool);
         }
       });
 
@@ -952,11 +968,11 @@ export function EditorCanvas({
         const newIndex = historyIndex - 1;
         const json = historyStack[newIndex];
         if (!json) return;
-        setIsUpdatingHistory(true);
+        isUpdatingHistoryRef.current = true;
         fabricRef.current.loadFromJSON(JSON.parse(json)).then(() => {
           fabricRef.current?.renderAll();
           setHistoryIndex(newIndex);
-          setIsUpdatingHistory(false);
+          isUpdatingHistoryRef.current = false;
         });
       },
       redo: () => {
@@ -965,11 +981,11 @@ export function EditorCanvas({
         const newIndex = historyIndex + 1;
         const json = historyStack[newIndex];
         if (!json) return;
-        setIsUpdatingHistory(true);
+        isUpdatingHistoryRef.current = true;
         fabricRef.current.loadFromJSON(JSON.parse(json)).then(() => {
           fabricRef.current?.renderAll();
           setHistoryIndex(newIndex);
-          setIsUpdatingHistory(false);
+          isUpdatingHistoryRef.current = false;
         });
       },
       canUndo: () => historyIndex > 0,
