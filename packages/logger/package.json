@@ -19,7 +19,6 @@
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
-  "dependencies": {},
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0"
   },
@@ -30,8 +29,8 @@
   },
   "devDependencies": {
     "@giga-pdf/typescript-config": "workspace:*",
-    "@types/react": "^18.3.18",
-    "tsup": "^8.3.5",
-    "typescript": "^5.7.2"
+    "@types/react": "^19.2.8",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   }
 }

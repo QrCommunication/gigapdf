@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { getStripe } from "../stripe-client";
 import type { CheckoutOptions } from "../types";
 
 interface UseCheckoutReturn {
@@ -10,6 +9,7 @@ interface UseCheckoutReturn {
 
 /**
  * Hook to create a Stripe Checkout session and redirect.
+ * Uses the modern Stripe API where the backend returns the checkout URL.
  */
 export function useCheckout(): UseCheckoutReturn {
   const [isLoading, setIsLoading] = useState(false);
@@ -34,21 +34,14 @@ export function useCheckout(): UseCheckoutReturn {
         throw new Error(errorData.message || "Failed to create checkout session");
       }
 
-      const { sessionId } = await response.json();
+      const { url } = await response.json();
 
-      // Redirect to Stripe Checkout
-      const stripe = await getStripe();
-      if (!stripe) {
-        throw new Error("Stripe failed to initialize");
+      if (!url) {
+        throw new Error("No checkout URL returned from server");
       }
 
-      const { error: stripeError } = await stripe.redirectToCheckout({
-        sessionId,
-      });
-
-      if (stripeError) {
-        throw new Error(stripeError.message);
-      }
+      // Redirect to Stripe Checkout using the session URL
+      window.location.href = url;
     } catch (err) {
       const error = err instanceof Error ? err : new Error("An unknown error occurred");
       setError(error);

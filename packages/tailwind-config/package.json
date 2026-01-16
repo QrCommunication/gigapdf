@@ -4,10 +4,7 @@
   "private": true,
   "main": "tailwind.config.ts",
   "files": ["*.ts", "*.js"],
-  "dependencies": {
-    "tailwindcss-animate": "^1.0.7"
-  },
   "peerDependencies": {
-    "tailwindcss": "^3.4.0"
+    "tailwindcss": "^4.0.0"
   }
 }

@@ -2,7 +2,8 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import type { Tool, ShapeType, AnnotationType } from "@giga-pdf/types";
+import type { Tool, ShapeType, AnnotationType, Element, TextStyle } from "@giga-pdf/types";
+import { FontPicker } from "@giga-pdf/ui";
 import {
   MousePointer2,
   Type,
@@ -89,6 +90,10 @@ export interface EditorToolbarProps {
   onDuplicate?: () => void;
   /** Callback pour ajouter une image */
   onAddImage?: () => void;
+  /** Element actuellement selectionne */
+  selectedElement?: Element | null;
+  /** Callback pour mettre a jour le style d'un element */
+  onElementStyleChange?: (elementId: string, style: Partial<TextStyle>) => void;
 }
 
 interface ToolButtonProps {
@@ -230,6 +235,51 @@ function ColorPicker({ color, onChange, label }: ColorPickerProps) {
 /**
  * Barre d'outils de l'éditeur PDF avec dropdowns et color picker.
  */
+// Font value mapping for FontPicker (value -> family)
+const FONT_VALUE_TO_FAMILY: Record<string, string> = {
+  arial: "Arial, sans-serif",
+  helvetica: "Helvetica, sans-serif",
+  times: "'Times New Roman', serif",
+  courier: "'Courier New', monospace",
+  georgia: "Georgia, serif",
+  verdana: "Verdana, sans-serif",
+  palatino: "Palatino, serif",
+  garamond: "Garamond, serif",
+  bookman: "Bookman, serif",
+  "comic-sans": "'Comic Sans MS', cursive",
+  trebuchet: "'Trebuchet MS', sans-serif",
+  impact: "Impact, sans-serif",
+  "lucida-console": "'Lucida Console', monospace",
+  tahoma: "Tahoma, sans-serif",
+  "century-gothic": "'Century Gothic', sans-serif",
+  optima: "Optima, sans-serif",
+  futura: "Futura, sans-serif",
+  rockwell: "Rockwell, serif",
+  baskerville: "Baskerville, serif",
+  didot: "Didot, serif",
+};
+
+// Reverse mapping: family -> value
+function getFontValueFromFamily(family: string): string {
+  const normalizedFamily = family.toLowerCase();
+  for (const [value, fontFamily] of Object.entries(FONT_VALUE_TO_FAMILY)) {
+    const normalizedFontFamily = fontFamily.toLowerCase();
+    const baseFontName = normalizedFontFamily.split(",")[0]?.replace(/'/g, "") ?? "";
+    if (normalizedFontFamily.includes(normalizedFamily) || normalizedFamily.includes(baseFontName)) {
+      return value;
+    }
+  }
+  // Default fallback based on common font names
+  if (normalizedFamily.includes("arial")) return "arial";
+  if (normalizedFamily.includes("helvetica")) return "helvetica";
+  if (normalizedFamily.includes("times")) return "times";
+  if (normalizedFamily.includes("courier")) return "courier";
+  return "arial";
+}
+
+// Available font sizes
+const FONT_SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72];
+
 export function EditorToolbar({
   activeTool,
   onToolChange,
@@ -254,11 +304,29 @@ export function EditorToolbar({
   onDelete,
   onDuplicate,
   onAddImage,
+  selectedElement,
+  onElementStyleChange,
 }: EditorToolbarProps) {
   const t = useTranslations("editor.toolbar");
+  const tProperties = useTranslations("editor.properties.text");
   const [showShapeDropdown, setShowShapeDropdown] = useState(false);
   const [showAnnotationDropdown, setShowAnnotationDropdown] = useState(false);
   const [showColorDropdown, setShowColorDropdown] = useState(false);
+
+  // Font states for text elements
+  const [selectedFontValue, setSelectedFontValue] = useState("arial");
+  const [selectedFontSize, setSelectedFontSize] = useState(14);
+
+  // Sync font states with selected text element
+  useEffect(() => {
+    if (selectedElement?.type === "text") {
+      const textElement = selectedElement;
+      const fontFamily = textElement.style?.fontFamily || "Arial, sans-serif";
+      const fontSize = textElement.style?.fontSize || 14;
+      setSelectedFontValue(getFontValueFromFamily(fontFamily));
+      setSelectedFontSize(fontSize);
+    }
+  }, [selectedElement]);
 
   // Définition des formes
   const shapes: { type: ShapeType; icon: React.ReactNode; labelKey: string }[] =
@@ -497,6 +565,44 @@ export function EditorToolbar({
       </div>
 
       <Separator />
+
+      {/* Font controls (visible only for text elements) */}
+      {selectedElement?.type === "text" && onElementStyleChange && (
+        <>
+          <div className="flex items-center gap-2">
+            <FontPicker
+              value={selectedFontValue}
+              onChange={(font) => {
+                setSelectedFontValue(font.value);
+                onElementStyleChange(selectedElement.elementId, {
+                  fontFamily: font.family,
+                });
+              }}
+              className="h-8 w-[160px]"
+              placeholder={tProperties("fontFamily")}
+            />
+            <select
+              value={selectedFontSize}
+              onChange={(e) => {
+                const size = parseInt(e.target.value, 10);
+                setSelectedFontSize(size);
+                onElementStyleChange(selectedElement.elementId, {
+                  fontSize: size,
+                });
+              }}
+              className="h-8 w-16 px-2 rounded border bg-background text-sm"
+              title={tProperties("fontSize")}
+            >
+              {FONT_SIZES.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Separator />
+        </>
+      )}
 
       {/* Formatage texte (visible si sélection) */}
       {hasSelection && onFormatAction && (

@@ -21,7 +21,7 @@ export default defineConfig({
   format: ["esm"],
   dts: true,
   sourcemap: true,
-  clean: true,
+  clean: false,
   external: [
     "react",
     "react-dom",

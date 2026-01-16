@@ -3,10 +3,9 @@
  * Manages online users, cursors, element locks, and WebSocket connection
  */
 
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { UUID } from "@giga-pdf/types";
-import type { Socket } from "socket.io-client";
 import type {
   CollaborationState,
   OnlineUser,
@@ -14,9 +13,13 @@ import type {
   ElementLockInfo,
 } from "../types";
 
-export interface CollaborationStore extends CollaborationState {
+// Use a simple type alias to avoid exposing socket.io internal types
+type SocketInstance = unknown;
+
+export interface CollaborationStore extends Omit<CollaborationState, 'socket'> {
+  socket: SocketInstance;
   // Actions
-  setSocket: (socket: Socket | null) => void;
+  setSocket: (socket: SocketInstance) => void;
   setConnected: (connected: boolean) => void;
   setSessionId: (sessionId: UUID | null) => void;
   setCurrentUserId: (userId: UUID | null) => void;
@@ -49,7 +52,7 @@ const initialState: CollaborationState = {
   socket: null,
 };
 
-export const useCollaborationStore = create<CollaborationStore>()(
+export const useCollaborationStore: UseBoundStore<StoreApi<CollaborationStore>> = create<CollaborationStore>()(
   immer((set, get) => ({
     ...initialState,
 

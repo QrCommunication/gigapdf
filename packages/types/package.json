@@ -7,24 +7,24 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.js"
     },
     "./models": {
+      "types": "./dist/models/index.d.ts",
       "import": "./dist/models/index.mjs",
-      "require": "./dist/models/index.js",
-      "types": "./dist/models/index.d.ts"
+      "require": "./dist/models/index.js"
     },
     "./api": {
+      "types": "./dist/api/index.d.ts",
       "import": "./dist/api/index.mjs",
-      "require": "./dist/api/index.js",
-      "types": "./dist/api/index.d.ts"
+      "require": "./dist/api/index.js"
     },
     "./websocket": {
+      "types": "./dist/websocket/index.d.ts",
       "import": "./dist/websocket/index.mjs",
-      "require": "./dist/websocket/index.js",
-      "types": "./dist/websocket/index.d.ts"
+      "require": "./dist/websocket/index.js"
     }
   },
   "scripts": {
@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@giga-pdf/typescript-config": "workspace:*",
-    "tsup": "^8.3.5",
-    "typescript": "^5.7.2"
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   }
 }

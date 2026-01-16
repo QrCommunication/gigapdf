@@ -161,6 +161,9 @@ export function EditorCanvas({
   const [historyIndex, setHistoryIndex] = useState(-1);
   const isUpdatingHistoryRef = useRef(false);
 
+  // Ref pour tracker le contenu original des textes (pour detecter les vraies modifications)
+  const originalContentRef = useRef<Map<string, string>>(new Map());
+
   // Sauvegarder l'état dans l'historique
   const saveHistory = useCallback(
     (canvas: FabricCanvas) => {
@@ -321,12 +324,88 @@ export function EditorCanvas({
     onSelectionChangedRef.current?.(ids);
   }, []);
 
+  // Type de modification pour distinguer position/contenu/style
+  type ModificationType = 'position' | 'content' | 'style';
+
+  // Handler appele quand un texte entre en mode edition
+  const handleTextEditingEntered = useCallback((e: { target?: FabricObject }) => {
+    if (!e.target) return;
+    const obj = e.target as FabricObjectWithData;
+    const typeName = obj.constructor.name;
+
+    if (typeName === "IText" || typeName === "Textbox" || typeName === "FabricText") {
+      const elementId = obj.data?.elementId;
+      const currentText = (obj as FabricObjectWithData & { text?: string }).text || "";
+
+      if (elementId) {
+        // Sauvegarder le contenu original avant edition
+        originalContentRef.current.set(elementId, currentText);
+        console.log("[EditorCanvas] Text editing started, saved original content:", elementId, `"${currentText}"`);
+      }
+    }
+  }, []);
+
+  // Handler appele quand le texte change en temps reel
+  const handleTextChanged = useCallback((e: { target?: FabricObject }) => {
+    if (!e.target) return;
+    const obj = e.target as FabricObjectWithData;
+    const elementId = obj.data?.elementId;
+    const currentText = (obj as FabricObjectWithData & { text?: string }).text || "";
+
+    console.log("[EditorCanvas] Text changed in real-time:", elementId, `"${currentText}"`);
+  }, []);
+
+  // Handler appele quand un texte sort du mode edition
+  const handleTextEditingExited = useCallback((e: { target?: FabricObject }) => {
+    if (!e.target) return;
+    const obj = e.target as FabricObjectWithData;
+    const elementId = obj.data?.elementId;
+    const currentText = (obj as FabricObjectWithData & { text?: string }).text || "";
+    const originalText = elementId ? originalContentRef.current.get(elementId) : undefined;
+
+    if (originalText !== undefined && originalText !== currentText) {
+      console.log(`[EditorCanvas] Text editing exited with CONTENT CHANGE: "${originalText}" -> "${currentText}"`);
+    } else {
+      console.log("[EditorCanvas] Text editing exited (no content change)");
+    }
+
+    // Note: On ne supprime pas du map ici car object:modified peut etre appele apres
+    // Le map sera nettoye au prochain text:editing:entered pour le meme element
+  }, []);
+
   const handleObjectModified = useCallback(
     (e: { target?: FabricObject }) => {
       if (!e.target) return;
-      const element = fabricObjectToElement(e.target as FabricObjectWithData);
+      const obj = e.target as FabricObjectWithData;
+      const elementId = obj.data?.elementId;
+      const typeName = obj.constructor.name;
+
+      // Detecter le TYPE de modification
+      let modificationType: ModificationType = 'position';
+
+      // Verifier si c'est un objet texte et si le contenu a change
+      if (typeName === "IText" || typeName === "Textbox" || typeName === "FabricText") {
+        const originalText = elementId ? originalContentRef.current.get(elementId) : undefined;
+        const currentText = (obj as FabricObjectWithData & { text?: string }).text || "";
+
+        if (originalText !== undefined && originalText !== currentText) {
+          modificationType = 'content';
+          console.log(`[EditorCanvas] Text content MODIFIED: "${originalText}" -> "${currentText}"`);
+          // Mettre a jour le contenu original pour les prochaines comparaisons
+          if (elementId) {
+            originalContentRef.current.set(elementId, currentText);
+          }
+        } else {
+          console.log("[EditorCanvas] Element position/style changed only (no content change)");
+        }
+      } else {
+        console.log("[EditorCanvas] Non-text element modified (position/style)");
+      }
+
+      const element = fabricObjectToElement(obj);
       if (element) {
-        console.log("[EditorCanvas] Object modified:", element.elementId, element.type);
+        console.log("[EditorCanvas] Object modified:", element.elementId, element.type, "modification:", modificationType);
+        // Appeler le callback avec l'element (le type de modification peut etre utilise plus tard)
         onElementModifiedRef.current?.(element);
       }
       if (fabricRef.current) {
@@ -380,6 +459,9 @@ export function EditorCanvas({
     canvas.off("object:modified");
     canvas.off("object:added");
     canvas.off("object:removed");
+    canvas.off("text:editing:entered");
+    canvas.off("text:changed");
+    canvas.off("text:editing:exited");
 
     // Re-attach updated handlers
     canvas.on("selection:created", handleSelectionChange);
@@ -388,7 +470,11 @@ export function EditorCanvas({
     canvas.on("object:modified", handleObjectModified as (e: unknown) => void);
     canvas.on("object:added", handleObjectAdded as (e: unknown) => void);
     canvas.on("object:removed", handleObjectRemoved as (e: unknown) => void);
-  }, [handleSelectionChange, handleObjectModified, handleObjectAdded, handleObjectRemoved]);
+    // Handlers pour detecter les modifications de contenu texte
+    canvas.on("text:editing:entered", handleTextEditingEntered as (e: unknown) => void);
+    canvas.on("text:changed", handleTextChanged as (e: unknown) => void);
+    canvas.on("text:editing:exited", handleTextEditingExited as (e: unknown) => void);
+  }, [handleSelectionChange, handleObjectModified, handleObjectAdded, handleObjectRemoved, handleTextEditingEntered, handleTextChanged, handleTextEditingExited]);
 
   // Initialiser Fabric.js
   useEffect(() => {
@@ -419,6 +505,10 @@ export function EditorCanvas({
       canvas.on("object:modified", handleObjectModified as (e: unknown) => void);
       canvas.on("object:added", handleObjectAdded as (e: unknown) => void);
       canvas.on("object:removed", handleObjectRemoved as (e: unknown) => void);
+      // Handlers pour detecter les modifications de contenu texte
+      canvas.on("text:editing:entered", handleTextEditingEntered as (e: unknown) => void);
+      canvas.on("text:changed", handleTextChanged as (e: unknown) => void);
+      canvas.on("text:editing:exited", handleTextEditingExited as (e: unknown) => void);
 
       // Mouse down for creating objects - using refs to get current values
       canvas.on("mouse:down", (e) => {

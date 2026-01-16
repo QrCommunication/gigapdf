@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Public paths that don't require authentication
@@ -45,7 +45,7 @@ export async function middleware(request: NextRequest) {
     // Session is valid, allow access
     return NextResponse.next();
   } catch (error) {
-    console.error("Middleware auth error:", error);
+    console.error("Proxy auth error:", error);
     // On error, redirect to login
     return NextResponse.redirect(new URL("/login", request.url));
   }

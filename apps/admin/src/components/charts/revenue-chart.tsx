@@ -83,8 +83,9 @@ export function RevenueChart() {
                 border: "1px solid hsl(var(--border))",
                 borderRadius: "8px",
               }}
-              formatter={(value: number, name: string) => {
-                if (name === "revenue") return [`€${value.toFixed(2)}`, t("revenue")];
+              formatter={(value, name) => {
+                if (value === undefined) return ["-", name ?? ""];
+                if (name === "revenue") return [`€${Number(value).toFixed(2)}`, t("revenue")];
                 return [value, t("subscriptions")];
               }}
             />

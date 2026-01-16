@@ -3,7 +3,7 @@
  * Manages history snapshots with a maximum stack size of 50
  */
 
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { PageObject } from "@giga-pdf/types";
 import type { HistoryState, HistorySnapshot } from "../types";
@@ -34,7 +34,7 @@ const initialState: HistoryState = {
   canRedo: false,
 };
 
-export const useHistoryStore = create<HistoryStore>()(
+export const useHistoryStore: UseBoundStore<StoreApi<HistoryStore>> = create<HistoryStore>()(
   immer((set, get) => ({
     ...initialState,
 

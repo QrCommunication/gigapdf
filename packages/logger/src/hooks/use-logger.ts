@@ -38,7 +38,7 @@ export interface UseLoggerOptions extends LoggerOptions {
  */
 export function useLogger(options: UseLoggerOptions = {}): Logger {
   // Create logger instance only once
-  const loggerRef = useRef<Logger>();
+  const loggerRef = useRef<Logger | null>(null);
 
   if (!loggerRef.current) {
     loggerRef.current = new Logger(options);
@@ -85,7 +85,7 @@ export function useLogger(options: UseLoggerOptions = {}): Logger {
  * ```
  */
 export function usePerformanceTracking(operation: string, logger?: Logger): void {
-  const startTimeRef = useRef<number>();
+  const startTimeRef = useRef<number | undefined>(undefined);
   const loggerInstance = logger || new Logger();
 
   useEffect(() => {

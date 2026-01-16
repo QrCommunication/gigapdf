@@ -24,7 +24,7 @@ class FillFormRequest(BaseModel):
     fields: dict[str, str | bool | list[str]] = Field(
         description="Field name to value mapping"
     )
-    validate: bool = Field(
+    validate_fields: bool = Field(
         default=True, description="Validate field values before applying"
     )
     create_if_missing: bool = Field(
@@ -40,7 +40,7 @@ class FillFormRequest(BaseModel):
                     "subscribe": True,
                     "preferences": ["option1", "option2"],
                 },
-                "validate": True,
+                "validate_fields": True,
                 "create_if_missing": False,
             }
         }
@@ -193,14 +193,14 @@ Fill multiple form fields at once.
     "subscribe": true,
     "preferences": ["option1", "option2"]
   },
-  "validate": true,
+  "validate_fields": true,
   "create_if_missing": false
 }
 ```
 
 ## Parameters
 - **fields**: Dictionary mapping field names to values
-- **validate**: Validate field values before applying (default: true)
+- **validate_fields**: Validate field values before applying (default: true)
 - **create_if_missing**: Create fields if they don't exist (default: false)
 
 ## Response
@@ -247,7 +247,7 @@ fill_data = {
         "email": "john@example.com",
         "subscribe": True
     },
-    "validate": True
+    "validate_fields": True
 }
 
 response = requests.put(
@@ -267,7 +267,7 @@ const fillData = {
     email: 'john@example.com',
     subscribe: true
   },
-  validate: true
+  validate_fields: true
 };
 
 const response = await fetch(`/api/v1/documents/${documentId}/forms/fill`, {
@@ -290,7 +290,7 @@ $fillData = [
         'email' => 'john@example.com',
         'subscribe' => true
     ],
-    'validate' => true
+    'validate_fields' => true
 ];
 
 $response = $client->put(

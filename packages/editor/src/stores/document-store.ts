@@ -3,7 +3,7 @@
  * Manages document metadata, pages, and elements
  */
 
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { UUID, PageObject } from "@giga-pdf/types";
 import type { DocumentState } from "../types";
@@ -36,7 +36,7 @@ const initialState: DocumentState = {
   error: null,
 };
 
-export const useDocumentStore = create<DocumentStore>()(
+export const useDocumentStore: UseBoundStore<StoreApi<DocumentStore>> = create<DocumentStore>()(
   immer((set) => ({
     ...initialState,
 

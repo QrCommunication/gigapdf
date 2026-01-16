@@ -6,12 +6,13 @@
   "description": "Giga-PDF - WYSIWYG PDF Editing Platform",
   "pnpm": {
     "overrides": {
-      "react": "19.1.0",
-      "react-dom": "19.1.0"
+      "react": "19.2.3",
+      "react-dom": "19.2.3"
     }
   },
   "scripts": {
-    "dev": "turbo dev --concurrency=15",
+    "dev": "turbo dev --filter=web --filter=admin --concurrency=15",
+    "dev:https": "bash scripts/dev-https.sh",
     "dev:web": "turbo dev --filter=web",
     "dev:admin": "turbo dev --filter=admin",
     "build": "turbo build",
@@ -30,15 +31,18 @@
   "devDependencies": {
     "@giga-pdf/eslint-config": "workspace:*",
     "@giga-pdf/typescript-config": "workspace:*",
-    "@types/node": "^22.10.2",
-    "eslint": "^9.17.0",
+    "@types/node": "^25.0.9",
+    "autoprefixer": "^10.4.23",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.39.2",
     "husky": "^9.1.7",
-    "lint-staged": "^15.2.11",
-    "prettier": "^3.4.2",
-    "prettier-plugin-tailwindcss": "^0.6.9",
-    "tsx": "^4.19.2",
-    "turbo": "^2.3.3",
-    "typescript": "^5.7.2"
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.8.0",
+    "prettier-plugin-tailwindcss": "^0.7.2",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.21.0",
+    "turbo": "^2.7.4",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=20.0.0",
@@ -54,6 +58,6 @@
     ]
   },
   "dependencies": {
-    "@better-auth/expo": "^1.4.7"
+    "@better-auth/expo": "^1.4.13"
   }
 }

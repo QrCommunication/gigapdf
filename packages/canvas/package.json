@@ -22,18 +22,18 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "fabric": "^6.5.1",
-    "pdfjs-dist": "^4.8.69"
+    "fabric": "^7.1.0",
+    "pdfjs-dist": "^5.4.530"
   },
   "devDependencies": {
     "@giga-pdf/eslint-config": "workspace:*",
     "@giga-pdf/types": "workspace:*",
     "@giga-pdf/typescript-config": "workspace:*",
-    "@types/react": "^18.2.55",
-    "@types/react-dom": "^18.2.19",
-    "react": "^18.2.0",
-    "tsup": "^8.0.2",
-    "typescript": "^5.3.3"
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.3",
+    "react": "19.2.3",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   },
   "peerDependencies": {
     "@giga-pdf/types": "workspace:*",

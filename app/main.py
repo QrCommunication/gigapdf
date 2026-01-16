@@ -264,9 +264,9 @@ All responses follow a standard format:
 ```
         """,
         version="1.0.0",
-        openapi_url="/api/v1/openapi.json",
-        docs_url="/api/docs",
-        redoc_url="/api/redoc",
+        openapi_url="/api/v1/openapi.json" if settings.is_development else None,
+        docs_url="/api/docs" if settings.is_development else None,
+        redoc_url="/api/redoc" if settings.is_development else None,
         lifespan=lifespan,
         openapi_tags=tags_metadata,
     )
@@ -274,25 +274,42 @@ All responses follow a standard format:
     # CORS middleware
     # Note: When allow_credentials=True, we cannot use "*" for allow_origins
     # In development, we use allow_origin_regex to allow all localhost ports
-    if settings.is_development:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-    else:
+    if settings.is_production:
         cors_origins = [
-            settings.frontend_url,
             "https://giga-pdf.com",
             "https://www.giga-pdf.com",
+            "https://app.giga-pdf.com",
             "https://admin.giga-pdf.com",
-            "https://api.giga-pdf.com",
         ]
+
         app.add_middleware(
             CORSMiddleware,
             allow_origins=cors_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=[
+                "Authorization",
+                "Content-Type",
+                "Accept",
+                "Accept-Language",
+                "X-Request-ID",
+                "X-Requested-With",
+            ],
+            expose_headers=[
+                "X-RateLimit-Limit",
+                "X-RateLimit-Remaining",
+                "X-RateLimit-Reset",
+                "X-API-Quota-Limit",
+                "X-API-Quota-Remaining",
+                "Content-Disposition",
+            ],
+            max_age=600,
+        )
+    else:
+        # Development mode - more permissive
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],

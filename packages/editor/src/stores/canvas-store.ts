@@ -3,7 +3,7 @@
  * Manages zoom, pan, active tool, and viewport dimensions
  */
 
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { Tool } from "@giga-pdf/types";
 import type { CanvasState, ViewportDimensions } from "../types";
@@ -47,7 +47,7 @@ const initialState: CanvasState = {
   currentPageIndex: 0,
 };
 
-export const useCanvasStore = create<CanvasStore>()(
+export const useCanvasStore: UseBoundStore<StoreApi<CanvasStore>> = create<CanvasStore>()(
   immer((set) => ({
     ...initialState,
 

@@ -84,7 +84,8 @@ export function UsageChart() {
                 border: "1px solid hsl(var(--border))",
                 borderRadius: "8px",
               }}
-              formatter={(value: number, name: string) => {
+              formatter={(value, name) => {
+                if (value === undefined) return ["-", name ?? ""];
                 if (name === "storage_gb") return [`${value} GB`, t("storage")];
                 return [value, t("documents")];
               }}

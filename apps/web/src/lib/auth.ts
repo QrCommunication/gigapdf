@@ -3,6 +3,8 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { expo } from "@better-auth/expo";
 import { jwt } from "better-auth/plugins/jwt";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 import {
   sendEmail,
   getWelcomeEmailTemplate,
@@ -10,10 +12,27 @@ import {
   getVerificationEmailTemplate,
 } from "./email/mailer";
 
-const prisma = new PrismaClient();
+// Lazy initialization for Prisma client (server-side only)
+// This prevents the module from crashing when imported on the client side
+let prisma: PrismaClient | undefined;
+
+function getPrismaClient(): PrismaClient {
+  if (prisma) return prisma;
+
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL environment variable is not set");
+  }
+
+  const pool = new Pool({ connectionString });
+  const adapter = new PrismaPg(pool);
+  prisma = new PrismaClient({ adapter });
+
+  return prisma;
+}
 
 export const auth = betterAuth({
-  database: prismaAdapter(prisma, {
+  database: prismaAdapter(getPrismaClient(), {
     provider: "postgresql",
   }),
   emailAndPassword: {

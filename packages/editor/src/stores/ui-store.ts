@@ -3,7 +3,7 @@
  * Manages panels, modals, notifications, and UI preferences
  */
 
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type {
   UIState,
@@ -61,7 +61,7 @@ const initialState: UIState = {
   contextMenu: null,
 };
 
-export const useUIStore = create<UIStore>()(
+export const useUIStore: UseBoundStore<StoreApi<UIStore>> = create<UIStore>()(
   immer((set, get) => ({
     ...initialState,
 

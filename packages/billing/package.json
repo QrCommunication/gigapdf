@@ -27,18 +27,18 @@
     "@giga-pdf/api": "workspace:*",
     "@giga-pdf/types": "workspace:*",
     "@giga-pdf/ui": "workspace:*",
-    "@stripe/react-stripe-js": "^2.9.0",
-    "@stripe/stripe-js": "^5.3.0",
-    "lucide-react": "^0.344.0"
+    "@stripe/react-stripe-js": "^5.4.1",
+    "@stripe/stripe-js": "^8.6.1",
+    "lucide-react": "^0.562.0"
   },
   "devDependencies": {
     "@giga-pdf/eslint-config": "workspace:*",
     "@giga-pdf/typescript-config": "workspace:*",
-    "@types/react": "^18.3.1",
-    "@types/react-dom": "^18.3.1",
-    "react": "^18.3.1",
-    "tsup": "^8.3.5",
-    "typescript": "^5.6.3"
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.3",
+    "react": "19.2.3",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   },
   "peerDependencies": {
     "react": "^18.0.0",

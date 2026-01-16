@@ -3,7 +3,7 @@
  * Manages selected elements, multi-select, and hover state
  */
 
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { UUID } from "@giga-pdf/types";
 import type { SelectionState } from "../types";
@@ -31,7 +31,7 @@ const initialState: SelectionState = {
   hoveredElementId: null,
 };
 
-export const useSelectionStore = create<SelectionStore>()(
+export const useSelectionStore: UseBoundStore<StoreApi<SelectionStore>> = create<SelectionStore>()(
   immer((set, get) => ({
     ...initialState,
 

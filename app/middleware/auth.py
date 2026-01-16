@@ -118,7 +118,11 @@ async def get_jwks_keys(jwks_url: str) -> dict:
     if _jwks_cache and (time.time() - _jwks_cache_time) < 300:
         return _jwks_cache
 
-    async with httpx.AsyncClient() as client:
+    # In development, disable SSL verification for self-signed certificates
+    settings = get_settings()
+    verify_ssl = not settings.is_development
+
+    async with httpx.AsyncClient(verify=verify_ssl) as client:
         response = await client.get(jwks_url, timeout=10.0)
         response.raise_for_status()
         _jwks_cache = response.json()
@@ -175,16 +179,20 @@ async def decode_jwt_token(token: str) -> dict:
         else:
             public_key = public_key_config
 
+        # Build verification options
+        verify_options = {
+            "verify_aud": bool(settings.auth_jwt_audience),
+            "verify_iss": bool(settings.auth_jwt_issuer),
+        }
+
         # Decode token - Better Auth JWT uses 'sub' for user ID
         claims = jwt.decode(
             token,
             public_key,
             algorithms=[settings.auth_jwt_algorithm],
-            options={
-                # Better Auth may not set audience/issuer, so make these optional
-                "verify_aud": False,
-                "verify_iss": False,
-            },
+            audience=settings.auth_jwt_audience if settings.auth_jwt_audience else None,
+            issuer=settings.auth_jwt_issuer if settings.auth_jwt_issuer else None,
+            options=verify_options,
         )
 
         logger.debug(f"JWT decoded successfully, claims: {claims}")
@@ -213,7 +221,11 @@ async def validate_session_with_better_auth(token: str, session_url: str) -> dic
         AuthInvalidError: If session is invalid.
     """
     try:
-        async with httpx.AsyncClient() as client:
+        # In development, disable SSL verification for self-signed certificates
+        settings = get_settings()
+        verify_ssl = not settings.is_development
+
+        async with httpx.AsyncClient(verify=verify_ssl) as client:
             # Better Auth expects the session token in a cookie or Authorization header
             response = await client.get(
                 session_url,
@@ -266,11 +278,29 @@ async def get_current_user(
 
     token = parts[1]
 
-    # Dev mode: Accept user ID directly as token (skip JWT validation)
+    # Dev mode: Decode JWT without validation to extract user ID
     if settings.is_development and settings.auth_jwt_public_key == "dev-mode-no-jwt-required":
-        logger.debug(f"Dev mode: Using token as user ID: {token}")
+        # Try to decode JWT without verification to get claims
+        if is_jwt_token(token):
+            try:
+                # Decode without verification (dev mode only!)
+                unverified_claims = jwt.get_unverified_claims(token)
+                user_id = unverified_claims.get("sub", unverified_claims.get("user_id", ""))
+                if user_id:
+                    logger.debug(f"Dev mode: Extracted user ID from JWT: {user_id}")
+                    return CurrentUser(
+                        user_id=user_id,
+                        email=unverified_claims.get("email"),
+                        name=unverified_claims.get("name"),
+                        roles=["user"],
+                    )
+            except Exception as e:
+                logger.warning(f"Dev mode: Failed to decode JWT, using token as user ID: {e}")
+
+        # Fallback: use token directly (for simple tokens)
+        logger.debug(f"Dev mode: Using token as user ID: {token[:50]}...")
         return CurrentUser(
-            user_id=token,
+            user_id=token[:255],  # Truncate to prevent DB errors
             email=None,
             name=None,
             roles=["user"],
