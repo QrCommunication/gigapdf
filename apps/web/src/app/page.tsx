@@ -462,7 +462,7 @@ export default function HomePage() {
             </div>
 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 max-w-6xl mx-auto">
-              {plans.map((plan, index) => (
+              {plans.map((plan) => (
                 <div
                   key={plan.id}
                   className={`relative rounded-xl border bg-card/50 backdrop-blur-sm p-6 flex flex-col transition-all duration-300 ${
