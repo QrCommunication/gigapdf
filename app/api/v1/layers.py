@@ -83,80 +83,121 @@ class ReorderLayersRequest(BaseModel):
     "/{document_id}/layers",
     response_model=APIResponse[dict],
     summary="List all layers",
-    description="""
-Get all layers (Optional Content Groups) in a PDF document.
+    description="Retrieve all layers (Optional Content Groups) in a PDF document. Layers control the visibility of different content groups within a PDF, allowing you to show or hide specific elements. Each layer includes properties such as visibility state, lock status, opacity, and z-order.",
+    responses={
+        200: {
+            "description": "Layers retrieved successfully. Returns a list of all layers with their properties including layer_id, name, visible, locked, opacity, print, and order."
+        },
+        401: {
+            "description": "Unauthorized. Invalid or missing authentication token."
+        },
+        404: {
+            "description": "Document not found. The specified document_id does not exist."
+        },
+        500: {
+            "description": "Internal server error. An unexpected error occurred while retrieving layers."
+        },
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X GET "https://api.giga-pdf.com/api/v1/documents/{document_id}/layers" \\
+  -H "Authorization: Bearer $TOKEN"''',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
 
-## Response
-Returns all layers with their properties.
-
-```json
-{
-  "success": true,
-  "data": {
-    "layers": [
-      {
-        "layer_id": "uuid",
-        "name": "Annotations",
-        "visible": true,
-        "locked": false,
-        "opacity": 1.0,
-        "print": true,
-        "order": 1
-      }
-    ],
-    "total_layers": 3
-  }
-}
-```
-
-## Example (curl)
-```bash
-curl -X GET "http://localhost:8000/api/v1/documents/{document_id}/layers" \\
-  -H "Authorization: Bearer <token>"
-```
-
-## Example (Python)
-```python
-import requests
+document_id = "your-document-id"
+token = "your-api-token"
 
 response = requests.get(
-    f"http://localhost:8000/api/v1/documents/{document_id}/layers",
-    headers={"Authorization": "Bearer <token>"}
+    f"https://api.giga-pdf.com/api/v1/documents/{document_id}/layers",
+    headers={"Authorization": f"Bearer {token}"}
 )
-layers = response.json()["data"]["layers"]
-for layer in layers:
-    print(f"{layer['name']}: visible={layer['visible']}, order={layer['order']}")
-```
 
-## Example (JavaScript)
-```javascript
-const response = await fetch(`/api/v1/documents/${documentId}/layers`, {
-  headers: { 'Authorization': 'Bearer <token>' }
-});
-const result = await response.json();
-result.data.layers.forEach(layer => {
-  console.log(`${layer.name}: visible=${layer.visible}, order=${layer.order}`);
-});
-```
+result = response.json()
+if result["success"]:
+    layers = result["data"]["layers"]
+    for layer in layers:
+        print(f"{layer['name']}: visible={layer['visible']}, order={layer['order']}")
+    print(f"Total layers: {result['data']['total_layers']}")''',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const documentId = "your-document-id";
+const token = "your-api-token";
 
-## Example (PHP)
-```php
-$response = $client->get(
-    "http://localhost:8000/api/v1/documents/{$documentId}/layers",
-    ['headers' => ['Authorization' => 'Bearer <token>']]
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/documents/${documentId}/layers`,
+  {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${token}`
+    }
+  }
 );
-$result = json_decode($response->getBody(), true);
-foreach ($result['data']['layers'] as $layer) {
-    echo "{$layer['name']}: visible={$layer['visible']}, order={$layer['order']}\n";
-}
-```
-""",
+
+const result = await response.json();
+if (result.success) {
+  result.data.layers.forEach(layer => {
+    console.log(`${layer.name}: visible=${layer.visible}, order=${layer.order}`);
+  });
+  console.log(`Total layers: ${result.data.total_layers}`);
+}''',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$documentId = "your-document-id";
+$token = "your-api-token";
+
+$ch = curl_init();
+curl_setopt_array($ch, [
+    CURLOPT_URL => "https://api.giga-pdf.com/api/v1/documents/{$documentId}/layers",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer {$token}"
+    ]
+]);
+
+$response = curl_exec($ch);
+curl_close($ch);
+
+$result = json_decode($response, true);
+if ($result["success"]) {
+    foreach ($result["data"]["layers"] as $layer) {
+        echo "{$layer['name']}: visible={$layer['visible']}, order={$layer['order']}\\n";
+    }
+    echo "Total layers: {$result['data']['total_layers']}\\n";
+}''',
+            },
+        ]
+    },
 )
 async def list_layers(
     document_id: str,
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
-    """List all layers in a document."""
+    """
+    List all layers in a document.
+
+    Retrieves all Optional Content Groups (OCGs) from the specified PDF document.
+    Each layer contains metadata about its visibility, lock state, opacity, and
+    rendering order.
+
+    Args:
+        document_id: The unique identifier of the PDF document.
+        user: Optional authenticated user context.
+
+    Returns:
+        APIResponse containing a list of layers and total count.
+    """
     start_time = time.time()
 
     # TODO: Implement layer listing using document service
@@ -184,62 +225,51 @@ async def list_layers(
     response_model=APIResponse[dict],
     status_code=201,
     summary="Create layer",
-    description="""
-Create a new layer (Optional Content Group).
-
-## Request Body
-```json
-{
-  "name": "Annotations",
-  "visible": true,
-  "locked": false,
-  "opacity": 1.0,
-  "print": true,
-  "order": 1
-}
-```
-
-## Parameters
-- **name**: Display name for the layer
-- **visible**: Initial visibility state (default: true)
-- **locked**: Whether layer is locked for editing (default: false)
-- **opacity**: Layer opacity 0-1 (default: 1.0)
-- **print**: Include layer when printing (default: true)
-- **order**: Z-order, higher values appear in front (default: 0)
-
-## Response
-Returns the created layer.
-
-```json
-{
-  "success": true,
-  "data": {
-    "layer_id": "uuid",
-    "name": "Annotations",
-    "visible": true,
-    "locked": false,
-    "opacity": 1.0,
-    "print": true,
-    "order": 1
-  }
-}
-```
-
-## Example (curl)
-```bash
-curl -X POST "http://localhost:8000/api/v1/documents/{document_id}/layers" \\
-  -H "Authorization: Bearer <token>" \\
+    description="Create a new layer (Optional Content Group) in the PDF document. Layers allow you to organize content into groups that can be independently shown or hidden. You can specify the layer name, initial visibility, lock state, opacity, print behavior, and z-order position.",
+    responses={
+        201: {
+            "description": "Layer created successfully. Returns the created layer with its assigned layer_id and all properties."
+        },
+        400: {
+            "description": "Bad request. Invalid layer properties provided (e.g., opacity out of range, missing required fields)."
+        },
+        401: {
+            "description": "Unauthorized. Invalid or missing authentication token."
+        },
+        404: {
+            "description": "Document not found. The specified document_id does not exist."
+        },
+        409: {
+            "description": "Conflict. A layer with the same name already exists in the document."
+        },
+        500: {
+            "description": "Internal server error. An unexpected error occurred while creating the layer."
+        },
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X POST "https://api.giga-pdf.com/api/v1/documents/{document_id}/layers" \\
+  -H "Authorization: Bearer $TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "name": "Watermarks",
     "visible": true,
-    "opacity": 0.5
-  }'
-```
+    "locked": false,
+    "opacity": 0.5,
+    "print": false,
+    "order": 10
+  }' ''',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
 
-## Example (Python)
-```python
-import requests
+document_id = "your-document-id"
+token = "your-api-token"
 
 layer_data = {
     "name": "Watermarks",
@@ -251,18 +281,27 @@ layer_data = {
 }
 
 response = requests.post(
-    f"http://localhost:8000/api/v1/documents/{document_id}/layers",
-    headers={"Authorization": "Bearer <token>", "Content-Type": "application/json"},
+    f"https://api.giga-pdf.com/api/v1/documents/{document_id}/layers",
+    headers={
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    },
     json=layer_data
 )
-layer = response.json()["data"]
-print(f"Created layer: {layer['name']} (ID: {layer['layer_id']})")
-```
 
-## Example (JavaScript)
-```javascript
+result = response.json()
+if result["success"]:
+    layer = result["data"]
+    print(f"Created layer: {layer['name']} (ID: {layer['layer_id']})")''',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const documentId = "your-document-id";
+const token = "your-api-token";
+
 const layerData = {
-  name: 'Watermarks',
+  name: "Watermarks",
   visible: true,
   locked: false,
   opacity: 0.5,
@@ -270,47 +309,83 @@ const layerData = {
   order: 10
 };
 
-const response = await fetch(`/api/v1/documents/${documentId}/layers`, {
-  method: 'POST',
-  headers: {
-    'Authorization': 'Bearer <token>',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(layerData)
-});
-const result = await response.json();
-console.log(`Created layer: ${result.data.name}`);
-```
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/documents/${documentId}/layers`,
+  {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(layerData)
+  }
+);
 
-## Example (PHP)
-```php
+const result = await response.json();
+if (result.success) {
+  console.log(`Created layer: ${result.data.name} (ID: ${result.data.layer_id})`);
+}''',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$documentId = "your-document-id";
+$token = "your-api-token";
+
 $layerData = [
-    'name' => 'Watermarks',
-    'visible' => true,
-    'locked' => false,
-    'opacity' => 0.5,
-    'print' => false,
-    'order' => 10
+    "name" => "Watermarks",
+    "visible" => true,
+    "locked" => false,
+    "opacity" => 0.5,
+    "print" => false,
+    "order" => 10
 ];
 
-$response = $client->post(
-    "http://localhost:8000/api/v1/documents/{$documentId}/layers",
-    [
-        'headers' => ['Authorization' => 'Bearer <token>', 'Content-Type' => 'application/json'],
-        'json' => $layerData
+$ch = curl_init();
+curl_setopt_array($ch, [
+    CURLOPT_URL => "https://api.giga-pdf.com/api/v1/documents/{$documentId}/layers",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST => true,
+    CURLOPT_POSTFIELDS => json_encode($layerData),
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer {$token}",
+        "Content-Type: application/json"
     ]
-);
-$result = json_decode($response->getBody(), true);
-echo "Created layer: " . $result['data']['name'];
-```
-""",
+]);
+
+$response = curl_exec($ch);
+curl_close($ch);
+
+$result = json_decode($response, true);
+if ($result["success"]) {
+    $layer = $result["data"];
+    echo "Created layer: {$layer['name']} (ID: {$layer['layer_id']})\\n";
+}''',
+            },
+        ]
+    },
 )
 async def create_layer(
     document_id: str,
     request: CreateLayerRequest,
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
-    """Create a new layer."""
+    """
+    Create a new layer in the document.
+
+    Creates a new Optional Content Group (OCG) with the specified properties.
+    The layer can be used to group related content that can be shown or hidden
+    together.
+
+    Args:
+        document_id: The unique identifier of the PDF document.
+        request: Layer creation request containing name and optional properties.
+        user: Optional authenticated user context.
+
+    Returns:
+        APIResponse containing the created layer data with its assigned ID.
+    """
     start_time = time.time()
 
     # TODO: Implement layer creation using document service
@@ -342,52 +417,48 @@ async def create_layer(
     "/{document_id}/layers/{layer_id}",
     response_model=APIResponse[dict],
     summary="Update layer",
-    description="""
-Update a layer's properties.
-
-## Request Body
-Only include fields you want to change.
-
-```json
-{
-  "visible": false,
-  "locked": true,
-  "opacity": 0.7
-}
-```
-
-## Response
-Returns the updated layer.
-
-```json
-{
-  "success": true,
-  "data": {
-    "layer_id": "uuid",
-    "name": "Annotations",
-    "visible": false,
-    "locked": true,
-    "opacity": 0.7,
-    "print": true,
-    "order": 1
-  }
-}
-```
-
-## Example (curl)
-```bash
-curl -X PATCH "http://localhost:8000/api/v1/documents/{document_id}/layers/{layer_id}" \\
-  -H "Authorization: Bearer <token>" \\
+    description="Update the properties of an existing layer. You can modify any combination of properties including name, visibility, lock state, opacity, print behavior, and z-order. Only the fields you include in the request will be updated; other properties remain unchanged.",
+    responses={
+        200: {
+            "description": "Layer updated successfully. Returns the updated layer with all current properties."
+        },
+        400: {
+            "description": "Bad request. Invalid layer properties provided (e.g., opacity out of range)."
+        },
+        401: {
+            "description": "Unauthorized. Invalid or missing authentication token."
+        },
+        403: {
+            "description": "Forbidden. The layer is locked and cannot be modified."
+        },
+        404: {
+            "description": "Not found. The specified document_id or layer_id does not exist."
+        },
+        500: {
+            "description": "Internal server error. An unexpected error occurred while updating the layer."
+        },
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X PATCH "https://api.giga-pdf.com/api/v1/documents/{document_id}/layers/{layer_id}" \\
+  -H "Authorization: Bearer $TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "visible": false,
     "opacity": 0.5
-  }'
-```
+  }' ''',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
 
-## Example (Python)
-```python
-import requests
+document_id = "your-document-id"
+layer_id = "your-layer-id"
+token = "your-api-token"
 
 updates = {
     "visible": False,
@@ -395,54 +466,84 @@ updates = {
 }
 
 response = requests.patch(
-    f"http://localhost:8000/api/v1/documents/{document_id}/layers/{layer_id}",
-    headers={"Authorization": "Bearer <token>", "Content-Type": "application/json"},
+    f"https://api.giga-pdf.com/api/v1/documents/{document_id}/layers/{layer_id}",
+    headers={
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    },
     json=updates
 )
-layer = response.json()["data"]
-print(f"Updated layer: {layer['name']} - visible={layer['visible']}")
-```
 
-## Example (JavaScript)
-```javascript
+result = response.json()
+if result["success"]:
+    layer = result["data"]
+    print(f"Updated layer: {layer['name']} - visible={layer['visible']}")''',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const documentId = "your-document-id";
+const layerId = "your-layer-id";
+const token = "your-api-token";
+
 const updates = {
   visible: false,
   opacity: 0.5
 };
 
 const response = await fetch(
-  `/api/v1/documents/${documentId}/layers/${layerId}`,
+  `https://api.giga-pdf.com/api/v1/documents/${documentId}/layers/${layerId}`,
   {
-    method: 'PATCH',
+    method: "PATCH",
     headers: {
-      'Authorization': 'Bearer <token>',
-      'Content-Type': 'application/json'
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
     },
     body: JSON.stringify(updates)
   }
 );
-const result = await response.json();
-console.log(`Updated layer: ${result.data.name}`);
-```
 
-## Example (PHP)
-```php
+const result = await response.json();
+if (result.success) {
+  console.log(`Updated layer: ${result.data.name} - visible=${result.data.visible}`);
+}''',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$documentId = "your-document-id";
+$layerId = "your-layer-id";
+$token = "your-api-token";
+
 $updates = [
-    'visible' => false,
-    'opacity' => 0.5
+    "visible" => false,
+    "opacity" => 0.5
 ];
 
-$response = $client->patch(
-    "http://localhost:8000/api/v1/documents/{$documentId}/layers/{$layerId}",
-    [
-        'headers' => ['Authorization' => 'Bearer <token>', 'Content-Type' => 'application/json'],
-        'json' => $updates
+$ch = curl_init();
+curl_setopt_array($ch, [
+    CURLOPT_URL => "https://api.giga-pdf.com/api/v1/documents/{$documentId}/layers/{$layerId}",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_CUSTOMREQUEST => "PATCH",
+    CURLOPT_POSTFIELDS => json_encode($updates),
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer {$token}",
+        "Content-Type: application/json"
     ]
-);
-$result = json_decode($response->getBody(), true);
-echo "Updated layer: " . $result['data']['name'];
-```
-""",
+]);
+
+$response = curl_exec($ch);
+curl_close($ch);
+
+$result = json_decode($response, true);
+if ($result["success"]) {
+    $layer = $result["data"];
+    echo "Updated layer: {$layer['name']} - visible={$layer['visible']}\\n";
+}''',
+            },
+        ]
+    },
 )
 async def update_layer(
     document_id: str,
@@ -450,7 +551,22 @@ async def update_layer(
     request: UpdateLayerRequest,
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
-    """Update a layer."""
+    """
+    Update a layer's properties.
+
+    Performs a partial update on the specified layer. Only the properties
+    included in the request will be modified; all other properties remain
+    unchanged.
+
+    Args:
+        document_id: The unique identifier of the PDF document.
+        layer_id: The unique identifier of the layer to update.
+        request: Layer update request containing properties to modify.
+        user: Optional authenticated user context.
+
+    Returns:
+        APIResponse containing the updated layer data.
+    """
     start_time = time.time()
 
     # TODO: Implement layer update using document service
@@ -479,61 +595,124 @@ async def update_layer(
     "/{document_id}/layers/{layer_id}",
     status_code=204,
     summary="Delete layer",
-    description="""
-Delete a layer from the document.
+    description="Delete a layer from the document. All elements on the deleted layer will be moved to the default layer to preserve document content. This operation cannot be undone.",
+    responses={
+        204: {
+            "description": "Layer deleted successfully. No content returned."
+        },
+        401: {
+            "description": "Unauthorized. Invalid or missing authentication token."
+        },
+        403: {
+            "description": "Forbidden. The layer is locked or is the default layer and cannot be deleted."
+        },
+        404: {
+            "description": "Not found. The specified document_id or layer_id does not exist."
+        },
+        500: {
+            "description": "Internal server error. An unexpected error occurred while deleting the layer."
+        },
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X DELETE "https://api.giga-pdf.com/api/v1/documents/{document_id}/layers/{layer_id}" \\
+  -H "Authorization: Bearer $TOKEN"''',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
 
-All elements on this layer will be moved to the default layer.
-
-## Example (curl)
-```bash
-curl -X DELETE "http://localhost:8000/api/v1/documents/{document_id}/layers/{layer_id}" \\
-  -H "Authorization: Bearer <token>"
-```
-
-## Example (Python)
-```python
-import requests
+document_id = "your-document-id"
+layer_id = "your-layer-id"
+token = "your-api-token"
 
 response = requests.delete(
-    f"http://localhost:8000/api/v1/documents/{document_id}/layers/{layer_id}",
-    headers={"Authorization": "Bearer <token>"}
+    f"https://api.giga-pdf.com/api/v1/documents/{document_id}/layers/{layer_id}",
+    headers={"Authorization": f"Bearer {token}"}
 )
+
 if response.status_code == 204:
     print("Layer deleted successfully")
-```
+else:
+    print(f"Error: {response.status_code}")''',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const documentId = "your-document-id";
+const layerId = "your-layer-id";
+const token = "your-api-token";
 
-## Example (JavaScript)
-```javascript
 const response = await fetch(
-  `/api/v1/documents/${documentId}/layers/${layerId}`,
+  `https://api.giga-pdf.com/api/v1/documents/${documentId}/layers/${layerId}`,
   {
-    method: 'DELETE',
-    headers: { 'Authorization': 'Bearer <token>' }
+    method: "DELETE",
+    headers: {
+      "Authorization": `Bearer ${token}`
+    }
   }
 );
-if (response.status === 204) {
-  console.log('Layer deleted successfully');
-}
-```
 
-## Example (PHP)
-```php
-$response = $client->delete(
-    "http://localhost:8000/api/v1/documents/{$documentId}/layers/{$layerId}",
-    ['headers' => ['Authorization' => 'Bearer <token>']]
-);
-if ($response->getStatusCode() === 204) {
-    echo "Layer deleted successfully";
-}
-```
-""",
+if (response.status === 204) {
+  console.log("Layer deleted successfully");
+} else {
+  console.log(`Error: ${response.status}`);
+}''',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$documentId = "your-document-id";
+$layerId = "your-layer-id";
+$token = "your-api-token";
+
+$ch = curl_init();
+curl_setopt_array($ch, [
+    CURLOPT_URL => "https://api.giga-pdf.com/api/v1/documents/{$documentId}/layers/{$layerId}",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_CUSTOMREQUEST => "DELETE",
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer {$token}"
+    ]
+]);
+
+$response = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+if ($httpCode === 204) {
+    echo "Layer deleted successfully\\n";
+} else {
+    echo "Error: {$httpCode}\\n";
+}''',
+            },
+        ]
+    },
 )
 async def delete_layer(
     document_id: str,
     layer_id: str,
     user: OptionalUser = None,
 ) -> None:
-    """Delete a layer."""
+    """
+    Delete a layer from the document.
+
+    Removes the specified layer from the document. Content from the deleted
+    layer is automatically moved to the default layer to prevent data loss.
+
+    Args:
+        document_id: The unique identifier of the PDF document.
+        layer_id: The unique identifier of the layer to delete.
+        user: Optional authenticated user context.
+
+    Returns:
+        None. Returns 204 No Content on success.
+    """
     # TODO: Implement layer deletion using document service
     pass
 
@@ -542,64 +721,47 @@ async def delete_layer(
     "/{document_id}/layers/reorder",
     response_model=APIResponse[dict],
     summary="Reorder layers",
-    description="""
-Change the order of layers (z-order).
-
-## Request Body
-```json
-{
-  "layer_order": [
-    "layer-uuid-1",
-    "layer-uuid-2",
-    "layer-uuid-3"
-  ]
-}
-```
-
-Layers are ordered from front to back. The first layer in the array
-will be rendered on top of all others.
-
-## Response
-Returns the updated layer list with new order.
-
-```json
-{
-  "success": true,
-  "data": {
-    "layers": [
-      {
-        "layer_id": "layer-uuid-1",
-        "name": "Top Layer",
-        "order": 3
-      },
-      {
-        "layer_id": "layer-uuid-2",
-        "name": "Middle Layer",
-        "order": 2
-      },
-      {
-        "layer_id": "layer-uuid-3",
-        "name": "Bottom Layer",
-        "order": 1
-      }
-    ]
-  }
-}
-```
-
-## Example (curl)
-```bash
-curl -X PUT "http://localhost:8000/api/v1/documents/{document_id}/layers/reorder" \\
-  -H "Authorization: Bearer <token>" \\
+    description="Change the z-order of layers in the document. Layers are ordered from front to back, where the first layer in the array will be rendered on top of all others. All layer IDs must be included in the request.",
+    responses={
+        200: {
+            "description": "Layers reordered successfully. Returns the updated list of layers with their new order values."
+        },
+        400: {
+            "description": "Bad request. Invalid layer order provided (e.g., missing layer IDs, duplicate IDs, or unknown layer IDs)."
+        },
+        401: {
+            "description": "Unauthorized. Invalid or missing authentication token."
+        },
+        404: {
+            "description": "Document not found. The specified document_id does not exist."
+        },
+        500: {
+            "description": "Internal server error. An unexpected error occurred while reordering layers."
+        },
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X PUT "https://api.giga-pdf.com/api/v1/documents/{document_id}/layers/reorder" \\
+  -H "Authorization: Bearer $TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "layer_order": ["uuid1", "uuid2", "uuid3"]
-  }'
-```
+    "layer_order": [
+      "layer-uuid-1",
+      "layer-uuid-2",
+      "layer-uuid-3"
+    ]
+  }' ''',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
 
-## Example (Python)
-```python
-import requests
+document_id = "your-document-id"
+token = "your-api-token"
 
 reorder_data = {
     "layer_order": [
@@ -610,72 +772,111 @@ reorder_data = {
 }
 
 response = requests.put(
-    f"http://localhost:8000/api/v1/documents/{document_id}/layers/reorder",
-    headers={"Authorization": "Bearer <token>", "Content-Type": "application/json"},
+    f"https://api.giga-pdf.com/api/v1/documents/{document_id}/layers/reorder",
+    headers={
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    },
     json=reorder_data
 )
-layers = response.json()["data"]["layers"]
-for layer in layers:
-    print(f"{layer['name']}: order={layer['order']}")
-```
 
-## Example (JavaScript)
-```javascript
+result = response.json()
+if result["success"]:
+    for layer in result["data"]["layers"]:
+        print(f"{layer['name']}: order={layer['order']}")''',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const documentId = "your-document-id";
+const token = "your-api-token";
+
 const reorderData = {
-  layerOrder: [
-    'layer-uuid-1',
-    'layer-uuid-2',
-    'layer-uuid-3'
+  layer_order: [
+    "layer-uuid-1",
+    "layer-uuid-2",
+    "layer-uuid-3"
   ]
 };
 
 const response = await fetch(
-  `/api/v1/documents/${documentId}/layers/reorder`,
+  `https://api.giga-pdf.com/api/v1/documents/${documentId}/layers/reorder`,
   {
-    method: 'PUT',
+    method: "PUT",
     headers: {
-      'Authorization': 'Bearer <token>',
-      'Content-Type': 'application/json'
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
     },
     body: JSON.stringify(reorderData)
   }
 );
-const result = await response.json();
-result.data.layers.forEach(layer => {
-  console.log(`${layer.name}: order=${layer.order}`);
-});
-```
 
-## Example (PHP)
-```php
+const result = await response.json();
+if (result.success) {
+  result.data.layers.forEach(layer => {
+    console.log(`${layer.name}: order=${layer.order}`);
+  });
+}''',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$documentId = "your-document-id";
+$token = "your-api-token";
+
 $reorderData = [
-    'layer_order' => [
-        'layer-uuid-1',
-        'layer-uuid-2',
-        'layer-uuid-3'
+    "layer_order" => [
+        "layer-uuid-1",
+        "layer-uuid-2",
+        "layer-uuid-3"
     ]
 ];
 
-$response = $client->put(
-    "http://localhost:8000/api/v1/documents/{$documentId}/layers/reorder",
-    [
-        'headers' => ['Authorization' => 'Bearer <token>', 'Content-Type' => 'application/json'],
-        'json' => $reorderData
+$ch = curl_init();
+curl_setopt_array($ch, [
+    CURLOPT_URL => "https://api.giga-pdf.com/api/v1/documents/{$documentId}/layers/reorder",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_CUSTOMREQUEST => "PUT",
+    CURLOPT_POSTFIELDS => json_encode($reorderData),
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer {$token}",
+        "Content-Type: application/json"
     ]
-);
-$result = json_decode($response->getBody(), true);
-foreach ($result['data']['layers'] as $layer) {
-    echo "{$layer['name']}: order={$layer['order']}\n";
-}
-```
-""",
+]);
+
+$response = curl_exec($ch);
+curl_close($ch);
+
+$result = json_decode($response, true);
+if ($result["success"]) {
+    foreach ($result["data"]["layers"] as $layer) {
+        echo "{$layer['name']}: order={$layer['order']}\\n";
+    }
+}''',
+            },
+        ]
+    },
 )
 async def reorder_layers(
     document_id: str,
     request: ReorderLayersRequest,
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
-    """Reorder layers."""
+    """
+    Reorder layers in the document.
+
+    Changes the z-order (stacking order) of all layers. The first layer in
+    the provided order array will be rendered on top of all others.
+
+    Args:
+        document_id: The unique identifier of the PDF document.
+        request: Reorder request containing the new layer order.
+        user: Optional authenticated user context.
+
+    Returns:
+        APIResponse containing the updated list of layers with new order values.
+    """
     start_time = time.time()
 
     # TODO: Implement layer reordering using document service

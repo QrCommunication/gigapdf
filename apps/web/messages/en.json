@@ -1244,6 +1244,53 @@
         "description": "For any questions regarding these terms:"
       }
     },
+    "changelog": {
+      "title": "Changelog",
+      "description": "All notable changes to GigaPDF are documented here. We follow semantic versioning.",
+      "subscribe": {
+        "title": "Stay Updated",
+        "description": "Follow our GitHub releases to get notified about new features and improvements.",
+        "link": "View on GitHub"
+      }
+    },
+    "docs": {
+      "title": "API Documentation",
+      "description": "Complete documentation for the GigaPDF REST API. Build powerful PDF workflows with our comprehensive endpoints.",
+      "interactive": {
+        "title": "Interactive Documentation",
+        "swagger": {
+          "description": "Try out API endpoints directly in your browser with the interactive Swagger UI."
+        },
+        "redoc": {
+          "description": "Clean, responsive documentation with detailed request/response schemas."
+        }
+      },
+      "openapi": {
+        "title": "OpenAPI Specification",
+        "description": "Download the OpenAPI 3.0 spec to generate clients in any language or import into Postman.",
+        "download": "Download JSON"
+      },
+      "quickstart": {
+        "title": "Quick Start",
+        "auth": {
+          "title": "Authentication",
+          "description": "All API requests require a JWT token in the Authorization header."
+        },
+        "example": {
+          "title": "Example Request",
+          "description": "Upload a PDF document to start editing."
+        }
+      },
+      "features": {
+        "title": "API Features",
+        "documents": "Document upload, download, and management",
+        "pages": "Page operations: add, remove, reorder, rotate",
+        "elements": "Text, images, shapes, and annotations",
+        "export": "Export to PNG, JPEG, DOCX, HTML",
+        "ocr": "OCR text extraction from scanned PDFs",
+        "realtime": "Real-time collaboration via WebSocket"
+      }
+    },
     "contact": {
       "title": "Contact us",
       "subtitle": "Have a question, suggestion, or need help? Don't hesitate to contact us.",

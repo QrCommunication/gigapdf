@@ -71,8 +71,7 @@ class DecryptDocumentRequest(BaseModel):
     "/{document_id}/security/encrypt",
     response_model=APIResponse[dict],
     summary="Encrypt PDF document",
-    description="""
-Add password protection and set permissions for a PDF document.
+    description="""Add password protection and set permissions for a PDF document.
 
 You can set two types of passwords:
 - **User password**: Required to open and view the document
@@ -86,103 +85,14 @@ You can also control various permissions:
 - Modifying content
 - Assembling pages
 
-## Path Parameters
-- **document_id**: Document identifier (UUID v4)
-
-## Request Body
-```json
-{
-  "user_password": "secret123",
-  "owner_password": "admin456",
-  "allow_printing": true,
-  "allow_copying": false,
-  "allow_annotation": true,
-  "allow_form_filling": true,
-  "allow_modification": false,
-  "allow_assembly": false,
-  "encryption_algorithm": "AES-256"
-}
-```
-
-## Example (curl)
-```bash
-curl -X POST "http://localhost:8000/api/v1/documents/{document_id}/security/encrypt" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "user_password": "secret123",
-    "allow_copying": false,
-    "encryption_algorithm": "AES-256"
-  }'
-```
-
-## Example (Python)
-```python
-import requests
-
-# Chiffrer un document PDF avec mot de passe
-response = requests.post(
-    f"http://localhost:8000/api/v1/documents/{document_id}/security/encrypt",
-    headers={"Authorization": "Bearer <token>"},
-    json={
-        "user_password": "secret123",
-        "owner_password": "admin456",
-        "allow_printing": True,
-        "allow_copying": False,
-        "allow_modification": False,
-        "encryption_algorithm": "AES-256"
-    }
-)
-result = response.json()
-```
-
-## Example (JavaScript)
-```javascript
-// Protéger un PDF par mot de passe
-const response = await fetch(
-  `/api/v1/documents/${documentId}/security/encrypt`,
-  {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Bearer <token>',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      user_password: 'secret123',
-      allow_copying: false,
-      encryption_algorithm: 'AES-256'
-    })
-  }
-);
-const result = await response.json();
-```
-
-## Example (PHP)
-```php
-// Chiffrer un document PDF
-$client = new GuzzleHttp\\Client();
-$response = $client->post(
-    "http://localhost:8000/api/v1/documents/{$documentId}/security/encrypt",
-    [
-        'headers' => [
-            'Authorization' => 'Bearer <token>',
-            'Content-Type' => 'application/json'
-        ],
-        'json' => [
-            'user_password' => 'secret123',
-            'owner_password' => 'admin456',
-            'allow_printing' => true,
-            'allow_copying' => false,
-            'encryption_algorithm' => 'AES-256'
-        ]
-    ]
-);
-$result = json_decode($response->getBody(), true);
-```
+Supported encryption algorithms:
+- **RC4-128**: Legacy encryption (not recommended for sensitive documents)
+- **AES-128**: Strong encryption suitable for most use cases
+- **AES-256**: Maximum security encryption (recommended)
 """,
     responses={
         200: {
-            "description": "Document encrypted successfully",
+            "description": "Document encrypted successfully. Returns the document ID, encryption status, algorithm used, and applied permissions.",
             "content": {
                 "application/json": {
                     "example": {
@@ -205,8 +115,130 @@ $result = json_decode($response->getBody(), true);
                 }
             },
         },
-        400: {"description": "Invalid encryption parameters"},
-        404: {"description": "Document not found"},
+        400: {"description": "Invalid encryption parameters. This can occur when no password is provided, or an unsupported encryption algorithm is specified."},
+        404: {"description": "Document not found. The specified document_id does not exist or the session has expired."},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": """curl -X POST "https://api.giga-pdf.com/api/v1/documents/{document_id}/security/encrypt" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "user_password": "secret123",
+    "owner_password": "admin456",
+    "allow_printing": true,
+    "allow_copying": false,
+    "allow_annotation": true,
+    "allow_form_filling": true,
+    "allow_modification": false,
+    "allow_assembly": false,
+    "encryption_algorithm": "AES-256"
+  }'"""
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": """import requests
+
+document_id = "550e8400-e29b-41d4-a716-446655440000"
+token = "your_api_token"
+
+response = requests.post(
+    f"https://api.giga-pdf.com/api/v1/documents/{document_id}/security/encrypt",
+    headers={
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    },
+    json={
+        "user_password": "secret123",
+        "owner_password": "admin456",
+        "allow_printing": True,
+        "allow_copying": False,
+        "allow_annotation": True,
+        "allow_form_filling": True,
+        "allow_modification": False,
+        "allow_assembly": False,
+        "encryption_algorithm": "AES-256"
+    }
+)
+
+result = response.json()
+print(f"Encrypted: {result['data']['encrypted']}")
+print(f"Algorithm: {result['data']['algorithm']}")"""
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": """const documentId = "550e8400-e29b-41d4-a716-446655440000";
+const token = "your_api_token";
+
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/documents/${documentId}/security/encrypt`,
+  {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      user_password: "secret123",
+      owner_password: "admin456",
+      allow_printing: true,
+      allow_copying: false,
+      allow_annotation: true,
+      allow_form_filling: true,
+      allow_modification: false,
+      allow_assembly: false,
+      encryption_algorithm: "AES-256"
+    })
+  }
+);
+
+const result = await response.json();
+console.log(`Encrypted: ${result.data.encrypted}`);
+console.log(`Algorithm: ${result.data.algorithm}`);"""
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": """<?php
+$documentId = "550e8400-e29b-41d4-a716-446655440000";
+$token = "your_api_token";
+
+$ch = curl_init();
+curl_setopt_array($ch, [
+    CURLOPT_URL => "https://api.giga-pdf.com/api/v1/documents/{$documentId}/security/encrypt",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST => true,
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer {$token}",
+        "Content-Type: application/json"
+    ],
+    CURLOPT_POSTFIELDS => json_encode([
+        "user_password" => "secret123",
+        "owner_password" => "admin456",
+        "allow_printing" => true,
+        "allow_copying" => false,
+        "allow_annotation" => true,
+        "allow_form_filling" => true,
+        "allow_modification" => false,
+        "allow_assembly" => false,
+        "encryption_algorithm" => "AES-256"
+    ])
+]);
+
+$response = curl_exec($ch);
+curl_close($ch);
+
+$result = json_decode($response, true);
+echo "Encrypted: " . ($result["data"]["encrypted"] ? "Yes" : "No") . "\\n";
+echo "Algorithm: " . $result["data"]["algorithm"] . "\\n";
+?>"""
+            }
+        ]
     },
 )
 async def encrypt_document(
@@ -314,81 +346,22 @@ async def encrypt_document(
     "/{document_id}/security/decrypt",
     response_model=APIResponse[dict],
     summary="Decrypt PDF document",
-    description="""
-Remove password protection from a PDF document.
+    description="""Remove password protection from a PDF document.
 
-This requires the owner password or user password with modification permissions.
+This endpoint removes all encryption and password protection from a PDF document, making it freely accessible without any credentials.
 
-## Path Parameters
-- **document_id**: Document identifier (UUID v4)
+**Requirements:**
+- The document must be currently encrypted
+- You must provide either the owner password or user password with modification permissions
 
-## Request Body
-```json
-{
-  "password": "secret123"
-}
-```
-
-## Example (curl)
-```bash
-curl -X POST "http://localhost:8000/api/v1/documents/{document_id}/security/decrypt" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"password": "secret123"}'
-```
-
-## Example (Python)
-```python
-import requests
-
-# Déchiffrer un document PDF
-response = requests.post(
-    f"http://localhost:8000/api/v1/documents/{document_id}/security/decrypt",
-    headers={"Authorization": "Bearer <token>"},
-    json={"password": "secret123"}
-)
-result = response.json()
-```
-
-## Example (JavaScript)
-```javascript
-// Supprimer la protection d'un PDF
-const response = await fetch(
-  `/api/v1/documents/${documentId}/security/decrypt`,
-  {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Bearer <token>',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      password: 'secret123'
-    })
-  }
-);
-const result = await response.json();
-```
-
-## Example (PHP)
-```php
-// Déchiffrer un document PDF
-$client = new GuzzleHttp\\Client();
-$response = $client->post(
-    "http://localhost:8000/api/v1/documents/{$documentId}/security/decrypt",
-    [
-        'headers' => [
-            'Authorization' => 'Bearer <token>',
-            'Content-Type' => 'application/json'
-        ],
-        'json' => ['password' => 'secret123']
-    ]
-);
-$result = json_decode($response->getBody(), true);
-```
+**Important Notes:**
+- Once decrypted, the document will have no password protection
+- All permission restrictions will be removed
+- This action can be reversed by encrypting the document again
 """,
     responses={
         200: {
-            "description": "Document decrypted successfully",
+            "description": "Document decrypted successfully. The document is now accessible without password protection.",
             "content": {
                 "application/json": {
                     "example": {
@@ -403,8 +376,110 @@ $result = json_decode($response->getBody(), true);
                 }
             },
         },
-        401: {"description": "Invalid password"},
-        404: {"description": "Document not found"},
+        400: {"description": "Invalid operation. The document is not encrypted or the provided password is incorrect."},
+        404: {"description": "Document not found. The specified document_id does not exist or the session has expired."},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": """curl -X POST "https://api.giga-pdf.com/api/v1/documents/{document_id}/security/decrypt" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "password": "secret123"
+  }'"""
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": """import requests
+
+document_id = "550e8400-e29b-41d4-a716-446655440000"
+token = "your_api_token"
+
+response = requests.post(
+    f"https://api.giga-pdf.com/api/v1/documents/{document_id}/security/decrypt",
+    headers={
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    },
+    json={
+        "password": "secret123"
+    }
+)
+
+result = response.json()
+if result["success"]:
+    print("Document decrypted successfully!")
+    print(f"Document ID: {result['data']['document_id']}")
+else:
+    print(f"Error: {result.get('error', 'Unknown error')}")"""
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": """const documentId = "550e8400-e29b-41d4-a716-446655440000";
+const token = "your_api_token";
+
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/documents/${documentId}/security/decrypt`,
+  {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      password: "secret123"
+    })
+  }
+);
+
+const result = await response.json();
+if (result.success) {
+  console.log("Document decrypted successfully!");
+  console.log(`Document ID: ${result.data.document_id}`);
+} else {
+  console.error(`Error: ${result.error || "Unknown error"}`);
+}"""
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": """<?php
+$documentId = "550e8400-e29b-41d4-a716-446655440000";
+$token = "your_api_token";
+
+$ch = curl_init();
+curl_setopt_array($ch, [
+    CURLOPT_URL => "https://api.giga-pdf.com/api/v1/documents/{$documentId}/security/decrypt",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST => true,
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer {$token}",
+        "Content-Type: application/json"
+    ],
+    CURLOPT_POSTFIELDS => json_encode([
+        "password" => "secret123"
+    ])
+]);
+
+$response = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+$result = json_decode($response, true);
+if ($result["success"]) {
+    echo "Document decrypted successfully!\\n";
+    echo "Document ID: " . $result["data"]["document_id"] . "\\n";
+} else {
+    echo "Error: " . ($result["error"] ?? "Unknown error") . "\\n";
+}
+?>"""
+            }
+        ]
     },
 )
 async def decrypt_document(
@@ -465,66 +540,27 @@ async def decrypt_document(
     "/{document_id}/security/permissions",
     response_model=APIResponse[dict],
     summary="Get document permissions",
-    description="""
-Get the current security permissions for a PDF document.
+    description="""Retrieve the current security permissions and encryption status for a PDF document.
 
-Returns information about:
+This endpoint returns comprehensive information about the document's security settings:
+
+**Encryption Status:**
 - Whether the document is encrypted
-- Encryption algorithm used
-- Allowed permissions (printing, copying, modification, etc.)
+- The encryption algorithm used (if encrypted)
 
-## Path Parameters
-- **document_id**: Document identifier (UUID v4)
+**Permission Flags:**
+- **printing**: Can the document be printed?
+- **copying**: Can text and graphics be copied?
+- **annotation**: Can annotations be added or modified?
+- **form_filling**: Can form fields be filled?
+- **modification**: Can the document content be modified?
+- **assembly**: Can pages be inserted, deleted, or rotated?
 
-## Example (curl)
-```bash
-curl -X GET "http://localhost:8000/api/v1/documents/{document_id}/security/permissions" \\
-  -H "Authorization: Bearer <token>"
-```
-
-## Example (Python)
-```python
-import requests
-
-# Obtenir les permissions du document
-response = requests.get(
-    f"http://localhost:8000/api/v1/documents/{document_id}/security/permissions",
-    headers={"Authorization": "Bearer <token>"}
-)
-permissions = response.json()["data"]
-print(f"Encrypted: {permissions['is_encrypted']}")
-print(f"Can print: {permissions['permissions']['printing']}")
-```
-
-## Example (JavaScript)
-```javascript
-// Récupérer les permissions du document
-const response = await fetch(
-  `/api/v1/documents/${documentId}/security/permissions`,
-  {
-    method: 'GET',
-    headers: { 'Authorization': 'Bearer <token>' }
-  }
-);
-const result = await response.json();
-const permissions = result.data.permissions;
-```
-
-## Example (PHP)
-```php
-// Obtenir les permissions du document
-$client = new GuzzleHttp\\Client();
-$response = $client->get(
-    "http://localhost:8000/api/v1/documents/{$documentId}/security/permissions",
-    ['headers' => ['Authorization' => 'Bearer <token>']]
-);
-$permissions = json_decode($response->getBody(), true)['data'];
-echo "Encrypted: " . ($permissions['is_encrypted'] ? 'Yes' : 'No');
-```
+**Note:** For unencrypted documents, all permissions return `true` as there are no restrictions.
 """,
     responses={
         200: {
-            "description": "Permissions retrieved successfully",
+            "description": "Permissions retrieved successfully. Returns the encryption status and all permission flags.",
             "content": {
                 "application/json": {
                     "example": {
@@ -547,7 +583,112 @@ echo "Encrypted: " . ($permissions['is_encrypted'] ? 'Yes' : 'No');
                 }
             },
         },
-        404: {"description": "Document not found"},
+        404: {"description": "Document not found. The specified document_id does not exist or the session has expired."},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": """curl -X GET "https://api.giga-pdf.com/api/v1/documents/{document_id}/security/permissions" \\
+  -H "Authorization: Bearer $TOKEN"
+"""
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": """import requests
+
+document_id = "550e8400-e29b-41d4-a716-446655440000"
+token = "your_api_token"
+
+response = requests.get(
+    f"https://api.giga-pdf.com/api/v1/documents/{document_id}/security/permissions",
+    headers={
+        "Authorization": f"Bearer {token}"
+    }
+)
+
+result = response.json()
+data = result["data"]
+
+print(f"Document ID: {data['document_id']}")
+print(f"Encrypted: {data['is_encrypted']}")
+if data["is_encrypted"]:
+    print(f"Algorithm: {data['encryption_algorithm']}")
+
+print("\\nPermissions:")
+for perm, allowed in data["permissions"].items():
+    status = "Allowed" if allowed else "Denied"
+    print(f"  {perm}: {status}")"""
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": """const documentId = "550e8400-e29b-41d4-a716-446655440000";
+const token = "your_api_token";
+
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/documents/${documentId}/security/permissions`,
+  {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${token}`
+    }
+  }
+);
+
+const result = await response.json();
+const data = result.data;
+
+console.log(`Document ID: ${data.document_id}`);
+console.log(`Encrypted: ${data.is_encrypted}`);
+if (data.is_encrypted) {
+  console.log(`Algorithm: ${data.encryption_algorithm}`);
+}
+
+console.log("\\nPermissions:");
+Object.entries(data.permissions).forEach(([perm, allowed]) => {
+  const status = allowed ? "Allowed" : "Denied";
+  console.log(`  ${perm}: ${status}`);
+});"""
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": """<?php
+$documentId = "550e8400-e29b-41d4-a716-446655440000";
+$token = "your_api_token";
+
+$ch = curl_init();
+curl_setopt_array($ch, [
+    CURLOPT_URL => "https://api.giga-pdf.com/api/v1/documents/{$documentId}/security/permissions",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer {$token}"
+    ]
+]);
+
+$response = curl_exec($ch);
+curl_close($ch);
+
+$result = json_decode($response, true);
+$data = $result["data"];
+
+echo "Document ID: " . $data["document_id"] . "\\n";
+echo "Encrypted: " . ($data["is_encrypted"] ? "Yes" : "No") . "\\n";
+if ($data["is_encrypted"]) {
+    echo "Algorithm: " . $data["encryption_algorithm"] . "\\n";
+}
+
+echo "\\nPermissions:\\n";
+foreach ($data["permissions"] as $perm => $allowed) {
+    $status = $allowed ? "Allowed" : "Denied";
+    echo "  {$perm}: {$status}\\n";
+}
+?>"""
+            }
+        ]
     },
 )
 async def get_permissions(

@@ -118,87 +118,96 @@ def create_application() -> FastAPI:
     """
     settings = get_settings()
 
+    # OpenAPI servers configuration
+    openapi_servers = [
+        {
+            "url": "https://api.giga-pdf.com",
+            "description": "Production server",
+        },
+    ]
+
+    # Add development server in non-production environments
+    if not settings.is_production:
+        openapi_servers.append(
+            {
+                "url": "http://localhost:8000",
+                "description": "Local development server",
+            }
+        )
+
     # OpenAPI tag metadata for better documentation organization
     tags_metadata = [
         {
-            "name": "Documents",
-            "description": "Upload, manage, and manipulate PDF documents. Create sessions, preview pages, and download files.",
+            "name": "documents",
+            "description": "Document upload, retrieval, and management",
         },
         {
-            "name": "Pages",
-            "description": "Page-level operations: add, remove, reorder, rotate, resize, and extract pages.",
+            "name": "pages",
+            "description": "Page operations including rotation, resizing, and reordering",
         },
         {
-            "name": "Elements",
-            "description": "Manipulate document elements: text blocks, images, shapes, and annotations.",
+            "name": "elements",
+            "description": "Create and manage page elements (text, images, shapes)",
         },
         {
-            "name": "Text Operations",
-            "description": "Extract, search, and modify text content within PDF documents.",
+            "name": "export",
+            "description": "Export documents to various formats (PNG, JPEG, PDF, HTML)",
         },
         {
-            "name": "Forms",
-            "description": "Work with PDF forms: fill fields, create form elements, and flatten forms.",
+            "name": "merge-split",
+            "description": "Merge multiple PDFs or split PDFs into separate files",
         },
         {
-            "name": "Annotations",
-            "description": "Add and manage PDF annotations: comments, highlights, stamps, and drawings.",
+            "name": "text",
+            "description": "Text search, replace, and extraction operations",
         },
         {
-            "name": "Security",
-            "description": "PDF security operations: encryption, decryption, password protection, and permissions.",
+            "name": "sharing",
+            "description": "Document sharing and collaboration",
         },
         {
-            "name": "Export",
-            "description": "Export PDFs to various formats: PNG, JPEG, DOCX, HTML, and more.",
+            "name": "billing",
+            "description": "Subscription and payment management",
         },
         {
-            "name": "Merge & Split",
-            "description": "Combine multiple PDFs or split documents into separate files.",
+            "name": "jobs",
+            "description": "Async job tracking and management",
         },
         {
-            "name": "Storage",
-            "description": "Persistent document storage: save, organize with folders, and manage document versions.",
+            "name": "annotations",
+            "description": "Add highlights, notes, and link annotations",
         },
         {
-            "name": "Quota",
-            "description": "User quota management: storage limits, API call tracking, and plan information.",
+            "name": "forms",
+            "description": "Form field operations and filling",
         },
         {
-            "name": "Plans",
-            "description": "Subscription plan management: view plans, pricing, and features.",
+            "name": "security",
+            "description": "PDF encryption and decryption",
         },
         {
-            "name": "Billing",
-            "description": "Billing and subscription management: checkout, portal, invoices, and payment methods. **Requires authentication.**",
+            "name": "layers",
+            "description": "PDF layer management (OCG)",
         },
         {
-            "name": "Public Billing",
-            "description": "**Public endpoints** for landing page: view plans, create checkout sessions, start trials. Some endpoints allow guest access.",
+            "name": "bookmarks",
+            "description": "Bookmark/outline management",
         },
         {
-            "name": "Tenant Documents",
-            "description": "**Organization document sharing**. Share documents with team members, manage access levels (read/write).",
+            "name": "storage",
+            "description": "Persistent document storage",
         },
         {
-            "name": "Sharing",
-            "description": "**Document sharing**. Share documents by email, manage invitations, create public links, and handle notifications.",
+            "name": "quota",
+            "description": "Usage quota information",
         },
         {
-            "name": "Admin",
-            "description": "**Admin endpoints** for system management: users, documents, jobs, tenants, and settings.",
+            "name": "history",
+            "description": "Undo/redo history",
         },
         {
-            "name": "Jobs",
-            "description": "Async job tracking for long-running operations like OCR, export, and merge.",
-        },
-        {
-            "name": "Health",
-            "description": "System health check endpoints.",
-        },
-        {
-            "name": "Webhooks",
-            "description": "**Webhook endpoints** for external service integrations (Stripe payments).",
+            "name": "activity",
+            "description": "User activity logs",
         },
     ]
 
@@ -235,7 +244,7 @@ Users can create or join organizations (tenants) to share documents and quotas:
 GigaPDF uses Stripe for payment processing:
 
 - **14-day Free Trial**: Try Starter or Pro plans without a credit card
-- **Flexible Plans**: Free, Starter (€9/mo), Pro (€29/mo), Enterprise
+- **Flexible Plans**: Free, Starter (9 EUR/mo), Pro (29 EUR/mo), Enterprise
 - **Organization Billing**: Only owners can manage billing for organizations
 - **Trial Freedom**: Change plans freely during trial with no charges
 
@@ -262,11 +271,35 @@ All responses follow a standard format:
   }
 }
 ```
+
+## Rate Limits
+
+API rate limits vary by plan:
+- **Free**: 100 requests/hour
+- **Starter**: 1,000 requests/hour
+- **Pro**: 10,000 requests/hour
+- **Enterprise**: Custom limits
+
+Rate limit headers are included in all responses:
+- `X-RateLimit-Limit`: Maximum requests allowed
+- `X-RateLimit-Remaining`: Requests remaining in current window
+- `X-RateLimit-Reset`: Unix timestamp when the limit resets
         """,
         version="1.0.0",
-        openapi_url="/api/v1/openapi.json" if settings.is_development else None,
-        docs_url="/api/docs" if settings.is_development else None,
-        redoc_url="/api/redoc" if settings.is_development else None,
+        openapi_url="/api/v1/openapi.json",
+        docs_url="/api/docs",
+        redoc_url="/api/redoc",
+        terms_of_service="https://giga-pdf.com/terms",
+        contact={
+            "name": "Giga-PDF Support",
+            "url": "https://giga-pdf.com/support",
+            "email": "support@giga-pdf.com",
+        },
+        license_info={
+            "name": "Proprietary",
+            "url": "https://giga-pdf.com/license",
+        },
+        servers=openapi_servers,
         lifespan=lifespan,
         openapi_tags=tags_metadata,
     )

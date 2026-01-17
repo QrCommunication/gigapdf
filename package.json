@@ -2,7 +2,7 @@
   "name": "giga-pdf",
   "version": "1.0.0",
   "private": true,
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@10.28.0",
   "description": "Giga-PDF - WYSIWYG PDF Editing Platform",
   "pnpm": {
     "overrides": {
@@ -12,7 +12,8 @@
   },
   "scripts": {
     "dev": "turbo dev --filter=web --filter=admin --concurrency=15",
-    "dev:https": "bash scripts/dev-https.sh",
+    "dev:all": "bash scripts/dev-all.sh",
+    "dev:all:https": "bash scripts/dev-all-https.sh",
     "dev:web": "turbo dev --filter=web",
     "dev:admin": "turbo dev --filter=admin",
     "build": "turbo build",

@@ -23,66 +23,22 @@ router = APIRouter()
     "/{job_id}",
     response_model=APIResponse[dict],
     summary="Get job status",
-    description="""
-Get the status and progress of an async job.
+    description="""Retrieve the current status and progress of an asynchronous job.
 
-Jobs are created for long-running operations like OCR, export, merge, and split.
-This endpoint returns the current status, progress percentage, and result if completed.
+Jobs are created for long-running operations such as OCR processing, PDF export, document merge, and split operations. This endpoint allows you to poll for job completion and retrieve results.
 
-## Path Parameters
-- **job_id**: Job identifier (UUID v4)
+**Job Status Values:**
+- `pending` - Job is queued and waiting to be processed
+- `processing` - Job is currently being executed
+- `completed` - Job finished successfully, result data is available
+- `failed` - Job encountered an error, error details are provided
+- `cancelled` - Job was cancelled by the user
 
-## Response
-Returns job information including:
-- Job type and status
-- Progress percentage (0-100)
-- Result data if completed
-- Error details if failed
-
-## Example (curl)
-```bash
-curl -X GET "http://localhost:8000/api/v1/jobs/{job_id}" \\
-  -H "Authorization: Bearer <token>"
-```
-
-## Example (Python)
-```python
-import requests
-
-# Obtenir le statut d'une tâche
-response = requests.get(
-    f"http://localhost:8000/api/v1/jobs/{job_id}",
-    headers={"Authorization": "Bearer <token>"}
-)
-job_status = response.json()["data"]
-print(f"Progress: {job_status['progress']}%")
-```
-
-## Example (JavaScript)
-```javascript
-// Récupérer le statut de la tâche
-const response = await fetch(`/api/v1/jobs/${jobId}`, {
-  method: 'GET',
-  headers: { 'Authorization': 'Bearer <token>' }
-});
-const result = await response.json();
-console.log(`Progress: ${result.data.progress}%`);
-```
-
-## Example (PHP)
-```php
-// Obtenir le statut de la tâche
-$client = new GuzzleHttp\\Client();
-$response = $client->get("http://localhost:8000/api/v1/jobs/{$jobId}", [
-    'headers' => ['Authorization' => 'Bearer <token>']
-]);
-$job = json_decode($response->getBody(), true)['data'];
-echo "Progress: {$job['progress']}%";
-```
-""",
+**Polling Strategy:**
+For optimal performance, we recommend polling every 2-5 seconds for short jobs (< 1 minute) and every 10-30 seconds for longer operations like OCR on large documents.""",
     responses={
         200: {
-            "description": "Job status retrieved successfully",
+            "description": "Job status retrieved successfully. The response includes job metadata, current progress (0-100), and result data if the job is completed.",
             "content": {
                 "application/json": {
                     "example": {
@@ -104,7 +60,31 @@ echo "Progress: {$job['progress']}%";
                 }
             },
         },
-        404: {"description": "Job not found"},
+        404: {"description": "Job not found. The specified job_id does not exist or has been deleted."},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/jobs/{job_id}" \\\n  -H "Authorization: Bearer $TOKEN" \\\n  -H "Accept: application/json"'
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\nimport time\n\njob_id = "550e8400-e29b-41d4-a716-446655440030"\ntoken = "your_api_token"\n\n# Poll for job completion\nwhile True:\n    response = requests.get(\n        f"https://api.giga-pdf.com/api/v1/jobs/{job_id}",\n        headers={"Authorization": f"Bearer {token}"}\n    )\n    response.raise_for_status()\n    job = response.json()["data"]\n\n    print(f"Status: {job[\'status\']}, Progress: {job[\'progress\']}%")\n\n    if job["status"] == "completed":\n        print("Job completed! Result:", job["result"])\n        break\n    elif job["status"] == "failed":\n        print("Job failed:", job["error"])\n        break\n\n    time.sleep(2)  # Poll every 2 seconds'
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const jobId = "550e8400-e29b-41d4-a716-446655440030";\nconst token = "your_api_token";\n\n// Poll for job completion\nasync function pollJobStatus() {\n  while (true) {\n    const response = await fetch(\n      `https://api.giga-pdf.com/api/v1/jobs/${jobId}`,\n      {\n        method: "GET",\n        headers: {\n          "Authorization": `Bearer ${token}`,\n          "Accept": "application/json"\n        }\n      }\n    );\n\n    if (!response.ok) {\n      throw new Error(`HTTP error! status: ${response.status}`);\n    }\n\n    const { data: job } = await response.json();\n    console.log(`Status: ${job.status}, Progress: ${job.progress}%`);\n\n    if (job.status === "completed") {\n      console.log("Job completed!", job.result);\n      return job;\n    } else if (job.status === "failed") {\n      throw new Error(`Job failed: ${job.error.message}`);\n    }\n\n    await new Promise(resolve => setTimeout(resolve, 2000));\n  }\n}\n\npollJobStatus().catch(console.error);'
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$jobId = "550e8400-e29b-41d4-a716-446655440030";\n$token = "your_api_token";\n\n// Poll for job completion\nwhile (true) {\n    $ch = curl_init();\n    curl_setopt_array($ch, [\n        CURLOPT_URL => "https://api.giga-pdf.com/api/v1/jobs/{$jobId}",\n        CURLOPT_RETURNTRANSFER => true,\n        CURLOPT_HTTPHEADER => [\n            "Authorization: Bearer {$token}",\n            "Accept: application/json"\n        ]\n    ]);\n\n    $response = curl_exec($ch);\n    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);\n    curl_close($ch);\n\n    if ($httpCode !== 200) {\n        throw new Exception("HTTP error: {$httpCode}");\n    }\n\n    $data = json_decode($response, true);\n    $job = $data["data"];\n\n    echo "Status: {$job[\'status\']}, Progress: {$job[\'progress\']}%\\n";\n\n    if ($job["status"] === "completed") {\n        echo "Job completed!\\n";\n        print_r($job["result"]);\n        break;\n    } elseif ($job["status"] === "failed") {\n        throw new Exception("Job failed: " . $job["error"]["message"]);\n    }\n\n    sleep(2); // Poll every 2 seconds\n}'
+            }
+        ]
     },
 )
 async def get_job_status(
@@ -166,57 +146,66 @@ async def get_job_status(
     "/{job_id}",
     response_model=APIResponse[dict],
     summary="Cancel job",
-    description="""
-Cancel a running async job.
+    description="""Cancel a running or pending asynchronous job.
 
-Only jobs in 'pending' or 'processing' status can be cancelled.
-Completed or failed jobs cannot be cancelled.
+Use this endpoint to stop a job that is no longer needed. This is useful for:
+- Cancelling long-running OCR operations on large documents
+- Stopping export jobs that are taking too long
+- Freeing up processing resources
 
-## Path Parameters
-- **job_id**: Job identifier (UUID v4)
+**Cancellable States:**
+- `pending` - Job is waiting in queue and can be cancelled
+- `processing` - Job is running and will be terminated
 
-## Example (curl)
-```bash
-curl -X DELETE "http://localhost:8000/api/v1/jobs/{job_id}" \\
-  -H "Authorization: Bearer <token>"
-```
+**Non-Cancellable States:**
+- `completed` - Job has already finished successfully
+- `failed` - Job has already failed
+- `cancelled` - Job was already cancelled
 
-## Example (Python)
-```python
-import requests
-
-# Annuler une tâche en cours
-response = requests.delete(
-    f"http://localhost:8000/api/v1/jobs/{job_id}",
-    headers={"Authorization": "Bearer <token>"}
-)
-result = response.json()
-```
-
-## Example (JavaScript)
-```javascript
-// Annuler une tâche
-const response = await fetch(`/api/v1/jobs/${jobId}`, {
-  method: 'DELETE',
-  headers: { 'Authorization': 'Bearer <token>' }
-});
-const result = await response.json();
-```
-
-## Example (PHP)
-```php
-// Annuler une tâche
-$client = new GuzzleHttp\\Client();
-$response = $client->delete("http://localhost:8000/api/v1/jobs/{$jobId}", [
-    'headers' => ['Authorization' => 'Bearer <token>']
-]);
-$result = json_decode($response->getBody(), true);
-```
-""",
+**Note:** Cancelling a job is irreversible. Any partial results will be discarded.""",
     responses={
-        200: {"description": "Job cancelled successfully"},
-        400: {"description": "Job cannot be cancelled (already completed/failed)"},
-        404: {"description": "Job not found"},
+        200: {
+            "description": "Job cancelled successfully. The job has been terminated and any partial results have been discarded.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "job_id": "550e8400-e29b-41d4-a716-446655440030",
+                            "status": "cancelled",
+                            "message": "Job cancelled successfully"
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-15T10:30:00Z"}
+                    }
+                }
+            }
+        },
+        400: {"description": "Job cannot be cancelled. The job has already completed, failed, or was previously cancelled."},
+        404: {"description": "Job not found. The specified job_id does not exist or has been deleted."},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X DELETE "https://api.giga-pdf.com/api/v1/jobs/{job_id}" \\\n  -H "Authorization: Bearer $TOKEN" \\\n  -H "Accept: application/json"'
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\njob_id = "550e8400-e29b-41d4-a716-446655440030"\ntoken = "your_api_token"\n\n# Cancel a running job\nresponse = requests.delete(\n    f"https://api.giga-pdf.com/api/v1/jobs/{job_id}",\n    headers={"Authorization": f"Bearer {token}"}\n)\n\nif response.status_code == 200:\n    result = response.json()\n    print(f"Job {result[\'data\'][\'job_id\']} cancelled successfully")\nelif response.status_code == 400:\n    error = response.json()\n    print(f"Cannot cancel job: {error[\'error\'][\'message\']}")\nelif response.status_code == 404:\n    print("Job not found")'
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const jobId = "550e8400-e29b-41d4-a716-446655440030";\nconst token = "your_api_token";\n\n// Cancel a running job\nasync function cancelJob() {\n  const response = await fetch(\n    `https://api.giga-pdf.com/api/v1/jobs/${jobId}`,\n    {\n      method: "DELETE",\n      headers: {\n        "Authorization": `Bearer ${token}`,\n        "Accept": "application/json"\n      }\n    }\n  );\n\n  const result = await response.json();\n\n  if (response.ok) {\n    console.log(`Job ${result.data.job_id} cancelled successfully`);\n  } else if (response.status === 400) {\n    console.log(`Cannot cancel job: ${result.error.message}`);\n  } else if (response.status === 404) {\n    console.log("Job not found");\n  }\n\n  return result;\n}\n\ncancelJob().catch(console.error);'
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$jobId = "550e8400-e29b-41d4-a716-446655440030";\n$token = "your_api_token";\n\n// Cancel a running job\n$ch = curl_init();\ncurl_setopt_array($ch, [\n    CURLOPT_URL => "https://api.giga-pdf.com/api/v1/jobs/{$jobId}",\n    CURLOPT_CUSTOMREQUEST => "DELETE",\n    CURLOPT_RETURNTRANSFER => true,\n    CURLOPT_HTTPHEADER => [\n        "Authorization: Bearer {$token}",\n        "Accept: application/json"\n    ]\n]);\n\n$response = curl_exec($ch);\n$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);\ncurl_close($ch);\n\n$result = json_decode($response, true);\n\nif ($httpCode === 200) {\n    echo "Job {$result[\'data\'][\'job_id\']} cancelled successfully\\n";\n} elseif ($httpCode === 400) {\n    echo "Cannot cancel job: {$result[\'error\'][\'message\']}\\n";\n} elseif ($httpCode === 404) {\n    echo "Job not found\\n";\n}'
+            }
+        ]
     },
 )
 async def cancel_job(
@@ -272,74 +261,30 @@ async def cancel_job(
     "",
     response_model=APIResponse[dict],
     summary="List user jobs",
-    description="""
-List all jobs for the authenticated user with pagination.
+    description="""Retrieve a paginated list of all jobs for the authenticated user.
 
-Returns jobs sorted by creation time (newest first).
-You can filter by job type and status.
+Returns jobs sorted by creation time (newest first). Use query parameters to filter results by job type or status.
 
-## Query Parameters
-- **page**: Page number (default: 1)
-- **per_page**: Items per page (default: 20, max: 100)
-- **job_type**: Filter by job type (ocr, export, merge, split, upload, convert)
-- **status**: Filter by status (pending, processing, completed, failed, cancelled)
+**Job Types:**
+- `ocr` - Optical Character Recognition processing
+- `export` - PDF export to other formats (Word, Excel, PowerPoint, images)
+- `merge` - Combining multiple PDFs into one
+- `split` - Splitting a PDF into multiple documents
+- `upload` - File upload and processing
+- `convert` - File format conversion
 
-## Example (curl)
-```bash
-curl -X GET "http://localhost:8000/api/v1/jobs?page=1&per_page=20&status=processing" \\
-  -H "Authorization: Bearer <token>"
-```
+**Job Statuses:**
+- `pending` - Job is queued and waiting to be processed
+- `processing` - Job is currently being executed
+- `completed` - Job finished successfully
+- `failed` - Job encountered an error
+- `cancelled` - Job was cancelled by the user
 
-## Example (Python)
-```python
-import requests
-
-# Lister toutes les tâches de l'utilisateur
-response = requests.get(
-    "http://localhost:8000/api/v1/jobs",
-    params={"page": 1, "per_page": 20, "status": "processing"},
-    headers={"Authorization": "Bearer <token>"}
-)
-jobs = response.json()["data"]["items"]
-pagination = response.json()["data"]["pagination"]
-```
-
-## Example (JavaScript)
-```javascript
-// Récupérer la liste des tâches
-const params = new URLSearchParams({
-  page: '1',
-  per_page: '20',
-  status: 'processing'
-});
-const response = await fetch(`/api/v1/jobs?${params}`, {
-  method: 'GET',
-  headers: { 'Authorization': 'Bearer <token>' }
-});
-const result = await response.json();
-const jobs = result.data.items;
-```
-
-## Example (PHP)
-```php
-// Obtenir la liste des tâches
-$client = new GuzzleHttp\\Client();
-$response = $client->get('http://localhost:8000/api/v1/jobs', [
-    'headers' => ['Authorization' => 'Bearer <token>'],
-    'query' => [
-        'page' => 1,
-        'per_page' => 20,
-        'status' => 'processing'
-    ]
-]);
-$data = json_decode($response->getBody(), true)['data'];
-$jobs = $data['items'];
-$pagination = $data['pagination'];
-```
-""",
+**Pagination:**
+Use `page` and `per_page` parameters to navigate through results. The response includes pagination metadata with total count and page information.""",
     responses={
         200: {
-            "description": "Jobs retrieved successfully",
+            "description": "Jobs retrieved successfully. Returns a paginated list of jobs with their current status and metadata.",
             "content": {
                 "application/json": {
                     "example": {
@@ -352,7 +297,19 @@ $pagination = $data['pagination'];
                                     "status": "completed",
                                     "progress": 100.0,
                                     "created_at": "2024-01-15T10:30:00Z",
+                                    "started_at": "2024-01-15T10:30:05Z",
                                     "completed_at": "2024-01-15T10:32:15Z",
+                                    "document_id": "550e8400-e29b-41d4-a716-446655440000"
+                                },
+                                {
+                                    "job_id": "550e8400-e29b-41d4-a716-446655440031",
+                                    "type": "ocr",
+                                    "status": "processing",
+                                    "progress": 45.0,
+                                    "created_at": "2024-01-15T10:35:00Z",
+                                    "started_at": "2024-01-15T10:35:02Z",
+                                    "completed_at": None,
+                                    "document_id": "550e8400-e29b-41d4-a716-446655440001"
                                 }
                             ],
                             "pagination": {
@@ -367,6 +324,31 @@ $pagination = $data['pagination'];
                 }
             },
         },
+        401: {"description": "Unauthorized. Authentication token is missing or invalid."},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '# List all jobs\ncurl -X GET "https://api.giga-pdf.com/api/v1/jobs" \\\n  -H "Authorization: Bearer $TOKEN" \\\n  -H "Accept: application/json"\n\n# Filter by status and paginate\ncurl -X GET "https://api.giga-pdf.com/api/v1/jobs?status=processing&page=1&per_page=10" \\\n  -H "Authorization: Bearer $TOKEN" \\\n  -H "Accept: application/json"\n\n# Filter by job type\ncurl -X GET "https://api.giga-pdf.com/api/v1/jobs?job_type=ocr" \\\n  -H "Authorization: Bearer $TOKEN" \\\n  -H "Accept: application/json"'
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\ntoken = "your_api_token"\n\n# List all jobs with pagination\nresponse = requests.get(\n    "https://api.giga-pdf.com/api/v1/jobs",\n    params={\n        "page": 1,\n        "per_page": 20,\n        "status": "processing"  # Optional: filter by status\n    },\n    headers={"Authorization": f"Bearer {token}"}\n)\nresponse.raise_for_status()\n\ndata = response.json()["data"]\njobs = data["items"]\npagination = data["pagination"]\n\nprint(f"Found {pagination[\'total\']} jobs (page {pagination[\'page\']} of {pagination[\'total_pages\']})")\n\nfor job in jobs:\n    print(f"Job {job[\'job_id\']}: {job[\'type\']} - {job[\'status\']} ({job[\'progress\']}%)")\n\n# Iterate through all pages\nall_jobs = []\npage = 1\nwhile True:\n    response = requests.get(\n        "https://api.giga-pdf.com/api/v1/jobs",\n        params={"page": page, "per_page": 100},\n        headers={"Authorization": f"Bearer {token}"}\n    )\n    data = response.json()["data"]\n    all_jobs.extend(data["items"])\n    if page >= data["pagination"]["total_pages"]:\n        break\n    page += 1'
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const token = "your_api_token";\n\n// List jobs with filters\nasync function listJobs(options = {}) {\n  const params = new URLSearchParams({\n    page: options.page || 1,\n    per_page: options.perPage || 20,\n    ...(options.status && { status: options.status }),\n    ...(options.jobType && { job_type: options.jobType })\n  });\n\n  const response = await fetch(\n    `https://api.giga-pdf.com/api/v1/jobs?${params}`,\n    {\n      method: "GET",\n      headers: {\n        "Authorization": `Bearer ${token}`,\n        "Accept": "application/json"\n      }\n    }\n  );\n\n  if (!response.ok) {\n    throw new Error(`HTTP error! status: ${response.status}`);\n  }\n\n  const { data } = await response.json();\n  return data;\n}\n\n// Get processing jobs\nconst { items: jobs, pagination } = await listJobs({ status: "processing" });\nconsole.log(`Found ${pagination.total} processing jobs`);\n\njobs.forEach(job => {\n  console.log(`${job.job_id}: ${job.type} - ${job.progress}%`);\n});'
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$token = "your_api_token";\n\n// List jobs with filters\nfunction listJobs($token, $options = []) {\n    $queryParams = http_build_query([\n        "page" => $options["page"] ?? 1,\n        "per_page" => $options["per_page"] ?? 20,\n        "status" => $options["status"] ?? null,\n        "job_type" => $options["job_type"] ?? null\n    ]);\n\n    $ch = curl_init();\n    curl_setopt_array($ch, [\n        CURLOPT_URL => "https://api.giga-pdf.com/api/v1/jobs?{$queryParams}",\n        CURLOPT_RETURNTRANSFER => true,\n        CURLOPT_HTTPHEADER => [\n            "Authorization: Bearer {$token}",\n            "Accept: application/json"\n        ]\n    ]);\n\n    $response = curl_exec($ch);\n    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);\n    curl_close($ch);\n\n    if ($httpCode !== 200) {\n        throw new Exception("HTTP error: {$httpCode}");\n    }\n\n    return json_decode($response, true)["data"];\n}\n\n// Get all processing jobs\n$data = listJobs($token, ["status" => "processing"]);\n$jobs = $data["items"];\n$pagination = $data["pagination"];\n\necho "Found {$pagination[\'total\']} processing jobs\\n";\n\nforeach ($jobs as $job) {\n    echo "{$job[\'job_id\']}: {$job[\'type\']} - {$job[\'progress\']}%\\n";\n}'
+            }
+        ]
     },
 )
 async def list_jobs(

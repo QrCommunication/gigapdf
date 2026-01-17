@@ -51,115 +51,29 @@ class SplitDocumentRequest(BaseModel):
 @router.post(
     "/merge",
     response_model=APIResponse[dict],
-    summary="Merge multiple documents",
-    description="""
-Merge multiple PDF documents into a single document.
+    summary="Merge multiple PDF documents",
+    description="""Combine multiple PDF documents into a single file.
 
-You can optionally specify page ranges for each document to merge only
-specific pages. The documents are merged in the order provided.
+Documents are merged in the order provided. You can optionally specify page ranges
+for each document to include only specific pages in the merged result.
 
-## Request Body
-```json
-{
-  "document_ids": [
-    "550e8400-e29b-41d4-a716-446655440001",
-    "550e8400-e29b-41d4-a716-446655440002",
-    "550e8400-e29b-41d4-a716-446655440003"
-  ],
-  "page_ranges": ["1-5", null, "10-20"],
-  "output_name": "merged_report.pdf"
-}
-```
+## Features
+- Merge 2 or more PDF documents into one
+- Optionally specify page ranges for selective merging
+- Preserve document quality and formatting
+- Automatic page numbering in the merged document
 
-## Example (curl)
-```bash
-curl -X POST "http://localhost:8000/api/v1/documents/merge" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "document_ids": ["doc1-id", "doc2-id", "doc3-id"],
-    "output_name": "merged.pdf"
-  }'
-```
+## Page Range Syntax
+- `"1-5"` - Pages 1 through 5
+- `"1,3,5"` - Pages 1, 3, and 5
+- `"1-3,7-9"` - Pages 1-3 and 7-9
+- `null` - All pages from the document
 
-## Example (Python)
-```python
-import requests
-
-# Fusionner plusieurs documents PDF
-response = requests.post(
-    "http://localhost:8000/api/v1/documents/merge",
-    headers={"Authorization": "Bearer <token>"},
-    json={
-        "document_ids": [doc1_id, doc2_id, doc3_id],
-        "page_ranges": ["1-5", None, "10-20"],  # Pages spécifiques pour doc1 et doc3
-        "output_name": "merged_report.pdf"
-    }
-)
-merged = response.json()["data"]
-merged_doc_id = merged["document_id"]
-
-# Le document fusionné est maintenant disponible dans la session
-# Vous pouvez le télécharger ou le modifier
-download_response = requests.get(
-    f"http://localhost:8000/api/v1/documents/{merged_doc_id}/download",
-    headers={"Authorization": "Bearer <token>"}
-)
-with open("merged.pdf", "wb") as f:
-    f.write(download_response.content)
-```
-
-## Example (JavaScript)
-```javascript
-// Fusionner des documents
-const response = await fetch('/api/v1/documents/merge', {
-  method: 'POST',
-  headers: {
-    'Authorization': 'Bearer <token>',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    document_ids: [doc1Id, doc2Id, doc3Id],
-    page_ranges: ['1-5', null, '10-20'],
-    output_name: 'merged.pdf'
-  })
-});
-const result = await response.json();
-const mergedDocId = result.data.document_id;
-
-// Télécharger le document fusionné
-const downloadRes = await fetch(
-  `/api/v1/documents/${mergedDocId}/download`,
-  { headers: { 'Authorization': 'Bearer <token>' } }
-);
-const blob = await downloadRes.blob();
-```
-
-## Example (PHP)
-```php
-// Fusionner plusieurs documents
-$client = new GuzzleHttp\\Client();
-$response = $client->post('http://localhost:8000/api/v1/documents/merge', [
-    'headers' => [
-        'Authorization' => 'Bearer <token>',
-        'Content-Type' => 'application/json'
-    ],
-    'json' => [
-        'document_ids' => [$doc1Id, $doc2Id, $doc3Id],
-        'page_ranges' => ['1-5', null, '10-20'],
-        'output_name' => 'merged.pdf'
-    ]
-]);
-$merged = json_decode($response->getBody(), true)['data'];
-$mergedDocId = $merged['document_id'];
-
-// Télécharger le résultat
-$downloadRes = $client->get(
-    "http://localhost:8000/api/v1/documents/{$mergedDocId}/download",
-    ['headers' => ['Authorization' => 'Bearer <token>']]
-);
-file_put_contents('merged.pdf', $downloadRes->getBody());
-```
+## Use Cases
+- Combining report sections from different sources
+- Merging contract pages with signature pages
+- Creating document bundles for distribution
+- Assembling presentations from multiple files
 """,
     responses={
         201: {
@@ -179,15 +93,63 @@ file_put_contents('merged.pdf', $downloadRes->getBody());
                 }
             },
         },
-        400: {"description": "Invalid document IDs or page ranges"},
-        404: {"description": "One or more documents not found"},
+        400: {
+            "description": "Invalid request - Less than 2 documents provided, invalid document IDs, or invalid page ranges",
+        },
+        404: {
+            "description": "One or more documents not found in the current session",
+        },
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X POST "https://api.giga-pdf.com/api/v1/documents/merge" \\\n  -H "Authorization: Bearer $TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{\n    "document_ids": [\n      "550e8400-e29b-41d4-a716-446655440001",\n      "550e8400-e29b-41d4-a716-446655440002",\n      "550e8400-e29b-41d4-a716-446655440003"\n    ],\n    "page_ranges": ["1-5", null, "10-20"],\n    "output_name": "merged_report.pdf"\n  }\''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\n# Merge multiple PDF documents\nresponse = requests.post(\n    "https://api.giga-pdf.com/api/v1/documents/merge",\n    headers={"Authorization": f"Bearer {token}"},\n    json={\n        "document_ids": [\n            "550e8400-e29b-41d4-a716-446655440001",\n            "550e8400-e29b-41d4-a716-446655440002",\n            "550e8400-e29b-41d4-a716-446655440003"\n        ],\n        "page_ranges": ["1-5", None, "10-20"],  # Specific pages for doc1 and doc3\n        "output_name": "merged_report.pdf"\n    }\n)\nresult = response.json()\nmerged_doc_id = result["data"]["document_id"]\nprint(f"Merged document ID: {merged_doc_id}")\nprint(f"Total pages: {result[\'data\'][\'page_count\']}")\n\n# Download the merged document\ndownload_response = requests.get(\n    f"https://api.giga-pdf.com/api/v1/documents/{merged_doc_id}/download",\n    headers={"Authorization": f"Bearer {token}"}\n)\nwith open("merged_report.pdf", "wb") as f:\n    f.write(download_response.content)'
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '// Merge multiple PDF documents\nconst response = await fetch("https://api.giga-pdf.com/api/v1/documents/merge", {\n  method: "POST",\n  headers: {\n    "Authorization": `Bearer ${token}`,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({\n    document_ids: [\n      "550e8400-e29b-41d4-a716-446655440001",\n      "550e8400-e29b-41d4-a716-446655440002",\n      "550e8400-e29b-41d4-a716-446655440003"\n    ],\n    page_ranges: ["1-5", null, "10-20"], // Specific pages for doc1 and doc3\n    output_name: "merged_report.pdf"\n  })\n});\n\nconst result = await response.json();\nconst mergedDocId = result.data.document_id;\nconsole.log(`Merged document ID: ${mergedDocId}`);\nconsole.log(`Total pages: ${result.data.page_count}`);\n\n// Download the merged document\nconst downloadResponse = await fetch(\n  `https://api.giga-pdf.com/api/v1/documents/${mergedDocId}/download`,\n  { headers: { "Authorization": `Bearer ${token}` } }\n);\nconst blob = await downloadResponse.blob();\nconst url = URL.createObjectURL(blob);\n// Use the URL to download or display the PDF'
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n// Merge multiple PDF documents\n$ch = curl_init();\n\n$data = [\n    "document_ids" => [\n        "550e8400-e29b-41d4-a716-446655440001",\n        "550e8400-e29b-41d4-a716-446655440002",\n        "550e8400-e29b-41d4-a716-446655440003"\n    ],\n    "page_ranges" => ["1-5", null, "10-20"], // Specific pages for doc1 and doc3\n    "output_name" => "merged_report.pdf"\n];\n\ncurl_setopt_array($ch, [\n    CURLOPT_URL => "https://api.giga-pdf.com/api/v1/documents/merge",\n    CURLOPT_RETURNTRANSFER => true,\n    CURLOPT_POST => true,\n    CURLOPT_POSTFIELDS => json_encode($data),\n    CURLOPT_HTTPHEADER => [\n        "Authorization: Bearer " . $token,\n        "Content-Type: application/json"\n    ]\n]);\n\n$response = curl_exec($ch);\n$result = json_decode($response, true);\n$mergedDocId = $result["data"]["document_id"];\necho "Merged document ID: " . $mergedDocId . "\\n";\necho "Total pages: " . $result["data"]["page_count"] . "\\n";\n\n// Download the merged document\ncurl_setopt_array($ch, [\n    CURLOPT_URL => "https://api.giga-pdf.com/api/v1/documents/{$mergedDocId}/download",\n    CURLOPT_POST => false,\n    CURLOPT_POSTFIELDS => null\n]);\n\n$pdfContent = curl_exec($ch);\nfile_put_contents("merged_report.pdf", $pdfContent);\ncurl_close($ch);\n?>'
+            },
+        ]
     },
 )
 async def merge_documents(
     request: MergeDocumentsRequest,
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
-    """Merge multiple documents into one."""
+    """
+    Merge multiple PDF documents into a single document.
+
+    This endpoint combines two or more PDF documents into one unified file.
+    Documents are merged in the order specified in the document_ids array.
+    You can optionally specify page ranges to include only specific pages
+    from each source document.
+
+    Args:
+        request: MergeDocumentsRequest containing document IDs, optional page ranges,
+                 and output filename.
+        user: Optional authenticated user for ownership tracking.
+
+    Returns:
+        APIResponse containing the merged document ID, page count, filename,
+        and number of source documents.
+
+    Raises:
+        DocumentNotFoundError: If any of the specified documents are not found.
+        InvalidOperationError: If page ranges are invalid or out of bounds.
+    """
     start_time = time.time()
 
     from app.repositories.document_repo import document_sessions
@@ -271,137 +233,36 @@ async def merge_documents(
 @router.post(
     "/{document_id}/split",
     response_model=APIResponse[dict],
-    summary="Split document",
-    description="""
-Split a PDF document into multiple separate documents.
+    summary="Split a PDF document into multiple parts",
+    description="""Split a single PDF document into multiple separate documents at specified page boundaries.
 
-Specify page numbers where you want to split. For example, if you have a
-20-page document and split at pages [5, 10], you'll get three documents:
+Specify the page numbers where you want to split the document. The split points define
+where each new document ends. For example, splitting a 20-page document at pages [5, 10]
+creates three documents:
 - Document 1: pages 1-5
 - Document 2: pages 6-10
 - Document 3: pages 11-20
 
-## Path Parameters
-- **document_id**: Document identifier (UUID v4)
+## Features
+- Split at any page boundary
+- Multiple split points supported
+- Custom naming for output documents
+- Preserves document quality and formatting
 
-## Request Body
-```json
-{
-  "split_points": [5, 10, 15],
-  "output_names": [
-    "part1.pdf",
-    "part2.pdf",
-    "part3.pdf",
-    "part4.pdf"
-  ]
-}
-```
+## Split Point Rules
+- Split points must be valid page numbers (1 to total pages)
+- Duplicate split points are automatically deduplicated
+- Split points are automatically sorted in ascending order
 
-## Example (curl)
-```bash
-curl -X POST "http://localhost:8000/api/v1/documents/{document_id}/split" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "split_points": [5, 10],
-    "output_names": ["part1.pdf", "part2.pdf", "part3.pdf"]
-  }'
-```
-
-## Example (Python)
-```python
-import requests
-
-# Diviser un document en plusieurs parties
-response = requests.post(
-    f"http://localhost:8000/api/v1/documents/{document_id}/split",
-    headers={"Authorization": "Bearer <token>"},
-    json={
-        "split_points": [5, 10, 15],
-        "output_names": ["intro.pdf", "chapter1.pdf", "chapter2.pdf", "conclusion.pdf"]
-    }
-)
-result = response.json()["data"]
-split_docs = result["documents"]
-
-# Télécharger chaque partie
-for doc in split_docs:
-    doc_id = doc["document_id"]
-    filename = doc["filename"]
-    download_res = requests.get(
-        f"http://localhost:8000/api/v1/documents/{doc_id}/download",
-        headers={"Authorization": "Bearer <token>"}
-    )
-    with open(filename, "wb") as f:
-        f.write(download_res.content)
-```
-
-## Example (JavaScript)
-```javascript
-// Diviser un document
-const response = await fetch(
-  `/api/v1/documents/${documentId}/split`,
-  {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Bearer <token>',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      split_points: [5, 10, 15],
-      output_names: ['intro.pdf', 'chapter1.pdf', 'chapter2.pdf', 'conclusion.pdf']
-    })
-  }
-);
-const result = await response.json();
-const splitDocs = result.data.documents;
-
-// Télécharger chaque partie
-for (const doc of splitDocs) {
-  const downloadRes = await fetch(
-    `/api/v1/documents/${doc.document_id}/download`,
-    { headers: { 'Authorization': 'Bearer <token>' } }
-  );
-  const blob = await downloadRes.blob();
-  // Télécharger ou traiter le blob
-}
-```
-
-## Example (PHP)
-```php
-// Diviser un document
-$client = new GuzzleHttp\\Client();
-$response = $client->post(
-    "http://localhost:8000/api/v1/documents/{$documentId}/split",
-    [
-        'headers' => [
-            'Authorization' => 'Bearer <token>',
-            'Content-Type' => 'application/json'
-        ],
-        'json' => [
-            'split_points' => [5, 10, 15],
-            'output_names' => ['intro.pdf', 'chapter1.pdf', 'chapter2.pdf', 'conclusion.pdf']
-        ]
-    ]
-);
-$result = json_decode($response->getBody(), true)['data'];
-$splitDocs = $result['documents'];
-
-// Télécharger chaque partie
-foreach ($splitDocs as $doc) {
-    $docId = $doc['document_id'];
-    $filename = $doc['filename'];
-    $downloadRes = $client->get(
-        "http://localhost:8000/api/v1/documents/{$docId}/download",
-        ['headers' => ['Authorization' => 'Bearer <token>']]
-    );
-    file_put_contents($filename, $downloadRes->getBody());
-}
-```
+## Use Cases
+- Extracting chapters from a book
+- Separating sections of a report
+- Breaking up large documents for easier sharing
+- Creating individual documents from scanned batches
 """,
     responses={
         201: {
-            "description": "Document split successfully",
+            "description": "Document split successfully into multiple parts",
             "content": {
                 "application/json": {
                     "example": {
@@ -421,6 +282,12 @@ foreach ($splitDocs as $doc) {
                                     "page_count": 5,
                                     "page_range": "6-10",
                                 },
+                                {
+                                    "document_id": "660e8400-e29b-41d4-a716-446655440003",
+                                    "filename": "part3.pdf",
+                                    "page_count": 10,
+                                    "page_range": "11-20",
+                                },
                             ],
                         },
                         "meta": {"request_id": "uuid", "timestamp": "2024-01-15T10:30:00Z"},
@@ -428,8 +295,36 @@ foreach ($splitDocs as $doc) {
                 }
             },
         },
-        400: {"description": "Invalid split points"},
-        404: {"description": "Document not found"},
+        400: {
+            "description": "Invalid split points - out of range, or output names count mismatch",
+        },
+        404: {
+            "description": "Document not found in the current session",
+        },
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X POST "https://api.giga-pdf.com/api/v1/documents/550e8400-e29b-41d4-a716-446655440000/split" \\\n  -H "Authorization: Bearer $TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{\n    "split_points": [5, 10, 15],\n    "output_names": ["intro.pdf", "chapter1.pdf", "chapter2.pdf", "conclusion.pdf"]\n  }\''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\ndocument_id = "550e8400-e29b-41d4-a716-446655440000"\n\n# Split a document into multiple parts\nresponse = requests.post(\n    f"https://api.giga-pdf.com/api/v1/documents/{document_id}/split",\n    headers={"Authorization": f"Bearer {token}"},\n    json={\n        "split_points": [5, 10, 15],\n        "output_names": ["intro.pdf", "chapter1.pdf", "chapter2.pdf", "conclusion.pdf"]\n    }\n)\nresult = response.json()\nsplit_docs = result["data"]["documents"]\n\nprint(f"Created {len(split_docs)} documents from original")\n\n# Download each split document\nfor doc in split_docs:\n    doc_id = doc["document_id"]\n    filename = doc["filename"]\n    print(f"Downloading {filename} ({doc[\'page_count\']} pages, {doc[\'page_range\']})")\n\n    download_response = requests.get(\n        f"https://api.giga-pdf.com/api/v1/documents/{doc_id}/download",\n        headers={"Authorization": f"Bearer {token}"}\n    )\n    with open(filename, "wb") as f:\n        f.write(download_response.content)'
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const documentId = "550e8400-e29b-41d4-a716-446655440000";\n\n// Split a document into multiple parts\nconst response = await fetch(\n  `https://api.giga-pdf.com/api/v1/documents/${documentId}/split`,\n  {\n    method: "POST",\n    headers: {\n      "Authorization": `Bearer ${token}`,\n      "Content-Type": "application/json"\n    },\n    body: JSON.stringify({\n      split_points: [5, 10, 15],\n      output_names: ["intro.pdf", "chapter1.pdf", "chapter2.pdf", "conclusion.pdf"]\n    })\n  }\n);\n\nconst result = await response.json();\nconst splitDocs = result.data.documents;\n\nconsole.log(`Created ${splitDocs.length} documents from original`);\n\n// Download each split document\nfor (const doc of splitDocs) {\n  console.log(`Downloading ${doc.filename} (${doc.page_count} pages, ${doc.page_range})`);\n\n  const downloadResponse = await fetch(\n    `https://api.giga-pdf.com/api/v1/documents/${doc.document_id}/download`,\n    { headers: { "Authorization": `Bearer ${token}` } }\n  );\n\n  const blob = await downloadResponse.blob();\n  // Create download link or process the blob\n  const url = URL.createObjectURL(blob);\n  const a = document.createElement("a");\n  a.href = url;\n  a.download = doc.filename;\n  a.click();\n}'
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$documentId = "550e8400-e29b-41d4-a716-446655440000";\n\n// Split a document into multiple parts\n$ch = curl_init();\n\n$data = [\n    "split_points" => [5, 10, 15],\n    "output_names" => ["intro.pdf", "chapter1.pdf", "chapter2.pdf", "conclusion.pdf"]\n];\n\ncurl_setopt_array($ch, [\n    CURLOPT_URL => "https://api.giga-pdf.com/api/v1/documents/{$documentId}/split",\n    CURLOPT_RETURNTRANSFER => true,\n    CURLOPT_POST => true,\n    CURLOPT_POSTFIELDS => json_encode($data),\n    CURLOPT_HTTPHEADER => [\n        "Authorization: Bearer " . $token,\n        "Content-Type: application/json"\n    ]\n]);\n\n$response = curl_exec($ch);\n$result = json_decode($response, true);\n$splitDocs = $result["data"]["documents"];\n\necho "Created " . count($splitDocs) . " documents from original\\n";\n\n// Download each split document\nforeach ($splitDocs as $doc) {\n    $docId = $doc["document_id"];\n    $filename = $doc["filename"];\n    echo "Downloading {$filename} ({$doc[\'page_count\']} pages, {$doc[\'page_range\']})\\n";\n\n    curl_setopt_array($ch, [\n        CURLOPT_URL => "https://api.giga-pdf.com/api/v1/documents/{$docId}/download",\n        CURLOPT_POST => false,\n        CURLOPT_POSTFIELDS => null\n    ]);\n\n    $pdfContent = curl_exec($ch);\n    file_put_contents($filename, $pdfContent);\n}\n\ncurl_close($ch);\n?>'
+            },
+        ]
     },
 )
 async def split_document(
@@ -437,7 +332,27 @@ async def split_document(
     request: SplitDocumentRequest,
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
-    """Split document into multiple documents."""
+    """
+    Split a PDF document into multiple separate documents.
+
+    This endpoint divides a single PDF document into multiple parts based on
+    specified split points. Each split point defines where one document ends
+    and the next begins.
+
+    Args:
+        document_id: The UUID of the document to split.
+        request: SplitDocumentRequest containing split points and optional output names.
+        user: Optional authenticated user for ownership tracking.
+
+    Returns:
+        APIResponse containing the original document ID and an array of
+        created documents with their IDs, filenames, page counts, and page ranges.
+
+    Raises:
+        DocumentNotFoundError: If the specified document is not found.
+        InvalidOperationError: If split points are out of range or output names
+                               count doesn't match the number of resulting documents.
+    """
     start_time = time.time()
 
     from app.repositories.document_repo import document_sessions

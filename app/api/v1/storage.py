@@ -76,92 +76,24 @@ class CreateVersionRequest(BaseModel):
     status_code=201,
     summary="Save document to storage",
     description="""
-Save a document from the active session to persistent storage.
+Save a document from an active editing session to persistent storage.
 
-This creates a permanent copy of the document that persists beyond the session.
-The document can be organized into folders and tagged for easier retrieval.
+This endpoint creates a permanent copy of a document that persists beyond the session lifetime. Documents can be organized into folders and tagged for easier retrieval and categorization.
+
+## Features
+- Automatic version tracking (initial version = 1)
+- Tag-based organization for searchability
+- Folder hierarchy support
+- Storage quota enforcement (personal or organization-based)
 
 ## Request Body
-```json
-{
-  "document_id": "550e8400-e29b-41d4-a716-446655440000",
-  "name": "Contract Agreement 2024",
-  "folder_id": "660e8400-e29b-41d4-a716-446655440001",
-  "tags": ["contract", "legal", "2024"],
-  "version_comment": "Initial version"
-}
-```
-
-## Example (curl)
-```bash
-curl -X POST "http://localhost:8000/api/v1/storage/documents" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "document_id": "550e8400-e29b-41d4-a716-446655440000",
-    "name": "My Document",
-    "tags": ["important"]
-  }'
-```
-
-## Example (Python)
-```python
-import requests
-
-# Sauvegarder un document dans le stockage persistant
-response = requests.post(
-    "http://localhost:8000/api/v1/storage/documents",
-    headers={"Authorization": "Bearer <token>"},
-    json={
-        "document_id": document_id,
-        "name": "Contract Agreement 2024",
-        "folder_id": folder_id,
-        "tags": ["contract", "legal", "2024"],
-        "version_comment": "Initial version"
-    }
-)
-stored_doc = response.json()["data"]
-stored_id = stored_doc["stored_document_id"]
-```
-
-## Example (JavaScript)
-```javascript
-// Enregistrer un document
-const response = await fetch('/api/v1/storage/documents', {
-  method: 'POST',
-  headers: {
-    'Authorization': 'Bearer <token>',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    document_id: documentId,
-    name: 'My Document',
-    folder_id: folderId,
-    tags: ['important', 'draft']
-  })
-});
-const result = await response.json();
-const storedId = result.data.stored_document_id;
-```
-
-## Example (PHP)
-```php
-// Sauvegarder un document
-$client = new GuzzleHttp\\Client();
-$response = $client->post('http://localhost:8000/api/v1/storage/documents', [
-    'headers' => [
-        'Authorization' => 'Bearer <token>',
-        'Content-Type' => 'application/json'
-    ],
-    'json' => [
-        'document_id' => $documentId,
-        'name' => 'Contract Agreement 2024',
-        'folder_id' => $folderId,
-        'tags' => ['contract', 'legal', '2024']
-    ]
-]);
-$storedDoc = json_decode($response->getBody(), true)['data'];
-```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| document_id | string | Yes | UUID of the document from an active session |
+| name | string | Yes | Display name (1-255 characters) |
+| folder_id | string | No | Target folder UUID (null for root) |
+| tags | array | No | List of tags for organization |
+| version_comment | string | No | Comment describing this version |
 """,
     responses={
         201: {
@@ -176,6 +108,7 @@ $storedDoc = json_decode($response->getBody(), true)['data'];
                             "page_count": 15,
                             "version": 1,
                             "created_at": "2024-01-15T10:30:00Z",
+                            "quota_source": "personal"
                         },
                         "meta": {"request_id": "uuid", "timestamp": "2024-01-15T10:30:00Z"},
                     }
@@ -184,6 +117,90 @@ $storedDoc = json_decode($response->getBody(), true)['data'];
         },
         400: {"description": "Invalid request or storage quota exceeded"},
         404: {"description": "Document or folder not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X POST "https://api.giga-pdf.com/api/v1/storage/documents" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "document_id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Contract Agreement 2024",
+    "folder_id": "660e8400-e29b-41d4-a716-446655440001",
+    "tags": ["contract", "legal", "2024"],
+    "version_comment": "Initial version"
+  }' '''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+response = requests.post(
+    "https://api.giga-pdf.com/api/v1/storage/documents",
+    headers={"Authorization": f"Bearer {token}"},
+    json={
+        "document_id": document_id,
+        "name": "Contract Agreement 2024",
+        "folder_id": folder_id,
+        "tags": ["contract", "legal", "2024"],
+        "version_comment": "Initial version"
+    }
+)
+
+stored_doc = response.json()["data"]
+print(f"Saved as: {stored_doc['stored_document_id']}")
+print(f"Version: {stored_doc['version']}")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const response = await fetch("https://api.giga-pdf.com/api/v1/storage/documents", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${token}`,
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    document_id: documentId,
+    name: "Contract Agreement 2024",
+    folder_id: folderId,
+    tags: ["contract", "legal", "2024"],
+    version_comment: "Initial version"
+  })
+});
+
+const { data: storedDoc } = await response.json();
+console.log(`Saved as: ${storedDoc.stored_document_id}`);
+console.log(`Version: ${storedDoc.version}`);'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$client = new GuzzleHttp\\Client();
+$response = $client->post("https://api.giga-pdf.com/api/v1/storage/documents", [
+    "headers" => [
+        "Authorization" => "Bearer " . $token,
+        "Content-Type" => "application/json"
+    ],
+    "json" => [
+        "document_id" => $documentId,
+        "name" => "Contract Agreement 2024",
+        "folder_id" => $folderId,
+        "tags" => ["contract", "legal", "2024"],
+        "version_comment" => "Initial version"
+    ]
+]);
+
+$storedDoc = json_decode($response->getBody(), true)["data"];
+echo "Saved as: " . $storedDoc["stored_document_id"] . "\\n";
+echo "Version: " . $storedDoc["version"] . "\\n";'''
+            }
+        ]
     },
 )
 async def save_document(
@@ -315,65 +332,132 @@ async def save_document(
     description="""
 List all documents in persistent storage for the authenticated user.
 
-Supports pagination, filtering by folder, and searching by name or tags.
+This endpoint provides paginated access to stored documents with powerful filtering and search capabilities.
 
 ## Query Parameters
-- **page**: Page number (default: 1)
-- **per_page**: Items per page (default: 20, max: 100)
-- **folder_id**: Filter by folder (null for root)
-- **search**: Search in name and tags
-- **tags**: Filter by tags (comma-separated)
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| page | integer | 1 | Page number (1-based) |
+| per_page | integer | 20 | Items per page (1-100) |
+| folder_id | string | null | Filter by folder UUID, empty string for root |
+| search | string | null | Search in document names |
+| tags | string | null | Filter by tags (comma-separated) |
 
-## Example (curl)
-```bash
-curl -X GET "http://localhost:8000/api/v1/storage/documents?page=1&per_page=20" \\
-  -H "Authorization: Bearer <token>"
-```
-
-## Example (Python)
-```python
-import requests
-
-# Lister les documents sauvegardés
-response = requests.get(
-    "http://localhost:8000/api/v1/storage/documents",
-    params={"page": 1, "per_page": 20, "folder_id": folder_id},
-    headers={"Authorization": "Bearer <token>"}
-)
-documents = response.json()["data"]["items"]
-pagination = response.json()["data"]["pagination"]
-```
-
-## Example (JavaScript)
-```javascript
-// Récupérer la liste des documents
-const params = new URLSearchParams({
-  page: '1',
-  per_page: '20',
-  search: 'contract'
-});
-const response = await fetch(`/api/v1/storage/documents?${params}`, {
-  method: 'GET',
-  headers: { 'Authorization': 'Bearer <token>' }
-});
-const result = await response.json();
-const documents = result.data.items;
-```
-
-## Example (PHP)
-```php
-// Lister les documents stockés
-$client = new GuzzleHttp\\Client();
-$response = $client->get('http://localhost:8000/api/v1/storage/documents', [
-    'headers' => ['Authorization' => 'Bearer <token>'],
-    'query' => ['page' => 1, 'per_page' => 20, 'search' => 'contract']
-]);
-$data = json_decode($response->getBody(), true)['data'];
-$documents = $data['items'];
-```
+## Response Structure
+- **items**: Array of document objects
+- **pagination**: Pagination metadata (total, page, per_page, total_pages)
 """,
     responses={
-        200: {"description": "Documents retrieved successfully"},
+        200: {
+            "description": "Documents retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "items": [
+                                {
+                                    "stored_document_id": "770e8400-e29b-41d4-a716-446655440002",
+                                    "name": "Contract Agreement 2024",
+                                    "page_count": 15,
+                                    "version": 2,
+                                    "folder_id": "660e8400-e29b-41d4-a716-446655440001",
+                                    "tags": ["contract", "legal"],
+                                    "file_size_bytes": 1048576,
+                                    "created_at": "2024-01-15T10:30:00Z",
+                                    "modified_at": "2024-01-16T14:20:00Z"
+                                }
+                            ],
+                            "pagination": {
+                                "total": 42,
+                                "page": 1,
+                                "per_page": 20,
+                                "total_pages": 3
+                            }
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-15T10:30:00Z"}
+                    }
+                }
+            }
+        },
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X GET "https://api.giga-pdf.com/api/v1/storage/documents?page=1&per_page=20&search=contract" \\
+  -H "Authorization: Bearer $TOKEN"'''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+response = requests.get(
+    "https://api.giga-pdf.com/api/v1/storage/documents",
+    params={
+        "page": 1,
+        "per_page": 20,
+        "search": "contract",
+        "tags": "legal,2024"
+    },
+    headers={"Authorization": f"Bearer {token}"}
+)
+
+data = response.json()["data"]
+for doc in data["items"]:
+    print(f"{doc['name']} - {doc['page_count']} pages")
+
+pagination = data["pagination"]
+print(f"Page {pagination['page']} of {pagination['total_pages']}")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const params = new URLSearchParams({
+  page: "1",
+  per_page: "20",
+  search: "contract",
+  tags: "legal,2024"
+});
+
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/documents?${params}`,
+  {
+    method: "GET",
+    headers: { "Authorization": `Bearer ${token}` }
+  }
+);
+
+const { data } = await response.json();
+data.items.forEach(doc => {
+  console.log(`${doc.name} - ${doc.page_count} pages`);
+});
+console.log(`Page ${data.pagination.page} of ${data.pagination.total_pages}`);'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$client = new GuzzleHttp\\Client();
+$response = $client->get("https://api.giga-pdf.com/api/v1/storage/documents", [
+    "headers" => ["Authorization" => "Bearer " . $token],
+    "query" => [
+        "page" => 1,
+        "per_page" => 20,
+        "search" => "contract",
+        "tags" => "legal,2024"
+    ]
+]);
+
+$data = json_decode($response->getBody(), true)["data"];
+foreach ($data["items"] as $doc) {
+    echo $doc["name"] . " - " . $doc["page_count"] . " pages\\n";
+}
+echo "Page " . $data["pagination"]["page"] . " of " . $data["pagination"]["total_pages"] . "\\n";'''
+            }
+        ]
     },
 )
 async def list_stored_documents(
@@ -482,60 +566,105 @@ async def list_stored_documents(
     description="""
 Load a document from persistent storage into an active editing session.
 
-This creates a new document session from the stored document,
-allowing you to edit it using the regular document APIs.
+This endpoint downloads the latest version of a stored document and creates a new editing session. The returned document_id can be used with all document manipulation APIs (annotations, text editing, page operations, etc.).
 
 ## Path Parameters
-- **stored_document_id**: Stored document identifier (UUID v4)
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| stored_document_id | string | UUID of the stored document |
 
-## Example (curl)
-```bash
-curl -X POST "http://localhost:8000/api/v1/storage/documents/{stored_document_id}/load" \\
-  -H "Authorization: Bearer <token>"
-```
+## Use Cases
+- Resume editing a previously saved document
+- Create a working copy of a stored document
+- Access document for annotation or modification
 
-## Example (Python)
-```python
-import requests
-
-# Charger un document stocké dans une session
-response = requests.post(
-    f"http://localhost:8000/api/v1/storage/documents/{stored_doc_id}/load",
-    headers={"Authorization": "Bearer <token>"}
-)
-session_doc = response.json()["data"]
-document_id = session_doc["document_id"]  # Use this for editing
-```
-
-## Example (JavaScript)
-```javascript
-// Charger un document pour édition
-const response = await fetch(
-  `/api/v1/storage/documents/${storedDocId}/load`,
-  {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer <token>' }
-  }
-);
-const result = await response.json();
-const documentId = result.data.document_id;
-```
-
-## Example (PHP)
-```php
-// Charger un document dans une session
-$client = new GuzzleHttp\\Client();
-$response = $client->post(
-    "http://localhost:8000/api/v1/storage/documents/{$storedDocId}/load",
-    ['headers' => ['Authorization' => 'Bearer <token>']]
-);
-$sessionDoc = json_decode($response->getBody(), true)['data'];
-$documentId = $sessionDoc['document_id'];
-```
+## Response
+Returns a session document_id that can be used with the Document APIs.
 """,
     responses={
-        200: {"description": "Document loaded successfully"},
+        200: {
+            "description": "Document loaded successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "document_id": "880e8400-e29b-41d4-a716-446655440003",
+                            "stored_document_id": "770e8400-e29b-41d4-a716-446655440002",
+                            "name": "Contract Agreement 2024",
+                            "page_count": 15
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-15T10:30:00Z"}
+                    }
+                }
+            }
+        },
         404: {"description": "Stored document not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X POST "https://api.giga-pdf.com/api/v1/storage/documents/770e8400-e29b-41d4-a716-446655440002/load" \\
+  -H "Authorization: Bearer $TOKEN"'''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+stored_doc_id = "770e8400-e29b-41d4-a716-446655440002"
+response = requests.post(
+    f"https://api.giga-pdf.com/api/v1/storage/documents/{stored_doc_id}/load",
+    headers={"Authorization": f"Bearer {token}"}
+)
+
+session = response.json()["data"]
+document_id = session["document_id"]
+print(f"Loaded '{session['name']}' with {session['page_count']} pages")
+print(f"Session document ID: {document_id}")
+
+# Now use document_id with Document APIs for editing'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const storedDocId = "770e8400-e29b-41d4-a716-446655440002";
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/documents/${storedDocId}/load`,
+  {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${token}` }
+  }
+);
+
+const { data: session } = await response.json();
+const documentId = session.document_id;
+console.log(`Loaded '${session.name}' with ${session.page_count} pages`);
+console.log(`Session document ID: ${documentId}`);
+
+// Now use documentId with Document APIs for editing'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$storedDocId = "770e8400-e29b-41d4-a716-446655440002";
+$client = new GuzzleHttp\\Client();
+$response = $client->post(
+    "https://api.giga-pdf.com/api/v1/storage/documents/{$storedDocId}/load",
+    ["headers" => ["Authorization" => "Bearer " . $token]]
+);
+
+$session = json_decode($response->getBody(), true)["data"];
+$documentId = $session["document_id"];
+echo "Loaded '" . $session["name"] . "' with " . $session["page_count"] . " pages\\n";
+echo "Session document ID: " . $documentId . "\\n";
+
+// Now use $documentId with Document APIs for editing'''
+            }
+        ]
     },
 )
 async def load_stored_document(
@@ -607,60 +736,129 @@ async def load_stored_document(
     response_model=APIResponse[dict],
     summary="List document versions",
     description="""
-List all versions of a stored document.
+List all versions of a stored document with their metadata.
 
-Each time you save changes to a stored document, a new version is created.
-This endpoint returns the version history with comments and metadata.
+Every time a document is saved to storage, a new version is created. This endpoint returns the complete version history, allowing you to track changes over time and restore previous versions.
 
 ## Path Parameters
-- **stored_document_id**: Stored document identifier (UUID v4)
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| stored_document_id | string | UUID of the stored document |
 
-## Example (curl)
-```bash
-curl -X GET "http://localhost:8000/api/v1/storage/documents/{stored_document_id}/versions" \\
-  -H "Authorization: Bearer <token>"
-```
-
-## Example (Python)
-```python
-import requests
-
-# Lister les versions d'un document
-response = requests.get(
-    f"http://localhost:8000/api/v1/storage/documents/{stored_doc_id}/versions",
-    headers={"Authorization": "Bearer <token>"}
-)
-versions = response.json()["data"]["versions"]
-```
-
-## Example (JavaScript)
-```javascript
-// Récupérer l'historique des versions
-const response = await fetch(
-  `/api/v1/storage/documents/${storedDocId}/versions`,
-  {
-    method: 'GET',
-    headers: { 'Authorization': 'Bearer <token>' }
-  }
-);
-const result = await response.json();
-const versions = result.data.versions;
-```
-
-## Example (PHP)
-```php
-// Lister les versions d'un document
-$client = new GuzzleHttp\\Client();
-$response = $client->get(
-    "http://localhost:8000/api/v1/storage/documents/{$storedDocId}/versions",
-    ['headers' => ['Authorization' => 'Bearer <token>']]
-);
-$versions = json_decode($response->getBody(), true)['data']['versions'];
-```
+## Response Structure
+- **stored_document_id**: The document's unique identifier
+- **current_version**: The latest version number
+- **versions**: Array of version objects (newest first)
+  - version: Version number
+  - created_at: ISO 8601 timestamp
+  - created_by: User ID who created this version
+  - comment: Optional version comment
+  - size_bytes: File size of this version
 """,
     responses={
-        200: {"description": "Versions retrieved successfully"},
+        200: {
+            "description": "Versions retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "stored_document_id": "770e8400-e29b-41d4-a716-446655440002",
+                            "current_version": 3,
+                            "versions": [
+                                {
+                                    "version": 3,
+                                    "created_at": "2024-01-17T09:15:00Z",
+                                    "created_by": "user-uuid",
+                                    "comment": "Final review changes",
+                                    "size_bytes": 1150000
+                                },
+                                {
+                                    "version": 2,
+                                    "created_at": "2024-01-16T14:20:00Z",
+                                    "created_by": "user-uuid",
+                                    "comment": "Updated terms on page 5",
+                                    "size_bytes": 1120000
+                                },
+                                {
+                                    "version": 1,
+                                    "created_at": "2024-01-15T10:30:00Z",
+                                    "created_by": "user-uuid",
+                                    "comment": "Initial version",
+                                    "size_bytes": 1048576
+                                }
+                            ]
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-15T10:30:00Z"}
+                    }
+                }
+            }
+        },
         404: {"description": "Stored document not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X GET "https://api.giga-pdf.com/api/v1/storage/documents/770e8400-e29b-41d4-a716-446655440002/versions" \\
+  -H "Authorization: Bearer $TOKEN"'''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+stored_doc_id = "770e8400-e29b-41d4-a716-446655440002"
+response = requests.get(
+    f"https://api.giga-pdf.com/api/v1/storage/documents/{stored_doc_id}/versions",
+    headers={"Authorization": f"Bearer {token}"}
+)
+
+data = response.json()["data"]
+print(f"Current version: {data['current_version']}")
+
+for version in data["versions"]:
+    print(f"v{version['version']}: {version['comment']} ({version['size_bytes']} bytes)")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const storedDocId = "770e8400-e29b-41d4-a716-446655440002";
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/documents/${storedDocId}/versions`,
+  {
+    method: "GET",
+    headers: { "Authorization": `Bearer ${token}` }
+  }
+);
+
+const { data } = await response.json();
+console.log(`Current version: ${data.current_version}`);
+
+data.versions.forEach(version => {
+  console.log(`v${version.version}: ${version.comment} (${version.size_bytes} bytes)`);
+});'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$storedDocId = "770e8400-e29b-41d4-a716-446655440002";
+$client = new GuzzleHttp\\Client();
+$response = $client->get(
+    "https://api.giga-pdf.com/api/v1/storage/documents/{$storedDocId}/versions",
+    ["headers" => ["Authorization" => "Bearer " . $token]]
+);
+
+$data = json_decode($response->getBody(), true)["data"];
+echo "Current version: " . $data["current_version"] . "\\n";
+
+foreach ($data["versions"] as $version) {
+    echo "v" . $version["version"] . ": " . $version["comment"] . " (" . $version["size_bytes"] . " bytes)\\n";
+}'''
+            }
+        ]
     },
 )
 async def list_versions(
@@ -728,88 +926,125 @@ async def list_versions(
     response_model=APIResponse[dict],
     summary="Create new version",
     description="""
-Create a new version of a stored document from an active session.
+Create a new version of a stored document from an active editing session.
 
-This saves the current state of the document as a new version,
-preserving the previous versions for history.
+This endpoint saves the current state of a document in an active session as a new version of an existing stored document. Previous versions are preserved, allowing for version history tracking and rollback capabilities.
 
 ## Path Parameters
-- **stored_document_id**: Stored document identifier (UUID v4)
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| stored_document_id | string | UUID of the stored document to update |
 
 ## Request Body
-```json
-{
-  "document_id": "550e8400-e29b-41d4-a716-446655440000",
-  "comment": "Updated legal terms on page 5"
-}
-```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| document_id | string | Yes | UUID of the active session document |
+| comment | string | No | Description of changes in this version |
 
-## Example (curl)
-```bash
-curl -X POST "http://localhost:8000/api/v1/storage/documents/{stored_document_id}/versions" \\
-  -H "Authorization: Bearer <token>" \\
+## Use Cases
+- Save incremental changes while editing
+- Create checkpoints before major modifications
+- Track document evolution with descriptive comments
+""",
+    responses={
+        201: {
+            "description": "Version created successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "stored_document_id": "770e8400-e29b-41d4-a716-446655440002",
+                            "version": 4,
+                            "created_at": "2024-01-18T11:45:00Z"
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-18T11:45:00Z"}
+                    }
+                }
+            }
+        },
+        404: {"description": "Stored document or session document not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X POST "https://api.giga-pdf.com/api/v1/storage/documents/770e8400-e29b-41d4-a716-446655440002/versions" \\
+  -H "Authorization: Bearer $TOKEN" \\
   -H "Content-Type: application/json" \\
-  -d '{"document_id": "...", "comment": "Fixed typos"}'
-```
+  -d '{
+    "document_id": "880e8400-e29b-41d4-a716-446655440003",
+    "comment": "Updated legal terms on page 5"
+  }' '''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
 
-## Example (Python)
-```python
-import requests
-
-# Créer une nouvelle version
+stored_doc_id = "770e8400-e29b-41d4-a716-446655440002"
 response = requests.post(
-    f"http://localhost:8000/api/v1/storage/documents/{stored_doc_id}/versions",
-    headers={"Authorization": "Bearer <token>"},
+    f"https://api.giga-pdf.com/api/v1/storage/documents/{stored_doc_id}/versions",
+    headers={"Authorization": f"Bearer {token}"},
     json={
-        "document_id": document_id,
+        "document_id": document_id,  # From active session
         "comment": "Updated legal terms on page 5"
     }
 )
-new_version = response.json()["data"]
-```
 
-## Example (JavaScript)
-```javascript
-// Enregistrer une nouvelle version
+new_version = response.json()["data"]
+print(f"Created version {new_version['version']}")
+print(f"Saved at: {new_version['created_at']}")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const storedDocId = "770e8400-e29b-41d4-a716-446655440002";
 const response = await fetch(
-  `/api/v1/storage/documents/${storedDocId}/versions`,
+  `https://api.giga-pdf.com/api/v1/storage/documents/${storedDocId}/versions`,
   {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Authorization': 'Bearer <token>',
-      'Content-Type': 'application/json'
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      document_id: documentId,
-      comment: 'Fixed typos'
+      document_id: documentId,  // From active session
+      comment: "Updated legal terms on page 5"
     })
   }
 );
-const result = await response.json();
-```
 
-## Example (PHP)
-```php
-// Créer une nouvelle version
+const { data: newVersion } = await response.json();
+console.log(`Created version ${newVersion.version}`);
+console.log(`Saved at: ${newVersion.created_at}`);'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$storedDocId = "770e8400-e29b-41d4-a716-446655440002";
 $client = new GuzzleHttp\\Client();
 $response = $client->post(
-    "http://localhost:8000/api/v1/storage/documents/{$storedDocId}/versions",
+    "https://api.giga-pdf.com/api/v1/storage/documents/{$storedDocId}/versions",
     [
-        'headers' => [
-            'Authorization' => 'Bearer <token>',
-            'Content-Type' => 'application/json'
+        "headers" => [
+            "Authorization" => "Bearer " . $token,
+            "Content-Type" => "application/json"
         ],
-        'json' => [
-            'document_id' => $documentId,
-            'comment' => 'Updated legal terms'
+        "json" => [
+            "document_id" => $documentId,  // From active session
+            "comment" => "Updated legal terms on page 5"
         ]
     ]
 );
-```
-""",
-    responses={
-        201: {"description": "Version created successfully"},
-        404: {"description": "Stored document not found"},
+
+$newVersion = json_decode($response->getBody(), true)["data"];
+echo "Created version " . $newVersion["version"] . "\\n";
+echo "Saved at: " . $newVersion["created_at"] . "\\n";'''
+            }
+        ]
     },
 )
 async def create_version(
@@ -930,74 +1165,109 @@ class RenameDocumentRequest(BaseModel):
     description="""
 Rename a document in persistent storage.
 
+This endpoint updates the display name of a stored document. The rename operation is logged in the activity history for audit purposes.
+
 ## Path Parameters
-- **stored_document_id**: Stored document identifier (UUID v4)
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| stored_document_id | string | UUID of the stored document to rename |
 
 ## Request Body
-```json
-{
-  "name": "New Document Name"
-}
-```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| name | string | Yes | New display name (1-255 characters) |
 
-## Example (curl)
-```bash
-curl -X PATCH "http://localhost:8000/api/v1/storage/documents/{stored_document_id}" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"name": "New Name"}'
-```
-
-## Example (Python)
-```python
-import requests
-
-# Renommer un document
-response = requests.patch(
-    f"http://localhost:8000/api/v1/storage/documents/{stored_doc_id}",
-    headers={"Authorization": "Bearer <token>"},
-    json={"name": "New Document Name"}
-)
-renamed_doc = response.json()["data"]
-```
-
-## Example (JavaScript)
-```javascript
-// Renommer un document
-const response = await fetch(
-  `/api/v1/storage/documents/${storedDocId}`,
-  {
-    method: 'PATCH',
-    headers: {
-      'Authorization': 'Bearer <token>',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ name: 'New Document Name' })
-  }
-);
-const result = await response.json();
-```
-
-## Example (PHP)
-```php
-// Renommer un document
-$client = new GuzzleHttp\\Client();
-$response = $client->patch(
-    "http://localhost:8000/api/v1/storage/documents/{$storedDocId}",
-    [
-        'headers' => [
-            'Authorization' => 'Bearer <token>',
-            'Content-Type' => 'application/json'
-        ],
-        'json' => ['name' => 'New Document Name']
-    ]
-);
-$renamedDoc = json_decode($response->getBody(), true)['data'];
-```
+## Notes
+- Renaming does not affect version history
+- The rename is recorded in the activity log
 """,
     responses={
-        200: {"description": "Document renamed successfully"},
+        200: {
+            "description": "Document renamed successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "stored_document_id": "770e8400-e29b-41d4-a716-446655440002",
+                            "name": "Updated Contract 2024",
+                            "updated_at": "2024-01-18T12:00:00Z"
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-18T12:00:00Z"}
+                    }
+                }
+            }
+        },
         404: {"description": "Stored document not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X PATCH "https://api.giga-pdf.com/api/v1/storage/documents/770e8400-e29b-41d4-a716-446655440002" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name": "Updated Contract 2024"}'  '''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+stored_doc_id = "770e8400-e29b-41d4-a716-446655440002"
+response = requests.patch(
+    f"https://api.giga-pdf.com/api/v1/storage/documents/{stored_doc_id}",
+    headers={"Authorization": f"Bearer {token}"},
+    json={"name": "Updated Contract 2024"}
+)
+
+renamed = response.json()["data"]
+print(f"Document renamed to: {renamed['name']}")
+print(f"Updated at: {renamed['updated_at']}")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const storedDocId = "770e8400-e29b-41d4-a716-446655440002";
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/documents/${storedDocId}`,
+  {
+    method: "PATCH",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ name: "Updated Contract 2024" })
+  }
+);
+
+const { data: renamed } = await response.json();
+console.log(`Document renamed to: ${renamed.name}`);
+console.log(`Updated at: ${renamed.updated_at}`);'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$storedDocId = "770e8400-e29b-41d4-a716-446655440002";
+$client = new GuzzleHttp\\Client();
+$response = $client->patch(
+    "https://api.giga-pdf.com/api/v1/storage/documents/{$storedDocId}",
+    [
+        "headers" => [
+            "Authorization" => "Bearer " . $token,
+            "Content-Type" => "application/json"
+        ],
+        "json" => ["name" => "Updated Contract 2024"]
+    ]
+);
+
+$renamed = json_decode($response->getBody(), true)["data"];
+echo "Document renamed to: " . $renamed["name"] . "\\n";
+echo "Updated at: " . $renamed["updated_at"] . "\\n";'''
+            }
+        ]
     },
 )
 async def rename_stored_document(
@@ -1065,56 +1335,104 @@ async def rename_stored_document(
     response_model=APIResponse[dict],
     summary="Delete stored document",
     description="""
-Delete a document from persistent storage (soft delete).
+Delete a document from persistent storage using soft delete.
 
-The document is marked as deleted but not physically removed,
-allowing for recovery if needed.
+This endpoint performs a soft delete, marking the document as deleted without physically removing it from storage. This allows for potential recovery and maintains audit trails.
 
 ## Path Parameters
-- **stored_document_id**: Stored document identifier (UUID v4)
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| stored_document_id | string | UUID of the stored document to delete |
 
-## Example (curl)
-```bash
-curl -X DELETE "http://localhost:8000/api/v1/storage/documents/{stored_document_id}" \\
-  -H "Authorization: Bearer <token>"
-```
+## Behavior
+- Document is marked as deleted with timestamp
+- Storage quota is immediately updated (freed space)
+- Activity is logged for audit purposes
+- All versions are preserved (soft deleted)
 
-## Example (Python)
-```python
-import requests
-
-# Supprimer un document
-response = requests.delete(
-    f"http://localhost:8000/api/v1/storage/documents/{stored_doc_id}",
-    headers={"Authorization": "Bearer <token>"}
-)
-```
-
-## Example (JavaScript)
-```javascript
-// Supprimer un document
-const response = await fetch(
-  `/api/v1/storage/documents/${storedDocId}`,
-  {
-    method: 'DELETE',
-    headers: { 'Authorization': 'Bearer <token>' }
-  }
-);
-```
-
-## Example (PHP)
-```php
-// Supprimer un document
-$client = new GuzzleHttp\\Client();
-$response = $client->delete(
-    "http://localhost:8000/api/v1/storage/documents/{$storedDocId}",
-    ['headers' => ['Authorization' => 'Bearer <token>']]
-);
-```
+## Notes
+- Quota is adjusted based on source (personal or organization)
+- Deleted documents are not returned in list queries
 """,
     responses={
-        200: {"description": "Document deleted successfully"},
+        200: {
+            "description": "Document deleted successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "stored_document_id": "770e8400-e29b-41d4-a716-446655440002",
+                            "deleted": True,
+                            "quota_source": "personal"
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-18T12:30:00Z"}
+                    }
+                }
+            }
+        },
         404: {"description": "Stored document not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X DELETE "https://api.giga-pdf.com/api/v1/storage/documents/770e8400-e29b-41d4-a716-446655440002" \\
+  -H "Authorization: Bearer $TOKEN"'''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+stored_doc_id = "770e8400-e29b-41d4-a716-446655440002"
+response = requests.delete(
+    f"https://api.giga-pdf.com/api/v1/storage/documents/{stored_doc_id}",
+    headers={"Authorization": f"Bearer {token}"}
+)
+
+result = response.json()["data"]
+if result["deleted"]:
+    print(f"Document {stored_doc_id} deleted")
+    print(f"Quota source: {result['quota_source']}")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const storedDocId = "770e8400-e29b-41d4-a716-446655440002";
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/documents/${storedDocId}`,
+  {
+    method: "DELETE",
+    headers: { "Authorization": `Bearer ${token}` }
+  }
+);
+
+const { data: result } = await response.json();
+if (result.deleted) {
+  console.log(`Document ${storedDocId} deleted`);
+  console.log(`Quota source: ${result.quota_source}`);
+}'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$storedDocId = "770e8400-e29b-41d4-a716-446655440002";
+$client = new GuzzleHttp\\Client();
+$response = $client->delete(
+    "https://api.giga-pdf.com/api/v1/storage/documents/{$storedDocId}",
+    ["headers" => ["Authorization" => "Bearer " . $token]]
+);
+
+$result = json_decode($response->getBody(), true)["data"];
+if ($result["deleted"]) {
+    echo "Document " . $storedDocId . " deleted\\n";
+    echo "Quota source: " . $result["quota_source"] . "\\n";
+}'''
+            }
+        ]
     },
 )
 async def delete_stored_document(
@@ -1206,49 +1524,120 @@ async def delete_stored_document(
     description="""
 List all folders for the authenticated user.
 
-Folders are returned in a flat list with parent_id relationships.
+Returns a flat list of all folders with parent_id relationships that can be used to build a tree structure. Folders are ordered by path for easier hierarchical display.
 
-## Example (curl)
-```bash
-curl -X GET "http://localhost:8000/api/v1/storage/folders" \\
-  -H "Authorization: Bearer <token>"
-```
+## Response Structure
+- **folders**: Array of folder objects
+  - folder_id: Unique folder identifier
+  - name: Folder display name
+  - parent_id: Parent folder UUID (null for root folders)
+  - path: Full path string for hierarchy
+  - created_at: ISO 8601 creation timestamp
 
-## Example (Python)
-```python
-import requests
-
-# Lister les dossiers
-response = requests.get(
-    "http://localhost:8000/api/v1/storage/folders",
-    headers={"Authorization": "Bearer <token>"}
-)
-folders = response.json()["data"]["folders"]
-```
-
-## Example (JavaScript)
-```javascript
-// Récupérer les dossiers
-const response = await fetch('/api/v1/storage/folders', {
-  method: 'GET',
-  headers: { 'Authorization': 'Bearer <token>' }
-});
-const result = await response.json();
-const folders = result.data.folders;
-```
-
-## Example (PHP)
-```php
-// Lister les dossiers
-$client = new GuzzleHttp\\Client();
-$response = $client->get('http://localhost:8000/api/v1/storage/folders', [
-    'headers' => ['Authorization' => 'Bearer <token>']
-]);
-$folders = json_decode($response->getBody(), true)['data']['folders'];
-```
+## Building a Folder Tree
+Use parent_id relationships to construct the folder hierarchy. Root folders have parent_id = null.
 """,
     responses={
-        200: {"description": "Folders retrieved successfully"},
+        200: {
+            "description": "Folders retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "folders": [
+                                {
+                                    "folder_id": "660e8400-e29b-41d4-a716-446655440001",
+                                    "name": "Legal Documents",
+                                    "parent_id": None,
+                                    "path": "/",
+                                    "created_at": "2024-01-10T08:00:00Z"
+                                },
+                                {
+                                    "folder_id": "660e8400-e29b-41d4-a716-446655440002",
+                                    "name": "Contracts",
+                                    "parent_id": "660e8400-e29b-41d4-a716-446655440001",
+                                    "path": "/660e8400-e29b-41d4-a716-446655440001/",
+                                    "created_at": "2024-01-10T08:15:00Z"
+                                }
+                            ]
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-15T10:30:00Z"}
+                    }
+                }
+            }
+        },
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X GET "https://api.giga-pdf.com/api/v1/storage/folders" \\
+  -H "Authorization: Bearer $TOKEN"'''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+response = requests.get(
+    "https://api.giga-pdf.com/api/v1/storage/folders",
+    headers={"Authorization": f"Bearer {token}"}
+)
+
+folders = response.json()["data"]["folders"]
+
+# Build folder tree
+root_folders = [f for f in folders if f["parent_id"] is None]
+for folder in root_folders:
+    print(f"/{folder['name']}")
+    children = [f for f in folders if f["parent_id"] == folder["folder_id"]]
+    for child in children:
+        print(f"  /{child['name']}")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const response = await fetch("https://api.giga-pdf.com/api/v1/storage/folders", {
+  method: "GET",
+  headers: { "Authorization": `Bearer ${token}` }
+});
+
+const { data: { folders } } = await response.json();
+
+// Build folder tree
+const rootFolders = folders.filter(f => f.parent_id === null);
+rootFolders.forEach(folder => {
+  console.log(`/${folder.name}`);
+  const children = folders.filter(f => f.parent_id === folder.folder_id);
+  children.forEach(child => {
+    console.log(`  /${child.name}`);
+  });
+});'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$client = new GuzzleHttp\\Client();
+$response = $client->get("https://api.giga-pdf.com/api/v1/storage/folders", [
+    "headers" => ["Authorization" => "Bearer " . $token]
+]);
+
+$folders = json_decode($response->getBody(), true)["data"]["folders"];
+
+// Build folder tree
+$rootFolders = array_filter($folders, fn($f) => $f["parent_id"] === null);
+foreach ($rootFolders as $folder) {
+    echo "/" . $folder["name"] . "\\n";
+    $children = array_filter($folders, fn($f) => $f["parent_id"] === $folder["folder_id"]);
+    foreach ($children as $child) {
+        echo "  /" . $child["name"] . "\\n";
+    }
+}'''
+            }
+        ]
     },
 )
 async def list_folders(
@@ -1300,70 +1689,135 @@ async def list_folders(
     description="""
 Create a new folder for organizing documents.
 
-Folders can be nested by specifying a parent_id.
+Folders can be nested to create a hierarchical structure. The path is automatically calculated based on the parent folder.
 
 ## Request Body
-```json
-{
-  "name": "Legal Documents",
-  "parent_id": null
-}
-```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| name | string | Yes | Folder name (1-255 characters) |
+| parent_id | string | No | Parent folder UUID (null for root) |
 
-## Example (curl)
-```bash
-curl -X POST "http://localhost:8000/api/v1/storage/folders" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"name": "Legal Documents"}'
-```
-
-## Example (Python)
-```python
-import requests
-
-# Créer un dossier
-response = requests.post(
-    "http://localhost:8000/api/v1/storage/folders",
-    headers={"Authorization": "Bearer <token>"},
-    json={"name": "Legal Documents", "parent_id": None}
-)
-folder = response.json()["data"]
-```
-
-## Example (JavaScript)
-```javascript
-// Créer un nouveau dossier
-const response = await fetch('/api/v1/storage/folders', {
-  method: 'POST',
-  headers: {
-    'Authorization': 'Bearer <token>',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    name: 'Legal Documents',
-    parent_id: null
-  })
-});
-const result = await response.json();
-```
-
-## Example (PHP)
-```php
-// Créer un dossier
-$client = new GuzzleHttp\\Client();
-$response = $client->post('http://localhost:8000/api/v1/storage/folders', [
-    'headers' => [
-        'Authorization' => 'Bearer <token>',
-        'Content-Type' => 'application/json'
-    ],
-    'json' => ['name' => 'Legal Documents', 'parent_id' => null]
-]);
-$folder = json_decode($response->getBody(), true)['data'];
-```
+## Path Calculation
+- Root folders have path = "/"
+- Nested folders have path = "{parent_path}{parent_id}/"
 """,
     responses={
-        201: {"description": "Folder created successfully"},
+        201: {
+            "description": "Folder created successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "folder_id": "660e8400-e29b-41d4-a716-446655440003",
+                            "name": "Legal Documents",
+                            "parent_id": None,
+                            "path": "/",
+                            "created_at": "2024-01-18T13:00:00Z"
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-18T13:00:00Z"}
+                    }
+                }
+            }
+        },
+        404: {"description": "Parent folder not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''# Create root folder
+curl -X POST "https://api.giga-pdf.com/api/v1/storage/folders" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name": "Legal Documents"}'
+
+# Create nested folder
+curl -X POST "https://api.giga-pdf.com/api/v1/storage/folders" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name": "Contracts", "parent_id": "660e8400-e29b-41d4-a716-446655440001"}' '''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+# Create root folder
+response = requests.post(
+    "https://api.giga-pdf.com/api/v1/storage/folders",
+    headers={"Authorization": f"Bearer {token}"},
+    json={"name": "Legal Documents"}
+)
+root_folder = response.json()["data"]
+print(f"Created folder: {root_folder['folder_id']}")
+
+# Create nested folder
+response = requests.post(
+    "https://api.giga-pdf.com/api/v1/storage/folders",
+    headers={"Authorization": f"Bearer {token}"},
+    json={"name": "Contracts", "parent_id": root_folder["folder_id"]}
+)
+nested_folder = response.json()["data"]
+print(f"Created nested folder: {nested_folder['path']}")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''// Create root folder
+let response = await fetch("https://api.giga-pdf.com/api/v1/storage/folders", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${token}`,
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({ name: "Legal Documents" })
+});
+const rootFolder = (await response.json()).data;
+console.log(`Created folder: ${rootFolder.folder_id}`);
+
+// Create nested folder
+response = await fetch("https://api.giga-pdf.com/api/v1/storage/folders", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${token}`,
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({ name: "Contracts", parent_id: rootFolder.folder_id })
+});
+const nestedFolder = (await response.json()).data;
+console.log(`Created nested folder: ${nestedFolder.path}`);'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$client = new GuzzleHttp\\Client();
+
+// Create root folder
+$response = $client->post("https://api.giga-pdf.com/api/v1/storage/folders", [
+    "headers" => [
+        "Authorization" => "Bearer " . $token,
+        "Content-Type" => "application/json"
+    ],
+    "json" => ["name" => "Legal Documents"]
+]);
+$rootFolder = json_decode($response->getBody(), true)["data"];
+echo "Created folder: " . $rootFolder["folder_id"] . "\\n";
+
+// Create nested folder
+$response = $client->post("https://api.giga-pdf.com/api/v1/storage/folders", [
+    "headers" => [
+        "Authorization" => "Bearer " . $token,
+        "Content-Type" => "application/json"
+    ],
+    "json" => ["name" => "Contracts", "parent_id" => $rootFolder["folder_id"]]
+]);
+$nestedFolder = json_decode($response->getBody(), true)["data"];
+echo "Created nested folder: " . $nestedFolder["path"] . "\\n";'''
+            }
+        ]
     },
 )
 async def create_folder(
@@ -1434,62 +1888,137 @@ async def create_folder(
     description="""
 Delete a folder and optionally its contents.
 
-By default, folders with documents cannot be deleted.
-Use the cascade parameter to delete all contents.
+By default, folders containing documents cannot be deleted (returns 400 error). Use the cascade parameter to soft-delete all documents within the folder along with the folder itself.
 
 ## Path Parameters
-- **folder_id**: Folder identifier (UUID v4)
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| folder_id | string | UUID of the folder to delete |
 
 ## Query Parameters
-- **cascade**: Delete all documents in folder (default: false)
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| cascade | boolean | false | If true, soft-delete all documents in folder |
 
-## Example (curl)
-```bash
-curl -X DELETE "http://localhost:8000/api/v1/storage/folders/{folder_id}?cascade=true" \\
-  -H "Authorization: Bearer <token>"
-```
-
-## Example (Python)
-```python
-import requests
-
-# Supprimer un dossier avec son contenu
-response = requests.delete(
-    f"http://localhost:8000/api/v1/storage/folders/{folder_id}",
-    params={"cascade": True},
-    headers={"Authorization": "Bearer <token>"}
-)
-```
-
-## Example (JavaScript)
-```javascript
-// Supprimer un dossier
-const response = await fetch(
-  `/api/v1/storage/folders/${folderId}?cascade=true`,
-  {
-    method: 'DELETE',
-    headers: { 'Authorization': 'Bearer <token>' }
-  }
-);
-```
-
-## Example (PHP)
-```php
-// Supprimer un dossier
-$client = new GuzzleHttp\\Client();
-$response = $client->delete(
-    "http://localhost:8000/api/v1/storage/folders/{$folderId}",
-    [
-        'headers' => ['Authorization' => 'Bearer <token>'],
-        'query' => ['cascade' => true]
-    ]
-);
-```
+## Behavior
+- Without cascade: Fails if folder contains documents
+- With cascade: Soft-deletes all documents, then deletes folder
+- Child folders are also deleted (SQL cascade)
 """,
     responses={
-        200: {"description": "Folder deleted successfully"},
-        400: {"description": "Folder not empty (use cascade=true)"},
+        200: {
+            "description": "Folder deleted successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "folder_id": "660e8400-e29b-41d4-a716-446655440001",
+                            "deleted": True
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-18T13:30:00Z"}
+                    }
+                }
+            }
+        },
+        400: {"description": "Folder not empty (use cascade=true to delete contents)"},
         404: {"description": "Folder not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''# Delete empty folder
+curl -X DELETE "https://api.giga-pdf.com/api/v1/storage/folders/660e8400-e29b-41d4-a716-446655440001" \\
+  -H "Authorization: Bearer $TOKEN"
+
+# Delete folder with contents
+curl -X DELETE "https://api.giga-pdf.com/api/v1/storage/folders/660e8400-e29b-41d4-a716-446655440001?cascade=true" \\
+  -H "Authorization: Bearer $TOKEN"'''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+folder_id = "660e8400-e29b-41d4-a716-446655440001"
+
+# Try to delete folder
+response = requests.delete(
+    f"https://api.giga-pdf.com/api/v1/storage/folders/{folder_id}",
+    headers={"Authorization": f"Bearer {token}"}
+)
+
+if response.status_code == 400:
+    # Folder not empty, retry with cascade
+    response = requests.delete(
+        f"https://api.giga-pdf.com/api/v1/storage/folders/{folder_id}",
+        params={"cascade": True},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+
+result = response.json()["data"]
+print(f"Folder deleted: {result['deleted']}")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const folderId = "660e8400-e29b-41d4-a716-446655440001";
+
+// Try to delete folder
+let response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/folders/${folderId}`,
+  {
+    method: "DELETE",
+    headers: { "Authorization": `Bearer ${token}` }
+  }
+);
+
+if (response.status === 400) {
+  // Folder not empty, retry with cascade
+  response = await fetch(
+    `https://api.giga-pdf.com/api/v1/storage/folders/${folderId}?cascade=true`,
+    {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${token}` }
+    }
+  );
+}
+
+const { data: result } = await response.json();
+console.log(`Folder deleted: ${result.deleted}`);'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$folderId = "660e8400-e29b-41d4-a716-446655440001";
+$client = new GuzzleHttp\\Client();
+
+try {
+    // Try to delete folder
+    $response = $client->delete(
+        "https://api.giga-pdf.com/api/v1/storage/folders/{$folderId}",
+        ["headers" => ["Authorization" => "Bearer " . $token]]
+    );
+} catch (GuzzleHttp\\Exception\\ClientException $e) {
+    if ($e->getResponse()->getStatusCode() === 400) {
+        // Folder not empty, retry with cascade
+        $response = $client->delete(
+            "https://api.giga-pdf.com/api/v1/storage/folders/{$folderId}",
+            [
+                "headers" => ["Authorization" => "Bearer " . $token],
+                "query" => ["cascade" => true]
+            ]
+        );
+    }
+}
+
+$result = json_decode($response->getBody(), true)["data"];
+echo "Folder deleted: " . ($result["deleted"] ? "true" : "false") . "\\n";'''
+            }
+        ]
     },
 )
 async def delete_folder(
@@ -1581,43 +2110,148 @@ class MoveDocumentRequest(BaseModel):
     description="""
 Move a document to a different folder.
 
+This endpoint allows reorganizing documents by moving them between folders. The move operation is logged in the activity history for audit purposes.
+
 ## Path Parameters
-- **stored_document_id**: Document identifier (UUID v4)
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| stored_document_id | string | UUID of the document to move |
 
 ## Request Body
-```json
-{
-  "folder_id": "660e8400-e29b-41d4-a716-446655440001"
-}
-```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| folder_id | string | No | Target folder UUID (null to move to root) |
 
-## Example (curl)
-```bash
-curl -X PATCH "http://localhost:8000/api/v1/storage/documents/{stored_document_id}/move" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"folder_id": "660e8400-e29b-41d4-a716-446655440001"}'
-```
-
-## Example (JavaScript)
-```javascript
-// Move a document to a folder
-const response = await fetch(
-  `/api/v1/storage/documents/${documentId}/move`,
-  {
-    method: 'PATCH',
-    headers: {
-      'Authorization': 'Bearer <token>',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ folder_id: targetFolderId })
-  }
-);
-```
+## Notes
+- Moving to root: set folder_id to null
+- Activity is logged with old and new folder IDs
 """,
     responses={
-        200: {"description": "Document moved successfully"},
+        200: {
+            "description": "Document moved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "stored_document_id": "770e8400-e29b-41d4-a716-446655440002",
+                            "folder_id": "660e8400-e29b-41d4-a716-446655440001",
+                            "moved": True
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-18T14:00:00Z"}
+                    }
+                }
+            }
+        },
         404: {"description": "Document or folder not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''# Move to folder
+curl -X PATCH "https://api.giga-pdf.com/api/v1/storage/documents/770e8400-e29b-41d4-a716-446655440002/move" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"folder_id": "660e8400-e29b-41d4-a716-446655440001"}'
+
+# Move to root
+curl -X PATCH "https://api.giga-pdf.com/api/v1/storage/documents/770e8400-e29b-41d4-a716-446655440002/move" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"folder_id": null}' '''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+doc_id = "770e8400-e29b-41d4-a716-446655440002"
+target_folder = "660e8400-e29b-41d4-a716-446655440001"
+
+response = requests.patch(
+    f"https://api.giga-pdf.com/api/v1/storage/documents/{doc_id}/move",
+    headers={"Authorization": f"Bearer {token}"},
+    json={"folder_id": target_folder}
+)
+
+result = response.json()["data"]
+print(f"Document moved to folder: {result['folder_id']}")
+
+# Move to root
+response = requests.patch(
+    f"https://api.giga-pdf.com/api/v1/storage/documents/{doc_id}/move",
+    headers={"Authorization": f"Bearer {token}"},
+    json={"folder_id": None}
+)'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const docId = "770e8400-e29b-41d4-a716-446655440002";
+const targetFolder = "660e8400-e29b-41d4-a716-446655440001";
+
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/documents/${docId}/move`,
+  {
+    method: "PATCH",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ folder_id: targetFolder })
+  }
+);
+
+const { data: result } = await response.json();
+console.log(`Document moved to folder: ${result.folder_id}`);
+
+// Move to root
+await fetch(`https://api.giga-pdf.com/api/v1/storage/documents/${docId}/move`, {
+  method: "PATCH",
+  headers: {
+    "Authorization": `Bearer ${token}`,
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({ folder_id: null })
+});'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$docId = "770e8400-e29b-41d4-a716-446655440002";
+$targetFolder = "660e8400-e29b-41d4-a716-446655440001";
+$client = new GuzzleHttp\\Client();
+
+$response = $client->patch(
+    "https://api.giga-pdf.com/api/v1/storage/documents/{$docId}/move",
+    [
+        "headers" => [
+            "Authorization" => "Bearer " . $token,
+            "Content-Type" => "application/json"
+        ],
+        "json" => ["folder_id" => $targetFolder]
+    ]
+);
+
+$result = json_decode($response->getBody(), true)["data"];
+echo "Document moved to folder: " . $result["folder_id"] . "\\n";
+
+// Move to root
+$client->patch(
+    "https://api.giga-pdf.com/api/v1/storage/documents/{$docId}/move",
+    [
+        "headers" => [
+            "Authorization" => "Bearer " . $token,
+            "Content-Type" => "application/json"
+        ],
+        "json" => ["folder_id" => null]
+    ]
+);'''
+            }
+        ]
     },
 )
 async def move_document(
@@ -1707,44 +2341,154 @@ class MoveFolderRequest(BaseModel):
     description="""
 Move a folder to a different parent folder.
 
+This endpoint allows reorganizing the folder hierarchy by moving folders. All descendant folders and their paths are automatically updated.
+
 ## Path Parameters
-- **folder_id**: Folder identifier (UUID v4)
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| folder_id | string | UUID of the folder to move |
 
 ## Request Body
-```json
-{
-  "parent_id": "660e8400-e29b-41d4-a716-446655440001"
-}
-```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| parent_id | string | No | Target parent folder UUID (null for root) |
 
-## Example (curl)
-```bash
-curl -X PATCH "http://localhost:8000/api/v1/storage/folders/{folder_id}/move" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"parent_id": "660e8400-e29b-41d4-a716-446655440001"}'
-```
+## Validation Rules
+- Cannot move a folder into itself
+- Cannot move a folder into one of its descendants (circular reference)
 
-## Example (JavaScript)
-```javascript
-// Move a folder to another folder
-const response = await fetch(
-  `/api/v1/storage/folders/${folderId}/move`,
-  {
-    method: 'PATCH',
-    headers: {
-      'Authorization': 'Bearer <token>',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ parent_id: targetFolderId })
-  }
-);
-```
+## Notes
+- All descendant folder paths are automatically updated
+- Moving to root: set parent_id to null
 """,
     responses={
-        200: {"description": "Folder moved successfully"},
+        200: {
+            "description": "Folder moved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "folder_id": "660e8400-e29b-41d4-a716-446655440002",
+                            "parent_id": "660e8400-e29b-41d4-a716-446655440001",
+                            "path": "/660e8400-e29b-41d4-a716-446655440001/",
+                            "moved": True
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-18T14:30:00Z"}
+                    }
+                }
+            }
+        },
         400: {"description": "Cannot move folder into itself or its descendant"},
-        404: {"description": "Folder not found"},
+        404: {"description": "Folder or target parent not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''# Move to parent folder
+curl -X PATCH "https://api.giga-pdf.com/api/v1/storage/folders/660e8400-e29b-41d4-a716-446655440002/move" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"parent_id": "660e8400-e29b-41d4-a716-446655440001"}'
+
+# Move to root
+curl -X PATCH "https://api.giga-pdf.com/api/v1/storage/folders/660e8400-e29b-41d4-a716-446655440002/move" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"parent_id": null}' '''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+folder_id = "660e8400-e29b-41d4-a716-446655440002"
+target_parent = "660e8400-e29b-41d4-a716-446655440001"
+
+response = requests.patch(
+    f"https://api.giga-pdf.com/api/v1/storage/folders/{folder_id}/move",
+    headers={"Authorization": f"Bearer {token}"},
+    json={"parent_id": target_parent}
+)
+
+result = response.json()["data"]
+print(f"Folder moved to: {result['path']}")
+
+# Move to root
+response = requests.patch(
+    f"https://api.giga-pdf.com/api/v1/storage/folders/{folder_id}/move",
+    headers={"Authorization": f"Bearer {token}"},
+    json={"parent_id": None}
+)'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const folderId = "660e8400-e29b-41d4-a716-446655440002";
+const targetParent = "660e8400-e29b-41d4-a716-446655440001";
+
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/folders/${folderId}/move`,
+  {
+    method: "PATCH",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ parent_id: targetParent })
+  }
+);
+
+const { data: result } = await response.json();
+console.log(`Folder moved to: ${result.path}`);
+
+// Move to root
+await fetch(`https://api.giga-pdf.com/api/v1/storage/folders/${folderId}/move`, {
+  method: "PATCH",
+  headers: {
+    "Authorization": `Bearer ${token}`,
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({ parent_id: null })
+});'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$folderId = "660e8400-e29b-41d4-a716-446655440002";
+$targetParent = "660e8400-e29b-41d4-a716-446655440001";
+$client = new GuzzleHttp\\Client();
+
+$response = $client->patch(
+    "https://api.giga-pdf.com/api/v1/storage/folders/{$folderId}/move",
+    [
+        "headers" => [
+            "Authorization" => "Bearer " . $token,
+            "Content-Type" => "application/json"
+        ],
+        "json" => ["parent_id" => $targetParent]
+    ]
+);
+
+$result = json_decode($response->getBody(), true)["data"];
+echo "Folder moved to: " . $result["path"] . "\\n";
+
+// Move to root
+$client->patch(
+    "https://api.giga-pdf.com/api/v1/storage/folders/{$folderId}/move",
+    [
+        "headers" => [
+            "Authorization" => "Bearer " . $token,
+            "Content-Type" => "application/json"
+        ],
+        "json" => ["parent_id" => null]
+    ]
+);'''
+            }
+        ]
     },
 )
 async def move_folder(
@@ -1846,34 +2590,107 @@ async def move_folder(
     response_model=APIResponse[dict],
     summary="Get folder statistics",
     description="""
-Get statistics for a folder including total size and document count (recursive).
+Get comprehensive statistics for a folder including total size and counts (recursive).
+
+This endpoint calculates statistics for the specified folder and all its descendants, providing a complete picture of the folder's contents.
 
 ## Path Parameters
-- **folder_id**: Folder identifier (UUID v4)
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| folder_id | string | UUID of the folder to analyze |
 
-## Example (curl)
-```bash
-curl -X GET "http://localhost:8000/api/v1/storage/folders/{folder_id}/stats" \\
-  -H "Authorization: Bearer <token>"
-```
+## Response Structure
+- **folder_id**: The analyzed folder's UUID
+- **total_size_bytes**: Combined size of all documents (recursive)
+- **document_count**: Total number of documents (recursive)
+- **folder_count**: Number of subfolders (not including the folder itself)
 
-## Example (JavaScript)
-```javascript
-// Get folder statistics
-const response = await fetch(
-  `/api/v1/storage/folders/${folderId}/stats`,
-  {
-    method: 'GET',
-    headers: { 'Authorization': 'Bearer <token>' }
-  }
-);
-const stats = await response.json();
-// stats.data = { folder_id, total_size_bytes, document_count, folder_count }
-```
+## Use Cases
+- Display folder size in file browser UI
+- Check folder contents before deletion
+- Monitor storage usage by folder
 """,
     responses={
-        200: {"description": "Folder statistics retrieved successfully"},
+        200: {
+            "description": "Folder statistics retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "folder_id": "660e8400-e29b-41d4-a716-446655440001",
+                            "total_size_bytes": 52428800,
+                            "document_count": 15,
+                            "folder_count": 3
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-18T15:00:00Z"}
+                    }
+                }
+            }
+        },
         404: {"description": "Folder not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X GET "https://api.giga-pdf.com/api/v1/storage/folders/660e8400-e29b-41d4-a716-446655440001/stats" \\
+  -H "Authorization: Bearer $TOKEN"'''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+folder_id = "660e8400-e29b-41d4-a716-446655440001"
+response = requests.get(
+    f"https://api.giga-pdf.com/api/v1/storage/folders/{folder_id}/stats",
+    headers={"Authorization": f"Bearer {token}"}
+)
+
+stats = response.json()["data"]
+size_mb = stats["total_size_bytes"] / (1024 * 1024)
+print(f"Folder size: {size_mb:.2f} MB")
+print(f"Documents: {stats['document_count']}")
+print(f"Subfolders: {stats['folder_count']}")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const folderId = "660e8400-e29b-41d4-a716-446655440001";
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/folders/${folderId}/stats`,
+  {
+    method: "GET",
+    headers: { "Authorization": `Bearer ${token}` }
+  }
+);
+
+const { data: stats } = await response.json();
+const sizeMB = (stats.total_size_bytes / (1024 * 1024)).toFixed(2);
+console.log(`Folder size: ${sizeMB} MB`);
+console.log(`Documents: ${stats.document_count}`);
+console.log(`Subfolders: ${stats.folder_count}`);'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$folderId = "660e8400-e29b-41d4-a716-446655440001";
+$client = new GuzzleHttp\\Client();
+$response = $client->get(
+    "https://api.giga-pdf.com/api/v1/storage/folders/{$folderId}/stats",
+    ["headers" => ["Authorization" => "Bearer " . $token]]
+);
+
+$stats = json_decode($response->getBody(), true)["data"];
+$sizeMB = number_format($stats["total_size_bytes"] / (1024 * 1024), 2);
+echo "Folder size: " . $sizeMB . " MB\\n";
+echo "Documents: " . $stats["document_count"] . "\\n";
+echo "Subfolders: " . $stats["folder_count"] . "\\n";'''
+            }
+        ]
     },
 )
 async def get_folder_stats(

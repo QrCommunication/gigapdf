@@ -14,6 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
+.playwright-mcp/
 # Python lib folders (but not packages/*/src/lib which is code)
 /lib/
 lib64/
@@ -25,7 +26,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
+CLAUDE.md
 # PyInstaller
 *.manifest
 *.spec

@@ -1,18 +1,37 @@
-# GigaPDF - Open Source WYSIWYG PDF Editor
+<p align="center">
+  <img src="apps/web/public/logo.svg" alt="GigaPDF Logo" width="80" height="80" />
+</p>
+
+<h1 align="center">GigaPDF</h1>
 
 <p align="center">
-  <img src="docs/assets/logo.png" alt="GigaPDF Logo" width="200"/>
+  <strong>Open Source WYSIWYG PDF Editor</strong>
 </p>
 
 <p align="center">
-  <strong>A powerful, open-source PDF editing platform with visual canvas editor, REST API, and real-time collaboration.</strong>
+  A powerful, self-hostable PDF editing platform with visual canvas editor, REST API, and real-time collaboration.
+</p>
+
+<p align="center">
+  <a href="https://github.com/ronylicha/gigapdf/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" />
+  </a>
+  <a href="https://github.com/ronylicha/gigapdf/actions">
+    <img src="https://img.shields.io/github/actions/workflow/status/ronylicha/gigapdf/ci.yml?branch=main" alt="CI Status" />
+  </a>
+  <a href="https://github.com/ronylicha/gigapdf/stargazers">
+    <img src="https://img.shields.io/github/stars/ronylicha/gigapdf" alt="GitHub Stars" />
+  </a>
+  <a href="https://giga-pdf.com">
+    <img src="https://img.shields.io/badge/demo-giga--pdf.com-green" alt="Demo" />
+  </a>
 </p>
 
 <p align="center">
   <a href="#features">Features</a> •
   <a href="#quick-start">Quick Start</a> •
-  <a href="#documentation">Documentation</a> •
-  <a href="#architecture">Architecture</a> •
+  <a href="#self-hosting">Self-Hosting</a> •
+  <a href="#api">API</a> •
   <a href="#contributing">Contributing</a>
 </p>
 
@@ -21,32 +40,42 @@
 ## Features
 
 ### PDF Editing
-- **Visual WYSIWYG Editor** - Canvas-based editing with drag-and-drop interface
-- **Text Manipulation** - Add, edit, and format text with full font support
-- **Image Handling** - Insert, resize, and position images
-- **Annotations** - Highlights, comments, stamps, and drawings
-- **Form Builder** - Create and fill interactive PDF forms
-- **Layers & Bookmarks** - Organize document structure
+- **Visual WYSIWYG Editor** — Canvas-based editing with drag-and-drop
+- **Text Manipulation** — Add, edit, and format text with full font support
+- **Images & Shapes** — Insert, resize, and position visual elements
+- **Annotations** — Highlights, comments, stamps, and freehand drawings
+- **Form Builder** — Create and fill interactive PDF forms
 
 ### Document Operations
-- **Page Management** - Add, remove, reorder, rotate, and resize pages
-- **Merge & Split** - Combine multiple PDFs or extract pages
-- **OCR Integration** - Extract text from scanned documents (Tesseract)
-- **Format Conversion** - Export to PNG, JPEG, DOCX, HTML, and more
-- **Security** - Password protection, encryption, and permission management
+- **Page Management** — Add, remove, reorder, rotate pages
+- **Merge & Split** — Combine multiple PDFs or extract pages
+- **OCR Integration** — Extract text from scanned documents (Tesseract)
+- **Format Conversion** — Export to PNG, JPEG, DOCX, HTML
 
-### Collaboration & API
-- **Real-time Collaboration** - Multi-user editing via WebSocket
-- **Cursor Tracking** - See other users' positions and selections
-- **Element Locking** - Prevent concurrent edits to the same element
-- **REST API** - Full programmatic access to all features
-- **Webhooks** - Event notifications for integrations
+### Collaboration
+- **Real-time Editing** — Multi-user collaboration via WebSocket
+- **Cursor Tracking** — See other users' positions
+- **Element Locking** — Prevent concurrent edits
 
-### Enterprise Features
-- **Multi-tenant Support** - Organizations with shared quotas
-- **Billing Integration** - Stripe-powered subscription management
-- **Usage Tracking** - Monitor document processing and storage
-- **Admin Dashboard** - Manage users, plans, and settings
+### Enterprise Ready
+- **REST API** — Full programmatic access
+- **Multi-tenant** — Organizations with shared quotas
+- **Stripe Billing** — Subscription management
+- **Self-hostable** — Deploy on your own infrastructure
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| **Backend** | FastAPI, SQLAlchemy 2.x, Celery, Socket.IO |
+| **Frontend** | Next.js 15, React 19, Tailwind CSS |
+| **Database** | PostgreSQL 16, Redis 7 |
+| **Auth** | BetterAuth (JWT/RS256) |
+| **Storage** | S3-compatible (Scaleway, AWS, MinIO) |
+| **PDF** | PyMuPDF, pdf-lib, Tesseract OCR |
+| **Billing** | Stripe |
 
 ---
 
@@ -54,183 +83,149 @@
 
 ### Prerequisites
 
-| Component | Version | Purpose |
-|-----------|---------|---------|
-| Python | 3.12+ | Backend API |
-| Node.js | 20+ | Frontend apps |
-| PostgreSQL | 16+ | Database |
-| Redis | 7+ | Caching & queues |
-| pnpm | 9+ | Package management |
-| Tesseract | 5+ | OCR (optional) |
-| S3-Compatible | - | Document storage |
+- Python 3.12+
+- Node.js 20+
+- PostgreSQL 16+
+- Redis 7+
+- pnpm 9+
 
-### Installation (5 minutes)
+### Installation
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/your-org/gigapdf.git
+# Clone the repository
+git clone https://github.com/ronylicha/gigapdf.git
 cd gigapdf
 
-# 2. Install dependencies
+# Install dependencies
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 pnpm install
 
-# 3. Configure environment
+# Configure environment
 cp .env.example .env
-# Edit .env with your database credentials and S3 settings
+# Edit .env with your credentials
 
-# 4. Setup database (schema + migrations)
+# Setup database
 ./database/setup.sh
 alembic upgrade head
 
-# 5. Generate Prisma clients
+# Generate Prisma clients
 pnpm --filter web prisma db pull && pnpm --filter web prisma generate
 pnpm --filter admin prisma db pull && pnpm --filter admin prisma generate
 
-# 6. Build shared packages
+# Build shared packages
 pnpm build:packages
 
-# 7. Start development servers (in separate terminals)
-uvicorn app.main:app --reload --port 8000      # Backend API
-pnpm --filter web dev                           # Web app (port 3000)
-pnpm --filter admin dev                         # Admin panel (port 3001)
+# Start all services
+pnpm dev:all
 ```
 
-> **Detailed instructions:** See [Installation Guide](docs/guides/INSTALLATION.md)
+### Access
+
+| Service | URL |
+|---------|-----|
+| Web App | http://localhost:3000 |
+| Admin Panel | http://localhost:3001 |
+| API Docs | http://localhost:8000/api/docs |
 
 ---
 
-## Documentation
+## Self-Hosting
 
-| Guide | Description |
-|-------|-------------|
-| [Installation Guide](docs/guides/INSTALLATION.md) | Complete setup instructions for all platforms |
-| [Development Guide](docs/guides/DEVELOPMENT.md) | Local development workflow and best practices |
-| [Deployment Guide](docs/guides/DEPLOYMENT.md) | Production deployment with Docker, PM2, Nginx |
-| [Architecture Overview](docs/ARCHITECTURE.md) | System design and component documentation |
-| [API Reference](docs/api/README.md) | REST API endpoints and examples |
-| [WebSocket Guide](docs/WEBSOCKET_COLLABORATION.md) | Real-time collaboration setup |
-| [Billing Integration](docs/api/billing.md) | Stripe subscription management |
+GigaPDF is designed to be self-hosted. You have complete control over your data and infrastructure.
 
----
+### Docker (Recommended)
 
-## Architecture
-
-```
-gigapdf/
-├── app/                        # FastAPI Backend (Python)
-│   ├── api/v1/                 # REST API endpoints
-│   ├── models/                 # SQLAlchemy models
-│   ├── services/               # Business logic
-│   ├── schemas/                # Pydantic schemas
-│   └── tasks/                  # Celery async tasks
-│
-├── apps/
-│   ├── web/                    # Next.js 15 Frontend
-│   │   ├── src/app/            # App Router pages
-│   │   ├── src/components/     # React components
-│   │   └── prisma/             # Auth database schema
-│   │
-│   ├── admin/                  # Admin Dashboard
-│   │   ├── src/app/            # Admin pages
-│   │   └── prisma/             # Admin database schema
-│   │
-│   └── mobile/                 # Expo mobile app
-│
-├── packages/
-│   ├── ui/                     # Shared UI components (shadcn/ui)
-│   ├── api/                    # API client library
-│   ├── types/                  # TypeScript definitions
-│   ├── canvas/                 # PDF canvas renderer
-│   ├── editor/                 # WYSIWYG editor core
-│   ├── billing/                # Stripe integration
-│   ├── s3/                     # Object storage client
-│   └── logger/                 # Logging utilities
-│
-├── database/                   # SQL bootstrap + setup scripts
-├── migrations/                 # Alembic database migrations
-├── tests/                      # Unit and integration tests
-└── docs/                       # Documentation
-```
-
-### Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| **Backend API** | FastAPI, SQLAlchemy 2.x, Celery, Socket.IO |
-| **Frontend** | Next.js 15, React 19, Tailwind CSS, Radix UI |
-| **Database** | PostgreSQL 16, Redis 7 |
-| **Authentication** | BetterAuth (JWT/RS256) |
-| **Storage** | S3-compatible (Scaleway, AWS, MinIO) |
-| **PDF Processing** | PyMuPDF, pdf-lib, Tesseract OCR |
-| **Billing** | Stripe |
-
----
-
-## API Overview
-
-### Interactive Documentation
-  
-Once the backend is running, access the API documentation:
-
-| URL | Description |
-|-----|-------------|
-| http://localhost:8000/api/docs | Swagger UI (interactive) |
-| http://localhost:8000/api/redoc | ReDoc (reference) |
-| http://localhost:8000/api/v1/openapi.json | OpenAPI specification |
-
-### Core Endpoints
-
-#### Documents
 ```bash
-POST   /api/v1/documents/upload          # Upload PDF
-GET    /api/v1/documents/{id}            # Get document info
-GET    /api/v1/documents/{id}/download   # Download PDF
-DELETE /api/v1/documents/{id}            # Delete document
+# Clone the repository
+git clone https://github.com/ronylicha/gigapdf.git
+cd gigapdf
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your credentials
+
+# Start with Docker Compose
+docker-compose up -d
 ```
 
-#### Pages
+### Manual Deployment
+
+#### 1. Server Requirements
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| CPU | 2 cores | 4+ cores |
+| RAM | 4 GB | 8+ GB |
+| Storage | 20 GB | 100+ GB SSD |
+| OS | Ubuntu 22.04 | Ubuntu 24.04 |
+
+#### 2. Install Dependencies
+
 ```bash
-GET    /api/v1/documents/{id}/pages/{num}         # Get page
-GET    /api/v1/documents/{id}/pages/{num}/preview # Page preview image
-POST   /api/v1/documents/{id}/pages               # Add page
-DELETE /api/v1/documents/{id}/pages/{num}         # Delete page
-PUT    /api/v1/documents/{id}/pages/reorder       # Reorder pages
-PUT    /api/v1/documents/{id}/pages/{num}/rotate  # Rotate page
+# System packages
+sudo apt update
+sudo apt install -y python3.12 python3.12-venv nodejs npm postgresql redis-server tesseract-ocr nginx
+
+# Install pnpm
+npm install -g pnpm
+
+# Install Certbot for SSL
+sudo apt install -y certbot python3-certbot-nginx
 ```
 
-#### Elements
+#### 3. Clone and Configure
+
 ```bash
-GET    /api/v1/documents/{id}/pages/{num}/elements  # List elements
-POST   /api/v1/documents/{id}/pages/{num}/elements  # Create element
-PATCH  /api/v1/documents/{id}/elements/{eid}        # Update element
-DELETE /api/v1/documents/{id}/elements/{eid}        # Delete element
+# Clone to /opt
+sudo mkdir -p /opt/gigapdf
+sudo chown $USER:$USER /opt/gigapdf
+git clone https://github.com/ronylicha/gigapdf.git /opt/gigapdf
+cd /opt/gigapdf
+
+# Configure environment
+cp .env.example .env
+nano .env  # Add your credentials
 ```
 
-#### Operations
+#### 4. Deploy
+
 ```bash
-POST   /api/v1/documents/merge           # Merge multiple PDFs
-POST   /api/v1/documents/{id}/split      # Split PDF
-POST   /api/v1/documents/{id}/ocr        # Run OCR
-POST   /api/v1/documents/{id}/export     # Export to format
+# Run the deployment script
+bash deploy/deploy.sh
 ```
 
-> **Complete API reference:** See [API Documentation](docs/api/README.md)
+The script will:
+- Install Python and Node dependencies
+- Build all packages and apps
+- Run database migrations
+- Configure systemd services
+- Setup Nginx reverse proxy
 
----
+#### 5. SSL Certificate
 
-## Environment Variables
+```bash
+sudo certbot --nginx -d yourdomain.com
+```
 
-### Backend (.env)
+#### 6. Verify
+
+```bash
+# Check services
+systemctl status gigapdf-api gigapdf-web gigapdf-admin
+
+# Check health
+curl -I https://yourdomain.com
+curl https://yourdomain.com/api/v1/health
+```
+
+### Environment Variables
 
 ```bash
 # Application
-APP_ENV=development              # development | production
-APP_SECRET_KEY=your-secret-key   # Min 32 characters
-APP_HOST=0.0.0.0
-APP_PORT=8000
+APP_ENV=production
+APP_SECRET_KEY=your-secret-key-min-32-chars
 
 # Database
 DATABASE_URL=postgresql://user:pass@localhost:5432/gigapdf
@@ -248,199 +243,131 @@ S3_REGION=fr-par
 # Authentication
 AUTH_JWT_PUBLIC_KEY=your-public-key
 AUTH_JWT_ALGORITHM=RS256
-AUTH_JWT_ISSUER=https://your-domain.com
 
-# Celery (async tasks)
-CELERY_BROKER_URL=redis://localhost:6379/1
-CELERY_RESULT_BACKEND=db+postgresql://user:pass@localhost:5432/gigapdf_celery
-
-# Stripe (billing)
-STRIPE_SECRET_KEY=sk_test_xxx
+# Stripe (optional)
+STRIPE_SECRET_KEY=sk_live_xxx
 STRIPE_WEBHOOK_SECRET=whsec_xxx
 ```
 
-### Frontend (apps/web/.env)
+### Updating
 
 ```bash
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_WS_URL=ws://localhost:8000
-
-BETTER_AUTH_SECRET=your-auth-secret
-BETTER_AUTH_URL=http://localhost:3000
-
-DATABASE_URL=postgresql://user:pass@localhost:5432/gigapdf
-```
-
-> **Complete configuration:** See [Installation Guide](docs/guides/INSTALLATION.md#environment-variables)
-
----
-
-## Testing
-
-```bash
-# Backend tests
-pytest                              # Run all tests
-pytest --cov=app --cov-report=html  # With coverage report
-pytest tests/unit/                  # Unit tests only
-pytest tests/integration/           # Integration tests only
-
-# Frontend tests
-pnpm test                           # All apps
-pnpm --filter web test              # Web app only
-
-# Code quality
-black app tests                     # Format Python code
-ruff check app tests                # Lint Python code
-mypy app                            # Type checking
-pnpm lint                           # Lint TypeScript
-```
-
----
-
-## Development
-
-### Running Services
-
-```bash
-# Terminal 1: Backend API
-source venv/bin/activate
-uvicorn app.main:app --reload --port 8000
-
-# Terminal 2: Web Frontend
-pnpm --filter web dev
-
-# Terminal 3: Admin Panel
-pnpm --filter admin dev
-
-# Terminal 4: Celery Worker (for async tasks)
-source venv/bin/activate
-celery -A app.tasks.celery_app worker --loglevel=info
-
-# Terminal 5: Celery Beat (for scheduled tasks)
-celery -A app.tasks.celery_app beat --loglevel=info
-```
-
-### Hot Reload
-
-- Backend: Automatic with `--reload` flag
-- Frontend: Built-in Next.js fast refresh
-- Packages: Run `pnpm --filter @giga-pdf/ui build` after changes
-
-> **Detailed workflow:** See [Development Guide](docs/guides/DEVELOPMENT.md)
-
----
-
-## Deployment
-
-### Production deployment (server)
-
-```bash
-# On the server
 cd /opt/gigapdf
-
-# Run the bundled deployment script (does everything below)
+git pull origin main
 bash deploy/deploy.sh
 ```
 
-What the script does:
-- Fixes permissions for `gigapdf` user and ensures `.env` is in place (symlinks into `apps/web` and `apps/admin`).
-- Installs Python deps into `.venv` and Node deps via `pnpm install --frozen-lockfile`.
-- Builds shared packages, Prisma clients, and both Next.js apps (web/admin).
-- Copies standalone `.next` output + static assets to the correct folders.
-- Runs Alembic migrations and initializes BetterAuth tables.
-- Installs/reloads systemd units (`gigapdf-api`, `gigapdf-web`, `gigapdf-admin`, `gigapdf-celery`, `gigapdf-celery-billing`) and restarts them.
-- Updates Nginx from `deploy/nginx.conf` and reloads if certificates are present.
+---
 
-Health checks (local):
-```bash
-curl -I http://localhost:3000        # Web
-curl -I http://localhost:3001        # Admin
-curl -I http://localhost:8000/api/v1/health # API (FastAPI prefix)
-systemctl status gigapdf-*           # Services
-```
+## API
 
-### Manual steps (if you cannot run deploy.sh)
+### Documentation
+
+Once running, access the interactive API docs:
+
+| URL | Format |
+|-----|--------|
+| `/api/docs` | Swagger UI |
+| `/api/redoc` | ReDoc |
+| `/api/v1/openapi.json` | OpenAPI spec |
+
+### Core Endpoints
 
 ```bash
-cd /opt/gigapdf
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-pnpm install --frozen-lockfile
-pnpm build:packages
-pnpm --filter web db:generate && pnpm --filter admin db:generate
-pnpm --filter web build && pnpm --filter admin build
-alembic upgrade head
-source .venv/bin/activate && set -a && source .env && set +a && \
-  python - <<'PY'
-from sqlalchemy import create_engine, text
-import os
+# Documents
+POST   /api/v1/documents/upload           # Upload PDF
+GET    /api/v1/documents/{id}             # Get document
+GET    /api/v1/documents/{id}/download    # Download PDF
+DELETE /api/v1/documents/{id}             # Delete document
 
-db_url = os.environ.get("DATABASE_URL", "")
-if db_url and "postgresql+asyncpg" in db_url:
-    db_url = db_url.replace("postgresql+asyncpg", "postgresql")
+# Pages
+GET    /api/v1/documents/{id}/pages/{num}          # Get page
+POST   /api/v1/documents/{id}/pages                # Add page
+DELETE /api/v1/documents/{id}/pages/{num}          # Delete page
+PUT    /api/v1/documents/{id}/pages/reorder        # Reorder pages
 
-if db_url:
-    engine = create_engine(db_url)
-    sql = open("deploy/init-betterauth-tables.sql").read()
-    with engine.connect() as conn:
-        for statement in sql.split(";"):
-            stmt = statement.strip()
-            if stmt and not stmt.startswith("--"):
-                try:
-                    conn.execute(text(stmt))
-                except Exception:
-                    pass
-        conn.commit()
-    print("Better Auth tables created")
-else:
-    print("DATABASE_URL not set, skipped")
-PY
-cp deploy/systemd/*.service /etc/systemd/system/ && systemctl daemon-reload
-systemctl restart gigapdf-api gigapdf-web gigapdf-admin gigapdf-celery gigapdf-celery-billing
-cp deploy/nginx.conf /etc/nginx/sites-available/gigapdf && nginx -t && systemctl reload nginx
+# Operations
+POST   /api/v1/documents/merge            # Merge PDFs
+POST   /api/v1/documents/{id}/split       # Split PDF
+POST   /api/v1/documents/{id}/ocr         # Run OCR
+POST   /api/v1/documents/{id}/export      # Export to format
 ```
 
-> Ensure Redis, PostgreSQL, Tesseract, and your S3-compatible storage are reachable before deploying.
+---
 
-> **Complete deployment instructions:** See [Deployment Guide](docs/guides/DEPLOYMENT.md)
+## Project Structure
+
+```
+gigapdf/
+├── app/                    # FastAPI Backend (Python)
+│   ├── api/v1/             # REST API endpoints
+│   ├── models/             # SQLAlchemy models
+│   ├── services/           # Business logic
+│   └── tasks/              # Celery async tasks
+│
+├── apps/
+│   ├── web/                # Next.js Frontend (port 3000)
+│   ├── admin/              # Admin Dashboard (port 3001)
+│   └── mobile/             # Expo mobile app
+│
+├── packages/               # Shared packages (@giga-pdf/*)
+│   ├── ui/                 # UI components (shadcn/ui)
+│   ├── api/                # API client
+│   ├── canvas/             # PDF canvas renderer
+│   └── editor/             # WYSIWYG editor core
+│
+├── database/               # SQL setup scripts
+├── migrations/             # Alembic migrations
+├── deploy/                 # Deployment configs
+└── docs/                   # Documentation
+```
 
 ---
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-### Development Setup
+### Development
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Make your changes
-4. Run tests: `pytest && pnpm test`
-5. Submit a pull request
+```bash
+# Fork and clone
+git clone https://github.com/YOUR_USERNAME/gigapdf.git
+cd gigapdf
+
+# Create branch
+git checkout -b feature/my-feature
+
+# Make changes and test
+pytest && pnpm test
+
+# Submit PR
+```
 
 ### Code Style
 
-- Python: Black + Ruff + MyPy
-- TypeScript: ESLint + Prettier
-- Commits: Conventional Commits
+| Language | Tools |
+|----------|-------|
+| Python | Black, Ruff, MyPy |
+| TypeScript | ESLint, Prettier |
+| Commits | Conventional Commits |
 
 ---
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
 ## Support
 
-- **Issues:** [GitHub Issues](https://github.com/your-org/gigapdf/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/your-org/gigapdf/discussions)
-- **Documentation:** [docs.gigapdf.com](https://docs.gigapdf.com)
+- **Issues:** [GitHub Issues](https://github.com/ronylicha/gigapdf/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/ronylicha/gigapdf/discussions)
+- **Website:** [giga-pdf.com](https://giga-pdf.com)
 
 ---
 
 <p align="center">
-  Made with ❤️ by the GigaPDF Team
+  Made with ❤️ by <a href="https://ronylicha.net">Rony Licha</a> and the open source community
 </p>

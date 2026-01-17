@@ -24,132 +24,51 @@ router = APIRouter()
     response_model=APIResponse[dict],
     summary="Start document export",
     description="""
-Start an async export operation to convert the document to various formats.
+Start an asynchronous export operation to convert a PDF document to various formats.
 
-Supported formats:
-- **png**: Export pages as PNG images
-- **jpeg**: Export pages as JPEG images
-- **webp**: Export pages as WebP images
-- **svg**: Export pages as SVG vector graphics
-- **html**: Export as HTML with text and layout
-- **txt**: Export as plain text
-- **docx**: Export as Microsoft Word (not yet implemented)
-- **xlsx**: Export as Microsoft Excel (not yet implemented)
+This endpoint initiates an export job and immediately returns a job ID that can be used
+to track progress and retrieve the exported file once processing is complete.
 
-For image formats, each page is exported separately. Use the `single_file` parameter
-to combine all pages into a ZIP archive.
+## Supported Formats
 
-## Path Parameters
-- **document_id**: Document identifier (UUID v4)
+| Format | Description | Output |
+|--------|-------------|--------|
+| **png** | Export pages as PNG images | High-quality raster images with transparency support |
+| **jpeg** | Export pages as JPEG images | Compressed raster images, smaller file size |
+| **webp** | Export pages as WebP images | Modern format with excellent compression |
+| **svg** | Export pages as SVG vector graphics | Scalable vector format, ideal for web |
+| **html** | Export as HTML with text and layout | Preserves document structure and styling |
+| **txt** | Export as plain text | Extracted text content only |
+| **docx** | Export as Microsoft Word | (Coming soon) |
+| **xlsx** | Export as Microsoft Excel | (Coming soon) |
 
-## Query Parameters
-- **format**: Output format (required)
-- **page_range**: Pages to export (e.g., "1-5,10,15-20", default: all pages)
-- **dpi**: Resolution for image formats (default: 150, max: 600)
-- **quality**: Quality for JPEG/WebP (default: 85, range: 1-100)
-- **single_file**: Combine into ZIP archive for multi-page exports (default: false)
+## Image Export Options
 
-## Response
-Returns a job_id to track the export progress.
+For image formats (png, jpeg, webp, svg), each page is exported as a separate file.
+Use the `single_file=true` parameter to receive all pages bundled in a ZIP archive.
 
-## Example (curl)
-```bash
-curl -X POST "http://localhost:8000/api/v1/documents/{document_id}/export?format=png&dpi=300" \\
-  -H "Authorization: Bearer <token>"
-```
+### DPI Settings
+- **72 DPI**: Screen resolution, smallest file size
+- **150 DPI**: Default, good balance of quality and size
+- **300 DPI**: Print quality
+- **600 DPI**: High-resolution print quality
 
-## Example (Python)
-```python
-import requests
+### Quality Settings (JPEG/WebP only)
+- **1-50**: Low quality, smallest file size
+- **51-84**: Medium quality
+- **85**: Default, recommended for most use cases
+- **86-100**: High quality, larger file size
 
-# Exporter un document en PNG haute résolution
-response = requests.post(
-    f"http://localhost:8000/api/v1/documents/{document_id}/export",
-    params={
-        "format": "png",
-        "dpi": 300,
-        "single_file": True
-    },
-    headers={"Authorization": "Bearer <token>"}
-)
-job = response.json()["data"]
-job_id = job["job_id"]
+## Workflow
 
-# Vérifier la progression
-import time
-while True:
-    status_response = requests.get(
-        f"http://localhost:8000/api/v1/jobs/{job_id}",
-        headers={"Authorization": "Bearer <token>"}
-    )
-    job_status = status_response.json()["data"]
-    if job_status["status"] == "completed":
-        break
-    time.sleep(1)
-```
-
-## Example (JavaScript)
-```javascript
-// Exporter en format HTML
-const response = await fetch(
-  `/api/v1/documents/${documentId}/export?format=html`,
-  {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer <token>' }
-  }
-);
-const result = await response.json();
-const jobId = result.data.job_id;
-
-// Surveiller la progression
-async function pollJobStatus(jobId) {
-  while (true) {
-    const statusRes = await fetch(`/api/v1/jobs/${jobId}`, {
-      headers: { 'Authorization': 'Bearer <token>' }
-    });
-    const status = await statusRes.json();
-    if (status.data.status === 'completed') {
-      return status.data.result;
-    }
-    await new Promise(r => setTimeout(r, 1000));
-  }
-}
-```
-
-## Example (PHP)
-```php
-// Exporter un document en JPEG
-$client = new GuzzleHttp\\Client();
-$response = $client->post(
-    "http://localhost:8000/api/v1/documents/{$documentId}/export",
-    [
-        'headers' => ['Authorization' => 'Bearer <token>'],
-        'query' => [
-            'format' => 'jpeg',
-            'quality' => 90,
-            'page_range' => '1-10'
-        ]
-    ]
-);
-$job = json_decode($response->getBody(), true)['data'];
-$jobId = $job['job_id'];
-
-// Attendre la fin de l'export
-while (true) {
-    $statusRes = $client->get("http://localhost:8000/api/v1/jobs/{$jobId}", [
-        'headers' => ['Authorization' => 'Bearer <token>']
-    ]);
-    $status = json_decode($statusRes->getBody(), true)['data'];
-    if ($status['status'] === 'completed') {
-        break;
-    }
-    sleep(1);
-}
-```
+1. Call this endpoint to start the export job
+2. Receive a `job_id` in the response
+3. Poll `/api/v1/jobs/{job_id}` to check progress
+4. When status is "completed", download the result from `/api/v1/documents/{document_id}/export/{job_id}`
 """,
     responses={
         202: {
-            "description": "Export job created",
+            "description": "Export job created successfully",
             "content": {
                 "application/json": {
                     "example": {
@@ -164,8 +83,240 @@ while (true) {
                 }
             },
         },
-        400: {"description": "Invalid format or parameters"},
-        404: {"description": "Document not found"},
+        400: {"description": "Invalid format or parameters. Check that the format is supported and all parameters are within valid ranges."},
+        404: {"description": "Document not found. The specified document_id does not exist or has expired."},
+        401: {"description": "Unauthorized. Missing or invalid authentication token."},
+        429: {"description": "Rate limit exceeded. Too many export requests."},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X POST "https://api.giga-pdf.com/api/v1/documents/{document_id}/export?format=png&dpi=300&single_file=true" \\
+  -H "Authorization: Bearer $TOKEN"
+
+# Response:
+# {
+#   "success": true,
+#   "data": {
+#     "job_id": "550e8400-e29b-41d4-a716-446655440030",
+#     "status": "pending",
+#     "message": "Export job created. Use the job_id to track progress."
+#   }
+# }
+
+# Poll for completion:
+curl -X GET "https://api.giga-pdf.com/api/v1/jobs/{job_id}" \\
+  -H "Authorization: Bearer $TOKEN"
+
+# Download result when completed:
+curl -X GET "https://api.giga-pdf.com/api/v1/documents/{document_id}/export/{job_id}" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -o exported_pages.zip'''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+import time
+
+# Configuration
+BASE_URL = "https://api.giga-pdf.com/api/v1"
+TOKEN = "your_api_token"
+HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+
+document_id = "your-document-id"
+
+# Start export job (PNG at 300 DPI)
+response = requests.post(
+    f"{BASE_URL}/documents/{document_id}/export",
+    params={
+        "format": "png",
+        "dpi": 300,
+        "page_range": "1-5",  # Export only pages 1-5
+        "single_file": True   # Bundle as ZIP
+    },
+    headers=HEADERS
+)
+response.raise_for_status()
+job_id = response.json()["data"]["job_id"]
+print(f"Export job started: {job_id}")
+
+# Poll for completion
+while True:
+    status_response = requests.get(
+        f"{BASE_URL}/jobs/{job_id}",
+        headers=HEADERS
+    )
+    job_status = status_response.json()["data"]
+    print(f"Status: {job_status['status']} - Progress: {job_status.get('progress', 0)}%")
+
+    if job_status["status"] == "completed":
+        break
+    elif job_status["status"] == "failed":
+        raise Exception(f"Export failed: {job_status.get('error')}")
+
+    time.sleep(2)
+
+# Download the exported file
+download_response = requests.get(
+    f"{BASE_URL}/documents/{document_id}/export/{job_id}",
+    headers=HEADERS
+)
+with open("exported_pages.zip", "wb") as f:
+    f.write(download_response.content)
+print("Export downloaded successfully!")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const BASE_URL = 'https://api.giga-pdf.com/api/v1';
+const TOKEN = 'your_api_token';
+
+async function exportDocument(documentId, options = {}) {
+  const { format = 'png', dpi = 150, pageRange = null, singleFile = true } = options;
+
+  // Build query string
+  const params = new URLSearchParams({ format, dpi, single_file: singleFile });
+  if (pageRange) params.append('page_range', pageRange);
+
+  // Start export job
+  const exportResponse = await fetch(
+    `${BASE_URL}/documents/${documentId}/export?${params}`,
+    {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${TOKEN}` }
+    }
+  );
+
+  if (!exportResponse.ok) {
+    throw new Error(`Export failed: ${exportResponse.statusText}`);
+  }
+
+  const { data } = await exportResponse.json();
+  const jobId = data.job_id;
+  console.log(`Export job started: ${jobId}`);
+
+  // Poll for completion
+  while (true) {
+    const statusResponse = await fetch(`${BASE_URL}/jobs/${jobId}`, {
+      headers: { 'Authorization': `Bearer ${TOKEN}` }
+    });
+    const status = await statusResponse.json();
+
+    console.log(`Status: ${status.data.status} - Progress: ${status.data.progress || 0}%`);
+
+    if (status.data.status === 'completed') {
+      break;
+    } else if (status.data.status === 'failed') {
+      throw new Error(`Export failed: ${status.data.error}`);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+
+  // Download the exported file
+  const downloadResponse = await fetch(
+    `${BASE_URL}/documents/${documentId}/export/${jobId}`,
+    { headers: { 'Authorization': `Bearer ${TOKEN}` } }
+  );
+
+  const blob = await downloadResponse.blob();
+
+  // Browser: trigger download
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'exported_pages.zip';
+  a.click();
+  window.URL.revokeObjectURL(url);
+
+  return blob;
+}
+
+// Usage
+exportDocument('your-document-id', {
+  format: 'png',
+  dpi: 300,
+  pageRange: '1-10',
+  singleFile: true
+}).then(() => console.log('Export complete!'));'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$baseUrl = 'https://api.giga-pdf.com/api/v1';
+$token = 'your_api_token';
+$documentId = 'your-document-id';
+
+// Start export job
+$ch = curl_init();
+curl_setopt_array($ch, [
+    CURLOPT_URL => "{$baseUrl}/documents/{$documentId}/export?" . http_build_query([
+        'format' => 'png',
+        'dpi' => 300,
+        'page_range' => '1-5',
+        'single_file' => 'true'
+    ]),
+    CURLOPT_POST => true,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => ["Authorization: Bearer {$token}"]
+]);
+
+$response = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+if ($httpCode !== 202) {
+    throw new Exception("Export failed with status {$httpCode}");
+}
+
+$result = json_decode($response, true);
+$jobId = $result['data']['job_id'];
+echo "Export job started: {$jobId}\\n";
+
+// Poll for completion
+while (true) {
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => "{$baseUrl}/jobs/{$jobId}",
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ["Authorization: Bearer {$token}"]
+    ]);
+
+    $statusResponse = curl_exec($ch);
+    curl_close($ch);
+
+    $status = json_decode($statusResponse, true)['data'];
+    echo "Status: {$status['status']} - Progress: " . ($status['progress'] ?? 0) . "%\\n";
+
+    if ($status['status'] === 'completed') {
+        break;
+    } elseif ($status['status'] === 'failed') {
+        throw new Exception("Export failed: " . ($status['error'] ?? 'Unknown error'));
+    }
+
+    sleep(2);
+}
+
+// Download the exported file
+$ch = curl_init();
+curl_setopt_array($ch, [
+    CURLOPT_URL => "{$baseUrl}/documents/{$documentId}/export/{$jobId}",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => ["Authorization: Bearer {$token}"]
+]);
+
+$fileContent = curl_exec($ch);
+curl_close($ch);
+
+file_put_contents('exported_pages.zip', $fileContent);
+echo "Export downloaded successfully!\\n";
+?>'''
+            }
+        ]
     },
 )
 async def start_export(
@@ -250,84 +401,253 @@ async def start_export(
 
 @router.get(
     "/{document_id}/export/{job_id}",
-    summary="Get export result",
+    summary="Download export result",
     description="""
-Download the exported file or get the export result.
+Download the exported file once the export job has completed.
 
-This endpoint returns the exported file directly. For multi-file exports with
-`single_file=true`, it returns a ZIP archive.
+This endpoint returns the exported file directly as a binary response with the
+appropriate content type based on the export format.
 
-## Path Parameters
-- **document_id**: Document identifier (UUID v4)
-- **job_id**: Export job identifier (UUID v4)
+## Response Content Types
 
-## Response
-Returns the exported file with appropriate content type.
+The response content type depends on the format used when starting the export:
 
-## Example (curl)
-```bash
-curl -X GET "http://localhost:8000/api/v1/documents/{document_id}/export/{job_id}" \\
-  -H "Authorization: Bearer <token>" \\
-  -o export.zip
+| Format | Content-Type | File Extension |
+|--------|--------------|----------------|
+| **png** | image/png | .png |
+| **jpeg** | image/jpeg | .jpeg |
+| **webp** | image/webp | .webp |
+| **svg** | image/svg+xml | .svg |
+| **html** | text/html | .html |
+| **txt** | text/plain | .txt |
+| **docx** | application/vnd.openxmlformats-officedocument.wordprocessingml.document | .docx |
+| **xlsx** | application/vnd.openxmlformats-officedocument.spreadsheetml.sheet | .xlsx |
+| **zip** (multi-page) | application/zip | .zip |
+
+## Multi-Page Exports
+
+When exporting multiple pages with `single_file=true`, the response will be a ZIP
+archive containing all exported pages. The ZIP file structure:
+
+```
+export_{document_id}.zip
+  ├── page_001.png
+  ├── page_002.png
+  ├── page_003.png
+  └── ...
 ```
 
-## Example (Python)
-```python
-import requests
+## Important Notes
 
-# Télécharger le résultat de l'export
-response = requests.get(
-    f"http://localhost:8000/api/v1/documents/{document_id}/export/{job_id}",
-    headers={"Authorization": "Bearer <token>"}
-)
-
-# Sauvegarder le fichier
-with open("export.zip", "wb") as f:
-    f.write(response.content)
-```
-
-## Example (JavaScript)
-```javascript
-// Télécharger le fichier exporté
-const response = await fetch(
-  `/api/v1/documents/${documentId}/export/${jobId}`,
-  {
-    method: 'GET',
-    headers: { 'Authorization': 'Bearer <token>' }
-  }
-);
-const blob = await response.blob();
-const url = window.URL.createObjectURL(blob);
-const a = document.createElement('a');
-a.href = url;
-a.download = 'export.zip';
-a.click();
-```
-
-## Example (PHP)
-```php
-// Télécharger le fichier exporté
-$client = new GuzzleHttp\\Client();
-$response = $client->get(
-    "http://localhost:8000/api/v1/documents/{$documentId}/export/{$jobId}",
-    ['headers' => ['Authorization' => 'Bearer <token>']]
-);
-file_put_contents('export.zip', $response->getBody());
-```
+- The job must be in "completed" status before downloading
+- Export results are stored temporarily and will expire after 24 hours
+- Large exports may take time; use the job status endpoint to monitor progress
+- The `Content-Disposition` header includes the suggested filename
 """,
     responses={
         200: {
-            "description": "Export file",
+            "description": "Export file downloaded successfully. Content type varies based on export format.",
             "content": {
-                "application/zip": {},
-                "image/png": {},
-                "image/jpeg": {},
-                "text/html": {},
-                "text/plain": {},
+                "application/zip": {"schema": {"type": "string", "format": "binary"}},
+                "image/png": {"schema": {"type": "string", "format": "binary"}},
+                "image/jpeg": {"schema": {"type": "string", "format": "binary"}},
+                "image/webp": {"schema": {"type": "string", "format": "binary"}},
+                "image/svg+xml": {"schema": {"type": "string", "format": "binary"}},
+                "text/html": {"schema": {"type": "string"}},
+                "text/plain": {"schema": {"type": "string"}},
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {"schema": {"type": "string", "format": "binary"}},
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {"schema": {"type": "string", "format": "binary"}},
             },
         },
-        404: {"description": "Job not found or not completed"},
-        410: {"description": "Export result has expired"},
+        401: {"description": "Unauthorized. Missing or invalid authentication token."},
+        404: {"description": "Job not found or export result not available. The job_id may be invalid or the job has not completed yet."},
+        409: {"description": "Job not completed. The export job is still processing. Check job status first."},
+        410: {"description": "Export result has expired. Results are deleted after 24 hours. Re-run the export."},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''# Download export result to file
+curl -X GET "https://api.giga-pdf.com/api/v1/documents/{document_id}/export/{job_id}" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -o exported_document.zip
+
+# Get content type from headers
+curl -I "https://api.giga-pdf.com/api/v1/documents/{document_id}/export/{job_id}" \\
+  -H "Authorization: Bearer $TOKEN"
+
+# Example response headers:
+# Content-Type: application/zip
+# Content-Disposition: attachment; filename="export_abc123.zip"
+# Content-Length: 1048576'''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+import os
+
+BASE_URL = "https://api.giga-pdf.com/api/v1"
+TOKEN = "your_api_token"
+HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+
+document_id = "your-document-id"
+job_id = "your-job-id"
+
+# Download the export result
+response = requests.get(
+    f"{BASE_URL}/documents/{document_id}/export/{job_id}",
+    headers=HEADERS,
+    stream=True  # Stream for large files
+)
+response.raise_for_status()
+
+# Get filename from Content-Disposition header
+content_disposition = response.headers.get("Content-Disposition", "")
+if "filename=" in content_disposition:
+    filename = content_disposition.split("filename=")[1].strip('"')
+else:
+    # Fallback based on content type
+    content_type = response.headers.get("Content-Type", "")
+    ext_map = {
+        "application/zip": ".zip",
+        "image/png": ".png",
+        "image/jpeg": ".jpeg",
+        "text/html": ".html",
+        "text/plain": ".txt"
+    }
+    ext = ext_map.get(content_type.split(";")[0], ".bin")
+    filename = f"export_{document_id}{ext}"
+
+# Save to file (streaming for large files)
+with open(filename, "wb") as f:
+    for chunk in response.iter_content(chunk_size=8192):
+        f.write(chunk)
+
+print(f"Downloaded: {filename} ({os.path.getsize(filename)} bytes)")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const BASE_URL = 'https://api.giga-pdf.com/api/v1';
+const TOKEN = 'your_api_token';
+
+async function downloadExport(documentId, jobId) {
+  const response = await fetch(
+    `${BASE_URL}/documents/${documentId}/export/${jobId}`,
+    {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${TOKEN}` }
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(`Download failed: ${error.message || response.statusText}`);
+  }
+
+  // Get filename from Content-Disposition header
+  const contentDisposition = response.headers.get('Content-Disposition') || '';
+  let filename = 'export.zip';
+  const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+  if (filenameMatch) {
+    filename = filenameMatch[1];
+  }
+
+  const blob = await response.blob();
+
+  // Browser: trigger download
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+
+  console.log(`Downloaded: ${filename} (${blob.size} bytes)`);
+  return blob;
+}
+
+// Node.js alternative using fs
+async function downloadExportNode(documentId, jobId) {
+  const fs = require('fs');
+  const response = await fetch(
+    `${BASE_URL}/documents/${documentId}/export/${jobId}`,
+    { headers: { 'Authorization': `Bearer ${TOKEN}` } }
+  );
+
+  const buffer = await response.arrayBuffer();
+  fs.writeFileSync('export.zip', Buffer.from(buffer));
+  console.log('Download complete!');
+}
+
+// Usage
+downloadExport('your-document-id', 'your-job-id')
+  .then(() => console.log('Success!'))
+  .catch(err => console.error(err));'''
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '''<?php
+$baseUrl = 'https://api.giga-pdf.com/api/v1';
+$token = 'your_api_token';
+$documentId = 'your-document-id';
+$jobId = 'your-job-id';
+
+// Download export result
+$ch = curl_init();
+curl_setopt_array($ch, [
+    CURLOPT_URL => "{$baseUrl}/documents/{$documentId}/export/{$jobId}",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => ["Authorization: Bearer {$token}"],
+    CURLOPT_HEADER => true  // Include headers in response
+]);
+
+$response = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+curl_close($ch);
+
+if ($httpCode !== 200) {
+    throw new Exception("Download failed with status {$httpCode}");
+}
+
+// Separate headers and body
+$headers = substr($response, 0, $headerSize);
+$body = substr($response, $headerSize);
+
+// Extract filename from Content-Disposition header
+$filename = 'export.zip';  // Default
+if (preg_match('/filename="?([^"\\r\\n]+)"?/', $headers, $matches)) {
+    $filename = $matches[1];
+}
+
+// Save the file
+file_put_contents($filename, $body);
+echo "Downloaded: {$filename} (" . strlen($body) . " bytes)\\n";
+
+// Alternative using Guzzle with streaming
+/*
+use GuzzleHttp\\Client;
+
+$client = new Client();
+$response = $client->get(
+    "{$baseUrl}/documents/{$documentId}/export/{$jobId}",
+    [
+        'headers' => ['Authorization' => "Bearer {$token}"],
+        'sink' => 'export.zip'  // Stream directly to file
+    ]
+);
+echo "Download complete!\\n";
+*/
+?>'''
+            }
+        ]
     },
 )
 async def get_export_result(

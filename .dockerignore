@@ -1,0 +1,107 @@
+# GigaPDF Docker Ignore
+# Reduces build context size and prevents sensitive files from being included
+
+# ============================================
+# Version Control
+# ============================================
+.git
+.gitignore
+.gitattributes
+
+# ============================================
+# Dependencies (will be installed in container)
+# ============================================
+node_modules
+**/node_modules
+.pnpm-store
+
+# Python
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.mypy_cache
+.pytest_cache
+.ruff_cache
+htmlcov
+.coverage
+*.egg-info
+
+# ============================================
+# Build outputs (will be built in container)
+# ============================================
+.next
+**/dist
+**/build
+*.tsbuildinfo
+.turbo
+
+# ============================================
+# Environment & Secrets
+# ============================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+certs/
+
+# ============================================
+# IDE & Editor
+# ============================================
+.idea
+.vscode
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ============================================
+# Testing & Development
+# ============================================
+tests/
+coverage/
+.nyc_output
+playwright-report/
+.playwright-mcp/
+
+# ============================================
+# Documentation & Misc
+# ============================================
+*.md
+!README.md
+docs/
+LICENSE
+
+# ============================================
+# Temporary files
+# ============================================
+tmp/
+temp/
+*.tmp
+*.log
+*.bak
+
+# ============================================
+# Docker files (avoid recursion)
+# ============================================
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# ============================================
+# Mobile app (not needed for Docker)
+# ============================================
+apps/mobile/
+
+# ============================================
+# Database files (for local dev only)
+# ============================================
+*.db
+*.sqlite
+celerybeat-schedule*

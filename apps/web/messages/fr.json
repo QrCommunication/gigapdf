@@ -1244,6 +1244,53 @@
         "description": "Pour toute question concernant ces conditions :"
       }
     },
+    "changelog": {
+      "title": "Journal des modifications",
+      "description": "Toutes les modifications notables de GigaPDF sont documentées ici. Nous suivons le versionnage sémantique.",
+      "subscribe": {
+        "title": "Restez informé",
+        "description": "Suivez nos releases GitHub pour être notifié des nouvelles fonctionnalités et améliorations.",
+        "link": "Voir sur GitHub"
+      }
+    },
+    "docs": {
+      "title": "Documentation API",
+      "description": "Documentation complète de l'API REST GigaPDF. Créez des workflows PDF puissants avec nos endpoints complets.",
+      "interactive": {
+        "title": "Documentation interactive",
+        "swagger": {
+          "description": "Testez les endpoints API directement dans votre navigateur avec l'interface Swagger UI interactive."
+        },
+        "redoc": {
+          "description": "Documentation propre et responsive avec des schémas détaillés de requête/réponse."
+        }
+      },
+      "openapi": {
+        "title": "Spécification OpenAPI",
+        "description": "Téléchargez la spec OpenAPI 3.0 pour générer des clients dans n'importe quel langage ou importer dans Postman.",
+        "download": "Télécharger JSON"
+      },
+      "quickstart": {
+        "title": "Démarrage rapide",
+        "auth": {
+          "title": "Authentification",
+          "description": "Toutes les requêtes API nécessitent un token JWT dans l'en-tête Authorization."
+        },
+        "example": {
+          "title": "Exemple de requête",
+          "description": "Uploadez un document PDF pour commencer l'édition."
+        }
+      },
+      "features": {
+        "title": "Fonctionnalités API",
+        "documents": "Upload, téléchargement et gestion de documents",
+        "pages": "Opérations sur les pages : ajouter, supprimer, réordonner, pivoter",
+        "elements": "Texte, images, formes et annotations",
+        "export": "Export vers PNG, JPEG, DOCX, HTML",
+        "ocr": "Extraction de texte OCR depuis les PDFs scannés",
+        "realtime": "Collaboration en temps réel via WebSocket"
+      }
+    },
     "contact": {
       "title": "Contactez-nous",
       "subtitle": "Une question, une suggestion ou besoin d'aide ? N'hésitez pas à nous contacter.",
