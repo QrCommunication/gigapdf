@@ -6,11 +6,9 @@
  * when running HTTPS frontend with HTTP backend in development.
  */
 
-// Use proxy path to avoid mixed content (HTTPS page -> HTTP API)
-// The /backend-api path is rewritten to the actual API URL by Next.js
-const API_BASE_URL = typeof window !== "undefined"
-  ? "/backend-api" // Client-side: use proxy
-  : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"); // Server-side: direct access
+// API base URL - use relative path for same-origin requests
+// nginx proxies /api/ to FastAPI backend
+const API_BASE_URL = "";
 
 // Token storage for auth
 let authToken: string | null = null;
