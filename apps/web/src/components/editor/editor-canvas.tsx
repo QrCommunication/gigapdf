@@ -27,6 +27,20 @@ function resolveImageUrl(url: string): string {
   return `${API_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
+// PDF uses 72 DPI as base unit
+const PDF_BASE_DPI = 72;
+// Preview API default DPI for high-quality rendering
+const PREVIEW_DPI = 150;
+// Scale factor to convert PDF points to preview pixels
+const SCALE_FACTOR = PREVIEW_DPI / PDF_BASE_DPI; // ≈ 2.083
+
+/**
+ * Generate the URL for a page preview image
+ */
+function getPagePreviewUrl(documentId: string, pageNumber: number, dpi: number = PREVIEW_DPI): string {
+  return `${API_BASE_URL}/api/v1/documents/${documentId}/pages/${pageNumber}/preview?format=png&dpi=${dpi}`;
+}
+
 export interface EditorCanvasHandle {
   /** Ajouter une image au canvas */
   addImage: (dataUrl: string, width: number, height: number) => void;
@@ -49,6 +63,8 @@ export interface EditorCanvasHandle {
 export interface EditorCanvasProps {
   /** Page actuelle à afficher */
   page: PageObject | null;
+  /** Document ID pour charger l'aperçu de la page comme fond */
+  documentId: string | null;
   /** Outil actif */
   tool: Tool;
   /** Niveau de zoom (1 = 100%) */
@@ -99,6 +115,7 @@ interface FabricObjectWithData extends FabricObject {
  */
 export function EditorCanvas({
   page,
+  documentId,
   tool,
   zoom,
   width = 800,
@@ -164,6 +181,9 @@ export function EditorCanvas({
   // Ref pour tracker le contenu original des textes (pour detecter les vraies modifications)
   const originalContentRef = useRef<Map<string, string>>(new Map());
 
+  // Cache for page background images to avoid re-fetching
+  const backgroundCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+
   // Sauvegarder l'état dans l'historique
   const saveHistory = useCallback(
     (canvas: FabricCanvas) => {
@@ -177,6 +197,46 @@ export function EditorCanvas({
     [historyIndex]
   );
 
+  // Load page background image from preview API
+  const loadPageBackground = useCallback(
+    async (pageNumber: number, docId: string, canvas: FabricCanvas) => {
+      const cacheKey = `${docId}-${pageNumber}`;
+
+      try {
+        const { FabricImage } = await import("fabric");
+        const previewUrl = getPagePreviewUrl(docId, pageNumber, PREVIEW_DPI);
+
+        // Check if we have a cached URL (browser will use cached image)
+        const cached = backgroundCacheRef.current.has(cacheKey);
+        if (cached) {
+          console.log("[EditorCanvas] Using cached background URL for page:", pageNumber);
+        } else {
+          console.log("[EditorCanvas] Loading background from:", previewUrl);
+        }
+
+        const img = await FabricImage.fromURL(previewUrl, { crossOrigin: "anonymous" });
+        canvas.backgroundImage = img;
+        canvas.renderAll();
+
+        // Mark as cached (browser handles actual image caching)
+        if (!cached) {
+          const imgElement = new Image();
+          imgElement.crossOrigin = "anonymous";
+          imgElement.src = previewUrl;
+          backgroundCacheRef.current.set(cacheKey, imgElement);
+        }
+
+        console.log("[EditorCanvas] Background loaded for page:", pageNumber);
+      } catch (error) {
+        console.error("[EditorCanvas] Failed to load background:", error);
+        // Fallback to white background
+        canvas.backgroundColor = "#ffffff";
+        canvas.renderAll();
+      }
+    },
+    []
+  );
+
   // Convertir un objet Fabric.js en Element
   const fabricObjectToElement = useCallback(
     (obj: FabricObjectWithData): Element | null => {
@@ -185,13 +245,14 @@ export function EditorCanvas({
       const scaleY = obj.scaleY ?? 1;
 
       // Base element properties matching ElementBase interface
+      // Divide by SCALE_FACTOR to convert back from preview pixels to PDF points
       const baseElement = {
         elementId,
         bounds: {
-          x: obj.left || 0,
-          y: obj.top || 0,
-          width: (obj.width || 100) * scaleX,
-          height: (obj.height || 100) * scaleY,
+          x: (obj.left || 0) / SCALE_FACTOR,
+          y: (obj.top || 0) / SCALE_FACTOR,
+          width: ((obj.width || 100) * scaleX) / SCALE_FACTOR,
+          height: ((obj.height || 100) * scaleY) / SCALE_FACTOR,
         },
         transform: {
           rotation: obj.angle || 0,
@@ -232,7 +293,7 @@ export function EditorCanvas({
           content: textObj.text || "",
           style: {
             fontFamily: textObj.fontFamily || "Arial",
-            fontSize: textObj.fontSize || 16,
+            fontSize: (textObj.fontSize || 16) / SCALE_FACTOR,
             fontWeight: textObj.fontWeight === "bold" ? "bold" : "normal",
             fontStyle: textObj.fontStyle === "italic" ? "italic" : "normal",
             color: (textObj.fill as string) || "#000000",
@@ -489,8 +550,8 @@ export function EditorCanvas({
       }
 
       const canvas = new Canvas(canvasRef.current!, {
-        width: (page?.dimensions?.width || width) * zoom,
-        height: (page?.dimensions?.height || height) * zoom,
+        width: (page?.dimensions?.width || width) * SCALE_FACTOR * zoom,
+        height: (page?.dimensions?.height || height) * SCALE_FACTOR * zoom,
         backgroundColor: "#ffffff",
         selection: tool === "select",
         preserveObjectStacking: true,
@@ -603,7 +664,7 @@ export function EditorCanvas({
                   width: 100,
                   height: 20,
                   fill: "rgba(255, 255, 0, 0.3)",
-                  stroke: "transparent",
+                  stroke: undefined,
                 });
                 break;
               case "underline":
@@ -761,9 +822,10 @@ export function EditorCanvas({
     const { Rect, Circle, Ellipse, Triangle, Line, IText, FabricImage } = fabricModule;
 
     // Base options from the new Element structure
+    // Apply SCALE_FACTOR to convert PDF coordinates to preview pixels
     const baseOptions = {
-      left: element.bounds.x,
-      top: element.bounds.y,
+      left: element.bounds.x * SCALE_FACTOR,
+      top: element.bounds.y * SCALE_FACTOR,
       angle: element.transform.rotation || 0,
       scaleX: element.transform.scaleX || 1,
       scaleY: element.transform.scaleY || 1,
@@ -776,9 +838,11 @@ export function EditorCanvas({
     switch (element.type) {
       case "text": {
         // TextElement structure with full styling
+        // Scale fontSize to match preview DPI
+        const scaledFontSize = (element.style.fontSize || 16) * SCALE_FACTOR;
         const textObj = new IText(element.content || t("defaultText"), {
           ...baseOptions,
-          fontSize: element.style.fontSize || 16,
+          fontSize: scaledFontSize,
           fontFamily: element.style.originalFont || element.style.fontFamily || "Arial",
           fontWeight: element.style.fontWeight || "normal",
           fontStyle: element.style.fontStyle || "normal",
@@ -822,10 +886,13 @@ export function EditorCanvas({
             .then((img: FabricObject) => {
               const originalWidth = element.source.originalDimensions?.width || 100;
               const originalHeight = element.source.originalDimensions?.height || 100;
+              // Scale bounds to match preview DPI
+              const scaledWidth = element.bounds.width * SCALE_FACTOR;
+              const scaledHeight = element.bounds.height * SCALE_FACTOR;
               img.set({
                 ...baseOptions,
-                scaleX: element.bounds.width / originalWidth,
-                scaleY: element.bounds.height / originalHeight,
+                scaleX: scaledWidth / originalWidth,
+                scaleY: scaledHeight / originalHeight,
                 opacity: element.style?.opacity ?? 1,
               });
               (img as FabricObjectWithData).data = { elementId: element.elementId };
@@ -847,14 +914,15 @@ export function EditorCanvas({
         const shapeOptions = {
           ...baseOptions,
           fill: element.style.fillColor || "transparent",
-          stroke: hasStroke ? element.style.strokeColor : "transparent",
-          strokeWidth: hasStroke ? element.style.strokeWidth : 0,
+          stroke: hasStroke ? element.style.strokeColor : undefined,
+          strokeWidth: hasStroke ? element.style.strokeWidth * SCALE_FACTOR : 0,
           opacity: element.style.fillOpacity ?? 1,
-          rx: element.geometry?.cornerRadius || 0,  // Border radius support
-          ry: element.geometry?.cornerRadius || 0,
+          rx: (element.geometry?.cornerRadius || 0) * SCALE_FACTOR,  // Border radius support
+          ry: (element.geometry?.cornerRadius || 0) * SCALE_FACTOR,
         };
-        const width = element.bounds.width || 100;
-        const height = element.bounds.height || 100;
+        // Scale dimensions to match preview DPI
+        const width = (element.bounds.width || 100) * SCALE_FACTOR;
+        const height = (element.bounds.height || 100) * SCALE_FACTOR;
 
         switch (element.shapeType) {
           case "rectangle":
@@ -886,8 +954,8 @@ export function EditorCanvas({
           default:
             return new Rect({
               ...shapeOptions,
-              width: 100,
-              height: 100,
+              width: 100 * SCALE_FACTOR,
+              height: 100 * SCALE_FACTOR,
             });
         }
       }
@@ -898,8 +966,9 @@ export function EditorCanvas({
           ...baseOptions,
           opacity: element.style?.opacity ?? 1,
         };
-        const annoWidth = element.bounds.width || 100;
-        const annoHeight = element.bounds.height || 20;
+        // Scale dimensions to match preview DPI
+        const annoWidth = (element.bounds.width || 100) * SCALE_FACTOR;
+        const annoHeight = (element.bounds.height || 20) * SCALE_FACTOR;
         const annoColor = element.style?.color || "#ff0000";
 
         switch (element.annotationType) {
@@ -909,37 +978,37 @@ export function EditorCanvas({
               width: annoWidth,
               height: annoHeight,
               fill: "rgba(255, 255, 0, 0.3)",
-              stroke: "transparent",
+              stroke: undefined,
             });
           case "underline":
             return new Line([0, 0, annoWidth, 0], {
               ...annoOptions,
               stroke: annoColor,
-              strokeWidth: 2,
+              strokeWidth: 2 * SCALE_FACTOR,
             });
           case "strikethrough":
           case "strikeout":
             return new Line([0, 0, annoWidth, 0], {
               ...annoOptions,
               stroke: annoColor,
-              strokeWidth: 1,
+              strokeWidth: 1 * SCALE_FACTOR,
             });
           case "note":
             return new Rect({
               ...annoOptions,
-              width: 30,
-              height: 30,
+              width: 30 * SCALE_FACTOR,
+              height: 30 * SCALE_FACTOR,
               fill: "#ffeb3b",
               stroke: "#ffc107",
-              strokeWidth: 1,
+              strokeWidth: 1 * SCALE_FACTOR,
             });
           case "comment":
             return new Circle({
               ...annoOptions,
-              radius: 15,
+              radius: 15 * SCALE_FACTOR,
               fill: "#2196f3",
               stroke: "#1976d2",
-              strokeWidth: 1,
+              strokeWidth: 1 * SCALE_FACTOR,
             });
           default:
             return new Rect({
@@ -958,7 +1027,7 @@ export function EditorCanvas({
 
   // Charger une page dans le canvas
   const loadPage = useCallback(
-    (pageData: PageObject, fabricModule: typeof import("fabric")) => {
+    async (pageData: PageObject, fabricModule: typeof import("fabric"), docId: string | null) => {
       if (!fabricRef.current) return;
       const canvas = fabricRef.current;
 
@@ -969,6 +1038,11 @@ export function EditorCanvas({
       // Nettoyer le canvas
       canvas.clear();
       canvas.backgroundColor = "#ffffff";
+
+      // Load page background first if documentId is available
+      if (docId && pageData.pageNumber) {
+        await loadPageBackground(pageData.pageNumber, docId, canvas);
+      }
 
       // Log element types
       if (pageData.elements?.length) {
@@ -993,7 +1067,7 @@ export function EditorCanvas({
       console.log("[EditorCanvas] Canvas objects count:", canvas.getObjects().length);
       canvas.renderAll();
     },
-    []
+    [loadPageBackground]
   );
 
   // Mettre à jour la page quand elle change
@@ -1003,9 +1077,9 @@ export function EditorCanvas({
     previousPageRef.current = page.pageId;
 
     import("fabric").then((fabricModule) => {
-      loadPage(page, fabricModule);
+      loadPage(page, fabricModule, documentId);
     });
-  }, [page, loadPage]);
+  }, [page, loadPage, documentId]);
 
   // Mettre à jour le zoom
   useEffect(() => {
@@ -1013,8 +1087,8 @@ export function EditorCanvas({
     const canvas = fabricRef.current;
     canvas.setZoom(zoom);
     canvas.setDimensions({
-      width: (page.dimensions?.width || width) * zoom,
-      height: (page.dimensions?.height || height) * zoom,
+      width: (page.dimensions?.width || width) * SCALE_FACTOR * zoom,
+      height: (page.dimensions?.height || height) * SCALE_FACTOR * zoom,
     });
     canvas.renderAll();
   }, [zoom, page, width, height]);
@@ -1121,9 +1195,9 @@ export function EditorCanvas({
     onCanvasReady(handle);
   }, [historyIndex, historyStack, saveHistory, onCanvasReady]);
 
-  // Calculer les dimensions du canvas basées sur la page
-  const canvasWidth = page?.dimensions?.width || width;
-  const canvasHeight = page?.dimensions?.height || height;
+  // Calculer les dimensions du canvas basées sur la page (scaled for preview DPI)
+  const canvasWidth = (page?.dimensions?.width || width) * SCALE_FACTOR;
+  const canvasHeight = (page?.dimensions?.height || height) * SCALE_FACTOR;
 
   return (
     <div className="editor-canvas-wrapper h-full w-full flex items-center justify-center bg-gray-100 dark:bg-gray-900 overflow-auto p-8">

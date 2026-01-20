@@ -839,6 +839,7 @@ export default function EditorPage() {
         >
           <EditorCanvas
             page={currentPage}
+            documentId={documentId}
             tool={activeTool}
             zoom={zoom}
             shapeType={shapeType}
