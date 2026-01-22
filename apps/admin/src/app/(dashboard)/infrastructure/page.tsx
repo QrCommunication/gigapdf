@@ -19,7 +19,6 @@ import {
   infrastructureApi,
   type CurrentCosts,
   type CurrentMetrics,
-  type CategoryCost,
 } from "@/lib/api";
 
 export default function InfrastructurePage() {
