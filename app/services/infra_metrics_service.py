@@ -14,7 +14,9 @@ from botocore.exceptions import ClientError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.config import get_settings
+
+settings = get_settings()
 from app.models.database import InfrastructureMetric
 from app.schemas.infrastructure import (
     CurrentMetricsResponse,
