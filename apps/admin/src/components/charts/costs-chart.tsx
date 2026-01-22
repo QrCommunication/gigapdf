@@ -102,7 +102,7 @@ export function CostsChart({ months = 12 }: CostsChartProps) {
                 border: "1px solid hsl(var(--border))",
                 borderRadius: "8px",
               }}
-              formatter={(value: number) => [`${value.toFixed(2)}€`, ""]}
+              formatter={(value) => [`${(value as number).toFixed(2)}€`, ""]}
               labelFormatter={(label) => `${t("period")}: ${label}`}
             />
             <Legend />

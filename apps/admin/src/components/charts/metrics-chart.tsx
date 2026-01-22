@@ -114,11 +114,12 @@ export function MetricsChart({ timeRange = "24h", onTimeRangeChange }: MetricsCh
                 borderRadius: "8px",
               }}
               labelFormatter={(label) => format(new Date(label), "PPpp", { locale: dateLocale })}
-              formatter={(value: number, name: string) => {
-                if (name === "cpu") return [`${value.toFixed(1)}%`, t("cpu")];
-                if (name === "memory") return [`${value.toFixed(1)}%`, t("memory")];
-                if (name === "disk") return [`${value.toFixed(1)}%`, t("disk")];
-                return [value, name];
+              formatter={(value, name) => {
+                const v = value as number;
+                if (name === "cpu") return [`${v.toFixed(1)}%`, t("cpu")];
+                if (name === "memory") return [`${v.toFixed(1)}%`, t("memory")];
+                if (name === "disk") return [`${v.toFixed(1)}%`, t("disk")];
+                return [v, name];
               }}
             />
             <Legend />
