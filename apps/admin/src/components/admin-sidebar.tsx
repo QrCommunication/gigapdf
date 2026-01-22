@@ -9,6 +9,7 @@ import {
   ScrollText,
   CreditCard,
   Settings,
+  Server,
   LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -57,6 +58,11 @@ const navigation: NavItem[] = [
     key: "plans",
     href: "/plans",
     icon: CreditCard,
+  },
+  {
+    key: "infrastructure",
+    href: "/infrastructure",
+    icon: Server,
   },
   {
     key: "settings",

@@ -1,0 +1,118 @@
+"""
+Infrastructure monitoring tasks.
+
+Handles periodic collection and cleanup of infrastructure metrics.
+"""
+
+import logging
+from datetime import datetime, timedelta
+
+from celery import shared_task
+from sqlalchemy import delete, select
+
+from app.core.database import get_sync_session
+from app.models.database import InfrastructureMetric
+from app.services.infra_metrics_service import infra_metrics_service
+
+logger = logging.getLogger(__name__)
+
+
+@shared_task(
+    name="infra.collect_metrics",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60,
+)
+def collect_infrastructure_metrics(self):
+    """
+    Collect and store current infrastructure metrics.
+
+    Runs every 15 minutes via Celery Beat.
+    Stores CPU, memory, disk, S3, and network statistics.
+    """
+    try:
+        logger.info("Starting infrastructure metrics collection")
+
+        # Collect current metrics
+        metrics = infra_metrics_service.collect_current_metrics()
+
+        # Store in database
+        with get_sync_session() as session:
+            record = InfrastructureMetric(
+                cpu_percent=metrics.get("cpu_percent"),
+                memory_used_bytes=metrics.get("memory_used_bytes"),
+                memory_total_bytes=metrics.get("memory_total_bytes"),
+                disk_used_bytes=metrics.get("disk_used_bytes"),
+                disk_total_bytes=metrics.get("disk_total_bytes"),
+                s3_objects_count=metrics.get("s3_objects_count"),
+                s3_total_bytes=metrics.get("s3_total_bytes"),
+                network_rx_bytes=metrics.get("network_rx_bytes"),
+                network_tx_bytes=metrics.get("network_tx_bytes"),
+            )
+            session.add(record)
+            session.commit()
+
+            logger.info(
+                f"Infrastructure metrics collected: "
+                f"CPU={metrics.get('cpu_percent', 0):.1f}%, "
+                f"Memory={metrics.get('memory_used_bytes', 0) / (1024**3):.1f}GB, "
+                f"S3 objects={metrics.get('s3_objects_count', 0)}"
+            )
+
+            return {
+                "status": "success",
+                "record_id": record.id,
+                "recorded_at": record.recorded_at.isoformat(),
+            }
+
+    except Exception as e:
+        logger.error(f"Failed to collect infrastructure metrics: {e}")
+        raise self.retry(exc=e)
+
+
+@shared_task(
+    name="infra.cleanup_old_metrics",
+    bind=True,
+    max_retries=1,
+)
+def cleanup_old_metrics(self, retention_days: int = 365):
+    """
+    Delete infrastructure metrics older than retention period.
+
+    Runs once daily via Celery Beat.
+    Default retention is 365 days (12 months).
+    """
+    try:
+        logger.info(f"Starting metrics cleanup (retention: {retention_days} days)")
+
+        cutoff = datetime.utcnow() - timedelta(days=retention_days)
+
+        with get_sync_session() as session:
+            # Count records to delete
+            count_stmt = select(InfrastructureMetric).where(
+                InfrastructureMetric.recorded_at < cutoff
+            )
+            old_records = session.execute(count_stmt).scalars().all()
+            count = len(old_records)
+
+            if count > 0:
+                # Delete old records
+                delete_stmt = delete(InfrastructureMetric).where(
+                    InfrastructureMetric.recorded_at < cutoff
+                )
+                session.execute(delete_stmt)
+                session.commit()
+
+                logger.info(f"Deleted {count} infrastructure metrics older than {cutoff}")
+            else:
+                logger.info("No old infrastructure metrics to clean up")
+
+            return {
+                "status": "success",
+                "deleted_count": count,
+                "cutoff_date": cutoff.isoformat(),
+            }
+
+    except Exception as e:
+        logger.error(f"Failed to cleanup old metrics: {e}")
+        raise self.retry(exc=e)

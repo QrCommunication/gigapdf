@@ -789,6 +789,119 @@ export const tenantsApi = {
   },
 };
 
+// ============ Infrastructure Types ============
+interface CategoryCost {
+  name: string;
+  cost: number;
+  product_count: number;
+}
+
+interface ResourceCost {
+  product_name: string;
+  resource_name: string;
+  category: string;
+  cost: number;
+  unit: string;
+  quantity: string;
+}
+
+interface CurrentCosts {
+  total_eur: number;
+  billing_period: string;
+  by_category: CategoryCost[];
+  resources: ResourceCost[];
+}
+
+interface MonthCost {
+  period: string;
+  total: number;
+  by_category: Record<string, number>;
+}
+
+interface CostHistory {
+  history: MonthCost[];
+}
+
+interface MemoryMetrics {
+  used_bytes: number;
+  total_bytes: number;
+  used_gb: number;
+  total_gb: number;
+  percent: number;
+}
+
+interface DiskMetrics {
+  used_bytes: number;
+  total_bytes: number;
+  used_gb: number;
+  total_gb: number;
+  percent: number;
+}
+
+interface S3Metrics {
+  objects_count: number;
+  total_bytes: number;
+  total_mb: number;
+}
+
+interface NetworkMetrics {
+  rx_bytes: number;
+  tx_bytes: number;
+  rx_mb: number;
+  tx_mb: number;
+}
+
+interface CurrentMetrics {
+  recorded_at: string;
+  cpu_percent: number;
+  memory: MemoryMetrics;
+  disk: DiskMetrics;
+  s3: S3Metrics;
+  network?: NetworkMetrics;
+}
+
+interface MetricPoint {
+  time: string;
+  cpu: number;
+  memory: number;
+  disk: number;
+  s3_mb?: number;
+}
+
+interface MetricsHistory {
+  range: string;
+  points: MetricPoint[];
+}
+
+// ============ Infrastructure API ============
+export const infrastructureApi = {
+  // Costs
+  getCurrentCosts: async (billingPeriod?: string): Promise<CurrentCosts> => {
+    const params = billingPeriod ? `?billing_period=${billingPeriod}` : "";
+    return fetchApi<CurrentCosts>(`/api/v1/admin/infrastructure/costs/current${params}`);
+  },
+
+  getCostHistory: async (months = 12): Promise<CostHistory> => {
+    return fetchApi<CostHistory>(`/api/v1/admin/infrastructure/costs/history?months=${months}`);
+  },
+
+  // Metrics
+  getCurrentMetrics: async (): Promise<CurrentMetrics> => {
+    return fetchApi<CurrentMetrics>("/api/v1/admin/infrastructure/metrics/current");
+  },
+
+  getMetricsHistory: async (timeRange: "24h" | "7d" | "30d" = "24h"): Promise<MetricsHistory> => {
+    return fetchApi<MetricsHistory>(`/api/v1/admin/infrastructure/metrics/history?time_range=${timeRange}`);
+  },
+
+  triggerMetricsCollection: async (): Promise<{ status: string; record_id: number; recorded_at: string }> => {
+    return fetchApi<{ status: string; record_id: number; recorded_at: string }>(
+      "/api/v1/admin/infrastructure/metrics/collect",
+      { method: "POST" }
+    );
+  },
+};
+
 // ============ Settings API ============
 export const settingsApi = {
   get: async (): Promise<SystemSettings> => {
@@ -865,4 +978,17 @@ export type {
   TenantStats,
   TenantStatus,
   TenantRole,
+  // Infrastructure
+  CategoryCost,
+  ResourceCost,
+  CurrentCosts,
+  MonthCost,
+  CostHistory,
+  MemoryMetrics,
+  DiskMetrics,
+  S3Metrics,
+  NetworkMetrics,
+  CurrentMetrics,
+  MetricPoint,
+  MetricsHistory,
 };

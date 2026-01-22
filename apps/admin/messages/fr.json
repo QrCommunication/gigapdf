@@ -67,6 +67,7 @@
     "jobs": "Tâches de fond",
     "logs": "Journaux système",
     "plans": "Forfaits",
+    "infrastructure": "Infrastructure",
     "settings": "Paramètres",
     "logout": "Déconnexion",
     "notifications": "Notifications",
@@ -686,6 +687,53 @@
         "githubEnabled": "Activer GitHub OAuth",
         "githubClientId": "Client ID GitHub",
         "githubClientSecret": "Client Secret GitHub"
+      }
+    }
+  },
+  "infrastructure": {
+    "title": "Infrastructure",
+    "subtitle": "Surveillance des coûts et performances système",
+    "refresh": "Actualiser",
+    "costs": {
+      "title": "Coûts d'hébergement",
+      "period": "Période de facturation",
+      "total": "Coût total",
+      "compute": "Calcul",
+      "database": "Base de données",
+      "storage": "Stockage"
+    },
+    "performance": {
+      "title": "Performances système",
+      "cpu": "Utilisation CPU",
+      "memory": "Mémoire",
+      "disk": "Disque",
+      "s3": "Stockage S3",
+      "objects": "objets"
+    },
+    "resources": {
+      "title": "Détails des ressources",
+      "product": "Produit",
+      "resource": "Ressource",
+      "category": "Catégorie",
+      "cost": "Coût"
+    },
+    "charts": {
+      "costs": {
+        "title": "Historique des coûts (12 mois)",
+        "noData": "Aucune donnée de coût disponible",
+        "period": "Période"
+      },
+      "metrics": {
+        "title": "Historique des performances",
+        "noData": "Aucune donnée de métriques disponible. Les métriques sont collectées toutes les 15 minutes.",
+        "cpu": "CPU",
+        "memory": "Mémoire",
+        "disk": "Disque",
+        "range": {
+          "24h": "24h",
+          "7d": "7 jours",
+          "30d": "30 jours"
+        }
       }
     }
   },

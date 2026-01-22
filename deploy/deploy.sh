@@ -68,6 +68,27 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 # =============================================================================
+# 2.5 Scaleway CLI (for infrastructure monitoring)
+# =============================================================================
+log_info "Setting up Scaleway CLI..."
+
+# Install scw CLI if not present
+if ! command -v scw &> /dev/null; then
+    log_info "Installing Scaleway CLI..."
+    curl -s https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | sh
+fi
+
+# Note: scw CLI uses environment variables (SCW_ACCESS_KEY, SCW_SECRET_KEY, etc.)
+# These are loaded from /opt/gigapdf/.env via systemd EnvironmentFile
+# No config file needed - variables take priority over config files
+if [ -n "$SCW_ACCESS_KEY" ]; then
+    log_info "Scaleway CLI installed (credentials configured via environment)"
+else
+    log_warn "SCW_ACCESS_KEY not set - infrastructure costs API will not work"
+    log_warn "Add to .env: SCW_ACCESS_KEY, SCW_SECRET_KEY, SCW_DEFAULT_ORGANIZATION_ID, SCW_DEFAULT_PROJECT_ID"
+fi
+
+# =============================================================================
 # 3. Node.js Dependencies
 # =============================================================================
 log_info "Installing Node.js dependencies..."

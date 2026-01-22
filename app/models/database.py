@@ -671,6 +671,45 @@ class ActivityLog(Base):
     )
 
 
+class InfrastructureMetric(Base):
+    """
+    Infrastructure metrics for monitoring dashboard.
+
+    Stores periodic snapshots of system performance (CPU, RAM, Disk, S3, Network).
+    Collected every 15 minutes by Celery task, retained for 12 months.
+    """
+
+    __tablename__ = "infrastructure_metrics"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), nullable=False, unique=True
+    )
+
+    # CPU metrics
+    cpu_percent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Memory metrics
+    memory_used_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    memory_total_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+
+    # Disk metrics
+    disk_used_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    disk_total_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+
+    # S3 metrics
+    s3_objects_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    s3_total_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+
+    # Network metrics
+    network_rx_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    network_tx_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+
+    __table_args__ = (
+        Index("idx_infra_metrics_time", "recorded_at"),
+    )
+
+
 # Import tenant models at the end to resolve forward references
 # This ensures TenantDocument is registered when the mapper is configured
 from app.models.tenant import TenantDocument, Tenant, TenantMember  # noqa: E402, F401

@@ -27,6 +27,7 @@ celery_app = Celery(
         "app.tasks.export_tasks",
         "app.tasks.processing_tasks",
         "app.tasks.billing_tasks",
+        "app.tasks.infra_tasks",
     ],
 )
 
@@ -64,7 +65,9 @@ celery_app.conf.update(
         "app.tasks.export_tasks.*": {"queue": "export"},
         "app.tasks.processing_tasks.*": {"queue": "processing"},
         "app.tasks.billing_tasks.*": {"queue": "billing"},
+        "app.tasks.infra_tasks.*": {"queue": "infra"},
         "billing.*": {"queue": "billing"},
+        "infra.*": {"queue": "infra"},
     },
 
     # Default queue
@@ -97,6 +100,15 @@ celery_app.conf.update(
         "cleanup-export-files": {
             "task": "app.tasks.export_tasks.cleanup_expired_exports",
             "schedule": 3600.0,  # Every hour
+        },
+        # Infrastructure monitoring
+        "collect-infrastructure-metrics": {
+            "task": "infra.collect_metrics",
+            "schedule": 900.0,  # Every 15 minutes
+        },
+        "cleanup-old-metrics": {
+            "task": "infra.cleanup_old_metrics",
+            "schedule": 86400.0,  # Every 24 hours
         },
     },
 )

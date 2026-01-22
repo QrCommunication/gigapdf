@@ -1,20 +1,23 @@
 """
 Database connection and session management.
 
-Provides async SQLAlchemy engine and session factory.
+Provides async SQLAlchemy engine and session factory,
+plus sync versions for Celery workers.
 """
 
 import logging
-from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from contextlib import asynccontextmanager, contextmanager
+from typing import AsyncGenerator, Generator
 
-from sqlalchemy import event
+from sqlalchemy import create_engine as create_sync_engine, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.config import get_settings
@@ -22,9 +25,13 @@ from app.models.database import Base
 
 logger = logging.getLogger(__name__)
 
-# Global engine and session factory
+# Global async engine and session factory
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
+
+# Global sync engine and session factory (for Celery tasks)
+_sync_engine: Engine | None = None
+_sync_session_factory: sessionmaker[Session] | None = None
 
 
 def get_database_url() -> str:
@@ -135,3 +142,79 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency for database session."""
     async with get_db_session() as session:
         yield session
+
+
+# =============================================================================
+# Sync database access (for Celery tasks)
+# =============================================================================
+
+
+def get_sync_database_url() -> str:
+    """
+    Get sync database URL.
+
+    Uses psycopg2 driver instead of asyncpg.
+    """
+    settings = get_settings()
+    url = settings.database_url
+
+    # Ensure we have postgresql:// (sync driver)
+    if url.startswith("postgresql+asyncpg://"):
+        url = url.replace("postgresql+asyncpg://", "postgresql://", 1)
+    elif url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+
+    return url
+
+
+def get_sync_engine() -> Engine:
+    """Get or create the sync database engine for Celery tasks."""
+    global _sync_engine
+    if _sync_engine is None:
+        settings = get_settings()
+        _sync_engine = create_sync_engine(
+            get_sync_database_url(),
+            echo=settings.app_debug,
+            pool_size=5,
+            max_overflow=5,
+            pool_pre_ping=True,
+            pool_recycle=3600,
+        )
+    return _sync_engine
+
+
+def get_sync_session_factory() -> sessionmaker[Session]:
+    """Get or create the sync session factory for Celery tasks."""
+    global _sync_session_factory
+    if _sync_session_factory is None:
+        _sync_session_factory = sessionmaker(
+            bind=get_sync_engine(),
+            expire_on_commit=False,
+            autocommit=False,
+            autoflush=False,
+        )
+    return _sync_session_factory
+
+
+@contextmanager
+def get_sync_session() -> Generator[Session, None, None]:
+    """
+    Provide a transactional sync database session for Celery tasks.
+
+    Automatically commits on success, rolls back on exception.
+
+    Usage:
+        with get_sync_session() as session:
+            result = session.execute(query)
+    """
+    session_factory = get_sync_session_factory()
+    session = session_factory()
+
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()

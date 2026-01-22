@@ -132,6 +132,16 @@ class Settings(BaseSettings):
     s3_region: str = "fr-par"
 
     # -------------------------------------------------------------------------
+    # Scaleway API (for infrastructure monitoring - used by scw CLI)
+    # Note: The scw CLI uses environment variables directly with SCW_ prefix
+    # These are defined here for documentation and optional programmatic access
+    # -------------------------------------------------------------------------
+    scw_access_key: str = ""
+    scw_secret_key: str = ""
+    scw_default_organization_id: str = ""
+    scw_default_project_id: str = ""
+
+    # -------------------------------------------------------------------------
     # Computed Properties
     # -------------------------------------------------------------------------
     @property

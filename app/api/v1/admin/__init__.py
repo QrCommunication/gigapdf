@@ -6,7 +6,7 @@ Provides administrative endpoints for managing the GigaPDF platform.
 
 from fastapi import APIRouter
 
-from app.api.v1.admin import stats, users, documents, jobs, logs, settings, tenants
+from app.api.v1.admin import stats, users, documents, jobs, logs, settings, tenants, infrastructure
 
 admin_router = APIRouter()
 
@@ -50,4 +50,10 @@ admin_router.include_router(
     tenants.router,
     prefix="/tenants",
     tags=["Admin - Tenants"],
+)
+
+admin_router.include_router(
+    infrastructure.router,
+    prefix="/infrastructure",
+    tags=["Admin - Infrastructure"],
 )

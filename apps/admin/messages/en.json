@@ -67,6 +67,7 @@
     "jobs": "Background Jobs",
     "logs": "System Logs",
     "plans": "Plans",
+    "infrastructure": "Infrastructure",
     "settings": "Settings",
     "logout": "Logout",
     "notifications": "Notifications",
@@ -686,6 +687,53 @@
         "githubEnabled": "Enable GitHub OAuth",
         "githubClientId": "GitHub Client ID",
         "githubClientSecret": "GitHub Client Secret"
+      }
+    }
+  },
+  "infrastructure": {
+    "title": "Infrastructure",
+    "subtitle": "Monitor costs and system performance",
+    "refresh": "Refresh",
+    "costs": {
+      "title": "Hosting Costs",
+      "period": "Billing Period",
+      "total": "Total Cost",
+      "compute": "Compute",
+      "database": "Database",
+      "storage": "Storage"
+    },
+    "performance": {
+      "title": "System Performance",
+      "cpu": "CPU Usage",
+      "memory": "Memory",
+      "disk": "Disk",
+      "s3": "S3 Storage",
+      "objects": "objects"
+    },
+    "resources": {
+      "title": "Resource Details",
+      "product": "Product",
+      "resource": "Resource",
+      "category": "Category",
+      "cost": "Cost"
+    },
+    "charts": {
+      "costs": {
+        "title": "Cost History (12 months)",
+        "noData": "No cost data available",
+        "period": "Period"
+      },
+      "metrics": {
+        "title": "Performance History",
+        "noData": "No metrics data available. Metrics are collected every 15 minutes.",
+        "cpu": "CPU",
+        "memory": "Memory",
+        "disk": "Disk",
+        "range": {
+          "24h": "24h",
+          "7d": "7 days",
+          "30d": "30 days"
+        }
       }
     }
   },
