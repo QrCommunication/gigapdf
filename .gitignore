@@ -84,6 +84,10 @@ temp/
 # Deploy (keep scripts, ignore secrets)
 deploy/.env.production
 
+# Production env files (secrets - copy via SSH)
+apps/web/.env.production
+apps/admin/.env.production
+
 # Celery
 celerybeat-schedule
 celerybeat.pid
@@ -140,3 +144,6 @@ storybook-static/
 apps/mobile/ios/
 apps/mobile/android/
 .expo/
+
+# Local dev certs
+certs/

@@ -96,14 +96,36 @@ export const FabricCanvas = forwardRef<FabricCanvasRef, FabricCanvasProps>(
       resetZoom: resetZoomHook,
     } = zoom || { setZoom: () => {}, zoomIn: () => {}, zoomOut: () => {}, zoomToFit: () => {}, resetZoom: () => {} };
 
-    // Tools
-    const [selectTool] = React.useState(() => canvas ? new SelectTool(canvas) : null);
-    const [textTool] = React.useState(() => canvas ? new TextTool(canvas) : null);
-    const [drawTool] = React.useState(() => canvas ? new DrawTool(canvas) : null);
-    const [shapeTool] = React.useState(() => canvas ? new ShapeTool(canvas) : null);
-    const [annotationTool] = React.useState(() => canvas ? new AnnotationTool(canvas) : null);
-    const [panTool] = React.useState(() => canvas ? new PanTool(canvas) : null);
-    const [zoomTool] = React.useState(() => canvas ? new ZoomTool(canvas) : null);
+    // Tools — initialized in useEffect once canvas is ready (cannot use useState here
+    // because canvas is null during first render, causing all tools to stay null forever)
+    const selectToolRef = React.useRef<SelectTool | null>(null);
+    const textToolRef = React.useRef<TextTool | null>(null);
+    const drawToolRef = React.useRef<DrawTool | null>(null);
+    const shapeToolRef = React.useRef<ShapeTool | null>(null);
+    const annotationToolRef = React.useRef<AnnotationTool | null>(null);
+    const panToolRef = React.useRef<PanTool | null>(null);
+    const zoomToolRef = React.useRef<ZoomTool | null>(null);
+
+    // Initialize tools once the Fabric.js canvas instance is available
+    useEffect(() => {
+      if (!canvas) return;
+      selectToolRef.current = new SelectTool(canvas);
+      textToolRef.current = new TextTool(canvas);
+      drawToolRef.current = new DrawTool(canvas);
+      shapeToolRef.current = new ShapeTool(canvas);
+      annotationToolRef.current = new AnnotationTool(canvas);
+      panToolRef.current = new PanTool(canvas);
+      zoomToolRef.current = new ZoomTool(canvas);
+      return () => {
+        selectToolRef.current?.deactivate();
+        textToolRef.current?.deactivate();
+        drawToolRef.current?.deactivate();
+        shapeToolRef.current?.deactivate();
+        annotationToolRef.current?.deactivate();
+        panToolRef.current?.deactivate();
+        zoomToolRef.current?.deactivate();
+      };
+    }, [canvas]);
 
     // Canvas events
     useCanvasEvents(canvas, {
@@ -131,37 +153,37 @@ export const FabricCanvas = forwardRef<FabricCanvasRef, FabricCanvasProps>(
       }
     }, [selectedObjects, onSelectionChanged]);
 
-    // Tool activation
+    // Tool activation — use refs so this effect doesn't re-run when tools are re-created
     useEffect(() => {
       if (!canvas) return;
 
       // Deactivate all tools
-      selectTool?.deactivate();
-      textTool?.deactivate();
-      drawTool?.deactivate();
-      shapeTool?.deactivate();
-      annotationTool?.deactivate();
-      panTool?.deactivate();
-      zoomTool?.deactivate();
+      selectToolRef.current?.deactivate();
+      textToolRef.current?.deactivate();
+      drawToolRef.current?.deactivate();
+      shapeToolRef.current?.deactivate();
+      annotationToolRef.current?.deactivate();
+      panToolRef.current?.deactivate();
+      zoomToolRef.current?.deactivate();
 
       // Activate selected tool
       switch (tool) {
         case "select":
-          selectTool?.activate();
+          selectToolRef.current?.activate();
           break;
         case "text":
-          textTool?.activate();
+          textToolRef.current?.activate();
           break;
         case "hand":
-          if (enablePan) panTool?.activate();
+          if (enablePan) panToolRef.current?.activate();
           break;
         case "zoom":
-          if (enableZoom) zoomTool?.activate();
+          if (enableZoom) zoomToolRef.current?.activate();
           break;
         default:
-          selectTool?.activate();
+          selectToolRef.current?.activate();
       }
-    }, [canvas, tool, selectTool, textTool, drawTool, shapeTool, annotationTool, panTool, zoomTool, enablePan, enableZoom]);
+    }, [canvas, tool, enablePan, enableZoom]);
 
     // Render pages
     useEffect(() => {
@@ -231,7 +253,7 @@ export const FabricCanvas = forwardRef<FabricCanvasRef, FabricCanvasProps>(
       if (!canvas) return;
 
       const objects = canvas.getObjects();
-      const obj = objects.find((o: any) => o.elementId === elementId);
+      const obj = objects.find((o: any) => o.data?.elementId === elementId);
 
       if (obj) {
         canvas.remove(obj);

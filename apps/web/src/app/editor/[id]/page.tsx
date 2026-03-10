@@ -420,8 +420,7 @@ export default function EditorPage() {
 
   const handleExport = useCallback(async () => {
     if (!documentId) return;
-    // TODO: Implémenter l'export
-    window.open(`/api/documents/${documentId}/download`, "_blank");
+    window.open(api.getDocumentDownloadUrl(documentId), "_blank");
   }, [documentId]);
 
   // Handler pour la navigation TOC
@@ -842,6 +841,7 @@ export default function EditorPage() {
             documentId={documentId}
             tool={activeTool}
             zoom={zoom}
+            documentId={documentId}
             shapeType={shapeType}
             annotationType={annotationType}
             strokeColor={strokeColor}
