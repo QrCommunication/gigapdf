@@ -1,3 +1,4 @@
+# DEPRECATED: Use @giga-pdf/pdf-engine via Next.js API routes instead
 """
 Export Celery tasks.
 
@@ -12,7 +13,11 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 from uuid import uuid4
 
-import fitz  # PyMuPDF
+# DEPRECATED: import fitz  # PyMuPDF
+try:
+    import fitz  # PyMuPDF
+except ImportError:
+    fitz = None  # type: ignore[assignment]
 
 from celery import shared_task
 

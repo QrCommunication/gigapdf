@@ -3,10 +3,15 @@ Redis-based Document Session Repository.
 
 Stores document sessions in Redis for multi-worker support.
 Uses a local LRU cache to avoid constant Redis roundtrips.
+
+# NOTE: PyMuPDF (fitz) has been removed. PDF bytes are now stored directly
+# in Redis and wrapped in LegacyDocumentProxy on retrieval.
+# All real PDF operations are handled by @giga-pdf/pdf-engine (TypeScript).
 """
 
 import asyncio
 import base64
+import io
 import json
 import logging
 import threading
@@ -15,11 +20,11 @@ from dataclasses import asdict
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-import fitz  # PyMuPDF
+import pikepdf  # MIT-licensed replacement for PyMuPDF
 import redis.asyncio as redis
 
 from app.core.cache import get_redis
-from app.core.parser import parse_document
+# parse_document import removed — PDF parsing now done by @giga-pdf/pdf-engine (TypeScript)
 from app.models.document import DocumentObject
 from app.models.history import HistoryEntry, HistoryState
 from app.repositories.document_repo import DocumentSession
@@ -122,7 +127,7 @@ class RedisDocumentSessionManager:
     async def create_session(
         self,
         document_id: str,
-        pdf_doc: fitz.Document,
+        pdf_doc: Any,  # LegacyDocumentProxy | pikepdf.Pdf | bytes-wrapper
         scene_graph: DocumentObject,
         owner_id: Optional[str] = None,
         filename: Optional[str] = None,
@@ -134,7 +139,7 @@ class RedisDocumentSessionManager:
 
         Args:
             document_id: Unique document identifier.
-            pdf_doc: PyMuPDF document.
+            pdf_doc: Document handle (LegacyDocumentProxy or any object with .tobytes()).
             scene_graph: Parsed document representation.
             owner_id: Owner user ID.
             filename: Original filename.
@@ -149,7 +154,7 @@ class RedisDocumentSessionManager:
 
         # Get PDF bytes if not provided
         if pdf_bytes is None:
-            # Save current document to bytes
+            # Extract bytes from the document handle
             pdf_bytes = pdf_doc.tobytes()
 
         # Create session object
@@ -266,8 +271,13 @@ class RedisDocumentSessionManager:
                 return None
 
             # Rebuild session
-            # Open PDF from bytes
-            pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            # Wrap bytes in LegacyDocumentProxy instead of fitz.Document
+            # TODO: after full TS-engine migration, store/retrieve doc_id only
+            from app.core.pdf_engine import LegacyDocumentProxy
+            with pikepdf.open(io.BytesIO(pdf_bytes)) as _pdf:
+                _page_count = len(_pdf.pages)
+                _is_encrypted = _pdf.is_encrypted
+            pdf_doc = LegacyDocumentProxy(document_id, pdf_bytes, _page_count, _is_encrypted)
 
             # Parse scene graph
             scene_graph = DocumentObject.model_validate_json(graph_json)

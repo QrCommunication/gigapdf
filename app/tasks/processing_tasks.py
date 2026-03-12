@@ -1,3 +1,4 @@
+# DEPRECATED: Use @giga-pdf/pdf-engine via Next.js API routes instead
 """
 Document processing Celery tasks.
 
@@ -31,7 +32,11 @@ def merge_documents(
     Returns:
         dict: Merge result with new document ID.
     """
-    import fitz
+    # DEPRECATED: import fitz
+    try:
+        import fitz
+    except ImportError:
+        fitz = None  # type: ignore[assignment]
 
     from app.core.parser import PDFParser
     from app.repositories.document_repo import document_sessions
@@ -117,7 +122,11 @@ def split_document(
     Returns:
         dict: Split result with new document IDs.
     """
-    import fitz
+    # DEPRECATED: import fitz
+    try:
+        import fitz
+    except ImportError:
+        fitz = None  # type: ignore[assignment]
 
     from app.core.parser import PDFParser
     from app.repositories.document_repo import document_sessions

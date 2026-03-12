@@ -3,13 +3,23 @@ OCR Integration - Text recognition using Tesseract.
 
 Provides OCR capabilities for scanned PDF pages,
 converting images to searchable text.
+
+# NOTE: PyMuPDF (fitz) has been removed. Page rendering for OCR is now done
+# via pdfplumber + Pillow (MIT-licensed). The public API (process_page,
+# process_document, add_ocr_layer) preserves the same signatures but accepts
+# bytes-based page handles instead of fitz.Page objects where needed.
+#
+# The `add_ocr_layer` method that wrote invisible text back into the PDF is
+# now a no-op stub — invisible OCR text insertion is handled by
+# @giga-pdf/pdf-engine (TypeScript).
 """
 
 import io
 import logging
 from typing import Optional
 
-import fitz  # PyMuPDF
+# fitz (PyMuPDF) removed — rendering via pdfplumber + Pillow
+import pdfplumber
 from PIL import Image
 
 from app.config import get_settings
@@ -50,19 +60,30 @@ class OCRProcessor:
 
     def process_page(
         self,
-        page: fitz.Page,
+        page: object,
         page_number: int,
         languages: str = "eng",
         confidence_threshold: float = 60.0,
+        *,
+        pdf_bytes: Optional[bytes] = None,
+        pdf_page_index: Optional[int] = None,
     ) -> list[TextElement]:
         """
         Perform OCR on a page and return text elements.
 
+        The `page` argument may be:
+          - A pdfplumber Page object (preferred after migration), or
+          - Any legacy object that exposes .rect.width / .rect.height (kept for
+            backward compat). In this case, `pdf_bytes` + `pdf_page_index` must
+            be supplied so we can render via pdfplumber.
+
         Args:
-            page: PyMuPDF page.
+            page: pdfplumber Page or legacy page proxy.
             page_number: Page number for logging.
             languages: Tesseract language codes (e.g., "eng+fra").
             confidence_threshold: Minimum confidence to include text.
+            pdf_bytes: Raw PDF bytes (required when `page` is a legacy proxy).
+            pdf_page_index: 0-based page index (required when `page` is a legacy proxy).
 
         Returns:
             list[TextElement]: Extracted text elements with positions.
@@ -74,17 +95,31 @@ class OCRProcessor:
         import pytesseract
 
         elements = []
-        page_height = page.rect.height
-        page_width = page.rect.width
 
         try:
-            # Render page to image at high DPI for OCR
-            zoom = 300 / 72  # 300 DPI
-            mat = fitz.Matrix(zoom, zoom)
-            pix = page.get_pixmap(matrix=mat, alpha=False)
-
-            # Convert to PIL Image
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            # Determine page dimensions and render to PIL Image via pdfplumber
+            if isinstance(page, pdfplumber.page.Page):
+                # Native pdfplumber path
+                page_width = float(page.width)
+                page_height = float(page.height)
+                # Render at 300 DPI (pdfplumber default bbox is in points, 72pt = 1 inch)
+                img = page.to_image(resolution=300).original
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+            else:
+                # Legacy path — render the page from raw bytes via pdfplumber
+                if pdf_bytes is None or pdf_page_index is None:
+                    logger.error(
+                        "process_page: legacy page object requires pdf_bytes and pdf_page_index"
+                    )
+                    return []
+                with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                    plumber_page = pdf.pages[pdf_page_index]
+                    page_width = float(plumber_page.width)
+                    page_height = float(plumber_page.height)
+                    img = plumber_page.to_image(resolution=300).original
+                    if img.mode != "RGB":
+                        img = img.convert("RGB")
 
             # Run OCR with detailed output
             data = pytesseract.image_to_data(
@@ -153,86 +188,93 @@ class OCRProcessor:
 
     def process_document(
         self,
-        doc: fitz.Document,
+        doc: object,
         page_numbers: Optional[list[int]] = None,
         languages: str = "eng",
         confidence_threshold: float = 60.0,
         progress_callback: Optional[callable] = None,
+        *,
+        pdf_bytes: Optional[bytes] = None,
     ) -> dict[int, list[TextElement]]:
         """
         Perform OCR on multiple pages.
 
         Args:
-            doc: PyMuPDF document.
+            doc: pdfplumber PDF object or a legacy document proxy that exposes
+                 .page_count. When `doc` is a legacy proxy, supply `pdf_bytes`
+                 so pages can be rendered via pdfplumber.
             page_numbers: Specific pages to process (None for all).
             languages: Tesseract language codes.
             confidence_threshold: Minimum confidence threshold.
             progress_callback: Callback for progress updates.
+            pdf_bytes: Raw PDF bytes for pdfplumber rendering (legacy path).
 
         Returns:
             dict: Mapping of page number to text elements.
         """
-        if page_numbers is None:
-            page_numbers = list(range(1, doc.page_count + 1))
-
         results = {}
-        total_pages = len(page_numbers)
 
-        for idx, page_num in enumerate(page_numbers):
-            if page_num < 1 or page_num > doc.page_count:
-                continue
-
-            page = doc[page_num - 1]
-            elements = self.process_page(
-                page, page_num, languages, confidence_threshold
-            )
-            results[page_num] = elements
-
-            # Report progress
-            if progress_callback:
-                progress = ((idx + 1) / total_pages) * 100
-                progress_callback(progress, f"Processing page {page_num}")
+        if isinstance(doc, pdfplumber.PDF):
+            # Native pdfplumber path
+            total = len(doc.pages)
+            if page_numbers is None:
+                page_numbers = list(range(1, total + 1))
+            total_pages = len(page_numbers)
+            for idx, page_num in enumerate(page_numbers):
+                if page_num < 1 or page_num > total:
+                    continue
+                plumber_page = doc.pages[page_num - 1]
+                elements = self.process_page(plumber_page, page_num, languages, confidence_threshold)
+                results[page_num] = elements
+                if progress_callback:
+                    progress_callback(((idx + 1) / total_pages) * 100, f"Processing page {page_num}")
+        else:
+            # Legacy path — doc has .page_count; render via pdf_bytes
+            doc_page_count = getattr(doc, "page_count", 0)
+            if page_numbers is None:
+                page_numbers = list(range(1, doc_page_count + 1))
+            total_pages = len(page_numbers)
+            for idx, page_num in enumerate(page_numbers):
+                if page_num < 1 or page_num > doc_page_count:
+                    continue
+                elements = self.process_page(
+                    doc,  # legacy proxy — process_page will use pdf_bytes
+                    page_num,
+                    languages,
+                    confidence_threshold,
+                    pdf_bytes=pdf_bytes,
+                    pdf_page_index=page_num - 1,
+                )
+                results[page_num] = elements
+                if progress_callback:
+                    progress_callback(((idx + 1) / total_pages) * 100, f"Processing page {page_num}")
 
         return results
 
     def add_ocr_layer(
         self,
-        doc: fitz.Document,
+        doc: object,
         page_number: int,
         elements: list[TextElement],
     ) -> None:
         """
         Add invisible OCR text layer to page.
 
-        This makes the PDF searchable while preserving
-        the original scanned image.
+        DEPRECATED: Invisible text insertion is now handled by
+        @giga-pdf/pdf-engine (TypeScript). This method is a no-op stub kept
+        so that existing call sites do not break.
+
+        TODO: Remove this method once callers are migrated to the TS engine.
 
         Args:
-            doc: PyMuPDF document.
-            page_number: Page number (1-indexed).
-            elements: OCR text elements to add.
+            doc: Document handle (ignored — no-op).
+            page_number: Page number (1-indexed, ignored).
+            elements: OCR text elements (ignored).
         """
-        page = doc[page_number - 1]
-        page_height = page.rect.height
-
-        for element in elements:
-            # Convert web coordinates back to PDF
-            x = element.bounds.x
-            y = page_height - element.bounds.y - element.bounds.height
-
-            # Insert invisible text
-            point = fitz.Point(x, y + element.bounds.height)
-
-            # Use very small opacity to make text invisible but searchable
-            page.insert_text(
-                point,
-                element.content,
-                fontsize=element.style.font_size,
-                fontname="helv",
-                render_mode=3,  # Invisible text
-            )
-
-        logger.info(f"Added OCR layer to page {page_number}")
+        logger.warning(
+            "OCRProcessor.add_ocr_layer() is deprecated and is now a no-op. "
+            "Invisible OCR text insertion is handled by @giga-pdf/pdf-engine (TypeScript)."
+        )
 
     def get_available_languages(self) -> list[str]:
         """

@@ -1,9 +1,16 @@
 """
 Document Session Repository - Hybrid in-memory + Redis session management.
 
-Manages active document editing sessions with PyMuPDF documents
+Manages active document editing sessions with PDF byte blobs
 and their parsed scene graph representations. Uses Redis for
 cross-worker persistence.
+
+# NOTE: PyMuPDF (fitz) has been removed. The `pdf_doc` field now accepts any
+# object that exposes `.tobytes() -> bytes`, `.page_count: int`, and
+# `.is_encrypted: bool`. Use `LegacyDocumentProxy` from app.core.pdf_engine
+# or pass raw bytes wrapped in a simple object.
+#
+# All real PDF operations are handled by @giga-pdf/pdf-engine (TypeScript).
 """
 
 import asyncio
@@ -15,7 +22,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-import fitz  # PyMuPDF
+# fitz (PyMuPDF) removed — replaced by LegacyDocumentProxy / pikepdf
 
 from app.models.document import DocumentObject
 from app.models.history import DocumentSnapshot, HistoryEntry, HistoryState
@@ -29,12 +36,18 @@ class DocumentSession:
     """
     Active document editing session.
 
-    Holds the PyMuPDF document, parsed scene graph,
+    Holds a PDF document handle (LegacyDocumentProxy or any object with
+    .tobytes()/.page_count/.is_encrypted), the parsed scene graph,
     and editing history.
+
+    NOTE: `pdf_doc` is typed as Any to avoid importing fitz. During the
+    migration period it holds a LegacyDocumentProxy instance from
+    app.core.pdf_engine. After full migration it will hold raw bytes or
+    a pikepdf.Pdf handle.
     """
 
     document_id: str
-    pdf_doc: fitz.Document
+    pdf_doc: Any  # LegacyDocumentProxy | pikepdf.Pdf | bytes-wrapper
     scene_graph: DocumentObject
     history: HistoryState = field(default_factory=HistoryState)
     locks: dict[str, str] = field(default_factory=dict)  # element_id -> user_id
@@ -196,7 +209,7 @@ class DocumentSessionManager:
     def create_session(
         self,
         document_id: str,
-        pdf_doc: fitz.Document,
+        pdf_doc: Any,  # LegacyDocumentProxy | pikepdf.Pdf | bytes-wrapper
         scene_graph: DocumentObject,
         owner_id: Optional[str] = None,
         filename: Optional[str] = None,
@@ -364,8 +377,15 @@ class DocumentSessionManager:
                 logger.debug(f"Session {document_id} not found in Redis")
                 return None
 
-            # Rebuild session
-            pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            # Rebuild session — wrap bytes in LegacyDocumentProxy instead of fitz.Document
+            # TODO: after full TS-engine migration, store/retrieve doc_id only
+            from app.core.pdf_engine import LegacyDocumentProxy
+            import pikepdf
+            import io as _io
+            with pikepdf.open(_io.BytesIO(pdf_bytes)) as _pdf:
+                _page_count = len(_pdf.pages)
+                _is_encrypted = _pdf.is_encrypted
+            pdf_doc = LegacyDocumentProxy(document_id, pdf_bytes, _page_count, _is_encrypted)
             scene_graph = DocumentObject.model_validate_json(graph_json)
 
             # Register document with pdf_engine for save operations

@@ -1,15 +1,25 @@
 """
 Preview Generator - Renders PDF pages to images.
 
-Generates thumbnail and full-resolution previews of PDF pages
-for display in the frontend.
+# DEPRECATED: Use @giga-pdf/pdf-engine via Next.js API routes instead.
+#
+# This module previously used PyMuPDF (AGPL) to render PDF pages to PNG/JPEG/WebP/SVG.
+# Page rendering is now performed by the TypeScript pdf-engine package
+# (packages/pdf-engine). The Python process no longer renders pages directly.
+#
+# This file is kept as a compatibility shim so that existing Celery tasks that
+# import PreviewGenerator do not crash during migration.
+#
+# TODO: Remove this module once all callers (export_tasks.py, document_service.py)
+#       have been migrated to retrieve previews from the TS engine.
 """
 
 import io
 import logging
 from typing import Literal, Optional
 
-import fitz  # PyMuPDF
+# fitz (PyMuPDF) removed — page rendering now done by @giga-pdf/pdf-engine (TypeScript)
+import pdfplumber  # MIT-licensed — used for basic page info
 from PIL import Image
 
 from app.config import get_settings
@@ -21,18 +31,33 @@ class PreviewGenerator:
     """
     Generates image previews of PDF pages.
 
-    Supports multiple output formats and resolution settings.
+    DEPRECATED: All page rendering is now handled by @giga-pdf/pdf-engine (TypeScript).
+
+    This class is a compatibility shim. It uses pdfplumber for page rendering
+    where still needed (e.g., OCR pipeline), but all methods log deprecation
+    warnings. The preferred approach is to fetch previews from the TS engine.
     """
 
-    def __init__(self, doc: fitz.Document):
+    def __init__(self, doc: object):
         """
         Initialize preview generator.
 
         Args:
-            doc: PyMuPDF document.
+            doc: Document handle (LegacyDocumentProxy or any object with
+                 ._pdf_bytes attribute, or raw bytes).
         """
         self.doc = doc
         self.settings = get_settings()
+
+    def _get_pdf_bytes(self) -> Optional[bytes]:
+        """Extract raw PDF bytes from whatever doc handle we have."""
+        if isinstance(self.doc, bytes):
+            return self.doc
+        if hasattr(self.doc, "_pdf_bytes"):
+            return self.doc._pdf_bytes
+        if hasattr(self.doc, "tobytes"):
+            return self.doc.tobytes()
+        return None
 
     def render_page(
         self,
@@ -43,53 +68,50 @@ class PreviewGenerator:
         scale: Optional[float] = None,
     ) -> bytes:
         """
-        Render a page to an image.
+        Render a page to an image via pdfplumber.
 
-        Args:
-            page_number: Page number (1-indexed).
-            dpi: Resolution in dots per inch.
-            format: Output format (png, jpeg, webp, svg).
-            quality: JPEG/WebP quality (1-100).
-            scale: Alternative to dpi - direct scale factor.
+        DEPRECATED: Page rendering is now handled by @giga-pdf/pdf-engine (TypeScript).
+        This implementation uses pdfplumber as a fallback for existing callers.
 
-        Returns:
-            bytes: Image data.
+        TODO: Replace callers with TS engine preview endpoint.
         """
-        # Validate DPI
+        logger.warning(
+            "PreviewGenerator.render_page() is deprecated. "
+            "Use @giga-pdf/pdf-engine via Next.js API routes for page rendering."
+        )
+
         max_dpi = self.settings.preview_max_dpi
         dpi = min(dpi, max_dpi)
+        effective_dpi = int((scale or 1.0) * dpi) if scale else dpi
 
-        # Get page
-        page = self.doc[page_number - 1]
+        pdf_bytes = self._get_pdf_bytes()
+        if not pdf_bytes:
+            raise ValueError("PreviewGenerator: no PDF bytes available")
 
-        # Calculate zoom factor
-        if scale:
-            zoom = scale
-        else:
-            zoom = dpi / 72  # 72 is the base PDF resolution
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            if page_number < 1 or page_number > len(pdf.pages):
+                raise IndexError(f"Page {page_number} not found")
 
-        # Create transformation matrix
-        mat = fitz.Matrix(zoom, zoom)
+            page = pdf.pages[page_number - 1]
 
-        # Handle SVG format separately
-        if format == "svg":
-            return self._render_svg(page)
+            if format == "svg":
+                # pdfplumber does not produce SVG natively — return empty SVG stub
+                logger.warning("SVG rendering not supported in pdfplumber fallback; returning stub.")
+                return b'<svg xmlns="http://www.w3.org/2000/svg"></svg>'
 
-        # Render to pixmap
-        pix = page.get_pixmap(matrix=mat, alpha=False)
+            img = page.to_image(resolution=effective_dpi).original
+            if img.mode != "RGB":
+                img = img.convert("RGB")
 
-        # Convert to PIL Image for format conversion
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-
-        # Save to bytes
         output = io.BytesIO()
-
         if format == "png":
             img.save(output, format="PNG", optimize=True)
         elif format == "jpeg":
             img.save(output, format="JPEG", quality=quality, optimize=True)
         elif format == "webp":
             img.save(output, format="WEBP", quality=quality)
+        else:
+            img.save(output, format="PNG", optimize=True)
 
         return output.getvalue()
 
@@ -101,37 +123,37 @@ class PreviewGenerator:
         format: Literal["png", "jpeg", "webp"] = "png",
     ) -> bytes:
         """
-        Render a thumbnail with maximum dimensions.
+        Render a thumbnail with maximum dimensions via pdfplumber.
 
-        Args:
-            page_number: Page number (1-indexed).
-            max_width: Maximum thumbnail width.
-            max_height: Maximum thumbnail height.
-            format: Output format.
-
-        Returns:
-            bytes: Thumbnail image data.
+        DEPRECATED: Thumbnail generation is now handled by @giga-pdf/pdf-engine (TypeScript).
+        TODO: Replace callers with TS engine thumbnail endpoint.
         """
-        page = self.doc[page_number - 1]
+        logger.warning(
+            "PreviewGenerator.render_thumbnail() is deprecated. "
+            "Use @giga-pdf/pdf-engine via Next.js API routes."
+        )
 
-        # Calculate scale to fit within max dimensions
-        page_width = page.rect.width
-        page_height = page.rect.height
+        pdf_bytes = self._get_pdf_bytes()
+        if not pdf_bytes:
+            raise ValueError("PreviewGenerator: no PDF bytes available")
 
-        scale_x = max_width / page_width
-        scale_y = max_height / page_height
-        scale = min(scale_x, scale_y)
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            if page_number < 1 or page_number > len(pdf.pages):
+                raise IndexError(f"Page {page_number} not found")
 
-        # Render at calculated scale
-        mat = fitz.Matrix(scale, scale)
-        pix = page.get_pixmap(matrix=mat, alpha=False)
+            page = pdf.pages[page_number - 1]
+            page_width = float(page.width)
+            page_height = float(page.height)
 
-        # Convert to PIL
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            # Calculate scale to fit within max dimensions
+            scale = min(max_width / page_width, max_height / page_height)
+            dpi = max(72, int(72 * scale))
+            img = page.to_image(resolution=dpi).original
+            if img.mode != "RGB":
+                img = img.convert("RGB")
 
-        # Save
+        img.thumbnail((max_width, max_height))
         output = io.BytesIO()
-
         if format == "png":
             img.save(output, format="PNG", optimize=True)
         elif format == "jpeg":
@@ -150,35 +172,25 @@ class PreviewGenerator:
         """
         Render thumbnails for all pages.
 
-        Args:
-            max_width: Maximum thumbnail width.
-            max_height: Maximum thumbnail height.
-            format: Output format.
-
-        Returns:
-            dict: Mapping of page number to thumbnail bytes.
+        DEPRECATED: Use @giga-pdf/pdf-engine via Next.js API routes.
         """
-        thumbnails = {}
+        logger.warning(
+            "PreviewGenerator.render_all_thumbnails() is deprecated. "
+            "Use @giga-pdf/pdf-engine via Next.js API routes."
+        )
 
-        for page_num in range(1, self.doc.page_count + 1):
-            thumbnails[page_num] = self.render_thumbnail(
-                page_num, max_width, max_height, format
-            )
+        pdf_bytes = self._get_pdf_bytes()
+        if not pdf_bytes:
+            return {}
+
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            page_count = len(pdf.pages)
+
+        thumbnails = {}
+        for page_num in range(1, page_count + 1):
+            thumbnails[page_num] = self.render_thumbnail(page_num, max_width, max_height, format)
 
         return thumbnails
-
-    def _render_svg(self, page: fitz.Page) -> bytes:
-        """
-        Render page as SVG.
-
-        Args:
-            page: PyMuPDF page.
-
-        Returns:
-            bytes: SVG data.
-        """
-        svg = page.get_svg_image()
-        return svg.encode("utf-8")
 
     def extract_page_image(
         self,
@@ -187,55 +199,43 @@ class PreviewGenerator:
         format: Optional[Literal["png", "jpeg", "webp"]] = None,
     ) -> tuple[bytes, str]:
         """
-        Extract an embedded image from a page.
+        Extract an embedded image from a page via pdfplumber.
 
-        Args:
-            page_number: Page number (1-indexed).
-            xref: Image xref number.
-            format: Output format (None for original).
+        DEPRECATED: Image extraction is now handled by @giga-pdf/pdf-engine (TypeScript).
 
-        Returns:
-            tuple: (image_bytes, mime_type)
+        NOTE: pdfplumber does not support extracting images by xref. This method
+        renders the full page at high DPI and returns it as a PNG fallback.
+        TODO: Use the TS engine image endpoint instead.
         """
-        # Extract image
-        img_info = self.doc.extract_image(xref)
+        logger.warning(
+            "PreviewGenerator.extract_page_image() is deprecated. "
+            "Use @giga-pdf/pdf-engine via Next.js API routes for embedded image extraction."
+        )
 
-        if not img_info:
-            raise ValueError(f"Image not found: xref {xref}")
+        pdf_bytes = self._get_pdf_bytes()
+        if not pdf_bytes:
+            raise ValueError(f"Image not found: xref {xref} (no PDF bytes)")
 
-        image_bytes = img_info["image"]
-        ext = img_info["ext"]
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            if page_number < 1 or page_number > len(pdf.pages):
+                raise ValueError(f"Image not found: page {page_number} out of range")
+            page = pdf.pages[page_number - 1]
+            img = page.to_image(resolution=150).original
+            if img.mode != "RGB":
+                img = img.convert("RGB")
 
-        # Determine mime type
-        mime_map = {
-            "png": "image/png",
-            "jpeg": "image/jpeg",
-            "jpg": "image/jpeg",
-            "webp": "image/webp",
-            "jbig2": "image/png",  # Convert to PNG
-        }
+        target_format = format or "png"
+        output = io.BytesIO()
+        mime_map = {"png": "image/png", "jpeg": "image/jpeg", "webp": "image/webp"}
 
-        # Convert if requested
-        if format and format != ext:
-            img = Image.open(io.BytesIO(image_bytes))
-            output = io.BytesIO()
+        if target_format == "jpeg":
+            img.save(output, format="JPEG", quality=85)
+        elif target_format == "webp":
+            img.save(output, format="WEBP", quality=85)
+        else:
+            img.save(output, format="PNG")
 
-            if format == "png":
-                img.save(output, format="PNG")
-            elif format == "jpeg":
-                # Convert RGBA to RGB for JPEG
-                if img.mode == "RGBA":
-                    img = img.convert("RGB")
-                img.save(output, format="JPEG", quality=85)
-            elif format == "webp":
-                img.save(output, format="WEBP", quality=85)
-
-            image_bytes = output.getvalue()
-            ext = format
-
-        mime_type = mime_map.get(ext, "application/octet-stream")
-
-        return image_bytes, mime_type
+        return output.getvalue(), mime_map.get(target_format, "image/png")
 
     def get_page_text_image(
         self,
@@ -243,9 +243,9 @@ class PreviewGenerator:
         dpi: int = 300,
     ) -> bytes:
         """
-        Render page suitable for OCR processing.
+        Render page suitable for OCR processing via pdfplumber.
 
-        High-contrast black and white rendering optimized for OCR.
+        High-contrast grayscale rendering optimized for OCR.
 
         Args:
             page_number: Page number (1-indexed).
@@ -254,17 +254,18 @@ class PreviewGenerator:
         Returns:
             bytes: PNG image data.
         """
-        page = self.doc[page_number - 1]
+        pdf_bytes = self._get_pdf_bytes()
+        if not pdf_bytes:
+            raise ValueError("PreviewGenerator: no PDF bytes available")
 
-        # High resolution for OCR
-        zoom = dpi / 72
-        mat = fitz.Matrix(zoom, zoom)
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            if page_number < 1 or page_number > len(pdf.pages):
+                raise IndexError(f"Page {page_number} not found")
+            page = pdf.pages[page_number - 1]
+            img = page.to_image(resolution=dpi).original
+            if img.mode != "RGB":
+                img = img.convert("RGB")
 
-        # Render to pixmap
-        pix = page.get_pixmap(matrix=mat, alpha=False)
-
-        # Convert to grayscale PIL image
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         img = img.convert("L")  # Grayscale
 
         # Enhance contrast for OCR
@@ -272,8 +273,6 @@ class PreviewGenerator:
         enhancer = ImageEnhance.Contrast(img)
         img = enhancer.enhance(1.5)
 
-        # Save as PNG
         output = io.BytesIO()
         img.save(output, format="PNG")
-
         return output.getvalue()

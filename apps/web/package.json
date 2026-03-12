@@ -20,6 +20,7 @@
     "@giga-pdf/api": "workspace:*",
     "@giga-pdf/canvas": "workspace:*",
     "@giga-pdf/editor": "workspace:*",
+    "@giga-pdf/pdf-engine": "workspace:*",
     "@giga-pdf/types": "workspace:*",
     "@giga-pdf/ui": "workspace:*",
     "@prisma/adapter-pg": "^7.2.0",

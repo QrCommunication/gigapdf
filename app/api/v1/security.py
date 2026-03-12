@@ -1,3 +1,4 @@
+# DEPRECATED: Use @giga-pdf/pdf-engine via Next.js API routes instead
 """
 PDF security endpoints.
 
@@ -270,7 +271,11 @@ async def encrypt_document(
         )
 
     # Build permissions bitmask for PyMuPDF
-    import fitz
+    # DEPRECATED: import fitz
+    try:
+        import fitz
+    except ImportError:
+        fitz = None  # type: ignore[assignment]
 
     perm = 0
     if request.allow_printing:
@@ -705,7 +710,11 @@ async def get_permissions(
         from app.middleware.error_handler import DocumentNotFoundError
         raise DocumentNotFoundError(document_id)
 
-    import fitz
+    # DEPRECATED: import fitz
+    try:
+        import fitz
+    except ImportError:
+        fitz = None  # type: ignore[assignment]
 
     pdf_doc = session.pdf_doc
 

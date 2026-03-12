@@ -6,9 +6,9 @@ pydantic[email]>=2.5.0
 pydantic-settings>=2.1.0
 
 # PDF manipulation
-PyMuPDF>=1.23.0
 pypdf>=3.17.0
-reportlab>=4.0.0
+pikepdf>=8.0.0
+pdfplumber>=0.10.0
 pdf2image>=1.16.0
 Pillow>=10.2.0
 

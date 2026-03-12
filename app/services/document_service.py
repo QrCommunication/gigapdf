@@ -1,3 +1,4 @@
+# DEPRECATED: Use @giga-pdf/pdf-engine via Next.js API routes instead
 """
 Document Service - High-level document operations.
 
@@ -8,7 +9,11 @@ and session management.
 import logging
 from typing import Any, Optional
 
-import fitz  # PyMuPDF
+# DEPRECATED: import fitz  # PyMuPDF
+try:
+    import fitz  # PyMuPDF
+except ImportError:
+    fitz = None  # type: ignore[assignment]
 
 from app.config import get_settings
 from app.core.parser import PDFParser

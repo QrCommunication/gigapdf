@@ -1,3 +1,4 @@
+# DEPRECATED: Use @giga-pdf/pdf-engine via Next.js API routes instead
 """
 Multi-document operations endpoints.
 
@@ -156,7 +157,11 @@ async def merge_documents(
     from app.core.pdf_engine import pdf_engine
     from app.core.parser import PDFParser
     from app.utils.helpers import parse_page_range
-    import fitz
+    # DEPRECATED: import fitz
+    try:
+        import fitz
+    except ImportError:
+        fitz = None  # type: ignore[assignment]
 
     # Validate all documents exist
     sessions = []
@@ -358,7 +363,11 @@ async def split_document(
     from app.repositories.document_repo import document_sessions
     from app.core.pdf_engine import pdf_engine
     from app.core.parser import PDFParser
-    import fitz
+    # DEPRECATED: import fitz
+    try:
+        import fitz
+    except ImportError:
+        fitz = None  # type: ignore[assignment]
 
     # Get source document
     session = document_sessions.get_session(document_id)
