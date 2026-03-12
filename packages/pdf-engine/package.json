@@ -4,54 +4,54 @@
   "description": "PDF manipulation engine for GigaPDF — parse, render, merge, encrypt, preview",
   "private": true,
   "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     },
     "./engine": {
       "types": "./dist/engine/index.d.ts",
-      "import": "./dist/engine/index.mjs",
-      "require": "./dist/engine/index.js"
+      "import": "./dist/engine/index.js",
+      "require": "./dist/engine/index.cjs"
     },
     "./parse": {
       "types": "./dist/parse/index.d.ts",
-      "import": "./dist/parse/index.mjs",
-      "require": "./dist/parse/index.js"
+      "import": "./dist/parse/index.js",
+      "require": "./dist/parse/index.cjs"
     },
     "./render": {
       "types": "./dist/render/index.d.ts",
-      "import": "./dist/render/index.mjs",
-      "require": "./dist/render/index.js"
+      "import": "./dist/render/index.js",
+      "require": "./dist/render/index.cjs"
     },
     "./merge-split": {
       "types": "./dist/merge-split/index.d.ts",
-      "import": "./dist/merge-split/index.mjs",
-      "require": "./dist/merge-split/index.js"
+      "import": "./dist/merge-split/index.js",
+      "require": "./dist/merge-split/index.cjs"
     },
     "./forms": {
       "types": "./dist/forms/index.d.ts",
-      "import": "./dist/forms/index.mjs",
-      "require": "./dist/forms/index.js"
+      "import": "./dist/forms/index.js",
+      "require": "./dist/forms/index.cjs"
     },
     "./encrypt": {
       "types": "./dist/encrypt/index.d.ts",
-      "import": "./dist/encrypt/index.mjs",
-      "require": "./dist/encrypt/index.js"
+      "import": "./dist/encrypt/index.js",
+      "require": "./dist/encrypt/index.cjs"
     },
     "./preview": {
       "types": "./dist/preview/index.d.ts",
-      "import": "./dist/preview/index.mjs",
-      "require": "./dist/preview/index.js"
+      "import": "./dist/preview/index.js",
+      "require": "./dist/preview/index.cjs"
     },
     "./convert": {
       "types": "./dist/convert/index.d.ts",
-      "import": "./dist/convert/index.mjs",
-      "require": "./dist/convert/index.js"
+      "import": "./dist/convert/index.js",
+      "require": "./dist/convert/index.cjs"
     }
   },
   "files": [

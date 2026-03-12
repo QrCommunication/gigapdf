@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect } from "react";
-import { setApiConfig } from "@giga-pdf/api";
+import { setApiConfig, QueryProvider } from "@giga-pdf/api";
 
 // Lazy load ThemeProvider to avoid SSG issues
 const DynamicThemeProvider = dynamic(
@@ -34,7 +34,9 @@ export function Providers({ children }: { children?: React.ReactNode }) {
       enableSystem
       disableTransitionOnChange
     >
-      <ApiConfigProvider>{children as React.ReactNode}</ApiConfigProvider>
+      <QueryProvider>
+        <ApiConfigProvider>{children as React.ReactNode}</ApiConfigProvider>
+      </QueryProvider>
     </DynamicThemeProvider>
   );
 }
