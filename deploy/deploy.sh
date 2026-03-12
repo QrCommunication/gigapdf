@@ -27,12 +27,11 @@ ENV_FILE="$APP_DIR/.env"
 cd "$APP_DIR"
 
 # =============================================================================
-# 0. Fix permissions for gigapdf user
+# 0. Fix permissions
 # =============================================================================
 log_info "Fixing permissions..."
-chown -R gigapdf:gigapdf /opt/gigapdf
-chown -R gigapdf:gigapdf /var/lib/gigapdf
-chown -R gigapdf:gigapdf /var/log/gigapdf
+sudo chown -R ubuntu:ubuntu /var/lib/gigapdf 2>/dev/null || true
+sudo chown -R ubuntu:ubuntu /var/log/gigapdf 2>/dev/null || true
 
 # =============================================================================
 # 1. Copy Production Environment if not exists
@@ -95,10 +94,11 @@ log_info "Installing Node.js dependencies..."
 pnpm install --frozen-lockfile
 
 # =============================================================================
-# 4. Build Packages
+# 4. Build Packages (sequential to avoid OOM on small VPS)
 # =============================================================================
-log_info "Building shared packages..."
-pnpm build:packages
+log_info "Building shared packages (sequential mode)..."
+export NODE_OPTIONS="--max-old-space-size=1024"
+pnpm exec turbo build --filter='./packages/*' --concurrency=1
 
 # =============================================================================
 # 5. Generate Prisma clients
@@ -117,12 +117,12 @@ cd ../..
 # =============================================================================
 log_info "Building Next.js Web application..."
 cd apps/web
-pnpm build
+NODE_OPTIONS="--max-old-space-size=1536" pnpm build
 cd ../..
 
 log_info "Building Next.js Admin application..."
 cd apps/admin
-pnpm build
+NODE_OPTIONS="--max-old-space-size=1536" pnpm build
 cd ../..
 
 # =============================================================================
@@ -192,26 +192,26 @@ with engine.connect() as conn:
 # 7. Install/Update Systemd Services
 # =============================================================================
 log_info "Installing systemd services..."
-cp deploy/systemd/*.service /etc/systemd/system/
-systemctl daemon-reload
+sudo cp deploy/systemd/*.service /etc/systemd/system/
+sudo systemctl daemon-reload
 
 # Enable services on boot
-systemctl enable gigapdf-api
-systemctl enable gigapdf-web
-systemctl enable gigapdf-admin
-systemctl enable gigapdf-celery
-systemctl enable gigapdf-celery-billing
+sudo systemctl enable gigapdf-api
+sudo systemctl enable gigapdf-web
+sudo systemctl enable gigapdf-admin
+sudo systemctl enable gigapdf-celery
+sudo systemctl enable gigapdf-celery-billing
 
 # =============================================================================
 # 8. Update Nginx Configuration
 # =============================================================================
 log_info "Updating Nginx configuration..."
 if [ -f /etc/letsencrypt/live/giga-pdf.com/fullchain.pem ]; then
-    cp deploy/nginx.conf /etc/nginx/sites-available/gigapdf
-    nginx -t && systemctl reload nginx
+    sudo cp deploy/nginx.conf /etc/nginx/sites-available/gigapdf
+    sudo nginx -t && sudo systemctl reload nginx
 else
     log_warn "SSL certificate not found, skipping Nginx update"
-    log_warn "Run: certbot --nginx -d giga-pdf.com -d www.giga-pdf.com"
+    log_warn "Run: sudo certbot --nginx -d giga-pdf.com -d www.giga-pdf.com"
 fi
 
 # =============================================================================
@@ -220,18 +220,18 @@ fi
 log_info "Restarting services..."
 
 # Stop all services first
-systemctl stop gigapdf-api || true
-systemctl stop gigapdf-web || true
-systemctl stop gigapdf-admin || true
-systemctl stop gigapdf-celery || true
-systemctl stop gigapdf-celery-billing || true
+sudo systemctl stop gigapdf-api || true
+sudo systemctl stop gigapdf-web || true
+sudo systemctl stop gigapdf-admin || true
+sudo systemctl stop gigapdf-celery || true
+sudo systemctl stop gigapdf-celery-billing || true
 
 # Start services
-systemctl start gigapdf-api
-systemctl start gigapdf-web
-systemctl start gigapdf-admin
-systemctl start gigapdf-celery
-systemctl start gigapdf-celery-billing
+sudo systemctl start gigapdf-api
+sudo systemctl start gigapdf-web
+sudo systemctl start gigapdf-admin
+sudo systemctl start gigapdf-celery
+sudo systemctl start gigapdf-celery-billing
 
 # =============================================================================
 # 10. Health Check

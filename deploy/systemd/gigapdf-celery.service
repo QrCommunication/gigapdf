@@ -4,8 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=gigapdf
-Group=gigapdf
+User=ubuntu
+Group=ubuntu
 WorkingDirectory=/opt/gigapdf
 Environment="PATH=/opt/gigapdf/.venv/bin"
 EnvironmentFile=/opt/gigapdf/.env

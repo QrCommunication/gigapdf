@@ -147,3 +147,4 @@ apps/mobile/android/
 
 # Local dev certs
 certs/
+deploy/backup-vps-config/
