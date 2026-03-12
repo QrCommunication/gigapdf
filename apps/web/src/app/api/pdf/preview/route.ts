@@ -74,10 +74,10 @@ export async function POST(request: Request): Promise<Response> {
       const maxHeight = formData.get('maxHeight') ? Number(formData.get('maxHeight')) : undefined;
 
       const options: ThumbnailOptions = { format, quality, maxWidth, maxHeight };
-      const thumbnails = await renderAllThumbnails(buffer, options);
+      const thumbnailMap = await renderAllThumbnails(buffer, options);
 
-      const base64Thumbnails = thumbnails.map((thumb, index) => ({
-        pageNumber: index + 1,
+      const base64Thumbnails = Array.from(thumbnailMap.entries()).map(([pageNum, thumb]) => ({
+        pageNumber: pageNum,
         data: thumb.toString('base64'),
         mimeType: CONTENT_TYPES[format],
       }));
@@ -86,7 +86,7 @@ export async function POST(request: Request): Promise<Response> {
         success: true,
         data: {
           format,
-          count: thumbnails.length,
+          count: thumbnailMap.size,
           thumbnails: base64Thumbnails,
         },
       });
@@ -121,7 +121,7 @@ export async function POST(request: Request): Promise<Response> {
       imageBuffer = await renderPage(buffer, pageNumber, options);
     }
 
-    return new Response(imageBuffer, {
+    return new Response(new Uint8Array(imageBuffer), {
       status: 200,
       headers: {
         'Content-Type': CONTENT_TYPES[format],
@@ -129,7 +129,7 @@ export async function POST(request: Request): Promise<Response> {
         'Content-Length': String(imageBuffer.byteLength),
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof PDFPageOutOfRangeError) {
       return NextResponse.json(
         { success: false, error: error.message },

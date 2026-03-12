@@ -144,7 +144,7 @@ export async function POST(request: Request): Promise<Response> {
         parts: result,
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof PDFPageOutOfRangeError) {
       return NextResponse.json(
         { success: false, error: error.message },

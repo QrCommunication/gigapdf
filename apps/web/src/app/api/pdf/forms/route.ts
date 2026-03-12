@@ -61,7 +61,7 @@ export async function POST(request: Request): Promise<Response> {
     if (action === 'get') {
       const fields = await getFormFields(buffer);
       const filled = fields.filter(
-        (f) => f.value !== '' && f.value !== false && !(Array.isArray(f.value) && f.value.length === 0),
+        (f: { value: string | boolean | string[] }) => f.value !== '' && f.value !== false && !(Array.isArray(f.value) && f.value.length === 0),
       );
       return NextResponse.json({
         success: true,
@@ -94,8 +94,8 @@ export async function POST(request: Request): Promise<Response> {
 
       const { buffer: filledBuffer, results } = await fillForm(buffer, values);
 
-      const failedCount = results.filter((r) => !r.success).length;
-      const filledCount = results.filter((r) => r.success).length;
+      const failedCount = results.filter((r: { success: boolean }) => !r.success).length;
+      const filledCount = results.filter((r: { success: boolean }) => r.success).length;
 
       // Return results metadata in response headers and modified PDF as body
       const headers = new Headers({
@@ -105,7 +105,7 @@ export async function POST(request: Request): Promise<Response> {
         'X-Fill-Results': JSON.stringify({ filledCount, failedCount }),
       });
 
-      return new Response(filledBuffer, { status: 200, headers });
+      return new Response(new Uint8Array(filledBuffer), { status: 200, headers });
     }
 
     // action === 'create'
@@ -147,7 +147,7 @@ export async function POST(request: Request): Promise<Response> {
     addFormField(handle, pageNumber, fieldDef);
     const savedBytes = await saveDocument(handle);
 
-    return new Response(savedBytes, {
+    return new Response(new Uint8Array(savedBytes), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
@@ -155,7 +155,7 @@ export async function POST(request: Request): Promise<Response> {
         'Content-Length': String(savedBytes.byteLength),
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof PDFPageOutOfRangeError) {
       return NextResponse.json(
         { success: false, error: error.message },

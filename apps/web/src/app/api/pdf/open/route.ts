@@ -55,18 +55,18 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({
       success: true,
       data: {
-        documentId: document.id,
+        documentId: document.documentId,
         pageCount: document.pages.length,
         metadata: document.metadata,
         pages: document.pages,
-        bookmarks: document.bookmarks,
+        bookmarks: document.outlines,
         layers: document.layers,
         embeddedFiles: document.embeddedFiles,
         filename: file.name,
         fileSize: buffer.byteLength,
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof PDFEncryptedError) {
       return NextResponse.json(
         { success: false, error: 'PDF is encrypted. Provide a password.' },

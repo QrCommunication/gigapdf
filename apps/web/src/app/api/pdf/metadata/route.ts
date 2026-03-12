@@ -90,7 +90,7 @@ export async function POST(request: Request): Promise<Response> {
     setMetadata(handle, metadata);
     const savedBytes = await saveDocument(handle);
 
-    return new Response(savedBytes, {
+    return new Response(new Uint8Array(savedBytes), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
@@ -98,7 +98,7 @@ export async function POST(request: Request): Promise<Response> {
         'Content-Length': String(savedBytes.byteLength),
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof PDFCorruptedError) {
       return NextResponse.json(
         { success: false, error: 'PDF file is corrupted.' },

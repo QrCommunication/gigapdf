@@ -30,6 +30,27 @@ export {
   jobService,
   storageService,
   billingService,
+  pdfService,
+} from './services';
+export type {
+  OpenPdfOptions,
+  OpenPdfResult,
+  SavePdfOptions,
+  MergePdfOptions,
+  SplitPdfOptions,
+  SplitPdfResult,
+  SplitPart,
+  PreviewOptions,
+  AllThumbnailsResult,
+  ThumbnailData,
+  EncryptOptions,
+  PermissionsResult,
+  FormFieldsResult,
+  ElementOperationOptions,
+  ConvertOptions,
+  MetadataResult,
+  FlattenOptions,
+  ApplyElementsOperation,
 } from './services';
 
 // Hooks
@@ -154,6 +175,33 @@ export {
   useSetDefaultPaymentMethod,
   useUsageSummary,
   billingKeys,
+
+  // PDF engine hooks
+  useOpenPdf,
+  useSavePdf,
+  useMergePdfs,
+  useSplitPdf,
+  usePreviewPage,
+  usePreviewAllThumbnails,
+  useEncryptPdf,
+  useDecryptPdf,
+  useGetPermissions,
+  useSetPermissions,
+  useGetFormFields,
+  useFillFormFields,
+  useAddFormField,
+  usePdfTextOperation,
+  usePdfImageOperation,
+  usePdfShapeOperation,
+  usePdfAnnotationOperation,
+  usePdfPageOperation,
+  useGetPdfMetadata,
+  useSetPdfMetadata,
+  useFlattenPdf,
+  useConvertToPdf,
+  useApplyElements,
+  downloadBlob,
+  pdfKeys,
 } from './hooks';
 
 // WebSocket

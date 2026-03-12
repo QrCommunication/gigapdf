@@ -99,7 +99,7 @@ export async function POST(request: Request): Promise<Response> {
 
     const savedBytes = await saveDocument(handle);
 
-    return new Response(savedBytes, {
+    return new Response(new Uint8Array(savedBytes), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
@@ -107,7 +107,7 @@ export async function POST(request: Request): Promise<Response> {
         'Content-Length': String(savedBytes.byteLength),
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof PDFPageOutOfRangeError) {
       return NextResponse.json(
         { success: false, error: error.message },

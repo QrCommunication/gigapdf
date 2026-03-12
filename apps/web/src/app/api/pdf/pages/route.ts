@@ -84,11 +84,13 @@ export async function POST(request: Request): Promise<Response> {
 
     switch (operation) {
       case 'add': {
-        await addPage(handle, {
-          afterPage: params.afterPage as number | undefined,
-          width: params.width as number | undefined,
-          height: params.height as number | undefined,
-        });
+        const afterPage = params.afterPage as number | undefined;
+        addPage(
+          handle,
+          afterPage !== undefined ? afterPage + 1 : 1,
+          params.width as number | undefined,
+          params.height as number | undefined,
+        );
         break;
       }
       case 'delete': {
@@ -98,7 +100,7 @@ export async function POST(request: Request): Promise<Response> {
             { status: 400 },
           );
         }
-        await deletePage(handle, params.pageNumber as number);
+        deletePage(handle, params.pageNumber as number);
         break;
       }
       case 'move': {
@@ -125,7 +127,7 @@ export async function POST(request: Request): Promise<Response> {
             { status: 400 },
           );
         }
-        await rotatePage(handle, params.pageNumber as number, params.degrees as 90 | 180 | 270);
+        rotatePage(handle, params.pageNumber as number, params.degrees as 90 | 180 | 270);
         break;
       }
       case 'copy': {
@@ -138,7 +140,7 @@ export async function POST(request: Request): Promise<Response> {
             { status: 400 },
           );
         }
-        await copyPage(handle, params.pageNumber as number, params.insertAfter as number);
+        await copyPage(handle, params.pageNumber as number, undefined, params.insertAfter as number);
         break;
       }
       case 'resize': {
@@ -155,7 +157,7 @@ export async function POST(request: Request): Promise<Response> {
             { status: 400 },
           );
         }
-        await resizePage(
+        resizePage(
           handle,
           params.pageNumber as number,
           params.width as number,
@@ -167,7 +169,7 @@ export async function POST(request: Request): Promise<Response> {
 
     const savedBytes = await saveDocument(handle);
 
-    return new Response(savedBytes, {
+    return new Response(new Uint8Array(savedBytes), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
@@ -175,7 +177,7 @@ export async function POST(request: Request): Promise<Response> {
         'Content-Length': String(savedBytes.byteLength),
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof PDFPageOutOfRangeError) {
       return NextResponse.json(
         { success: false, error: error.message },

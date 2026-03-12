@@ -37,7 +37,7 @@ export async function POST(request: Request): Promise<Response> {
     const handle = await openDocument(buffer);
     const savedBytes = await saveDocument(handle, { garbage, useObjectStreams });
 
-    return new Response(savedBytes, {
+    return new Response(new Uint8Array(savedBytes), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
@@ -45,7 +45,7 @@ export async function POST(request: Request): Promise<Response> {
         'Content-Length': String(savedBytes.byteLength),
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof PDFEncryptedError) {
       return NextResponse.json(
         { success: false, error: 'PDF is encrypted. Cannot save without password.' },

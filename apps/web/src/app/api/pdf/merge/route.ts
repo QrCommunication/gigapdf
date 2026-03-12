@@ -41,7 +41,7 @@ export async function POST(request: Request): Promise<Response> {
     // Build per-document PageRange options from range strings.
     // Use a high sentinel page count; mergePDFs validates against actual counts.
     const MAX_PAGES = 100000;
-    const pageRanges: MergeOptions['pageRanges'] = buffers.map((_, i) => {
+    const pageRanges: MergeOptions['pageRanges'] = buffers.map((_: Buffer, i: number) => {
       const rangeStr = rangeStrings[i] ?? '';
       if (!rangeStr) return null;
       try {
@@ -54,7 +54,7 @@ export async function POST(request: Request): Promise<Response> {
     const hasRanges = pageRanges.some((r) => r !== null);
     const mergedBytes = await mergePDFs(buffers, hasRanges ? { pageRanges } : undefined);
 
-    return new Response(mergedBytes, {
+    return new Response(new Uint8Array(mergedBytes), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
@@ -62,7 +62,7 @@ export async function POST(request: Request): Promise<Response> {
         'Content-Length': String(mergedBytes.byteLength),
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof PDFCorruptedError) {
       return NextResponse.json(
         { success: false, error: 'One or more PDF files are corrupted.' },

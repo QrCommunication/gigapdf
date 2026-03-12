@@ -125,7 +125,7 @@ export async function POST(request: Request): Promise<Response> {
         permissions,
       });
 
-      return new Response(encryptedBuffer, {
+      return new Response(new Uint8Array(encryptedBuffer), {
         status: 200,
         headers: {
           'Content-Type': 'application/pdf',
@@ -146,7 +146,7 @@ export async function POST(request: Request): Promise<Response> {
 
       const decryptedBuffer = await decryptPDF(buffer, password);
 
-      return new Response(decryptedBuffer, {
+      return new Response(new Uint8Array(decryptedBuffer), {
         status: 200,
         headers: {
           'Content-Type': 'application/pdf',
@@ -183,9 +183,9 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const updatedBuffer = await setPermissions(buffer, ownerPassword, permissions);
+    const updatedBuffer = await setPermissions(buffer, permissions, ownerPassword);
 
-    return new Response(updatedBuffer, {
+    return new Response(new Uint8Array(updatedBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
@@ -193,7 +193,7 @@ export async function POST(request: Request): Promise<Response> {
         'Content-Length': String(updatedBuffer.byteLength),
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof PDFCorruptedError) {
       return NextResponse.json(
         { success: false, error: 'PDF file is corrupted.' },

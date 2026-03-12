@@ -3,7 +3,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import type { PageObject } from "@giga-pdf/types";
-import { Plus, Trash2, ChevronUp, ChevronDown, Copy } from "lucide-react";
+import { Plus, Trash2, ChevronUp, ChevronDown, Copy, RotateCw, FileOutput } from "lucide-react";
 
 export interface PagesSidebarProps {
   /** Liste des pages */
@@ -20,6 +20,10 @@ export interface PagesSidebarProps {
   onPageReorder?: (fromIndex: number, toIndex: number) => void;
   /** Callback pour dupliquer une page */
   onPageDuplicate?: (pageIndex: number) => void;
+  /** Callback pour faire pivoter une page de 90° dans le sens horaire */
+  onPageRotate?: (pageIndex: number) => void;
+  /** Callback pour extraire une page en PDF séparé */
+  onPageExtract?: (pageIndex: number) => void;
   /** URL de base pour les previews */
   previewBaseUrl?: string;
 }
@@ -35,6 +39,8 @@ export function PagesSidebar({
   onPageDelete,
   onPageReorder,
   onPageDuplicate,
+  onPageRotate,
+  onPageExtract,
   previewBaseUrl = "",
 }: PagesSidebarProps) {
   const t = useTranslations("editor.pages");
@@ -146,6 +152,34 @@ export function PagesSidebar({
                   className="p-1 bg-background/80 rounded hover:bg-primary hover:text-primary-foreground"
                 >
                   <Copy size={12} />
+                </button>
+              )}
+              {/* Rotate */}
+              {onPageRotate && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPageRotate(index);
+                  }}
+                  title={t("rotate")}
+                  className="p-1 bg-background/80 rounded hover:bg-muted transition-colors"
+                >
+                  <RotateCw size={12} />
+                </button>
+              )}
+              {/* Extract */}
+              {onPageExtract && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPageExtract(index);
+                  }}
+                  title={t("extract")}
+                  className="p-1 bg-background/80 rounded hover:bg-muted transition-colors"
+                >
+                  <FileOutput size={12} />
                 </button>
               )}
               {/* Delete */}

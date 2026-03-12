@@ -33,7 +33,20 @@ import {
   Trash2,
   Copy,
   Palette,
+  Merge,
+  Scissors,
+  Lock,
+  FileText,
+  Layers,
+  FileSearch,
+  FileCode,
+  SquareDashedMousePointer,
 } from "lucide-react";
+import { MergeDialog } from "./merge-dialog";
+import { SplitDialog } from "./split-dialog";
+import { EncryptDialog } from "./encrypt-dialog";
+import { MetadataDialog } from "./metadata-dialog";
+import { ConvertDialog } from "./convert-dialog";
 
 export interface EditorToolbarProps {
   /** Outil actuellement sélectionné */
@@ -94,6 +107,18 @@ export interface EditorToolbarProps {
   selectedElement?: Element | null;
   /** Callback pour mettre a jour le style d'un element */
   onElementStyleChange?: (elementId: string, style: Partial<TextStyle>) => void;
+  /** Fichier PDF actuellement ouvert (pour les opérations merge/split/encrypt) */
+  currentFile?: File | null;
+  /** Callback pour afficher/masquer le panneau formulaires */
+  onToggleFormsPanel?: () => void;
+  /** Callback pour aplatir le PDF courant */
+  onFlattenPdf?: () => void;
+  onToggleMetadataDialog?: () => void;
+  onToggleConvertDialog?: () => void;
+  /** Whether content edit mode is active */
+  isContentEditActive?: boolean;
+  /** Callback to toggle content edit mode */
+  onToggleContentEdit?: () => void;
 }
 
 interface ToolButtonProps {
@@ -306,12 +331,22 @@ export function EditorToolbar({
   onAddImage,
   selectedElement,
   onElementStyleChange,
+  currentFile,
+  onToggleFormsPanel,
+  onFlattenPdf,
+  isContentEditActive,
+  onToggleContentEdit,
 }: EditorToolbarProps) {
   const t = useTranslations("editor.toolbar");
   const tProperties = useTranslations("editor.properties.text");
   const [showShapeDropdown, setShowShapeDropdown] = useState(false);
   const [showAnnotationDropdown, setShowAnnotationDropdown] = useState(false);
   const [showColorDropdown, setShowColorDropdown] = useState(false);
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
+  const [showSplitDialog, setShowSplitDialog] = useState(false);
+  const [showEncryptDialog, setShowEncryptDialog] = useState(false);
+  const [showMetadataDialog, setShowMetadataDialog] = useState(false);
+  const [showConvertDialog, setShowConvertDialog] = useState(false);
 
   // Font states for text elements
   const [selectedFontValue, setSelectedFontValue] = useState("arial");
@@ -687,6 +722,78 @@ export function EditorToolbar({
           disabled={zoom >= 4}
         />
       </div>
+
+      {/* Content Edit Mode */}
+      <ToolButton
+        icon={<SquareDashedMousePointer size={20} />}
+        label={t("contentEdit")}
+        isActive={isContentEditActive}
+        onClick={() => onToggleContentEdit?.()}
+      />
+
+      <Separator />
+
+      {/* PDF Tools */}
+      <ToolButton
+        icon={<Merge size={20} />}
+        label={t("merge")}
+        onClick={() => setShowMergeDialog(true)}
+      />
+      <ToolButton
+        icon={<Scissors size={20} />}
+        label={t("split")}
+        onClick={() => setShowSplitDialog(true)}
+      />
+      <ToolButton
+        icon={<Lock size={20} />}
+        label={t("encrypt")}
+        onClick={() => setShowEncryptDialog(true)}
+      />
+      <ToolButton
+        icon={<FileText size={20} />}
+        label={t("forms")}
+        onClick={() => onToggleFormsPanel?.()}
+      />
+      <ToolButton
+        icon={<FileSearch size={20} />}
+        label={t("metadata")}
+        onClick={() => setShowMetadataDialog(true)}
+      />
+      <ToolButton
+        icon={<FileCode size={20} />}
+        label={t("convert")}
+        onClick={() => setShowConvertDialog(true)}
+      />
+      <ToolButton
+        icon={<Layers size={20} />}
+        label={t("flatten")}
+        onClick={() => onFlattenPdf?.()}
+      />
+
+      {/* PDF operation dialogs */}
+      <MergeDialog
+        open={showMergeDialog}
+        onClose={() => setShowMergeDialog(false)}
+      />
+      <SplitDialog
+        open={showSplitDialog}
+        onClose={() => setShowSplitDialog(false)}
+        currentFile={currentFile}
+      />
+      <EncryptDialog
+        open={showEncryptDialog}
+        onClose={() => setShowEncryptDialog(false)}
+        currentFile={currentFile}
+      />
+      <MetadataDialog
+        isOpen={showMetadataDialog}
+        onClose={() => setShowMetadataDialog(false)}
+        currentFile={currentFile ?? null}
+      />
+      <ConvertDialog
+        isOpen={showConvertDialog}
+        onClose={() => setShowConvertDialog(false)}
+      />
     </div>
   );
 }

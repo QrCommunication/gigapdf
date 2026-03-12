@@ -11,3 +11,4 @@ export * from './use-ocr';
 export * from './use-jobs';
 export * from './use-storage';
 export * from './use-billing';
+export * from './use-pdf';

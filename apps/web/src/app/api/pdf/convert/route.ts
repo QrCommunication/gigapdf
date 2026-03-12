@@ -100,7 +100,7 @@ export async function POST(request: Request): Promise<Response> {
       pdfBuffer = await urlToPDF(url, options);
     }
 
-    return new Response(pdfBuffer, {
+    return new Response(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
@@ -108,7 +108,7 @@ export async function POST(request: Request): Promise<Response> {
         'Content-Length': String(pdfBuffer.byteLength),
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[api/pdf/convert]', error);
     return NextResponse.json(
       { success: false, error: 'Failed to convert to PDF.' },

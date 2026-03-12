@@ -34,6 +34,9 @@ import {
   DocumentInfoSidebar,
 } from "@/components/editor";
 import type { EditorCanvasHandle } from "@/components/editor/editor-canvas";
+import { FormsPanel } from "@/components/editor/forms-panel";
+import { useFlattenPdf, usePdfPageOperation, downloadBlob, useApplyElements } from "@giga-pdf/api";
+import { ContentEditLayer, type ElementModification } from "@/components/editor/content-edit-layer";
 
 /**
  * Convert a frontend Element to API ElementCreateRequest format.
@@ -121,6 +124,17 @@ export default function EditorPage() {
   // Ref pour l'input file
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Forms panel visibility and current PDF file
+  const [showFormsPanel, setShowFormsPanel] = useState(false);
+  const [currentPdfFile, setCurrentPdfFile] = useState<File | null>(null);
+
+  // Content edit mode
+  const [isContentEditActive, setIsContentEditActive] = useState(false);
+  const [contentModifications, setContentModifications] = useState<ElementModification[]>([]);
+
+  // Ref for the PDF canvas element (for background capture in content edit)
+  const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
+
   // Charger le document
   const {
     name,
@@ -142,6 +156,29 @@ export default function EditorPage() {
     layers,
     embeddedFiles,
   } = useDocument({ storedDocumentId });
+
+  // Fetch the actual PDF binary when document loads
+  useEffect(() => {
+    if (!documentId || !name) return;
+    let cancelled = false;
+
+    async function loadPdfBinary() {
+      try {
+        const downloadUrl = api.getDocumentDownloadUrl(documentId!);
+        const response = await fetch(downloadUrl, { credentials: 'include' });
+        if (!response.ok || cancelled) return;
+        const blob = await response.blob();
+        if (cancelled) return;
+        const file = new File([blob], `${name}.pdf`, { type: 'application/pdf' });
+        setCurrentPdfFile(file);
+      } catch (err) {
+        console.error('Failed to load PDF binary:', err);
+      }
+    }
+
+    loadPdfBinary();
+    return () => { cancelled = true; };
+  }, [documentId, name]);
 
   // État pour l'édition du nom
   const [isEditingName, setIsEditingName] = useState(false);
@@ -418,10 +455,108 @@ export default function EditorPage() {
     [setDirty, saveWithPriority]
   );
 
+  // Flatten PDF handler
+  const flattenPdf = useFlattenPdf();
+  const pageOperation = usePdfPageOperation();
+  const applyElements = useApplyElements();
+
   const handleExport = useCallback(async () => {
-    if (!documentId) return;
-    window.open(api.getDocumentDownloadUrl(documentId), "_blank");
-  }, [documentId]);
+    if (!currentPdfFile) {
+      // Fall back to server download if no local PDF
+      if (documentId) {
+        window.open(api.getDocumentDownloadUrl(documentId), "_blank");
+      }
+      return;
+    }
+
+    try {
+      let fileToExport: File | Blob = currentPdfFile;
+
+      // If there are canvas elements on the current page, gather them as add operations
+      const canvasElements = currentPage?.elements ?? [];
+      const canvasOps = canvasElements.map((el) => ({
+        action: 'add' as const,
+        pageNumber: currentPageIndex + 1,
+        element: el as unknown as Record<string, unknown>,
+      }));
+
+      // Combine canvas element ops with content edit modifications
+      const allOperations = [...canvasOps, ...contentModifications.map((mod) => ({
+        ...mod,
+        pageNumber: mod.pageNumber + 1, // content-edit-layer uses 0-indexed, API uses 1-indexed
+      }))];
+
+      if (allOperations.length > 0) {
+        const modifiedBlob = await applyElements.mutateAsync({
+          file: fileToExport,
+          operations: allOperations,
+        });
+        fileToExport = modifiedBlob;
+      }
+
+      downloadBlob(fileToExport instanceof Blob ? fileToExport : new Blob([fileToExport]),
+        `${name || 'document'}.pdf`);
+    } catch (err) {
+      console.error('Export failed:', err);
+      // Fall back to server download
+      if (documentId) {
+        window.open(api.getDocumentDownloadUrl(documentId), "_blank");
+      }
+    }
+  }, [currentPdfFile, currentPage, currentPageIndex, contentModifications, applyElements, name, documentId]);
+
+  const handleFlattenPdf = async () => {
+    if (!currentPdfFile) return;
+    try {
+      const blob = await flattenPdf.mutateAsync({ file: currentPdfFile });
+      downloadBlob(blob, "flattened.pdf");
+    } catch (error) {
+      console.error("Flatten failed:", error);
+    }
+  };
+
+  const handlePageRotate = useCallback(async (pageIndex: number) => {
+    if (!currentPdfFile) return;
+    try {
+      const result = await pageOperation.mutateAsync({
+        file: currentPdfFile,
+        action: 'rotate',
+        params: { pageNumber: pageIndex + 1, degrees: 90 },
+      });
+      const file = new File([result as Blob], currentPdfFile.name, { type: 'application/pdf' });
+      setCurrentPdfFile(file);
+    } catch (err) {
+      console.error('Rotate failed:', err);
+    }
+  }, [currentPdfFile, pageOperation]);
+
+  const handlePageExtract = useCallback(async (pageIndex: number) => {
+    if (!currentPdfFile) return;
+    try {
+      const result = await pageOperation.mutateAsync({
+        file: currentPdfFile,
+        action: 'extract',
+        params: { pages: [pageIndex + 1] },
+      });
+      downloadBlob(result as Blob, `page-${pageIndex + 1}.pdf`);
+    } catch (err) {
+      console.error('Extract failed:', err);
+    }
+  }, [currentPdfFile, pageOperation]);
+
+  const handleToggleContentEdit = useCallback(() => {
+    setIsContentEditActive((prev) => {
+      if (prev) {
+        // Leaving content edit mode — clear modifications
+        setContentModifications([]);
+      }
+      return !prev;
+    });
+  }, []);
+
+  const handleContentModificationsChange = useCallback((modifications: ElementModification[]) => {
+    setContentModifications(modifications);
+  }, []);
 
   // Handler pour la navigation TOC
   const handleNavigateToPage = useCallback((pageNumber: number) => {
@@ -621,6 +756,18 @@ export default function EditorPage() {
     selectedElementIds,
   ]);
 
+  // Find the PDF canvas element for content edit background capture
+  useEffect(() => {
+    if (!isContentEditActive) return;
+    // The EditorCanvas renders a canvas element — find it within the main area
+    const mainEl = canvasRef.current;
+    if (!mainEl) return;
+    const canvas = mainEl.querySelector('canvas');
+    if (canvas) {
+      (pdfCanvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = canvas;
+    }
+  }, [isContentEditActive, currentPageIndex]);
+
   // Rendu conditionnel pour chargement/erreur
   if (loading) {
     return (
@@ -814,6 +961,11 @@ export default function EditorPage() {
         onDelete={handleDelete}
         onDuplicate={handleDuplicate}
         onAddImage={handleAddImage}
+        currentFile={currentPdfFile}
+        onToggleFormsPanel={() => setShowFormsPanel((prev) => !prev)}
+        onFlattenPdf={handleFlattenPdf}
+        isContentEditActive={isContentEditActive}
+        onToggleContentEdit={handleToggleContentEdit}
       />
 
       {/* Main content */}
@@ -828,6 +980,8 @@ export default function EditorPage() {
           onPageReorder={reorderPages}
           onPageDuplicate={duplicatePage}
           previewBaseUrl={process.env.NEXT_PUBLIC_API_URL}
+          onPageRotate={handlePageRotate}
+          onPageExtract={handlePageExtract}
         />
 
         {/* Canvas */}
@@ -841,7 +995,6 @@ export default function EditorPage() {
             documentId={documentId}
             tool={activeTool}
             zoom={zoom}
-            documentId={documentId}
             shapeType={shapeType}
             annotationType={annotationType}
             strokeColor={strokeColor}
@@ -854,6 +1007,16 @@ export default function EditorPage() {
             onZoomChanged={setZoom}
             onCanvasReady={setCanvasHandle}
             onHyperlinkClick={handleHyperlinkClick}
+          />
+
+          {/* Content edit layer (deep PDF editing overlay) */}
+          <ContentEditLayer
+            currentFile={currentPdfFile}
+            currentPageIndex={currentPageIndex}
+            zoom={zoom}
+            isActive={isContentEditActive}
+            onModificationsChange={handleContentModificationsChange}
+            canvasRef={pdfCanvasRef as React.RefObject<HTMLCanvasElement>}
           />
 
           {/* Overlay des curseurs des collaborateurs */}
@@ -883,6 +1046,22 @@ export default function EditorPage() {
           onDownloadFile={handleDownloadFile}
           currentPageIndex={currentPageIndex}
         />
+
+        {/* Forms panel (conditionally shown) */}
+        {showFormsPanel && (
+          <FormsPanel
+            currentFile={currentPdfFile}
+            onPdfUpdated={(blob) => {
+              // Convert blob back to File for subsequent operations
+              const file = new File(
+                [blob],
+                currentPdfFile?.name ?? "document.pdf",
+                { type: "application/pdf" }
+              );
+              setCurrentPdfFile(file);
+            }}
+          />
+        )}
       </div>
 
       {/* Status bar */}
