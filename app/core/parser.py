@@ -1,21 +1,22 @@
 """
 PDF Parser - Converts PDF content to scene graph representation.
 
-# DEPRECATED: Use @giga-pdf/pdf-engine via Next.js API routes instead.
-#
-# This module previously used PyMuPDF (AGPL) to extract text, images, shapes,
-# annotations, and form fields from PDF pages and convert them to our internal
-# scene graph model. All these operations are now performed by the TypeScript
-# pdf-engine package (packages/pdf-engine), which is MIT-licensed and runs in
-# the Next.js process.
-#
-# This file is retained so that existing Celery tasks (processing_tasks.py,
-# export_tasks.py) and the document_service continue to import PDFParser
-# without crashing. The class now returns minimal stub scene graphs and logs
-# deprecation warnings instead of performing real parsing.
-#
-# TODO: Remove this module once all callers have been migrated to call the
-#       TS engine REST API and retrieve the scene graph from there.
+DEPRECATED: Use @giga-pdf/pdf-engine via Next.js API routes instead.
+
+This module previously used PyMuPDF (AGPL) to extract text, images, shapes,
+annotations, and form fields from PDF pages and convert them to our internal
+scene graph model. All these operations are now performed by the TypeScript
+pdf-engine package (packages/pdf-engine), which is MIT-licensed and runs in
+the Next.js process.
+
+This file is retained so that existing Celery tasks (processing_tasks.py,
+export_tasks.py) and the document_service continue to import PDFParser
+without crashing. The class now returns minimal stub scene graphs and logs
+deprecation warnings instead of performing real parsing.
+
+TODO: Remove this module once all callers have been migrated to call the
+      TS engine REST API and retrieve the scene graph from there.
+"""
 
 import base64
 import io

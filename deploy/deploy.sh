@@ -153,6 +153,14 @@ cp -r /opt/gigapdf/apps/admin/public /opt/gigapdf/apps/admin/.next/standalone/ap
 log_info "Running Alembic migrations (FastAPI tables)..."
 source .venv/bin/activate
 cd "$APP_DIR"
+
+# Source .env for database scripts
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    source "$ENV_FILE"
+    set +a
+fi
+
 alembic upgrade head || log_warn "Alembic migrations skipped or failed"
 
 # Better Auth tables (created via SQL script, NOT Prisma push)
