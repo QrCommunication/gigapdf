@@ -27,22 +27,35 @@ router = APIRouter()
 
 @router.post(
     "/stripe",
-    summary="Stripe webhook",
+    summary="Receive Stripe webhook events",
     description="""
-Handle Stripe webhook events.
+Internal endpoint that receives and processes webhook events sent by Stripe.
 
-This endpoint receives events from Stripe and processes them accordingly.
-Events handled:
-- `checkout.session.completed`: Process successful payment
-- `customer.subscription.created`: New subscription activated
-- `customer.subscription.updated`: Subscription modified
-- `customer.subscription.deleted`: Subscription canceled
-- `customer.subscription.trial_will_end`: Trial ending soon (3 days)
-- `invoice.paid`: Successful payment
-- `invoice.payment_failed`: Failed payment
+**Do not call this endpoint directly** — it is invoked by Stripe's webhook system only.
+The Stripe signature header (`stripe-signature`) is verified on every request; requests
+without a valid signature are rejected with `400`.
 
-**Note**: This endpoint verifies the Stripe signature for security.
+**Handled event types**:
+
+| Event | Action |
+|---|---|
+| `checkout.session.completed` | Activate subscription after successful payment |
+| `customer.subscription.created` | Register new subscription (user or tenant) |
+| `customer.subscription.updated` | Sync plan changes, status changes, trial conversion |
+| `customer.subscription.deleted` | Downgrade entity to free plan |
+| `customer.subscription.trial_will_end` | Log trial-ending notification (3 days before) |
+| `invoice.paid` | Confirm subscription is active after payment |
+| `invoice.payment_failed` | Mark subscription as `past_due` after 2+ failures |
+| `customer.updated` | Sync customer email changes |
+
+Unrecognized event types are logged and ignored. Non-critical errors return `200`
+to prevent Stripe from retrying unnecessarily.
 """,
+    response_description="Processing status and event type",
+    responses={
+        200: {"description": "Event processed (or acknowledged for non-critical errors)"},
+        400: {"description": "Missing or invalid Stripe signature"},
+    },
     include_in_schema=False,  # Hide from public API docs
 )
 async def stripe_webhook(request: Request):

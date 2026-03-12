@@ -111,6 +111,7 @@ class TextReplaceRequest(BaseModel):
     "/{document_id}/text/search",
     response_model=APIResponse[dict],
     summary="Search text in document",
+    response_description="List of all matches found, with page number, position bounds, matched text, and surrounding context",
     description="""Search for text within a PDF document with advanced options including regex pattern matching, case sensitivity, and whole word matching.
 
 This endpoint scans through the text content of a PDF document and returns all occurrences of the search query along with their positions, page numbers, and surrounding context. Useful for finding specific content, validating document contents, or building search functionality.
@@ -319,6 +320,7 @@ async def search_text(
     "/{document_id}/text/replace",
     response_model=APIResponse[dict],
     summary="Search and replace text",
+    response_description="Number of replacements made, list of affected page numbers, and element IDs of modified text elements",
     description="""Search and replace text within a PDF document with support for regex patterns and advanced matching options.
 
 This endpoint finds all occurrences of the specified search text and replaces them with the replacement text. The operation modifies the document and returns information about the changes made.
@@ -529,6 +531,7 @@ async def replace_text(
     "/{document_id}/text/extract",
     response_model=APIResponse[dict],
     summary="Extract all text from document",
+    response_description="Extracted text organized by page, full combined text, total page count, and total character count",
     description="""Extract all text content from a PDF document with optional formatting and layout preservation.
 
 This endpoint extracts text from native PDF text elements (not scanned images - use OCR endpoint for that). Returns text organized by page with optional positional and formatting information.
@@ -759,6 +762,7 @@ async def extract_text(
     "/{document_id}/ocr",
     response_model=APIResponse[dict],
     summary="Extract text using OCR",
+    response_description="OCR results per page with confidence scores, full extracted text, average confidence, and detected language. Returns 202 with job_id for large documents processed asynchronously",
     description="""Run Optical Character Recognition (OCR) on scanned PDF pages to extract text content.
 
 This endpoint processes image-based or scanned PDF pages using OCR technology to recognize and extract text. Unlike the text extraction endpoint which reads native PDF text, OCR is designed for documents that contain text as images.
@@ -1087,6 +1091,7 @@ async def ocr_document(
     "/{document_id}/ocr/status",
     response_model=APIResponse[dict],
     summary="Get OCR job status",
+    response_description="Current job state (queued/processing/completed/failed), progress percentage, pages processed, estimated time remaining, and OCR results when completed",
     description="""Check the status of an OCR processing job.
 
 For large documents, OCR operations are processed asynchronously. This endpoint allows you to poll for the status of a running OCR job and retrieve results when complete.
@@ -1316,6 +1321,7 @@ async def get_ocr_status(
     "/{document_id}/ocr/languages",
     response_model=APIResponse[dict],
     summary="List available OCR languages",
+    response_description="List of supported OCR language codes with names and scripts, total language count, and languages recommended for the document",
     description="""Get a list of all available OCR languages supported for a document.
 
 This endpoint returns all language codes that can be used with the OCR endpoint. Languages are identified by their ISO 639-3 three-letter codes.

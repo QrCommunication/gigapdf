@@ -26,6 +26,7 @@ router = APIRouter()
     response_model=APIResponse[dict],
     status_code=201,
     summary="Upload PDF document",
+    response_description="Parsed document structure with metadata, pages, and extracted elements",
     description="""
 Upload and parse a PDF document.
 
@@ -273,6 +274,7 @@ async def upload_document(
     "/{document_id}",
     response_model=APIResponse[dict],
     summary="Get document structure",
+    response_description="Complete document structure including metadata, pages, bookmarks, and layers",
     description="""
 Retrieve the complete structure of an uploaded document.
 
@@ -496,6 +498,7 @@ async def get_document(
 @router.get(
     "/{document_id}/download",
     summary="Download PDF document",
+    response_description="Binary PDF file stream with applied modifications",
     description="""
 Download the PDF document with all modifications applied.
 
@@ -717,6 +720,7 @@ async def download_document(
     "/{document_id}",
     status_code=204,
     summary="Delete document",
+    response_description="No content — document successfully deleted and resources freed",
     description="""
 Delete a document and free server memory.
 
@@ -876,6 +880,7 @@ async def delete_document(
     "/{document_id}/unlock",
     response_model=APIResponse[dict],
     summary="Unlock encrypted PDF",
+    response_description="Unlock result indicating success and any restrictions that were removed",
     description="""
 Unlock an encrypted PDF document using the provided password.
 

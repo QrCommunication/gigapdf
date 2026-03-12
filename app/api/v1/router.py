@@ -9,6 +9,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     activity,
     annotations,
+    api_keys,
     billing,
     bookmarks,
     documents,
@@ -158,6 +159,12 @@ api_router.include_router(
     sharing.router,
     prefix="/sharing",
     tags=["Sharing"],
+)
+
+api_router.include_router(
+    api_keys.router,
+    prefix="/api-keys",
+    tags=["API Keys"],
 )
 
 # Admin endpoints

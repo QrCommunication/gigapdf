@@ -79,41 +79,46 @@ class PlanComparisonResponse(BaseModel):
     response_model=APIResponse[list[PlanComparisonResponse]],
     summary="List available plans (public)",
     description="""
-Get list of available subscription plans.
+Get all active subscription plans for display on the landing page.
 
-**Public endpoint** - No authentication required.
+**Public endpoint** — No authentication required.
 
-Returns all active plans with pricing, features, and limits.
-Plans are sorted by display order for proper comparison display.
+Returns plans sorted by `display_order`, each with:
+- Pricing (`price`, `currency`, `interval`)
+- Storage and API usage limits
+- Feature list
+- Trial availability (Starter and Pro plans include a 14-day trial)
 
-## Trial Information
-- Starter and Pro plans include a 14-day free trial
-- Trial can be used once per user
-- No credit card required to start trial
-
-## Response
-Returns an array of plans with:
-- Pricing information (price, currency, interval)
-- Usage limits (storage, API calls, documents)
-- Features list
-- Trial availability
-
-## Example (curl)
-```bash
-curl -X GET "https://giga-pdf.com/api/v1/public/billing/plans"
-```
-
-## Example (JavaScript)
-```javascript
-const response = await fetch('https://giga-pdf.com/api/v1/public/billing/plans');
-const { data: plans } = await response.json();
-
-// Display plans on landing page
-plans.forEach(plan => {
-  console.log(`${plan.name}: €${plan.price}/${plan.interval}`);
-});
-```
+Tenant-specific plans are excluded from this endpoint.
 """,
+    response_description="Array of plan objects sorted by display order",
+    responses={
+        200: {"description": "Plans listed successfully"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/public/billing/plans"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.get("https://api.giga-pdf.com/api/v1/public/billing/plans")\nplans = response.json()["data"]\nfor plan in plans:\n    print(f"{plan[\'name\']}: \u20ac{plan[\'price\']}/{plan[\'interval\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": "const response = await fetch('https://api.giga-pdf.com/api/v1/public/billing/plans');\nconst { data: plans } = await response.json();\nplans.forEach(plan => console.log(`${plan.name}: \u20ac${plan.price}/${plan.interval}`));",
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": "<?php\n$response = file_get_contents('https://api.giga-pdf.com/api/v1/public/billing/plans');\n$plans = json_decode($response, true)['data'];\nforeach ($plans as $plan) {\n    echo \"{$plan['name']}: \u20ac{$plan['price']}/{$plan['interval']}\\n\";\n}",
+            },
+        ]
+    },
 )
 async def list_plans_public() -> APIResponse[list[PlanComparisonResponse]]:
     """List all available subscription plans (public access)."""
@@ -154,17 +159,44 @@ async def list_plans_public() -> APIResponse[list[PlanComparisonResponse]]:
 @router.get(
     "/plans/{plan_slug}",
     response_model=APIResponse[PlanComparisonResponse],
-    summary="Get plan details (public)",
+    summary="Get plan details by slug (public)",
     description="""
-Get details for a specific plan.
+Retrieve full details for a single subscription plan by its slug.
 
-**Public endpoint** - No authentication required.
+**Public endpoint** — No authentication required.
 
-## Example (curl)
-```bash
-curl -X GET "https://giga-pdf.com/api/v1/public/billing/plans/starter"
-```
+Useful for displaying pricing details on individual plan pages or confirming plan
+features before checkout. Returns `404` if the plan is inactive or does not exist.
 """,
+    response_description="Single plan object with pricing, limits, and feature list",
+    responses={
+        200: {"description": "Plan found and returned"},
+        404: {"description": "Plan not found or inactive"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/public/billing/plans/starter"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.get("https://api.giga-pdf.com/api/v1/public/billing/plans/starter")\nplan = response.json()["data"]\nprint(f"{plan[\'name\']}: \u20ac{plan[\'price\']}/{plan[\'interval\']}, {plan[\'storage_gb\']} GB")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": "const response = await fetch('https://api.giga-pdf.com/api/v1/public/billing/plans/starter');\nconst { data: plan } = await response.json();\nconsole.log(`${plan.name}: \u20ac${plan.price}/${plan.interval}`);",
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": "<?php\n$response = file_get_contents('https://api.giga-pdf.com/api/v1/public/billing/plans/starter');\n$plan = json_decode($response, true)['data'];\necho \"{$plan['name']}: \u20ac{$plan['price']}/{$plan['interval']}\\n\";",
+            },
+        ]
+    },
 )
 async def get_plan_public(plan_slug: str) -> APIResponse[PlanComparisonResponse]:
     """Get details for a specific plan (public access)."""
@@ -201,93 +233,111 @@ async def get_plan_public(plan_slug: str) -> APIResponse[PlanComparisonResponse]
 @router.post(
     "/checkout",
     response_model=APIResponse[CheckoutSessionResponse],
-    summary="Create checkout session (public)",
+    summary="Create a Stripe checkout session",
     description="""
-Create a Stripe Checkout session for subscription.
+Initiate a Stripe Checkout session to subscribe to a plan.
 
 **Semi-public endpoint**:
-- Authenticated users: Uses their account
-- Unauthenticated users: Requires email, creates guest checkout
+- **Authenticated users**: The subscription is linked to their existing account.
+  If they are a member of an organization, they cannot subscribe individually — only the
+  organization owner can manage subscriptions.
+- **Unauthenticated users (guest checkout)**: `email` is required. After payment, the user
+  must create an account or log in to activate the subscription.
 
-After checkout, users will be redirected to create an account or login.
+**Trial period**: If the user has never started a trial and the plan supports it, a
+14-day free trial is automatically included in the checkout session.
 
-## For Authenticated Users
-The subscription is linked to their existing account.
-If they are a member of a tenant, they cannot subscribe individually.
-
-## For New Users (Guest Checkout)
-- Email is required
-- After payment, they'll need to create an account
-- The subscription is linked via Stripe customer email
-
-## Trial Period
-- If user hasn't used their trial, a 14-day trial is included
-- No charge until trial ends
-
-## Example (curl) - Guest checkout
-```bash
-curl -X POST "https://giga-pdf.com/api/v1/public/billing/checkout" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "plan_id": "starter",
-    "email": "newuser@example.com",
-    "success_url": "https://giga-pdf.com/welcome?session_id={CHECKOUT_SESSION_ID}",
-    "cancel_url": "https://giga-pdf.com/pricing"
-  }'
-```
-
-## Example (JavaScript) - Landing page
-```javascript
-async function subscribeToPlan(planSlug, email) {
-  const response = await fetch('https://giga-pdf.com/api/v1/public/billing/checkout', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      // Include auth header if user is logged in
-      ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
-    },
-    body: JSON.stringify({
-      plan_id: planSlug,
-      email: email, // Required if not authenticated
-      success_url: `${window.location.origin}/welcome?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${window.location.origin}/pricing`
-    })
-  });
-
-  const { data } = await response.json();
-
-  // Redirect to Stripe Checkout
-  window.location.href = data.url;
-}
-```
-
-## Example (PHP)
-```php
-<?php
-// Create checkout for guest user
-$data = [
-    'plan_id' => 'starter',
-    'email' => 'newuser@example.com',
-    'success_url' => 'https://giga-pdf.com/welcome?session_id={CHECKOUT_SESSION_ID}',
-    'cancel_url' => 'https://giga-pdf.com/pricing'
-];
-
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, 'https://giga-pdf.com/api/v1/public/billing/checkout');
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_POST, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-
-$response = curl_exec($ch);
-curl_close($ch);
-
-$result = json_decode($response, true);
-header('Location: ' . $result['data']['url']);
-exit;
-?>
-```
+On success, redirect the user to `data.url` (the Stripe-hosted checkout page).
 """,
+    response_description="Stripe checkout session ID and redirect URL",
+    responses={
+        200: {"description": "Checkout session created — redirect user to `data.url`"},
+        400: {"description": "Invalid request: missing email for guest, or already has active subscription"},
+        403: {"description": "Organization members cannot create individual subscriptions"},
+        404: {"description": "Plan not found or not available for checkout"},
+        422: {"description": "Validation error in request body"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X POST "https://api.giga-pdf.com/api/v1/public/billing/checkout" \\\n'
+                    '  -H "Content-Type: application/json" \\\n'
+                    "  -d '{\n"
+                    '    "plan_id": "starter",\n'
+                    '    "email": "newuser@example.com",\n'
+                    '    "success_url": "https://app.giga-pdf.com/welcome?session_id={CHECKOUT_SESSION_ID}",\n'
+                    '    "cancel_url": "https://giga-pdf.com/pricing"\n'
+                    "  }'"
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    'import requests\n\n'
+                    'response = requests.post(\n'
+                    '    "https://api.giga-pdf.com/api/v1/public/billing/checkout",\n'
+                    '    json={\n'
+                    '        "plan_id": "starter",\n'
+                    '        "email": "newuser@example.com",\n'
+                    '        "success_url": "https://app.giga-pdf.com/welcome?session_id={CHECKOUT_SESSION_ID}",\n'
+                    '        "cancel_url": "https://giga-pdf.com/pricing"\n'
+                    '    }\n'
+                    ')\n'
+                    'checkout_url = response.json()["data"]["url"]\n'
+                    '# Redirect user to checkout_url'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "async function subscribeToPlan(planSlug, email, authToken = null) {\n"
+                    "  const response = await fetch('https://api.giga-pdf.com/api/v1/public/billing/checkout', {\n"
+                    "    method: 'POST',\n"
+                    "    headers: {\n"
+                    "      'Content-Type': 'application/json',\n"
+                    "      ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})\n"
+                    "    },\n"
+                    "    body: JSON.stringify({\n"
+                    "      plan_id: planSlug,\n"
+                    "      email,\n"
+                    "      success_url: `${window.location.origin}/welcome?session_id={CHECKOUT_SESSION_ID}`,\n"
+                    "      cancel_url: `${window.location.origin}/pricing`\n"
+                    "    })\n"
+                    "  });\n"
+                    "  const { data } = await response.json();\n"
+                    "  window.location.href = data.url;\n"
+                    "}"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$ch = curl_init('https://api.giga-pdf.com/api/v1/public/billing/checkout');\n"
+                    "curl_setopt_array($ch, [\n"
+                    "    CURLOPT_POST => true,\n"
+                    "    CURLOPT_RETURNTRANSFER => true,\n"
+                    "    CURLOPT_HTTPHEADER => ['Content-Type: application/json'],\n"
+                    "    CURLOPT_POSTFIELDS => json_encode([\n"
+                    "        'plan_id' => 'starter',\n"
+                    "        'email' => 'newuser@example.com',\n"
+                    "        'success_url' => 'https://app.giga-pdf.com/welcome?session_id={CHECKOUT_SESSION_ID}',\n"
+                    "        'cancel_url' => 'https://giga-pdf.com/pricing'\n"
+                    "    ])\n"
+                    "]);\n"
+                    "$result = json_decode(curl_exec($ch), true);\n"
+                    "header('Location: ' . $result['data']['url']);\n"
+                    "exit;"
+                ),
+            },
+        ]
+    },
 )
 async def create_public_checkout(
     request: PublicCheckoutRequest,
@@ -426,40 +476,83 @@ async def create_public_checkout(
 @router.post(
     "/trial/start",
     response_model=APIResponse[dict],
-    summary="Start free trial",
+    summary="Start a free trial",
     description="""
-Start a 14-day free trial for a plan.
+Activate a 14-day free trial for the Starter or Pro plan.
 
-**Requires authentication** - User must be logged in.
+**Requires authentication** — include a valid Bearer token.
 
-**Restrictions**:
-- Users in a tenant cannot start individual trials
-- Each user can only use the trial once
-- Only Starter and Pro plans have trials
+**Eligibility rules**:
+- The user must not be a member of an organization (tenant members cannot start individual trials).
+- Each user can only use their free trial once.
+- Only `starter` and `pro` plans support trials.
+- The user must not already have an active subscription.
 
-## Example (curl)
-```bash
-curl -X POST "https://giga-pdf.com/api/v1/public/billing/trial/start" \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{"plan_id": "starter"}'
-```
-
-## Example (JavaScript)
-```javascript
-const response = await fetch('https://giga-pdf.com/api/v1/public/billing/trial/start', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${authToken}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({ plan_id: 'starter' })
-});
-
-const { data } = await response.json();
-console.log(`Trial ends: ${data.trial_ends}`);
-```
+On success, returns the trial start and end dates.
 """,
+    response_description="Trial activation details including start date, end date, and duration",
+    responses={
+        200: {"description": "Trial started successfully"},
+        400: {"description": "Trial already used, already in trial, or invalid plan"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Organization members cannot start individual trials"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X POST "https://api.giga-pdf.com/api/v1/public/billing/trial/start?plan_id=starter" \\\n'
+                    '  -H "Authorization: Bearer $TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    'import requests\n\n'
+                    'response = requests.post(\n'
+                    '    "https://api.giga-pdf.com/api/v1/public/billing/trial/start",\n'
+                    '    headers={"Authorization": "Bearer $TOKEN"},\n'
+                    '    params={"plan_id": "starter"}\n'
+                    ')\n'
+                    'data = response.json()["data"]\n'
+                    'print(f"Trial ends: {data[\'trial_ends\']}")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const response = await fetch(\n"
+                    "  'https://api.giga-pdf.com/api/v1/public/billing/trial/start?plan_id=starter',\n"
+                    "  {\n"
+                    "    method: 'POST',\n"
+                    "    headers: { 'Authorization': `Bearer ${authToken}` }\n"
+                    "  }\n"
+                    ");\n"
+                    "const { data } = await response.json();\n"
+                    "console.log(`Trial ends: ${data.trial_ends}`);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$ch = curl_init('https://api.giga-pdf.com/api/v1/public/billing/trial/start?plan_id=starter');\n"
+                    "curl_setopt_array($ch, [\n"
+                    "    CURLOPT_POST => true,\n"
+                    "    CURLOPT_RETURNTRANSFER => true,\n"
+                    "    CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token]\n"
+                    "]);\n"
+                    "$data = json_decode(curl_exec($ch), true)['data'];\n"
+                    "echo 'Trial ends: ' . $data['trial_ends'];"
+                ),
+            },
+        ]
+    },
 )
 async def start_trial_public(
     user: AuthenticatedUser,
@@ -528,23 +621,88 @@ async def start_trial_public(
 @router.get(
     "/check-trial-eligibility",
     response_model=APIResponse[dict],
-    summary="Check trial eligibility",
+    summary="Check trial eligibility for the current user",
     description="""
-Check if the current user is eligible for a free trial.
+Determine whether the authenticated user is eligible to start a free trial.
 
-**Requires authentication** - User must be logged in.
+**Requires authentication** — include a valid Bearer token.
 
-Returns:
-- `eligible`: Whether user can start a trial
-- `reason`: If not eligible, why
-- `current_plan`: User's current plan
-
-## Example (curl)
-```bash
-curl -X GET "https://giga-pdf.com/api/v1/public/billing/check-trial-eligibility" \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
+**Response fields**:
+- `eligible` (bool): Whether the user can start a trial right now.
+- `reason` (str | null): If not eligible, one of: `tenant_member`, `trial_used`, `in_trial`, `has_subscription`.
+- `message` (str): Human-readable explanation.
+- `current_plan` (str): The user's current plan slug.
+- `trial_ends_at` (str, optional): ISO timestamp if currently in trial.
+- `trial_days_remaining` (int, optional): Days left if currently in trial.
+- `trial_days_available` (int, optional): Number of trial days if eligible.
 """,
+    response_description="Trial eligibility status with reason and current plan information",
+    responses={
+        200: {"description": "Eligibility check completed (always 200, check `eligible` field)"},
+        401: {"description": "Authentication required"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/public/billing/check-trial-eligibility" \\\n'
+                    '  -H "Authorization: Bearer $TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    'import requests\n\n'
+                    'response = requests.get(\n'
+                    '    "https://api.giga-pdf.com/api/v1/public/billing/check-trial-eligibility",\n'
+                    '    headers={"Authorization": "Bearer $TOKEN"}\n'
+                    ')\n'
+                    'data = response.json()["data"]\n'
+                    'if data["eligible"]:\n'
+                    '    print(f"Eligible for {data[\'trial_days_available\']}-day trial")\n'
+                    'else:\n'
+                    '    print(f"Not eligible: {data[\'reason\']}")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const response = await fetch(\n"
+                    "  'https://api.giga-pdf.com/api/v1/public/billing/check-trial-eligibility',\n"
+                    "  { headers: { 'Authorization': `Bearer ${authToken}` } }\n"
+                    ");\n"
+                    "const { data } = await response.json();\n"
+                    "if (data.eligible) {\n"
+                    "  console.log(`Eligible for ${data.trial_days_available}-day trial`);\n"
+                    "} else {\n"
+                    "  console.log(`Not eligible: ${data.reason}`);\n"
+                    "}"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$ch = curl_init('https://api.giga-pdf.com/api/v1/public/billing/check-trial-eligibility');\n"
+                    "curl_setopt_array($ch, [\n"
+                    "    CURLOPT_RETURNTRANSFER => true,\n"
+                    "    CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token]\n"
+                    "]);\n"
+                    "$data = json_decode(curl_exec($ch), true)['data'];\n"
+                    "if ($data['eligible']) {\n"
+                    "    echo 'Eligible for ' . $data['trial_days_available'] . '-day trial';\n"
+                    "} else {\n"
+                    "    echo 'Not eligible: ' . $data['reason'];\n"
+                    "}"
+                ),
+            },
+        ]
+    },
 )
 async def check_trial_eligibility(
     user: AuthenticatedUser,

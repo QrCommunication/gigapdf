@@ -66,7 +66,111 @@ class DocumentStatsResponse(BaseModel):
     deleted_count: int
 
 
-@router.get("", response_model=DocumentListResponse)
+@router.get(
+    "",
+    response_model=DocumentListResponse,
+    summary="List all documents",
+    description="""Returns a paginated list of all PDF documents stored on the platform.
+
+**Admin access required.** This endpoint is restricted to administrators and provides
+a global view across all users' documents.
+
+Supports filtering by:
+- **search**: partial match on document name (case-insensitive)
+- **owner_id**: filter documents belonging to a specific user
+- **include_deleted**: include soft-deleted documents in results (default: false)
+
+Results are sorted by last update date (most recent first).""",
+    response_description="Paginated list of documents with metadata",
+    responses={
+        200: {
+            "description": "Paginated document list returned successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "documents": [
+                            {
+                                "id": "doc_01HXYZ",
+                                "name": "invoice_2024_q1.pdf",
+                                "owner_id": "usr_01HABC",
+                                "page_count": 4,
+                                "file_size_bytes": 204800,
+                                "file_size_formatted": "200.0 KB",
+                                "mime_type": "application/pdf",
+                                "current_version": 2,
+                                "is_deleted": False,
+                                "tags": ["invoice", "2024"],
+                                "created_at": "2024-01-15T10:00:00Z",
+                                "updated_at": "2024-03-01T14:30:00Z",
+                            }
+                        ],
+                        "total": 1,
+                        "page": 1,
+                        "page_size": 20,
+                        "total_pages": 1,
+                    }
+                }
+            },
+        },
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        422: {"description": "Invalid query parameters (e.g. page < 1)"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/documents'
+                    '?page=1&page_size=20&include_deleted=false" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.get(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/documents",\n'
+                    "    headers={\"Authorization\": \"Bearer \" + ADMIN_TOKEN},\n"
+                    "    params={\"page\": 1, \"page_size\": 20, \"include_deleted\": False},\n"
+                    ")\n"
+                    "data = response.json()\n"
+                    'print(f"Total documents: {data[\'total\']}")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const params = new URLSearchParams({ page: 1, page_size: 20, include_deleted: false });\n"
+                    "const response = await fetch(\n"
+                    '  `https://api.giga-pdf.com/api/v1/admin/documents?${params}`,\n'
+                    "  { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }\n"
+                    ");\n"
+                    "const data = await response.json();\n"
+                    "console.log(`Total documents: ${data.total}`);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->get('https://api.giga-pdf.com/api/v1/admin/documents', [\n"
+                    "    'headers' => ['Authorization' => 'Bearer ' . $adminToken],\n"
+                    "    'query'   => ['page' => 1, 'page_size' => 20, 'include_deleted' => false],\n"
+                    "]);\n"
+                    "$data = json_decode($response->getBody(), true);\n"
+                    "echo 'Total documents: ' . $data['total'];"
+                ),
+            },
+        ]
+    },
+)
 async def list_documents(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -133,7 +237,95 @@ async def list_documents(
     )
 
 
-@router.get("/stats", response_model=DocumentStatsResponse)
+@router.get(
+    "/stats",
+    response_model=DocumentStatsResponse,
+    summary="Get document statistics",
+    description="""Returns aggregated statistics about all PDF documents stored on the platform.
+
+**Admin access required.** Provides a high-level overview useful for dashboard metrics and
+capacity planning:
+
+- **total_documents**: count of active (non-deleted) documents
+- **total_size_bytes / total_size_formatted**: cumulative storage used by active documents
+- **documents_by_type**: breakdown by MIME type (e.g. `application/pdf`, `image/png`)
+- **avg_page_count**: average number of pages across active documents
+- **deleted_count**: number of soft-deleted documents (not yet permanently removed)""",
+    response_description="Aggregated document statistics",
+    responses={
+        200: {
+            "description": "Document statistics returned successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "total_documents": 4821,
+                        "total_size_bytes": 10737418240,
+                        "total_size_formatted": "10.0 GB",
+                        "documents_by_type": {
+                            "application/pdf": 4650,
+                            "image/png": 171,
+                        },
+                        "avg_page_count": 7.3,
+                        "deleted_count": 134,
+                    }
+                }
+            },
+        },
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/documents/stats" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.get(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/documents/stats",\n'
+                    "    headers={\"Authorization\": \"Bearer \" + ADMIN_TOKEN},\n"
+                    ")\n"
+                    "stats = response.json()\n"
+                    'print(f"Total storage: {stats[\'total_size_formatted\']}")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const response = await fetch(\n"
+                    '  "https://api.giga-pdf.com/api/v1/admin/documents/stats",\n'
+                    "  { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }\n"
+                    ");\n"
+                    "const stats = await response.json();\n"
+                    "console.log(`Total storage: ${stats.total_size_formatted}`);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->get(\n"
+                    "    'https://api.giga-pdf.com/api/v1/admin/documents/stats',\n"
+                    "    ['headers' => ['Authorization' => 'Bearer ' . $adminToken]]\n"
+                    ");\n"
+                    "$stats = json_decode($response->getBody(), true);\n"
+                    "echo 'Total storage: ' . $stats['total_size_formatted'];"
+                ),
+            },
+        ]
+    },
+)
 async def get_document_stats(
     db: AsyncSession = Depends(get_db),
 ):
@@ -193,7 +385,98 @@ async def get_document_stats(
     )
 
 
-@router.get("/{document_id}", response_model=DocumentResponse)
+@router.get(
+    "/{document_id}",
+    response_model=DocumentResponse,
+    summary="Get document details",
+    description="""Returns the full metadata of a specific document identified by its ID.
+
+**Admin access required.** Unlike the user-facing endpoint, this admin endpoint returns
+details for any document regardless of its owner, including soft-deleted documents.
+
+Use this endpoint to inspect a document before deciding to restore or permanently delete it.""",
+    response_description="Complete document metadata",
+    responses={
+        200: {
+            "description": "Document found and returned successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "doc_01HXYZ",
+                        "name": "contract_signed.pdf",
+                        "owner_id": "usr_01HABC",
+                        "page_count": 12,
+                        "file_size_bytes": 512000,
+                        "file_size_formatted": "500.0 KB",
+                        "mime_type": "application/pdf",
+                        "current_version": 3,
+                        "is_deleted": False,
+                        "tags": ["contract", "legal"],
+                        "created_at": "2024-02-10T09:00:00Z",
+                        "updated_at": "2024-02-28T16:45:00Z",
+                    }
+                }
+            },
+        },
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Document not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/documents/doc_01HXYZ" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "doc_id = \"doc_01HXYZ\"\n"
+                    "response = requests.get(\n"
+                    '    f"https://api.giga-pdf.com/api/v1/admin/documents/{doc_id}",\n'
+                    "    headers={\"Authorization\": \"Bearer \" + ADMIN_TOKEN},\n"
+                    ")\n"
+                    "doc = response.json()\n"
+                    'print(f"Document: {doc[\'name\']} ({doc[\'file_size_formatted\']})")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const docId = \"doc_01HXYZ\";\n"
+                    "const response = await fetch(\n"
+                    "  `https://api.giga-pdf.com/api/v1/admin/documents/${docId}`,\n"
+                    "  { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }\n"
+                    ");\n"
+                    "const doc = await response.json();\n"
+                    "console.log(`Document: ${doc.name} (${doc.file_size_formatted})`);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$docId = 'doc_01HXYZ';\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->get(\n"
+                    "    \"https://api.giga-pdf.com/api/v1/admin/documents/{$docId}\",\n"
+                    "    ['headers' => ['Authorization' => 'Bearer ' . $adminToken]]\n"
+                    ");\n"
+                    "$doc = json_decode($response->getBody(), true);\n"
+                    "echo 'Document: ' . $doc['name'] . ' (' . $doc['file_size_formatted'] . ')';"
+                ),
+            },
+        ]
+    },
+)
 async def get_document(
     document_id: str,
     db: AsyncSession = Depends(get_db),
@@ -225,7 +508,98 @@ async def get_document(
     )
 
 
-@router.get("/{document_id}/versions")
+@router.get(
+    "/{document_id}/versions",
+    summary="List document versions",
+    description="""Returns the complete version history of a document, sorted from newest to oldest.
+
+**Admin access required.** Each entry includes the version number, file size, SHA hash,
+an optional comment describing the change, and the ID of the user who created that version.
+
+Useful for auditing document changes or identifying which version to restore from.""",
+    response_description="List of document versions ordered by version number descending",
+    responses={
+        200: {
+            "description": "Version history returned successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "versions": [
+                            {
+                                "id": "ver_01HXYZ",
+                                "version_number": 3,
+                                "file_size_bytes": 512000,
+                                "file_size_formatted": "500.0 KB",
+                                "file_hash": "sha256:abc123...",
+                                "comment": "Updated signature page",
+                                "created_by": "usr_01HABC",
+                                "created_at": "2024-02-28T16:45:00Z",
+                            }
+                        ],
+                        "total": 3,
+                    }
+                }
+            },
+        },
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Document not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/documents/doc_01HXYZ/versions" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "doc_id = \"doc_01HXYZ\"\n"
+                    "response = requests.get(\n"
+                    '    f"https://api.giga-pdf.com/api/v1/admin/documents/{doc_id}/versions",\n'
+                    "    headers={\"Authorization\": \"Bearer \" + ADMIN_TOKEN},\n"
+                    ")\n"
+                    "data = response.json()\n"
+                    'print(f"Total versions: {data[\'total\']}")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const docId = \"doc_01HXYZ\";\n"
+                    "const response = await fetch(\n"
+                    "  `https://api.giga-pdf.com/api/v1/admin/documents/${docId}/versions`,\n"
+                    "  { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }\n"
+                    ");\n"
+                    "const data = await response.json();\n"
+                    "console.log(`Total versions: ${data.total}`);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$docId = 'doc_01HXYZ';\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->get(\n"
+                    "    \"https://api.giga-pdf.com/api/v1/admin/documents/{$docId}/versions\",\n"
+                    "    ['headers' => ['Authorization' => 'Bearer ' . $adminToken]]\n"
+                    ");\n"
+                    "$data = json_decode($response->getBody(), true);\n"
+                    "echo 'Total versions: ' . $data['total'];"
+                ),
+            },
+        ]
+    },
+)
 async def get_document_versions(
     document_id: str,
     db: AsyncSession = Depends(get_db),
@@ -266,7 +640,104 @@ async def get_document_versions(
     }
 
 
-@router.delete("/{document_id}")
+@router.delete(
+    "/{document_id}",
+    summary="Delete a document",
+    description="""Deletes a document, either as a soft delete (recoverable) or a permanent hard delete.
+
+**Admin access required.** This is a privileged operation that bypasses user-level ownership checks.
+
+- **Soft delete** (default, `permanent=false`): sets `is_deleted=true` and records `deleted_at`.
+  The document remains in the database and can be restored via `POST /{document_id}/restore`.
+- **Hard delete** (`permanent=true`): permanently removes the document record from the database.
+  **This action is irreversible.**
+
+Use permanent deletion only when you are certain the document and all its versions should be
+purged (e.g. GDPR right-to-erasure requests).""",
+    response_description="Confirmation message indicating whether the document was soft or hard deleted",
+    responses={
+        200: {
+            "description": "Document deleted successfully",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "soft_delete": {
+                            "summary": "Soft delete",
+                            "value": {"message": "Document doc_01HXYZ soft deleted successfully"},
+                        },
+                        "hard_delete": {
+                            "summary": "Hard delete",
+                            "value": {"message": "Document doc_01HXYZ permanently deleted successfully"},
+                        },
+                    }
+                }
+            },
+        },
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Document not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    "# Soft delete (default)\n"
+                    'curl -X DELETE "https://api.giga-pdf.com/api/v1/admin/documents/doc_01HXYZ" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"\n\n'
+                    "# Permanent hard delete\n"
+                    'curl -X DELETE "https://api.giga-pdf.com/api/v1/admin/documents/doc_01HXYZ?permanent=true" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "doc_id = \"doc_01HXYZ\"\n"
+                    "# Soft delete\n"
+                    "response = requests.delete(\n"
+                    '    f"https://api.giga-pdf.com/api/v1/admin/documents/{doc_id}",\n'
+                    "    headers={\"Authorization\": \"Bearer \" + ADMIN_TOKEN},\n"
+                    ")\n"
+                    "print(response.json()['message'])"
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const docId = \"doc_01HXYZ\";\n"
+                    "// Soft delete\n"
+                    "const response = await fetch(\n"
+                    "  `https://api.giga-pdf.com/api/v1/admin/documents/${docId}`,\n"
+                    "  { method: \"DELETE\", headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }\n"
+                    ");\n"
+                    "const result = await response.json();\n"
+                    "console.log(result.message);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$docId = 'doc_01HXYZ';\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "// Soft delete\n"
+                    "$response = $client->delete(\n"
+                    "    \"https://api.giga-pdf.com/api/v1/admin/documents/{$docId}\",\n"
+                    "    ['headers' => ['Authorization' => 'Bearer ' . $adminToken]]\n"
+                    ");\n"
+                    "$result = json_decode($response->getBody(), true);\n"
+                    "echo $result['message'];"
+                ),
+            },
+        ]
+    },
+)
 async def delete_document(
     document_id: str,
     permanent: bool = Query(False),
@@ -297,7 +768,85 @@ async def delete_document(
     return {"message": f"Document {document_id} {action} successfully"}
 
 
-@router.post("/{document_id}/restore")
+@router.post(
+    "/{document_id}/restore",
+    summary="Restore a soft-deleted document",
+    description="""Restores a previously soft-deleted document, making it active again.
+
+**Admin access required.** This endpoint undoes a soft delete by setting `is_deleted=false`
+and clearing the `deleted_at` timestamp.
+
+Only documents that have been soft-deleted can be restored. Permanently deleted documents
+cannot be recovered. If the document ID does not correspond to a soft-deleted document,
+a 404 error is returned.""",
+    response_description="Confirmation message indicating the document has been restored",
+    responses={
+        200: {
+            "description": "Document restored successfully",
+            "content": {
+                "application/json": {
+                    "example": {"message": "Document doc_01HXYZ restored successfully"}
+                }
+            },
+        },
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Deleted document not found (either never existed or already hard-deleted)"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X POST "https://api.giga-pdf.com/api/v1/admin/documents/doc_01HXYZ/restore" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "doc_id = \"doc_01HXYZ\"\n"
+                    "response = requests.post(\n"
+                    '    f"https://api.giga-pdf.com/api/v1/admin/documents/{doc_id}/restore",\n'
+                    "    headers={\"Authorization\": \"Bearer \" + ADMIN_TOKEN},\n"
+                    ")\n"
+                    "print(response.json()['message'])"
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const docId = \"doc_01HXYZ\";\n"
+                    "const response = await fetch(\n"
+                    "  `https://api.giga-pdf.com/api/v1/admin/documents/${docId}/restore`,\n"
+                    "  { method: \"POST\", headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }\n"
+                    ");\n"
+                    "const result = await response.json();\n"
+                    "console.log(result.message);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$docId = 'doc_01HXYZ';\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->post(\n"
+                    "    \"https://api.giga-pdf.com/api/v1/admin/documents/{$docId}/restore\",\n"
+                    "    ['headers' => ['Authorization' => 'Bearer ' . $adminToken]]\n"
+                    ");\n"
+                    "$result = json_decode($response->getBody(), true);\n"
+                    "echo $result['message'];"
+                ),
+            },
+        ]
+    },
+)
 async def restore_document(
     document_id: str,
     db: AsyncSession = Depends(get_db),

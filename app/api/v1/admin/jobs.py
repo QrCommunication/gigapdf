@@ -57,7 +57,117 @@ class JobStatsResponse(BaseModel):
     avg_duration_seconds: Optional[float] = None
 
 
-@router.get("", response_model=JobListResponse)
+@router.get(
+    "",
+    response_model=JobListResponse,
+    summary="List all async jobs",
+    description="""Returns a paginated list of all asynchronous processing jobs on the platform.
+
+**Admin access required.** This endpoint provides a global view of the job queue across all
+users, regardless of ownership.
+
+Jobs represent background tasks such as PDF compression, conversion, OCR, splitting, merging,
+and other processing operations. Each job carries a `status` field with one of the following values:
+`pending`, `processing`, `completed`, `failed`, `cancelled`.
+
+Supports filtering by:
+- **status**: narrow results to a specific lifecycle state
+- **job_type**: filter by processing operation type (e.g. `compress`, `ocr`, `merge`)
+- **owner_id**: filter jobs submitted by a specific user
+
+Results are ordered by creation date (most recent first).""",
+    response_description="Paginated list of async jobs with full metadata",
+    responses={
+        200: {
+            "description": "Paginated job list returned successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "jobs": [
+                            {
+                                "id": "job_01HXYZ",
+                                "job_type": "compress",
+                                "status": "completed",
+                                "progress": 1.0,
+                                "document_id": "doc_01HABC",
+                                "owner_id": "usr_01HDEF",
+                                "input_params": {"quality": "medium"},
+                                "result": {"output_document_id": "doc_01HGHI"},
+                                "error_code": None,
+                                "error_message": None,
+                                "started_at": "2024-03-01T10:00:00Z",
+                                "completed_at": "2024-03-01T10:00:05Z",
+                                "created_at": "2024-03-01T09:59:58Z",
+                                "duration_seconds": 5.0,
+                            }
+                        ],
+                        "total": 1,
+                        "page": 1,
+                        "page_size": 20,
+                        "total_pages": 1,
+                    }
+                }
+            },
+        },
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        422: {"description": "Invalid query parameters (e.g. page < 1)"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/jobs'
+                    '?page=1&page_size=20&status=failed" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.get(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/jobs",\n'
+                    "    headers={\"Authorization\": \"Bearer \" + ADMIN_TOKEN},\n"
+                    "    params={\"page\": 1, \"page_size\": 20, \"status\": \"failed\"},\n"
+                    ")\n"
+                    "data = response.json()\n"
+                    'print(f"Failed jobs: {data[\'total\']}")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const params = new URLSearchParams({ page: 1, page_size: 20, status: \"failed\" });\n"
+                    "const response = await fetch(\n"
+                    '  `https://api.giga-pdf.com/api/v1/admin/jobs?${params}`,\n'
+                    "  { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }\n"
+                    ");\n"
+                    "const data = await response.json();\n"
+                    "console.log(`Failed jobs: ${data.total}`);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->get('https://api.giga-pdf.com/api/v1/admin/jobs', [\n"
+                    "    'headers' => ['Authorization' => 'Bearer ' . $adminToken],\n"
+                    "    'query'   => ['page' => 1, 'page_size' => 20, 'status' => 'failed'],\n"
+                    "]);\n"
+                    "$data = json_decode($response->getBody(), true);\n"
+                    "echo 'Failed jobs: ' . $data['total'];"
+                ),
+            },
+        ]
+    },
+)
 async def list_jobs(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -130,7 +240,102 @@ async def list_jobs(
     )
 
 
-@router.get("/stats", response_model=JobStatsResponse)
+@router.get(
+    "/stats",
+    response_model=JobStatsResponse,
+    summary="Get job queue statistics",
+    description="""Returns aggregated statistics about the async job queue across all users.
+
+**Admin access required.** Provides a real-time snapshot of the processing pipeline, useful
+for monitoring dashboards and capacity planning:
+
+- **total_jobs**: total number of jobs ever recorded
+- **pending_jobs**: jobs waiting to be picked up by a worker
+- **processing_jobs**: jobs currently being executed by a worker
+- **completed_jobs**: successfully finished jobs
+- **failed_jobs**: jobs that terminated with an error
+- **cancelled_jobs**: jobs manually cancelled by an admin or the system
+- **jobs_by_type**: breakdown of total jobs per operation type
+- **avg_duration_seconds**: average execution time for completed jobs (null if no completed jobs)""",
+    response_description="Aggregated job queue statistics",
+    responses={
+        200: {
+            "description": "Job statistics returned successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "total_jobs": 15432,
+                        "pending_jobs": 12,
+                        "processing_jobs": 5,
+                        "completed_jobs": 15200,
+                        "failed_jobs": 198,
+                        "cancelled_jobs": 17,
+                        "jobs_by_type": {
+                            "compress": 6800,
+                            "ocr": 4500,
+                            "merge": 2300,
+                            "split": 1832,
+                        },
+                        "avg_duration_seconds": 3.74,
+                    }
+                }
+            },
+        },
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/jobs/stats" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.get(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/jobs/stats",\n'
+                    "    headers={\"Authorization\": \"Bearer \" + ADMIN_TOKEN},\n"
+                    ")\n"
+                    "stats = response.json()\n"
+                    'print(f"Pending: {stats[\'pending_jobs\']} | Processing: {stats[\'processing_jobs\']}")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const response = await fetch(\n"
+                    '  "https://api.giga-pdf.com/api/v1/admin/jobs/stats",\n'
+                    "  { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }\n"
+                    ");\n"
+                    "const stats = await response.json();\n"
+                    "console.log(`Pending: ${stats.pending_jobs} | Processing: ${stats.processing_jobs}`);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->get(\n"
+                    "    'https://api.giga-pdf.com/api/v1/admin/jobs/stats',\n"
+                    "    ['headers' => ['Authorization' => 'Bearer ' . $adminToken]]\n"
+                    ");\n"
+                    "$stats = json_decode($response->getBody(), true);\n"
+                    "echo 'Pending: ' . $stats['pending_jobs'] . ' | Processing: ' . $stats['processing_jobs'];"
+                ),
+            },
+        ]
+    },
+)
 async def get_job_stats(
     db: AsyncSession = Depends(get_db),
 ):
@@ -191,7 +396,105 @@ async def get_job_stats(
     )
 
 
-@router.get("/{job_id}", response_model=JobResponse)
+@router.get(
+    "/{job_id}",
+    response_model=JobResponse,
+    summary="Get job details",
+    description="""Returns the full details of a specific async job identified by its ID.
+
+**Admin access required.** This endpoint exposes all job fields including internal parameters,
+processing results, error codes, and timing information — regardless of which user submitted the job.
+
+Key fields:
+- **progress**: completion percentage between 0.0 and 1.0
+- **input_params**: the parameters the job was submitted with (e.g. compression quality, OCR language)
+- **result**: output data upon successful completion (e.g. output document ID)
+- **error_code / error_message**: populated when `status` is `failed`
+- **duration_seconds**: computed from `started_at` and `completed_at` when both are available""",
+    response_description="Complete job details including status, progress, and result",
+    responses={
+        200: {
+            "description": "Job found and returned successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "job_01HXYZ",
+                        "job_type": "ocr",
+                        "status": "failed",
+                        "progress": 0.45,
+                        "document_id": "doc_01HABC",
+                        "owner_id": "usr_01HDEF",
+                        "input_params": {"language": "fr"},
+                        "result": None,
+                        "error_code": "OCR_TIMEOUT",
+                        "error_message": "OCR worker timed out after 120s",
+                        "started_at": "2024-03-01T11:00:00Z",
+                        "completed_at": "2024-03-01T11:02:00Z",
+                        "created_at": "2024-03-01T10:59:50Z",
+                        "duration_seconds": 120.0,
+                    }
+                }
+            },
+        },
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Job not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/jobs/job_01HXYZ" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "job_id = \"job_01HXYZ\"\n"
+                    "response = requests.get(\n"
+                    '    f"https://api.giga-pdf.com/api/v1/admin/jobs/{job_id}",\n'
+                    "    headers={\"Authorization\": \"Bearer \" + ADMIN_TOKEN},\n"
+                    ")\n"
+                    "job = response.json()\n"
+                    'print(f"Job {job[\'id\']}: {job[\'status\']} ({job[\'progress\']*100:.0f}%)")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const jobId = \"job_01HXYZ\";\n"
+                    "const response = await fetch(\n"
+                    "  `https://api.giga-pdf.com/api/v1/admin/jobs/${jobId}`,\n"
+                    "  { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }\n"
+                    ");\n"
+                    "const job = await response.json();\n"
+                    "console.log(`Job ${job.id}: ${job.status} (${(job.progress * 100).toFixed(0)}%)`);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$jobId = 'job_01HXYZ';\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->get(\n"
+                    "    \"https://api.giga-pdf.com/api/v1/admin/jobs/{$jobId}\",\n"
+                    "    ['headers' => ['Authorization' => 'Bearer ' . $adminToken]]\n"
+                    ");\n"
+                    "$job = json_decode($response->getBody(), true);\n"
+                    "echo 'Job ' . $job['id'] . ': ' . $job['status'];"
+                ),
+            },
+        ]
+    },
+)
 async def get_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),
@@ -229,7 +532,97 @@ async def get_job(
     )
 
 
-@router.post("/{job_id}/cancel")
+@router.post(
+    "/{job_id}/cancel",
+    summary="Cancel a pending or processing job",
+    description="""Forces cancellation of an async job that is currently in `pending` or `processing` state.
+
+**Admin access required.** This is a privileged action that overrides normal user-level job control.
+It is intended for situations where a job is stuck, consuming excessive resources, or was submitted
+in error.
+
+Upon cancellation:
+- `status` is set to `cancelled`
+- `completed_at` is set to the current timestamp
+- `error_message` is set to `"Cancelled by admin"` for audit traceability
+
+Returns a 400 error if the job is already in a terminal state (`completed`, `failed`, or `cancelled`).""",
+    response_description="Confirmation message that the job has been cancelled",
+    responses={
+        200: {
+            "description": "Job cancelled successfully",
+            "content": {
+                "application/json": {
+                    "example": {"message": "Job job_01HXYZ cancelled successfully"}
+                }
+            },
+        },
+        400: {
+            "description": "Job cannot be cancelled (already in a terminal state)",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Cannot cancel job with status 'completed'"}
+                }
+            },
+        },
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Job not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X POST "https://api.giga-pdf.com/api/v1/admin/jobs/job_01HXYZ/cancel" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "job_id = \"job_01HXYZ\"\n"
+                    "response = requests.post(\n"
+                    '    f"https://api.giga-pdf.com/api/v1/admin/jobs/{job_id}/cancel",\n'
+                    "    headers={\"Authorization\": \"Bearer \" + ADMIN_TOKEN},\n"
+                    ")\n"
+                    "print(response.json()['message'])"
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const jobId = \"job_01HXYZ\";\n"
+                    "const response = await fetch(\n"
+                    "  `https://api.giga-pdf.com/api/v1/admin/jobs/${jobId}/cancel`,\n"
+                    "  { method: \"POST\", headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }\n"
+                    ");\n"
+                    "const result = await response.json();\n"
+                    "console.log(result.message);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$jobId = 'job_01HXYZ';\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->post(\n"
+                    "    \"https://api.giga-pdf.com/api/v1/admin/jobs/{$jobId}/cancel\",\n"
+                    "    ['headers' => ['Authorization' => 'Bearer ' . $adminToken]]\n"
+                    ");\n"
+                    "$result = json_decode($response->getBody(), true);\n"
+                    "echo $result['message'];"
+                ),
+            },
+        ]
+    },
+)
 async def cancel_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),
@@ -260,7 +653,100 @@ async def cancel_job(
     return {"message": f"Job {job_id} cancelled successfully"}
 
 
-@router.post("/{job_id}/retry")
+@router.post(
+    "/{job_id}/retry",
+    summary="Retry a failed job",
+    description="""Re-queues a failed job for reprocessing by resetting it to `pending` state.
+
+**Admin access required.** Use this endpoint to recover from transient failures (e.g. worker
+crash, temporary storage unavailability, external API timeout) without requiring the user to
+re-submit their request.
+
+Upon retry, the following fields are reset:
+- `status` → `pending`
+- `progress` → `0.0`
+- `started_at`, `completed_at` → `null`
+- `error_code`, `error_message` → `null`
+- `result` → `null`
+
+The original `input_params` and `document_id` are preserved. Returns a 400 error if the job
+is not in `failed` state.""",
+    response_description="Confirmation message that the job has been queued for retry",
+    responses={
+        200: {
+            "description": "Job successfully queued for retry",
+            "content": {
+                "application/json": {
+                    "example": {"message": "Job job_01HXYZ queued for retry"}
+                }
+            },
+        },
+        400: {
+            "description": "Job cannot be retried (not in failed state)",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Can only retry failed jobs, current status is 'processing'"}
+                }
+            },
+        },
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Job not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X POST "https://api.giga-pdf.com/api/v1/admin/jobs/job_01HXYZ/retry" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "job_id = \"job_01HXYZ\"\n"
+                    "response = requests.post(\n"
+                    '    f"https://api.giga-pdf.com/api/v1/admin/jobs/{job_id}/retry",\n'
+                    "    headers={\"Authorization\": \"Bearer \" + ADMIN_TOKEN},\n"
+                    ")\n"
+                    "print(response.json()['message'])"
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const jobId = \"job_01HXYZ\";\n"
+                    "const response = await fetch(\n"
+                    "  `https://api.giga-pdf.com/api/v1/admin/jobs/${jobId}/retry`,\n"
+                    "  { method: \"POST\", headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }\n"
+                    ");\n"
+                    "const result = await response.json();\n"
+                    "console.log(result.message);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$jobId = 'job_01HXYZ';\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->post(\n"
+                    "    \"https://api.giga-pdf.com/api/v1/admin/jobs/{$jobId}/retry\",\n"
+                    "    ['headers' => ['Authorization' => 'Bearer ' . $adminToken]]\n"
+                    ");\n"
+                    "$result = json_decode($response->getBody(), true);\n"
+                    "echo $result['message'];"
+                ),
+            },
+        ]
+    },
+)
 async def retry_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),
@@ -296,7 +782,94 @@ async def retry_job(
     return {"message": f"Job {job_id} queued for retry"}
 
 
-@router.delete("/{job_id}")
+@router.delete(
+    "/{job_id}",
+    summary="Delete a terminal job",
+    description="""Permanently removes a job record from the database.
+
+**Admin access required.** Only jobs in a terminal state can be deleted:
+`completed`, `failed`, or `cancelled`. Active jobs (`pending` or `processing`) must be
+cancelled first before they can be deleted.
+
+This is useful for cleaning up old or failed job records to keep the queue table lean.
+**This action is irreversible** — the job record and its associated result data will be
+permanently removed.""",
+    response_description="Confirmation message that the job has been permanently deleted",
+    responses={
+        200: {
+            "description": "Job deleted successfully",
+            "content": {
+                "application/json": {
+                    "example": {"message": "Job job_01HXYZ deleted successfully"}
+                }
+            },
+        },
+        400: {
+            "description": "Job is still active and cannot be deleted",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Cannot delete active jobs. Cancel them first."}
+                }
+            },
+        },
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Job not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X DELETE "https://api.giga-pdf.com/api/v1/admin/jobs/job_01HXYZ" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "job_id = \"job_01HXYZ\"\n"
+                    "response = requests.delete(\n"
+                    '    f"https://api.giga-pdf.com/api/v1/admin/jobs/{job_id}",\n'
+                    "    headers={\"Authorization\": \"Bearer \" + ADMIN_TOKEN},\n"
+                    ")\n"
+                    "print(response.json()['message'])"
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const jobId = \"job_01HXYZ\";\n"
+                    "const response = await fetch(\n"
+                    "  `https://api.giga-pdf.com/api/v1/admin/jobs/${jobId}`,\n"
+                    "  { method: \"DELETE\", headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }\n"
+                    ");\n"
+                    "const result = await response.json();\n"
+                    "console.log(result.message);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$jobId = 'job_01HXYZ';\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->delete(\n"
+                    "    \"https://api.giga-pdf.com/api/v1/admin/jobs/{$jobId}\",\n"
+                    "    ['headers' => ['Authorization' => 'Bearer ' . $adminToken]]\n"
+                    ");\n"
+                    "$result = json_decode($response->getBody(), true);\n"
+                    "echo $result['message'];"
+                ),
+            },
+        ]
+    },
+)
 async def delete_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),

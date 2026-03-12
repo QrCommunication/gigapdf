@@ -141,45 +141,46 @@ def plan_to_response(plan: Plan) -> PlanResponse:
 @router.get(
     "",
     response_model=APIResponse[dict],
-    summary="List all plans",
+    summary="List all subscription plans",
     description="""
-Get list of all subscription plans.
+Retrieve the list of subscription plans available on the platform.
 
-Returns active non-tenant plans by default, sorted by display order.
-Use `include_tenant_plans=true` to also include tenant-specific plans.
+Returns active non-tenant plans by default, sorted by `display_order`.
+Use `include_inactive=true` to also retrieve disabled plans (admin only).
+Use `include_tenant_plans=true` to include organization-specific plans.
+Use `tenant_id` to also return private plans associated with a specific tenant.
 
-## Example (curl)
-```bash
-curl -X GET "http://localhost:8000/api/v1/plans" \\
-  -H "Accept: application/json"
-```
-
-## Example (Python)
-```python
-import requests
-
-response = requests.get("http://localhost:8000/api/v1/plans")
-plans = response.json()["data"]["plans"]
-for plan in plans:
-    print(f"{plan['name']}: €{plan['price']}/month")
-```
-
-## Example (JavaScript)
-```javascript
-const response = await fetch('http://localhost:8000/api/v1/plans');
-const { data: { plans } } = await response.json();
-plans.forEach(plan => console.log(`${plan.name}: €${plan.price}/month`));
-```
-
-## Example (PHP)
-```php
-$response = file_get_contents('http://localhost:8000/api/v1/plans');
-$data = json_decode($response, true);
-foreach ($data['data']['plans'] as $plan) {
-    echo "{$plan['name']}: €{$plan['price']}/month\\n";
-}
-```
+**No authentication required** for public plan listing.
 """,
+    response_description="Object containing a `plans` array with all matching plan objects",
+    responses={
+        200: {"description": "Plans retrieved successfully"},
+        422: {"description": "Invalid query parameter"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/plans" \\\n  -H "Accept: application/json"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.get("https://api.giga-pdf.com/api/v1/plans")\nplans = response.json()["data"]["plans"]\nfor plan in plans:\n    print(f"{plan[\'name\']}: \u20ac{plan[\'price\']}/{plan[\'interval\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": "const response = await fetch('https://api.giga-pdf.com/api/v1/plans');\nconst { data: { plans } } = await response.json();\nplans.forEach(plan => console.log(`${plan.name}: \u20ac${plan.price}/${plan.interval}`));",
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": "<?php\n$response = file_get_contents('https://api.giga-pdf.com/api/v1/plans');\n$data = json_decode($response, true);\nforeach ($data['data']['plans'] as $plan) {\n    echo \"{$plan['name']}: \u20ac{$plan['price']}/{$plan['interval']}\\n\";\n}",
+            },
+        ]
+    },
 )
 async def list_plans(
     include_inactive: bool = False,
@@ -231,25 +232,45 @@ async def list_plans(
 @router.get(
     "/{plan_id}",
     response_model=APIResponse[PlanResponse],
-    summary="Get plan by ID",
+    summary="Get a plan by ID or slug",
     description="""
-Get a specific plan by its ID or slug.
+Retrieve full details for a specific subscription plan.
 
-## Example (curl)
-```bash
-curl -X GET "http://localhost:8000/api/v1/plans/starter" \\
-  -H "Accept: application/json"
-```
+The `plan_id` path parameter accepts either:
+- A plan **UUID** (e.g. `3f6a1c2e-...`)
+- A plan **slug** (e.g. `starter`, `pro`, `enterprise`)
 
-## Example (Python)
-```python
-import requests
-
-response = requests.get("http://localhost:8000/api/v1/plans/starter")
-plan = response.json()["data"]
-print(f"Storage: {plan['storage_limit_bytes'] / 1024**3} GB")
-```
+**No authentication required.**
 """,
+    response_description="Plan object with all pricing and feature details",
+    responses={
+        200: {"description": "Plan found and returned"},
+        404: {"description": "Plan not found for the given ID or slug"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/plans/starter" \\\n  -H "Accept: application/json"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.get("https://api.giga-pdf.com/api/v1/plans/starter")\nplan = response.json()["data"]\nprint(f"Storage: {plan[\'storage_limit_bytes\'] / 1024**3:.0f} GB")\nprint(f"API calls/month: {plan[\'api_calls_limit\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": "const response = await fetch('https://api.giga-pdf.com/api/v1/plans/starter');\nconst { data: plan } = await response.json();\nconsole.log(`${plan.name}: \u20ac${plan.price}/${plan.interval}`);",
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": "<?php\n$response = file_get_contents('https://api.giga-pdf.com/api/v1/plans/starter');\n$plan = json_decode($response, true)['data'];\necho \"{$plan['name']}: \u20ac{$plan['price']}/{$plan['interval']}\\n\";",
+            },
+        ]
+    },
 )
 async def get_plan(plan_id: str) -> APIResponse[PlanResponse]:
     """
@@ -284,83 +305,50 @@ async def get_plan(plan_id: str) -> APIResponse[PlanResponse]:
     "",
     response_model=APIResponse[PlanResponse],
     status_code=status.HTTP_201_CREATED,
-    summary="Create a new plan",
+    summary="Create a new subscription plan",
     description="""
-Create a new subscription plan (admin only).
+Create a new subscription plan on the platform.
 
-## Example (curl)
-```bash
-curl -X POST "http://localhost:8000/api/v1/plans" \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer <admin_token>" \\
-  -d '{
-    "slug": "business",
-    "name": "Business",
-    "description": "For growing businesses",
-    "price": 49,
-    "storage_limit_bytes": 214748364800,
-    "api_calls_limit": 200000,
-    "document_limit": 5000,
-    "is_popular": false,
-    "display_order": 3
-  }'
-```
+**Admin only** — requires a valid admin Bearer token.
 
-## Example (Python)
-```python
-import requests
+The `slug` must be unique and URL-safe (e.g. `business-plus`).
+Optionally link a Stripe Price ID (`stripe_price_id`) to enable checkout for this plan.
+Set `linked_tenant_id` to make the plan exclusive to a specific organization.
 
-response = requests.post(
-    "http://localhost:8000/api/v1/plans",
-    headers={"Authorization": "Bearer <admin_token>"},
-    json={
-        "slug": "business",
-        "name": "Business",
-        "description": "For growing businesses",
-        "price": 49,
-        "storage_limit_bytes": 214748364800,
-        "api_calls_limit": 200000,
-    }
-)
-plan = response.json()["data"]
-```
-
-## Example (JavaScript)
-```javascript
-const response = await fetch('http://localhost:8000/api/v1/plans', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer <admin_token>'
-  },
-  body: JSON.stringify({
-    slug: 'business',
-    name: 'Business',
-    price: 49
-  })
-});
-const { data: plan } = await response.json();
-```
-
-## Example (PHP)
-```php
-$ch = curl_init('http://localhost:8000/api/v1/plans');
-curl_setopt_array($ch, [
-    CURLOPT_POST => true,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        'Content-Type: application/json',
-        'Authorization: Bearer <admin_token>'
-    ],
-    CURLOPT_POSTFIELDS => json_encode([
-        'slug' => 'business',
-        'name' => 'Business',
-        'price' => 49
-    ])
-]);
-$response = json_decode(curl_exec($ch), true);
-```
+**Conflict**: Returns `409` if a plan with the same slug already exists.
 """,
+    response_description="Created plan object with all fields including generated UUID and timestamps",
+    responses={
+        201: {"description": "Plan created successfully"},
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Insufficient privileges — admin access required"},
+        409: {"description": "A plan with this slug already exists"},
+        422: {"description": "Validation error in request body"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X POST "https://api.giga-pdf.com/api/v1/plans" \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer $ADMIN_TOKEN" \\\n  -d \'{"slug":"business","name":"Business","description":"For growing businesses","price":49,"storage_limit_bytes":214748364800,"api_calls_limit":200000,"document_limit":5000,"display_order":3}\'',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.post(\n    "https://api.giga-pdf.com/api/v1/plans",\n    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n    json={\n        "slug": "business",\n        "name": "Business",\n        "description": "For growing businesses",\n        "price": 49,\n        "storage_limit_bytes": 214748364800,\n        "api_calls_limit": 200000,\n        "document_limit": 5000,\n    }\n)\nplan = response.json()["data"]\nprint(f"Created plan: {plan[\'id\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": "const response = await fetch('https://api.giga-pdf.com/api/v1/plans', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${adminToken}`\n  },\n  body: JSON.stringify({\n    slug: 'business',\n    name: 'Business',\n    price: 49,\n    storage_limit_bytes: 214748364800,\n    api_calls_limit: 200000,\n  })\n});\nconst { data: plan } = await response.json();",
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": "<?php\n$ch = curl_init('https://api.giga-pdf.com/api/v1/plans');\ncurl_setopt_array($ch, [\n    CURLOPT_POST => true,\n    CURLOPT_RETURNTRANSFER => true,\n    CURLOPT_HTTPHEADER => [\n        'Content-Type: application/json',\n        'Authorization: Bearer ' . $adminToken\n    ],\n    CURLOPT_POSTFIELDS => json_encode([\n        'slug' => 'business',\n        'name' => 'Business',\n        'price' => 49,\n        'storage_limit_bytes' => 214748364800,\n        'api_calls_limit' => 200000,\n    ])\n]);\n$plan = json_decode(curl_exec($ch), true)['data'];",
+            },
+        ]
+    },
 )
 async def create_plan(plan_data: PlanCreate) -> APIResponse[PlanResponse]:
     """
@@ -422,59 +410,49 @@ async def create_plan(plan_data: PlanCreate) -> APIResponse[PlanResponse]:
 @router.patch(
     "/{plan_id}",
     response_model=APIResponse[PlanResponse],
-    summary="Update a plan",
+    summary="Update an existing plan",
     description="""
-Update an existing subscription plan (admin only).
+Partially update an existing subscription plan.
 
-## Example (curl)
-```bash
-curl -X PATCH "http://localhost:8000/api/v1/plans/starter" \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer <admin_token>" \\
-  -d '{
-    "price": 12,
-    "is_popular": true
-  }'
-```
+**Admin only** — requires a valid admin Bearer token.
 
-## Example (Python)
-```python
-import requests
+Only the fields provided in the request body will be updated (PATCH semantics).
+The `plan_id` accepts either a UUID or a slug.
 
-response = requests.patch(
-    "http://localhost:8000/api/v1/plans/starter",
-    headers={"Authorization": "Bearer <admin_token>"},
-    json={"price": 12, "is_popular": True}
-)
-plan = response.json()["data"]
-```
-
-## Example (JavaScript)
-```javascript
-const response = await fetch('http://localhost:8000/api/v1/plans/starter', {
-  method: 'PATCH',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer <admin_token>'
-  },
-  body: JSON.stringify({ price: 12 })
-});
-```
-
-## Example (PHP)
-```php
-$ch = curl_init('http://localhost:8000/api/v1/plans/starter');
-curl_setopt_array($ch, [
-    CURLOPT_CUSTOMREQUEST => 'PATCH',
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        'Content-Type: application/json',
-        'Authorization: Bearer <admin_token>'
-    ],
-    CURLOPT_POSTFIELDS => json_encode(['price' => 12])
-]);
-```
+**Note**: Changing `stripe_price_id` will affect new checkouts but not existing subscriptions.
 """,
+    response_description="Updated plan object with all fields",
+    responses={
+        200: {"description": "Plan updated successfully"},
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Insufficient privileges — admin access required"},
+        404: {"description": "Plan not found for the given ID or slug"},
+        422: {"description": "Validation error in request body"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X PATCH "https://api.giga-pdf.com/api/v1/plans/starter" \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer $ADMIN_TOKEN" \\\n  -d \'{"price": 12, "is_popular": true}\'',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.patch(\n    "https://api.giga-pdf.com/api/v1/plans/starter",\n    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n    json={"price": 12, "is_popular": True}\n)\nplan = response.json()["data"]',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": "const response = await fetch('https://api.giga-pdf.com/api/v1/plans/starter', {\n  method: 'PATCH',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${adminToken}`\n  },\n  body: JSON.stringify({ price: 12, is_popular: true })\n});\nconst { data: plan } = await response.json();",
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": "<?php\n$ch = curl_init('https://api.giga-pdf.com/api/v1/plans/starter');\ncurl_setopt_array($ch, [\n    CURLOPT_CUSTOMREQUEST => 'PATCH',\n    CURLOPT_RETURNTRANSFER => true,\n    CURLOPT_HTTPHEADER => [\n        'Content-Type: application/json',\n        'Authorization: Bearer ' . $adminToken\n    ],\n    CURLOPT_POSTFIELDS => json_encode(['price' => 12, 'is_popular' => true])\n]);\n$plan = json_decode(curl_exec($ch), true)['data'];",
+            },
+        ]
+    },
 )
 async def update_plan(
     plan_id: str, plan_data: PlanUpdate
@@ -522,47 +500,50 @@ async def update_plan(
 @router.delete(
     "/{plan_id}",
     response_model=APIResponse[dict],
-    summary="Delete a plan",
+    summary="Delete a subscription plan",
     description="""
-Delete a subscription plan (admin only).
+Permanently delete a subscription plan.
 
-Note: Plans with active subscriptions cannot be deleted.
-Consider deactivating instead.
+**Admin only** — requires a valid admin Bearer token.
 
-## Example (curl)
-```bash
-curl -X DELETE "http://localhost:8000/api/v1/plans/old-plan" \\
-  -H "Authorization: Bearer <admin_token>"
-```
+**Restrictions**:
+- Core plans (`free`, `starter`, `pro`, `enterprise`) cannot be deleted. Deactivate them instead via PATCH.
+- Plans with active subscribers should be deactivated rather than deleted.
 
-## Example (Python)
-```python
-import requests
-
-response = requests.delete(
-    "http://localhost:8000/api/v1/plans/old-plan",
-    headers={"Authorization": "Bearer <admin_token>"}
-)
-```
-
-## Example (JavaScript)
-```javascript
-await fetch('http://localhost:8000/api/v1/plans/old-plan', {
-  method: 'DELETE',
-  headers: { 'Authorization': 'Bearer <admin_token>' }
-});
-```
-
-## Example (PHP)
-```php
-$ch = curl_init('http://localhost:8000/api/v1/plans/old-plan');
-curl_setopt_array($ch, [
-    CURLOPT_CUSTOMREQUEST => 'DELETE',
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => ['Authorization: Bearer <admin_token>']
-]);
-```
+The `plan_id` accepts either a UUID or a slug.
 """,
+    response_description="Deletion confirmation with the plan name",
+    responses={
+        200: {"description": "Plan deleted successfully"},
+        400: {"description": "Cannot delete a core plan — deactivate it instead"},
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Insufficient privileges — admin access required"},
+        404: {"description": "Plan not found for the given ID or slug"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X DELETE "https://api.giga-pdf.com/api/v1/plans/old-plan" \\\n  -H "Authorization: Bearer $ADMIN_TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.delete(\n    "https://api.giga-pdf.com/api/v1/plans/old-plan",\n    headers={"Authorization": "Bearer $ADMIN_TOKEN"}\n)\nprint(response.json()["data"]["message"])',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": "const response = await fetch('https://api.giga-pdf.com/api/v1/plans/old-plan', {\n  method: 'DELETE',\n  headers: { 'Authorization': `Bearer ${adminToken}` }\n});\nconst { data } = await response.json();\nconsole.log(data.message);",
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": "<?php\n$ch = curl_init('https://api.giga-pdf.com/api/v1/plans/old-plan');\ncurl_setopt_array($ch, [\n    CURLOPT_CUSTOMREQUEST => 'DELETE',\n    CURLOPT_RETURNTRANSFER => true,\n    CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $adminToken]\n]);\n$result = json_decode(curl_exec($ch), true);\necho $result['data']['message'];",
+            },
+        ]
+    },
 )
 async def delete_plan(plan_id: str) -> APIResponse[dict]:
     """

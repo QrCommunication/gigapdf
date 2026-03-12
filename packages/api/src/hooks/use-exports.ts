@@ -10,11 +10,13 @@ export const exportKeys = {
   lists: () => [...exportKeys.all, 'list'] as const,
   list: (documentId: string) => [...exportKeys.lists(), documentId] as const,
   details: () => [...exportKeys.all, 'detail'] as const,
-  detail: (exportId: string) => [...exportKeys.details(), exportId] as const,
+  detail: (documentId: string, jobId: string) =>
+    [...exportKeys.details(), documentId, jobId] as const,
 };
 
 /**
  * Hook to create export job
+ * Backend: POST /documents/{document_id}/export
  */
 export const useCreateExport = () => {
   const queryClient = useQueryClient();
@@ -30,11 +32,16 @@ export const useCreateExport = () => {
 
 /**
  * Hook to get export status
+ * Backend: GET /documents/{document_id}/export/{job_id}
  */
-export const useExportStatus = (exportId: string, enabled = true) => {
+export const useExportStatus = (
+  documentId: string,
+  jobId: string,
+  enabled = true
+) => {
   return useQuery({
-    queryKey: exportKeys.detail(exportId),
-    queryFn: () => exportService.getExportStatus(exportId),
+    queryKey: exportKeys.detail(documentId, jobId),
+    queryFn: () => exportService.getExportStatus(documentId, jobId),
     enabled,
     refetchInterval: (query) => {
       const data = query.state.data as ExportJob | undefined;
@@ -46,6 +53,7 @@ export const useExportStatus = (exportId: string, enabled = true) => {
 
 /**
  * Hook to download exported file
+ * TODO: Backend endpoint not yet implemented
  */
 export const useDownloadExport = () => {
   return useMutation({
@@ -55,20 +63,22 @@ export const useDownloadExport = () => {
 
 /**
  * Hook to cancel export
+ * Backend: DELETE /jobs/{job_id}
  */
 export const useCancelExport = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (exportId: string) => exportService.cancelExport(exportId),
-    onSuccess: (_, exportId) => {
-      queryClient.invalidateQueries({ queryKey: exportKeys.detail(exportId) });
+    mutationFn: (jobId: string) => exportService.cancelExport(jobId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: exportKeys.details() });
     },
   });
 };
 
 /**
  * Hook to list exports for a document
+ * TODO: Backend endpoint not yet implemented
  */
 export const useExports = (documentId: string, enabled = true) => {
   return useQuery({
@@ -79,7 +89,8 @@ export const useExports = (documentId: string, enabled = true) => {
 };
 
 /**
- * Hook to export document directly
+ * Hook to export document directly (blocking)
+ * Backend: POST /documents/{document_id}/export
  */
 export const useExportDirect = () => {
   return useMutation({
@@ -101,10 +112,11 @@ export const useExportDirect = () => {
 
 /**
  * Hook to get export download URL
+ * TODO: Backend endpoint not yet implemented
  */
 export const useExportDownloadUrl = (exportId: string, enabled = true) => {
   return useQuery({
-    queryKey: [...exportKeys.detail(exportId), 'url'],
+    queryKey: [...exportKeys.details(), exportId, 'url'],
     queryFn: () => exportService.getDownloadUrl(exportId),
     enabled,
     staleTime: 0, // Always refetch as the URL expires
@@ -129,7 +141,7 @@ export const useExportAndDownload = () => {
     // Poll for completion
     const pollInterval = setInterval(async () => {
       try {
-        const status = await exportService.getExportStatus(exportJob.id);
+        const status = await exportService.getExportStatus(documentId, exportJob.id);
         if (onStatusChange) onStatusChange(status);
 
         if (status.status === 'completed') {

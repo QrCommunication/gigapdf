@@ -12,20 +12,21 @@ import type {
 export const elementKeys = {
   all: ['elements'] as const,
   lists: () => [...elementKeys.all, 'list'] as const,
-  list: (documentId: string, pageId?: string) =>
-    [...elementKeys.lists(), documentId, pageId] as const,
+  list: (documentId: string, pageNumber?: number) =>
+    [...elementKeys.lists(), documentId, pageNumber] as const,
   details: () => [...elementKeys.all, 'detail'] as const,
   detail: (documentId: string, elementId: string) =>
     [...elementKeys.details(), documentId, elementId] as const,
 };
 
 /**
- * Hook to list elements for a document
+ * Hook to list elements for a specific page
+ * Backend: GET /documents/{document_id}/pages/{page_number}/elements
  */
-export const useElements = (documentId: string, pageId?: string, enabled = true) => {
+export const useElements = (documentId: string, pageNumber: number, enabled = true) => {
   return useQuery({
-    queryKey: elementKeys.list(documentId, pageId),
-    queryFn: () => elementService.list(documentId, pageId),
+    queryKey: elementKeys.list(documentId, pageNumber),
+    queryFn: () => elementService.list(documentId, pageNumber),
     enabled,
     staleTime: 30 * 1000, // 30 seconds
   });
@@ -44,7 +45,8 @@ export const useElement = (documentId: string, elementId: string, enabled = true
 };
 
 /**
- * Hook to create an element
+ * Hook to create an element on a specific page
+ * Backend: POST /documents/{document_id}/pages/{page_number}/elements
  */
 export const useCreateElement = () => {
   const queryClient = useQueryClient();
@@ -52,13 +54,15 @@ export const useCreateElement = () => {
   return useMutation({
     mutationFn: ({
       documentId,
+      pageNumber,
       data,
     }: {
       documentId: string;
+      pageNumber: number;
       data: CreateElementRequest;
-    }) => elementService.create(documentId, data),
-    onSuccess: (_, { documentId }) => {
-      queryClient.invalidateQueries({ queryKey: elementKeys.list(documentId) });
+    }) => elementService.create(documentId, pageNumber, data),
+    onSuccess: (_, { documentId, pageNumber }) => {
+      queryClient.invalidateQueries({ queryKey: elementKeys.list(documentId, pageNumber) });
     },
   });
 };
@@ -87,7 +91,8 @@ export const useUpdateElement = () => {
 };
 
 /**
- * Hook to bulk update elements
+ * Hook to batch update elements
+ * Backend: POST /documents/{document_id}/elements/batch
  */
 export const useBulkUpdateElements = () => {
   const queryClient = useQueryClient();
@@ -124,6 +129,7 @@ export const useDeleteElement = () => {
 
 /**
  * Hook to bulk delete elements
+ * TODO: Backend endpoint not yet implemented
  */
 export const useBulkDeleteElements = () => {
   const queryClient = useQueryClient();
@@ -158,7 +164,32 @@ export const useDuplicateElement = () => {
 };
 
 /**
+ * Hook to move an element
+ * Backend: PUT /documents/{document_id}/elements/{element_id}/move
+ */
+export const useMoveElement = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      documentId,
+      elementId,
+      position,
+    }: {
+      documentId: string;
+      elementId: string;
+      position: { x: number; y: number; page_number?: number };
+    }) => elementService.move(documentId, elementId, position),
+    onSuccess: (data: Element, { documentId }) => {
+      queryClient.setQueryData(elementKeys.detail(documentId, data.elementId), data);
+      queryClient.invalidateQueries({ queryKey: elementKeys.list(documentId) });
+    },
+  });
+};
+
+/**
  * Hook to update element z-index
+ * TODO: Backend endpoint not yet implemented
  */
 export const useUpdateElementZIndex = () => {
   const queryClient = useQueryClient();
@@ -182,6 +213,7 @@ export const useUpdateElementZIndex = () => {
 
 /**
  * Hook to bring element to front
+ * TODO: Backend endpoint not yet implemented
  */
 export const useBringElementToFront = () => {
   const queryClient = useQueryClient();
@@ -198,6 +230,7 @@ export const useBringElementToFront = () => {
 
 /**
  * Hook to send element to back
+ * TODO: Backend endpoint not yet implemented
  */
 export const useSendElementToBack = () => {
   const queryClient = useQueryClient();
@@ -214,6 +247,7 @@ export const useSendElementToBack = () => {
 
 /**
  * Hook to group elements
+ * TODO: Backend endpoint not yet implemented
  */
 export const useGroupElements = () => {
   const queryClient = useQueryClient();
@@ -234,6 +268,7 @@ export const useGroupElements = () => {
 
 /**
  * Hook to ungroup elements
+ * TODO: Backend endpoint not yet implemented
  */
 export const useUngroupElements = () => {
   const queryClient = useQueryClient();

@@ -114,7 +114,72 @@ def get_current_settings() -> SystemSettings:
     return SystemSettings(**merged)
 
 
-@router.get("", response_model=SystemSettings)
+@router.get(
+    "",
+    response_model=SystemSettings,
+    summary="Get system settings",
+    description=(
+        "Retrieve all current system settings for the GigaPDF platform.\n\n"
+        "**Admin access required.** Returns the full configuration including general settings, "
+        "file limits, storage configuration, SMTP email settings, and feature flags.\n\n"
+        "Settings are resolved by merging environment variables with any runtime overrides "
+        "stored in memory. SMTP password is never returned for security reasons."
+    ),
+    response_description="Current system settings object",
+    responses={
+        200: {"description": "Settings retrieved successfully"},
+        401: {"description": "Authentication required — provide a valid Bearer token"},
+        403: {"description": "Admin access required"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/admin/settings" \\\n  -H "Authorization: Bearer $ADMIN_TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.get(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/settings",\n'
+                    '    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n'
+                    ")\n"
+                    "settings = response.json()\n"
+                    "print(settings['system_name'], settings['maintenance_mode'])"
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const response = await fetch(\n"
+                    '  "https://api.giga-pdf.com/api/v1/admin/settings",\n'
+                    '  { headers: { "Authorization": "Bearer " + ADMIN_TOKEN } }\n'
+                    ");\n"
+                    "const settings = await response.json();\n"
+                    "console.log(settings.system_name, settings.maintenance_mode);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$ch = curl_init('https://api.giga-pdf.com/api/v1/admin/settings');\n"
+                    "curl_setopt_array($ch, [\n"
+                    "    CURLOPT_RETURNTRANSFER => true,\n"
+                    "    CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $adminToken],\n"
+                    "]);\n"
+                    "$settings = json_decode(curl_exec($ch), true);\n"
+                    "echo $settings['system_name'];"
+                ),
+            },
+        ]
+    },
+)
 async def get_system_settings():
     """
     Get current system settings.
@@ -122,7 +187,83 @@ async def get_system_settings():
     return get_current_settings()
 
 
-@router.patch("", response_model=SystemSettings)
+@router.patch(
+    "",
+    response_model=SystemSettings,
+    summary="Update system settings",
+    description=(
+        "Partially update one or more system settings at runtime.\n\n"
+        "**Admin access required.** Only provided fields are updated; omitted fields keep "
+        "their current values. Settings are stored in memory and reset on server restart — "
+        "for persistent changes, update the corresponding environment variables.\n\n"
+        "**Note:** `smtp_password` is accepted for update but never returned in the response. "
+        "Some settings (e.g. storage provider) may require a server restart to fully take effect."
+    ),
+    response_description="Updated system settings object",
+    responses={
+        200: {"description": "Settings updated successfully"},
+        401: {"description": "Authentication required — provide a valid Bearer token"},
+        403: {"description": "Admin access required"},
+        422: {"description": "Validation error — invalid field value"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X PATCH "https://api.giga-pdf.com/api/v1/admin/settings" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN" \\\n'
+                    '  -H "Content-Type: application/json" \\\n'
+                    "  -d '{\"maintenance_mode\": true, \"max_file_size_mb\": 200}'"
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.patch(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/settings",\n'
+                    '    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n'
+                    "    json={\"maintenance_mode\": True, \"max_file_size_mb\": 200},\n"
+                    ")\n"
+                    "updated = response.json()"
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const response = await fetch(\n"
+                    '  "https://api.giga-pdf.com/api/v1/admin/settings",\n'
+                    "  {\n"
+                    '    method: "PATCH",\n'
+                    '    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + ADMIN_TOKEN },\n'
+                    "    body: JSON.stringify({ maintenance_mode: true, max_file_size_mb: 200 }),\n"
+                    "  }\n"
+                    ");\n"
+                    "const updated = await response.json();"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$ch = curl_init('https://api.giga-pdf.com/api/v1/admin/settings');\n"
+                    "curl_setopt_array($ch, [\n"
+                    "    CURLOPT_CUSTOMREQUEST => 'PATCH',\n"
+                    "    CURLOPT_RETURNTRANSFER => true,\n"
+                    "    CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $adminToken],\n"
+                    "    CURLOPT_POSTFIELDS => json_encode(['maintenance_mode' => true, 'max_file_size_mb' => 200]),\n"
+                    "]);\n"
+                    "$updated = json_decode(curl_exec($ch), true);"
+                ),
+            },
+        ]
+    },
+)
 async def update_system_settings(
     update: SettingsUpdateRequest,
 ):
@@ -150,7 +291,80 @@ async def update_system_settings(
     return get_current_settings()
 
 
-@router.post("/test-email")
+@router.post(
+    "/test-email",
+    summary="Test SMTP email configuration",
+    description=(
+        "Send a test email to verify the current SMTP configuration.\n\n"
+        "**Admin access required.** Attempts to deliver a test message to the specified "
+        "address using the currently configured SMTP settings. Returns success/failure "
+        "along with the SMTP host and port used.\n\n"
+        "If `smtp_host` is not configured, the endpoint returns a failure response "
+        "without attempting delivery.\n\n"
+        "**Query parameter:** `to_email` — destination address for the test message (required)."
+    ),
+    response_description="Test result with SMTP host, port, and success status",
+    responses={
+        200: {"description": "Test result returned (check `success` field for outcome)"},
+        401: {"description": "Authentication required — provide a valid Bearer token"},
+        403: {"description": "Admin access required"},
+        422: {"description": "Validation error — invalid or missing email address"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X POST "https://api.giga-pdf.com/api/v1/admin/settings/test-email'
+                    '?to_email=admin@example.com" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.post(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/settings/test-email",\n'
+                    '    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n'
+                    '    params={"to_email": "admin@example.com"},\n'
+                    ")\n"
+                    "result = response.json()\n"
+                    'print("OK" if result["success"] else result["message"])'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const response = await fetch(\n"
+                    '  "https://api.giga-pdf.com/api/v1/admin/settings/test-email?to_email=admin@example.com",\n'
+                    '  { method: "POST", headers: { "Authorization": "Bearer " + ADMIN_TOKEN } }\n'
+                    ");\n"
+                    "const result = await response.json();\n"
+                    "console.log(result.success, result.message);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$ch = curl_init('https://api.giga-pdf.com/api/v1/admin/settings/test-email?to_email=admin@example.com');\n"
+                    "curl_setopt_array($ch, [\n"
+                    "    CURLOPT_POST => true,\n"
+                    "    CURLOPT_RETURNTRANSFER => true,\n"
+                    "    CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $adminToken],\n"
+                    "]);\n"
+                    "$result = json_decode(curl_exec($ch), true);\n"
+                    "echo $result['success'] ? 'OK' : $result['message'];"
+                ),
+            },
+        ]
+    },
+)
 async def test_email_settings(
     to_email: str,
 ):
@@ -175,7 +389,76 @@ async def test_email_settings(
     }
 
 
-@router.post("/test-storage")
+@router.post(
+    "/test-storage",
+    summary="Test storage (S3) connection",
+    description=(
+        "Verify the S3-compatible storage configuration by performing a live connection test.\n\n"
+        "**Admin access required.** Attempts to connect to the configured bucket using the "
+        "current storage credentials (access key, secret key, endpoint, region). Uses a "
+        "`HeadBucket` operation to confirm access without reading or writing any data.\n\n"
+        "Returns connection status, provider name, endpoint, and region on success. "
+        "Compatible with AWS S3, Scaleway Object Storage, MinIO, and any S3-compatible provider."
+    ),
+    response_description="Connection test result with storage provider details",
+    responses={
+        200: {"description": "Connection test result (check `success` field for outcome)"},
+        401: {"description": "Authentication required — provide a valid Bearer token"},
+        403: {"description": "Admin access required"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X POST "https://api.giga-pdf.com/api/v1/admin/settings/test-storage" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.post(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/settings/test-storage",\n'
+                    '    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n'
+                    ")\n"
+                    "result = response.json()\n"
+                    'print("OK" if result["success"] else result["message"])'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const response = await fetch(\n"
+                    '  "https://api.giga-pdf.com/api/v1/admin/settings/test-storage",\n'
+                    '  { method: "POST", headers: { "Authorization": "Bearer " + ADMIN_TOKEN } }\n'
+                    ");\n"
+                    "const result = await response.json();\n"
+                    "console.log(result.success, result.provider);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$ch = curl_init('https://api.giga-pdf.com/api/v1/admin/settings/test-storage');\n"
+                    "curl_setopt_array($ch, [\n"
+                    "    CURLOPT_POST => true,\n"
+                    "    CURLOPT_RETURNTRANSFER => true,\n"
+                    "    CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $adminToken],\n"
+                    "]);\n"
+                    "$result = json_decode(curl_exec($ch), true);\n"
+                    "echo $result['success'] ? 'Connected' : $result['message'];"
+                ),
+            },
+        ]
+    },
+)
 async def test_storage_settings():
     """
     Test storage connection.
@@ -224,7 +507,76 @@ async def test_storage_settings():
         }
 
 
-@router.get("/storage-info")
+@router.get(
+    "/storage-info",
+    summary="Get storage statistics",
+    description=(
+        "Retrieve storage usage statistics from the configured S3-compatible bucket.\n\n"
+        "**Admin access required.** Connects to the bucket and returns object count, "
+        "total size (bytes and human-readable), provider, region, and endpoint.\n\n"
+        "Object count is capped at 1,000 for performance — if the bucket contains more objects, "
+        "a `object_count_note` field is included in the response. "
+        "Returns `configured: false` if no bucket is set."
+    ),
+    response_description="Storage statistics including object count and total size",
+    responses={
+        200: {"description": "Storage info returned (check `configured` field)"},
+        401: {"description": "Authentication required — provide a valid Bearer token"},
+        403: {"description": "Admin access required"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/settings/storage-info" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.get(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/settings/storage-info",\n'
+                    '    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n'
+                    ")\n"
+                    "info = response.json()\n"
+                    'if info.get("configured"):\n'
+                    '    print(info["object_count"], info["total_size_formatted"])'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const response = await fetch(\n"
+                    '  "https://api.giga-pdf.com/api/v1/admin/settings/storage-info",\n'
+                    '  { headers: { "Authorization": "Bearer " + ADMIN_TOKEN } }\n'
+                    ");\n"
+                    "const info = await response.json();\n"
+                    "if (info.configured) console.log(info.object_count, info.total_size_formatted);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$ch = curl_init('https://api.giga-pdf.com/api/v1/admin/settings/storage-info');\n"
+                    "curl_setopt_array($ch, [\n"
+                    "    CURLOPT_RETURNTRANSFER => true,\n"
+                    "    CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $adminToken],\n"
+                    "]);\n"
+                    "$info = json_decode(curl_exec($ch), true);\n"
+                    "if ($info['configured']) echo $info['object_count'] . ' — ' . $info['total_size_formatted'];"
+                ),
+            },
+        ]
+    },
+)
 async def get_storage_info():
     """
     Get storage information and statistics.

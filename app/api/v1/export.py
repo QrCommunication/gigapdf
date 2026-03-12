@@ -23,6 +23,7 @@ router = APIRouter()
     "/{document_id}/export",
     response_model=APIResponse[dict],
     summary="Start document export",
+    response_description="Export job created — contains job_id and initial status to track progress via the jobs endpoint",
     description="""
 Start an asynchronous export operation to convert a PDF document to various formats.
 
@@ -402,6 +403,7 @@ async def start_export(
 @router.get(
     "/{document_id}/export/{job_id}",
     summary="Download export result",
+    response_description="Binary file stream with appropriate Content-Type and Content-Disposition headers for the exported format",
     description="""
 Download the exported file once the export job has completed.
 

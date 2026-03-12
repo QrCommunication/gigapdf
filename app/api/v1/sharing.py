@@ -74,6 +74,7 @@ An email invitation will also be sent.
 ## Response
 Returns invitation details including the invitation ID.
 """,
+    response_description="Invitation details including invitation_id, document info, permission level, and expiration timestamp",
     responses={
         201: {"description": "Invitation created successfully"},
         400: {"description": "Invalid request or already shared"},
@@ -255,6 +256,7 @@ Returns a paginated list of shared documents with:
 - Permission level (view or edit)
 - Share date and expiration (if applicable)
 """,
+    response_description="Paginated list of documents shared with the current user, including owner info and permission levels",
     responses={
         200: {"description": "Shared documents retrieved successfully"},
     },
@@ -418,6 +420,7 @@ Returns a paginated list of shares with:
 - Permission level granted
 - Share creation date
 """,
+    response_description="Paginated list of shares the current user has created, including document and recipient information",
     responses={
         200: {"description": "Shares retrieved successfully"},
     },
@@ -559,6 +562,7 @@ Returns a list of pending invitations with:
 - Invitation message (if any)
 - Expiration date
 """,
+    response_description="List of pending share invitations with document, inviter info, permission level, and expiration date",
     responses={
         200: {"description": "Pending invitations retrieved successfully"},
     },
@@ -689,6 +693,7 @@ Returns the created share with:
 - Permission level
 - Access granted timestamp
 """,
+    response_description="Created share details including share_id, document information, and permission level",
     responses={
         200: {"description": "Invitation accepted successfully"},
         400: {"description": "Invalid or expired invitation"},
@@ -831,6 +836,7 @@ invitations list. The document owner will be notified that you declined.
 ## Response
 Returns confirmation of the declined invitation.
 """,
+    response_description="Confirmation that the invitation was declined and removed from pending list",
     responses={
         200: {"description": "Invitation declined successfully"},
         400: {"description": "Invalid invitation"},
@@ -971,6 +977,7 @@ Returns confirmation of the revoked share including:
 - Document ID
 - Former recipient email
 """,
+    response_description="Confirmation of the revoked share including share_id and the email of the user who lost access",
     responses={
         200: {"description": "Share revoked successfully"},
         403: {"description": "Not authorized to revoke this share"},
@@ -1126,6 +1133,7 @@ Returns the updated share details including:
 - New permission level
 - Updated timestamp
 """,
+    response_description="Updated share details including share_id, old permission, new permission, and updated timestamp",
     responses={
         200: {"description": "Permission updated successfully"},
         400: {"description": "Invalid permission value"},
@@ -1282,6 +1290,7 @@ Returns a list of all shares including:
 - Pending invitations with invitee email and expiration
 - Total count of shares
 """,
+    response_description="List of all active shares and pending invitations for the document, with recipient info and permission levels",
     responses={
         200: {"description": "Document shares retrieved successfully"},
         403: {"description": "Not authorized to view shares for this document"},
@@ -1442,6 +1451,7 @@ Returns the public link details including:
 - Expiration date (if set)
 - Creation timestamp
 """,
+    response_description="Public link details including the unique token, full shareable URL, optional expiration date, and creation timestamp",
     responses={
         201: {"description": "Public link created successfully"},
         400: {"description": "Invalid request or link already exists"},
@@ -1606,6 +1616,7 @@ Returns confirmation of the revoked link including:
 - Revoked token (for reference)
 - Revocation timestamp
 """,
+    response_description="Confirmation that the public link was revoked, including the document_id and the revoked token",
     responses={
         200: {"description": "Public link revoked successfully"},
         404: {"description": "No public link found for this document"},
@@ -1753,6 +1764,7 @@ Returns a paginated list of notifications with:
 - Read/unread status
 - Timestamp
 """,
+    response_description="Paginated list of sharing notifications with type, message, related document/user info, and read status",
     responses={
         200: {"description": "Notifications retrieved successfully"},
     },
@@ -1905,6 +1917,7 @@ in the UI without fetching the full notification list.
 ## Response
 Returns the unread notification count.
 """,
+    response_description="Unread notification count as an integer, suitable for badge display in the UI",
     responses={
         200: {"description": "Unread count retrieved successfully"},
     },
@@ -2024,6 +2037,7 @@ Mark a specific notification as read.
 ## Response
 Returns confirmation that the notification was marked as read.
 """,
+    response_description="Confirmation that the notification was marked as read",
     responses={
         200: {"description": "Notification marked as read successfully"},
         404: {"description": "Notification not found"},
@@ -2153,6 +2167,7 @@ This is useful for a "Mark all as read" button in the UI.
 ## Response
 Returns the count of notifications that were marked as read.
 """,
+    response_description="Count of notifications that were marked as read in this operation",
     responses={
         200: {"description": "All notifications marked as read successfully"},
     },

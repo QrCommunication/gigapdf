@@ -82,16 +82,18 @@ export {
   useRestoreDocumentVersion,
   documentKeys,
 
-  // Page hooks
-  usePages,
+  // Page hooks — pages are identified by page_number (integer), not a UUID
   usePage,
   useCreatePage,
-  useUpdatePage,
   useDeletePage,
   useDuplicatePage,
   useReorderPages,
+  useRotatePage,
+  useResizePage,
+  useExtractPages,
   useMovePage,
-  usePageThumbnail,
+  usePagePreview,
+  usePageImage,
   pageKeys,
 
   // Element hooks
@@ -103,6 +105,7 @@ export {
   useDeleteElement,
   useBulkDeleteElements,
   useDuplicateElement,
+  useMoveElement,
   useUpdateElementZIndex,
   useBringElementToFront,
   useSendElementToBack,
@@ -111,10 +114,11 @@ export {
   elementKeys,
 
   // Upload hooks
+  useUploadDirect,
+  useUnlockDocument,
   useGetPresignedUrl,
   useUploadToPresignedUrl,
   useCompleteUpload,
-  useUploadDirect,
   useCancelUpload,
   useUploadStatus,
   useFileUpload,
@@ -134,6 +138,7 @@ export {
   // OCR hooks
   useStartOcr,
   useOcrStatus,
+  useOcrLanguages,
   useOcrResults,
   useCancelOcr,
   useOcrJobs,
@@ -151,11 +156,22 @@ export {
   jobKeys,
 
   // Storage hooks
-  useStorageInfo,
+  useStorageDocuments,
+  useCreateStorageDocument,
+  useLoadDocument,
+  useUpdateStorageDocument,
+  useDeleteStorageDocument,
+  useMoveDocument,
+  useDocumentVersions,
+  useCreateVersion,
+  useFolders,
+  useCreateFolder,
+  useDeleteFolder,
+  useMoveFolder,
+  useFolderStats,
   useStorageQuota,
-  useStorageUsage,
-  useCleanupTemp,
-  useLargestFiles,
+  useEffectiveQuota,
+  useQuotaPlans,
   storageKeys,
 
   // Billing hooks

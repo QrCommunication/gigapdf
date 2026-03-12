@@ -41,6 +41,7 @@ This endpoint is useful for:
 
 The response includes the page ID, page number, dimensions (width/height in points), rotation angle, and when `include_elements=true`, a complete list of all elements on the page with their properties.
 """,
+    response_description="Page details including dimensions, rotation, and optionally all page elements",
     responses={
         200: {"description": "Page details retrieved successfully"},
         404: {"description": "Document or page not found"},
@@ -137,6 +138,7 @@ Use cases:
 
 The image xref can be obtained from the page elements when retrieving page details with `include_elements=true`.
 """,
+    response_description="Raw image binary data with appropriate Content-Type header (image/png or image/jpeg)",
     responses={
         200: {
             "description": "Image data returned successfully",
@@ -255,6 +257,7 @@ This endpoint converts a PDF page to a raster image (PNG, JPEG, WebP) or vector 
 - `webp`: Modern format with excellent compression
 - `svg`: Vector format, ideal for scaling without quality loss
 """,
+    response_description="Rendered page image as binary data with the requested Content-Type (image/png, image/jpeg, image/webp, or image/svg+xml)",
     responses={
         200: {
             "description": "Page preview image rendered successfully",
@@ -422,6 +425,7 @@ This endpoint allows you to insert new pages into an existing document. Pages ca
 
 The response includes the new page details and updated total page count.
 """,
+    response_description="The newly added page details along with the updated total page count",
     responses={
         201: {"description": "Page added successfully"},
         404: {"description": "Document not found"},
@@ -656,6 +660,7 @@ This operation permanently deletes the specified page and renumbers all subseque
 
 The response includes the deleted page number and the new total page count.
 """,
+    response_description="Confirmation with the deleted page number and updated total page count",
     responses={
         200: {"description": "Page deleted successfully"},
         404: {"description": "Document or page not found"},
@@ -824,6 +829,7 @@ The array `[3, 1, 2]` means:
 
 The response includes the updated page list with new page numbers.
 """,
+    response_description="The full updated page list reflecting the new page order with reassigned page numbers",
     responses={
         200: {"description": "Pages reordered successfully"},
         404: {"description": "Document not found"},
@@ -1025,6 +1031,7 @@ This endpoint rotates a page clockwise by the specified angle. The rotation is c
 
 The response includes the updated page details with new dimensions.
 """,
+    response_description="Updated page details with the new rotation angle and swapped dimensions (for 90/270 degree rotations)",
     responses={
         200: {"description": "Page rotated successfully"},
         404: {"description": "Document or page not found"},
@@ -1225,6 +1232,7 @@ Control where content is positioned when the page size changes without scaling:
 - Cropping pages by reducing dimensions
 - Preparing documents for printing on different paper sizes
 """,
+    response_description="Updated page details reflecting the new dimensions and content scaling applied",
     responses={
         200: {"description": "Page resized successfully"},
         404: {"description": "Document or page not found"},
@@ -1451,6 +1459,7 @@ You can specify pages using two methods (or combine both):
 - Extracting specific pages for sharing
 - Creating document excerpts
 """,
+    response_description="The new document ID and page count of the newly created document containing the extracted pages",
     responses={
         201: {"description": "Pages extracted successfully, new document created"},
         404: {"description": "Document not found"},

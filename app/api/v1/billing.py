@@ -172,39 +172,40 @@ async def ensure_stripe_customer(
     response_model=APIResponse[SubscriptionResponse],
     summary="Get current subscription",
     description="""
-Get the current subscription status.
+Get the current subscription status for the authenticated user or their organization.
 
-**For tenant members**: Returns the organization's subscription.
-Only members with VIEW_BILLING permission can access this.
-
-**For individual users**: Returns their personal subscription.
-
-## Trial Period
-- 14-day free trial for Starter and Pro plans
-- During trial, you can switch plans without payment
-- Billing starts at the end of the trial
-
-## Example (curl)
-```bash
-curl -X GET "https://giga-pdf.com/api/v1/billing/subscription" \\
-  -H "Authorization: Bearer <token>"
-```
-
-## Example (Python)
-```python
-import requests
-
-response = requests.get(
-    "https://giga-pdf.com/api/v1/billing/subscription",
-    headers={"Authorization": "Bearer <token>"}
-)
-subscription = response.json()["data"]
-print(f"Plan: {subscription['current_plan']}")
-print(f"Status: {subscription['status']}")
-if subscription.get('is_in_trial'):
-    print(f"Trial ends in {subscription['trial_days_remaining']} days")
-```
+For tenant members, returns the organization's shared subscription. Individual users get their personal subscription details. Includes trial status and remaining trial days when applicable.
 """,
+    response_description="The current subscription details including plan, status, and trial information",
+    responses={
+        200: {"description": "Subscription details retrieved successfully"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Insufficient permissions to view billing information"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/billing/subscription" \\\n  -H "Authorization: Bearer $TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.get(\n    "https://api.giga-pdf.com/api/v1/billing/subscription",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"}\n)\nsubscription = response.json()["data"]\nprint(f"Plan: {subscription[\'current_plan\']}")\nprint(f"Status: {subscription[\'status\']}")\nif subscription.get("is_in_trial"):\n    print(f"Trial ends in {subscription[\'trial_days_remaining\']} days")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const response = await fetch("https://api.giga-pdf.com/api/v1/billing/subscription", {\n  headers: { "Authorization": "Bearer YOUR_API_TOKEN" }\n});\nconst { data: subscription } = await response.json();\nconsole.log(`Plan: ${subscription.current_plan}`);\nconsole.log(`Status: ${subscription.status}`);\nif (subscription.is_in_trial) {\n  console.log(`Trial ends in ${subscription.trial_days_remaining} days`);\n}',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$client = new GuzzleHttp\\Client();\n$response = $client->get("https://api.giga-pdf.com/api/v1/billing/subscription", [\n    "headers" => ["Authorization" => "Bearer " . $token]\n]);\n$subscription = json_decode($response->getBody(), true)["data"];\necho "Plan: " . $subscription["current_plan"] . "\\n";\necho "Status: " . $subscription["status"] . "\\n";',
+            },
+        ]
+    },
 )
 async def get_subscription(user: AuthenticatedUser) -> APIResponse[SubscriptionResponse]:
     """Get current subscription status."""
@@ -274,30 +275,44 @@ async def get_subscription(user: AuthenticatedUser) -> APIResponse[SubscriptionR
 @router.patch(
     "/subscription",
     response_model=APIResponse[SubscriptionResponse],
-    summary="Update subscription",
+    summary="Update subscription plan",
     description="""
-Change the current subscription plan.
+Change the current subscription plan for the authenticated user or organization.
 
-**Permissions**: Only organization owners can change the plan for tenants.
-
-**During Trial Period (14 days)**:
-- You can switch between Starter and Pro plans freely
-- No payment or proration is applied
-- The trial continues until it ends
-
-**After Trial**:
-- Prorations are automatically applied
-- Upgrades are effective immediately
-- Downgrades take effect at period end
-
-## Example (curl)
-```bash
-curl -X PATCH "https://giga-pdf.com/api/v1/billing/subscription" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"plan_id": "pro"}'
-```
+During an active trial period, plan changes are free and immediate with no proration. After the trial, upgrades take effect immediately with prorations applied, while downgrades take effect at the end of the current billing period. Only organization owners can change the plan for tenant accounts.
 """,
+    response_description="The updated subscription details with new plan information",
+    responses={
+        200: {"description": "Subscription updated successfully"},
+        400: {"description": "Invalid plan ID or no active subscription to update"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Only organization owners can manage billing"},
+        404: {"description": "Specified plan not found or not available"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X PATCH "https://api.giga-pdf.com/api/v1/billing/subscription" \\\n  -H "Authorization: Bearer $TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"plan_id": "pro"}\'',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.patch(\n    "https://api.giga-pdf.com/api/v1/billing/subscription",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"},\n    json={"plan_id": "pro"}\n)\nresult = response.json()["data"]\nprint(f"Updated to: {result[\'current_plan\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const response = await fetch("https://api.giga-pdf.com/api/v1/billing/subscription", {\n  method: "PATCH",\n  headers: {\n    "Authorization": "Bearer YOUR_API_TOKEN",\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({ plan_id: "pro" })\n});\nconst { data } = await response.json();\nconsole.log(`Updated to: ${data.current_plan}`);',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$client = new GuzzleHttp\\Client();\n$response = $client->patch("https://api.giga-pdf.com/api/v1/billing/subscription", [\n    "headers" => [\n        "Authorization" => "Bearer " . $token,\n        "Content-Type" => "application/json"\n    ],\n    "json" => ["plan_id" => "pro"]\n]);\n$result = json_decode($response->getBody(), true)["data"];\necho "Updated to: " . $result["current_plan"] . "\\n";',
+            },
+        ]
+    },
 )
 async def update_subscription(
     user: AuthenticatedUser,
@@ -409,26 +424,41 @@ async def update_subscription(
     response_model=APIResponse[SubscriptionResponse],
     summary="Cancel subscription",
     description="""
-Cancel the current subscription.
+Cancel the current subscription, either immediately or at the end of the billing period.
 
-**Permissions**: Only organization owners can cancel for tenants.
-
-**During Trial**:
-- Canceling during trial immediately reverts to free plan
-- No charges are applied
-
-**After Trial**:
-- By default, cancellation takes effect at the end of the current billing period
-- Set `immediately: true` to cancel immediately (no refund)
-
-## Example (curl)
-```bash
-curl -X POST "https://giga-pdf.com/api/v1/billing/subscription/cancel" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"immediately": false}'
-```
+Canceling during a trial immediately reverts the account to the free plan with no charges. After the trial, the default behavior is to cancel at the end of the current billing period. Setting `immediately` to true cancels immediately without a refund. Only organization owners can cancel for tenant accounts.
 """,
+    response_description="The updated subscription status after cancellation",
+    responses={
+        200: {"description": "Subscription cancelled successfully"},
+        400: {"description": "No active subscription to cancel"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Only organization owners can manage billing"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X POST "https://api.giga-pdf.com/api/v1/billing/subscription/cancel" \\\n  -H "Authorization: Bearer $TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"immediately": false}\'',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\n# Cancel at period end (default)\nresponse = requests.post(\n    "https://api.giga-pdf.com/api/v1/billing/subscription/cancel",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"},\n    json={"immediately": False}\n)\nresult = response.json()["data"]\nprint(f"Status: {result[\'status\']}")\nprint(f"Cancel at period end: {result[\'cancel_at_period_end\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const response = await fetch("https://api.giga-pdf.com/api/v1/billing/subscription/cancel", {\n  method: "POST",\n  headers: {\n    "Authorization": "Bearer YOUR_API_TOKEN",\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({ immediately: false })\n});\nconst { data } = await response.json();\nconsole.log(`Status: ${data.status}`);',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$client = new GuzzleHttp\\Client();\n$response = $client->post("https://api.giga-pdf.com/api/v1/billing/subscription/cancel", [\n    "headers" => [\n        "Authorization" => "Bearer " . $token,\n        "Content-Type" => "application/json"\n    ],\n    "json" => ["immediately" => false]\n]);\n$result = json_decode($response->getBody(), true)["data"];\necho "Status: " . $result["status"] . "\\n";',
+            },
+        ]
+    },
 )
 async def cancel_subscription(
     user: AuthenticatedUser,
@@ -517,20 +547,43 @@ async def cancel_subscription(
 @router.post(
     "/subscription/reactivate",
     response_model=APIResponse[SubscriptionResponse],
-    summary="Reactivate subscription",
+    summary="Reactivate scheduled cancellation",
     description="""
-Reactivate a subscription that was scheduled for cancellation.
+Reactivate a subscription that was previously scheduled for cancellation at the end of the billing period.
 
-**Permissions**: Only organization owners can reactivate for tenants.
-
-Only works if the subscription hasn't actually been canceled yet.
-
-## Example (curl)
-```bash
-curl -X POST "https://giga-pdf.com/api/v1/billing/subscription/reactivate" \\
-  -H "Authorization: Bearer <token>"
-```
+This endpoint only works if the subscription is still active but has `cancel_at_period_end` set to true. It does not restore an already-cancelled subscription. Only organization owners can reactivate for tenant accounts.
 """,
+    response_description="The reactivated subscription details",
+    responses={
+        200: {"description": "Subscription reactivated successfully"},
+        400: {"description": "No subscription to reactivate or not scheduled for cancellation"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Only organization owners can manage billing"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X POST "https://api.giga-pdf.com/api/v1/billing/subscription/reactivate" \\\n  -H "Authorization: Bearer $TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.post(\n    "https://api.giga-pdf.com/api/v1/billing/subscription/reactivate",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"}\n)\nresult = response.json()["data"]\nprint(f"Status: {result[\'status\']}")\nprint(f"Cancel at period end: {result[\'cancel_at_period_end\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const response = await fetch("https://api.giga-pdf.com/api/v1/billing/subscription/reactivate", {\n  method: "POST",\n  headers: { "Authorization": "Bearer YOUR_API_TOKEN" }\n});\nconst { data } = await response.json();\nconsole.log(`Status: ${data.status}, Cancel at period end: ${data.cancel_at_period_end}`);',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$client = new GuzzleHttp\\Client();\n$response = $client->post("https://api.giga-pdf.com/api/v1/billing/subscription/reactivate", [\n    "headers" => ["Authorization" => "Bearer " . $token]\n]);\n$result = json_decode($response->getBody(), true)["data"];\necho "Status: " . $result["status"] . "\\n";',
+            },
+        ]
+    },
 )
 async def reactivate_subscription(
     user: AuthenticatedUser,
@@ -597,26 +650,43 @@ async def reactivate_subscription(
 @router.post(
     "/trial/start",
     response_model=APIResponse[dict],
-    summary="Start free trial",
+    summary="Start 14-day free trial",
     description="""
-Start a 14-day free trial for a plan.
+Start a 14-day free trial for a paid plan (starter or pro).
 
-**Each user/organization can only use the trial once.**
-
-During the trial:
-- Full access to all features of the selected plan
-- Switch between Starter and Pro freely
-- No payment required until trial ends
-- Billing starts automatically after 14 days if not canceled
-
-## Example (curl)
-```bash
-curl -X POST "https://giga-pdf.com/api/v1/billing/trial/start" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"plan_id": "starter"}'
-```
+Each user or organization can only use the trial once. During the trial, you get full access to all plan features, can switch between Starter and Pro freely, and no payment is required. Billing starts automatically at the end of the 14-day period if not cancelled.
 """,
+    response_description="Trial start confirmation with plan details and end date",
+    responses={
+        200: {"description": "Trial started successfully"},
+        400: {"description": "Trial already used, already in trial, or invalid plan specified (only starter/pro allowed)"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Only organization owners can start trials for tenants"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X POST "https://api.giga-pdf.com/api/v1/billing/trial/start" \\\n  -H "Authorization: Bearer $TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"plan_id": "starter"}\'',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.post(\n    "https://api.giga-pdf.com/api/v1/billing/trial/start",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"},\n    json={"plan_id": "starter"}\n)\nresult = response.json()["data"]\nprint(f"Trial started for: {result[\'plan\']}")\nprint(f"Trial ends: {result[\'trial_ends\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const response = await fetch("https://api.giga-pdf.com/api/v1/billing/trial/start", {\n  method: "POST",\n  headers: {\n    "Authorization": "Bearer YOUR_API_TOKEN",\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({ plan_id: "starter" })\n});\nconst { data } = await response.json();\nconsole.log(`Trial started for ${data.plan}, ends ${data.trial_ends}`);',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$client = new GuzzleHttp\\Client();\n$response = $client->post("https://api.giga-pdf.com/api/v1/billing/trial/start", [\n    "headers" => [\n        "Authorization" => "Bearer " . $token,\n        "Content-Type" => "application/json"\n    ],\n    "json" => ["plan_id" => "starter"]\n]);\n$result = json_decode($response->getBody(), true)["data"];\necho "Trial started for: " . $result["plan"] . "\\n";\necho "Trial ends: " . $result["trial_ends"] . "\\n";',
+            },
+        ]
+    },
 )
 async def start_trial(
     user: AuthenticatedUser,
@@ -686,49 +756,44 @@ async def start_trial(
 @router.post(
     "/checkout",
     response_model=APIResponse[CheckoutSessionResponse],
-    summary="Create checkout session",
+    summary="Create Stripe checkout session",
     description="""
-Create a Stripe Checkout session for subscription.
+Create a Stripe Checkout session to start or upgrade a subscription.
 
-**Permissions**: Only organization owners can create checkout for tenants.
-
-**Trial Handling**:
-- If currently in trial, checkout will convert the trial to a paid subscription
-- Billing starts immediately after checkout completion
-- The trial is marked as used
-
-Returns a URL to redirect the user to complete payment.
-
-## Example (curl)
-```bash
-curl -X POST "https://giga-pdf.com/api/v1/billing/checkout" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "plan_id": "starter",
-    "success_url": "https://giga-pdf.com/billing/success",
-    "cancel_url": "https://giga-pdf.com/billing/cancel"
-  }'
-```
-
-## Example (JavaScript)
-```javascript
-const response = await fetch('https://giga-pdf.com/api/v1/billing/checkout', {
-  method: 'POST',
-  headers: {
-    'Authorization': 'Bearer <token>',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    plan_id: 'starter',
-    success_url: 'https://giga-pdf.com/billing/success',
-    cancel_url: 'https://giga-pdf.com/billing/cancel'
-  })
-});
-const { data } = await response.json();
-window.location.href = data.url;
-```
+Returns a URL to redirect the user to the Stripe-hosted checkout page to complete payment. If the user is currently in a trial, completing checkout converts the trial to a paid subscription. Only organization owners can create checkout sessions for tenant accounts.
 """,
+    response_description="Checkout session with the redirect URL to Stripe payment page",
+    responses={
+        200: {"description": "Checkout session created successfully. Redirect the user to the returned URL."},
+        400: {"description": "Stripe error or invalid request"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Only organization owners can manage billing"},
+        404: {"description": "Specified plan not found or not available for purchase"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X POST "https://api.giga-pdf.com/api/v1/billing/checkout" \\\n  -H "Authorization: Bearer $TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"plan_id": "starter", "success_url": "https://example.com/success", "cancel_url": "https://example.com/cancel"}\'',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.post(\n    "https://api.giga-pdf.com/api/v1/billing/checkout",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"},\n    json={\n        "plan_id": "starter",\n        "success_url": "https://example.com/success",\n        "cancel_url": "https://example.com/cancel"\n    }\n)\ncheckout = response.json()["data"]\nprint(f"Redirect to: {checkout[\'url\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const response = await fetch("https://api.giga-pdf.com/api/v1/billing/checkout", {\n  method: "POST",\n  headers: {\n    "Authorization": "Bearer YOUR_API_TOKEN",\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({\n    plan_id: "starter",\n    success_url: "https://example.com/success",\n    cancel_url: "https://example.com/cancel"\n  })\n});\nconst { data } = await response.json();\nwindow.location.href = data.url;  // Redirect to Stripe',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$client = new GuzzleHttp\\Client();\n$response = $client->post("https://api.giga-pdf.com/api/v1/billing/checkout", [\n    "headers" => [\n        "Authorization" => "Bearer " . $token,\n        "Content-Type" => "application/json"\n    ],\n    "json" => [\n        "plan_id" => "starter",\n        "success_url" => "https://example.com/success",\n        "cancel_url" => "https://example.com/cancel"\n    ]\n]);\n$checkout = json_decode($response->getBody(), true)["data"];\nheader("Location: " . $checkout["url"]);  // Redirect to Stripe',
+            },
+        ]
+    },
 )
 async def create_checkout(
     user: AuthenticatedUser,
@@ -823,22 +888,43 @@ async def create_checkout(
 @router.post(
     "/portal",
     response_model=APIResponse[PortalSessionResponse],
-    summary="Create billing portal session",
+    summary="Create Stripe billing portal session",
     description="""
-Create a Stripe Customer Portal session.
+Create a Stripe Customer Portal session for self-service billing management.
 
-**Permissions**: Only organization owners can access the portal for tenants.
-
-Allows users to manage their subscription, payment methods, and view invoices.
-
-## Example (curl)
-```bash
-curl -X POST "https://giga-pdf.com/api/v1/billing/portal" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"return_url": "https://giga-pdf.com/settings/billing"}'
-```
+Returns a URL to the Stripe-hosted portal where users can manage their subscription, update payment methods, download invoices, and change billing details. The portal automatically creates a Stripe customer if one does not yet exist. Only organization owners can access the portal for tenant accounts.
 """,
+    response_description="Portal session with the redirect URL to the Stripe billing portal",
+    responses={
+        200: {"description": "Portal session created successfully. Redirect the user to the returned URL."},
+        400: {"description": "Stripe error or missing user email"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Only organization owners can manage billing"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X POST "https://api.giga-pdf.com/api/v1/billing/portal" \\\n  -H "Authorization: Bearer $TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"return_url": "https://example.com/settings/billing"}\'',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.post(\n    "https://api.giga-pdf.com/api/v1/billing/portal",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"},\n    json={"return_url": "https://example.com/settings/billing"}\n)\nportal = response.json()["data"]\nprint(f"Redirect to: {portal[\'url\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const response = await fetch("https://api.giga-pdf.com/api/v1/billing/portal", {\n  method: "POST",\n  headers: {\n    "Authorization": "Bearer YOUR_API_TOKEN",\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({ return_url: "https://example.com/settings/billing" })\n});\nconst { data } = await response.json();\nwindow.location.href = data.url;  // Redirect to Stripe portal',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$client = new GuzzleHttp\\Client();\n$response = $client->post("https://api.giga-pdf.com/api/v1/billing/portal", [\n    "headers" => [\n        "Authorization" => "Bearer " . $token,\n        "Content-Type" => "application/json"\n    ],\n    "json" => ["return_url" => "https://example.com/settings/billing"]\n]);\n$portal = json_decode($response->getBody(), true)["data"];\nheader("Location: " . $portal["url"]);',
+            },
+        ]
+    },
 )
 async def create_portal(
     user: AuthenticatedUser,
@@ -884,20 +970,40 @@ async def create_portal(
 @router.get(
     "/plans",
     response_model=APIResponse[list[BillingPlanResponse]],
-    summary="List available plans",
+    summary="List available subscription plans",
     description="""
-Get list of available subscription plans.
+Get the list of all available subscription plans with pricing, features, and resource limits.
 
-## Trial Information
-- All paid plans include a 14-day free trial
-- Trial can only be used once per user/organization
-- During trial, switch between plans freely
-
-## Example (curl)
-```bash
-curl -X GET "https://giga-pdf.com/api/v1/billing/plans"
-```
+All paid plans (starter and pro) include a 14-day free trial that can only be used once per user or organization. This endpoint is public and does not require authentication.
 """,
+    response_description="List of available plans with pricing, limits, and feature details",
+    responses={
+        200: {"description": "Plans retrieved successfully"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/billing/plans"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.get("https://api.giga-pdf.com/api/v1/billing/plans")\nplans = response.json()["data"]\n\nfor plan in plans:\n    print(f"{plan[\'name\']}: ${plan[\'price\']}/{plan[\'interval\']}")\n    print(f"  Storage: {plan[\'storage_gb\']} GB")\n    print(f"  API calls: {plan[\'api_calls_limit\']}/month")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const response = await fetch("https://api.giga-pdf.com/api/v1/billing/plans");\nconst { data: plans } = await response.json();\n\nplans.forEach(plan => {\n  console.log(`${plan.name}: $${plan.price}/${plan.interval}`);\n  console.log(`  Storage: ${plan.storage_gb} GB`);\n  console.log(`  API calls: ${plan.api_calls_limit}/month`);\n});',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$client = new GuzzleHttp\\Client();\n$response = $client->get("https://api.giga-pdf.com/api/v1/billing/plans");\n$plans = json_decode($response->getBody(), true)["data"];\n\nforeach ($plans as $plan) {\n    echo "{$plan[\'name\']}: \\${$plan[\'price\']}/{$plan[\'interval\']}\\n";\n    echo "  Storage: {$plan[\'storage_gb\']} GB\\n";\n}',
+            },
+        ]
+    },
 )
 async def list_plans() -> APIResponse[list[BillingPlanResponse]]:
     """List all available subscription plans."""
@@ -944,18 +1050,43 @@ async def list_plans() -> APIResponse[list[BillingPlanResponse]]:
 @router.get(
     "/invoices",
     response_model=APIResponse[list[InvoiceResponse]],
-    summary="List invoices",
+    summary="List billing invoices",
     description="""
-Get list of invoices.
+Get a paginated list of invoices for the authenticated user or their organization.
 
-**Permissions**: Requires VIEW_BILLING permission for organization members.
-
-## Example (curl)
-```bash
-curl -X GET "https://giga-pdf.com/api/v1/billing/invoices?limit=10" \\
-  -H "Authorization: Bearer <token>"
-```
+Returns invoices sorted by creation date (newest first) from Stripe. Returns an empty list if no Stripe customer exists yet (no payment has been made). Organization members require VIEW_BILLING permission.
 """,
+    response_description="List of invoices with amount, status, and download links",
+    responses={
+        200: {"description": "Invoices retrieved successfully (empty list if no billing history)"},
+        400: {"description": "Stripe API error"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Insufficient billing permissions"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/billing/invoices?limit=10" \\\n  -H "Authorization: Bearer $TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.get(\n    "https://api.giga-pdf.com/api/v1/billing/invoices",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"},\n    params={"limit": 10}\n)\ninvoices = response.json()["data"]\n\nfor inv in invoices:\n    print(f"Invoice {inv[\'number\']}: {inv[\'status\']} - ${inv[\'amount_paid\']/100:.2f}")\n    if inv.get("pdf_url"):\n        print(f"  PDF: {inv[\'pdf_url\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const response = await fetch("https://api.giga-pdf.com/api/v1/billing/invoices?limit=10", {\n  headers: { "Authorization": "Bearer YOUR_API_TOKEN" }\n});\nconst { data: invoices } = await response.json();\n\ninvoices.forEach(inv => {\n  console.log(`Invoice ${inv.number}: ${inv.status} - $${(inv.amount_paid/100).toFixed(2)}`);\n  if (inv.pdf_url) console.log(`  PDF: ${inv.pdf_url}`);\n});',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$client = new GuzzleHttp\\Client();\n$response = $client->get("https://api.giga-pdf.com/api/v1/billing/invoices", [\n    "headers" => ["Authorization" => "Bearer " . $token],\n    "query" => ["limit" => 10]\n]);\n$invoices = json_decode($response->getBody(), true)["data"];\n\nforeach ($invoices as $inv) {\n    $amount = number_format($inv["amount_paid"] / 100, 2);\n    echo "Invoice {$inv[\'number\']}: {$inv[\'status\']} - \\${$amount}\\n";\n}',
+            },
+        ]
+    },
 )
 async def list_invoices(
     user: AuthenticatedUser,
@@ -1024,8 +1155,43 @@ async def list_invoices(
 @router.get(
     "/invoices/{invoice_id}",
     response_model=APIResponse[InvoiceResponse],
-    summary="Get invoice",
-    description="Get a single invoice by ID.",
+    summary="Get invoice by ID",
+    description="""
+Retrieve a specific invoice by its Stripe invoice ID.
+
+The invoice must belong to the authenticated user's billing account. Returns full invoice details including amounts, dates, and download URLs. Organization members require VIEW_BILLING permission.
+""",
+    response_description="Invoice details including amount, status, period, and PDF download URL",
+    responses={
+        200: {"description": "Invoice retrieved successfully"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Insufficient billing permissions"},
+        404: {"description": "Invoice not found or does not belong to this account"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/billing/invoices/in_abc123" \\\n  -H "Authorization: Bearer $TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\ninvoice_id = "in_abc123"\nresponse = requests.get(\n    f"https://api.giga-pdf.com/api/v1/billing/invoices/{invoice_id}",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"}\n)\ninv = response.json()["data"]\nprint(f"Invoice {inv[\'number\']}: {inv[\'status\']} - {inv[\'currency\'].upper()} {inv[\'amount_paid\']/100:.2f}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const invoiceId = "in_abc123";\nconst response = await fetch(`https://api.giga-pdf.com/api/v1/billing/invoices/${invoiceId}`, {\n  headers: { "Authorization": "Bearer YOUR_API_TOKEN" }\n});\nconst { data: inv } = await response.json();\nconsole.log(`Invoice ${inv.number}: ${inv.status} - ${inv.currency.toUpperCase()} ${(inv.amount_paid/100).toFixed(2)}`);',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$invoiceId = "in_abc123";\n$client = new GuzzleHttp\\Client();\n$response = $client->get(\n    "https://api.giga-pdf.com/api/v1/billing/invoices/" . $invoiceId,\n    ["headers" => ["Authorization" => "Bearer " . $token]]\n);\n$inv = json_decode($response->getBody(), true)["data"];\necho "Invoice " . $inv["number"] . ": " . $inv["status"] . " - " . strtoupper($inv["currency"]) . " " . number_format($inv["amount_paid"] / 100, 2) . "\\n";',
+            },
+        ]
+    },
 )
 async def get_invoice(
     user: AuthenticatedUser,
@@ -1075,8 +1241,43 @@ async def get_invoice(
 
 @router.get(
     "/invoices/{invoice_id}/download",
-    summary="Download invoice PDF",
-    description="Get the PDF download URL for an invoice.",
+    summary="Get invoice PDF download URL",
+    description="""
+Get the Stripe-hosted PDF download URL for a specific invoice.
+
+Returns a direct link to the invoice PDF hosted by Stripe. This link is time-limited. Returns 404 if the invoice has no PDF available (e.g., pending invoices). The invoice must belong to the authenticated user's billing account.
+""",
+    response_description="Object containing the PDF URL for direct download",
+    responses={
+        200: {"description": "PDF URL retrieved successfully"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Insufficient billing permissions"},
+        404: {"description": "Invoice not found, does not belong to this account, or has no PDF available"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/billing/invoices/in_abc123/download" \\\n  -H "Authorization: Bearer $TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\ninvoice_id = "in_abc123"\nresponse = requests.get(\n    f"https://api.giga-pdf.com/api/v1/billing/invoices/{invoice_id}/download",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"}\n)\npdf_url = response.json()["data"]["pdf_url"]\nprint(f"PDF download URL: {pdf_url}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const invoiceId = "in_abc123";\nconst response = await fetch(`https://api.giga-pdf.com/api/v1/billing/invoices/${invoiceId}/download`, {\n  headers: { "Authorization": "Bearer YOUR_API_TOKEN" }\n});\nconst { data } = await response.json();\nconsole.log("PDF download URL:", data.pdf_url);\n// Open in new tab:\nwindow.open(data.pdf_url, "_blank");',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$invoiceId = "in_abc123";\n$client = new GuzzleHttp\\Client();\n$response = $client->get(\n    "https://api.giga-pdf.com/api/v1/billing/invoices/" . $invoiceId . "/download",\n    ["headers" => ["Authorization" => "Bearer " . $token]]\n);\n$data = json_decode($response->getBody(), true)["data"];\necho "PDF URL: " . $data["pdf_url"] . "\\n";',
+            },
+        ]
+    },
 )
 async def download_invoice(
     user: AuthenticatedUser,
@@ -1121,18 +1322,43 @@ async def download_invoice(
 @router.get(
     "/payment-methods",
     response_model=APIResponse[list[PaymentMethodResponse]],
-    summary="List payment methods",
+    summary="List saved payment methods",
     description="""
-List all payment methods.
+List all saved payment methods for the authenticated user or organization.
 
-**Permissions**: Only organization owners can view payment methods for tenants.
-
-## Example (curl)
-```bash
-curl -X GET "https://giga-pdf.com/api/v1/billing/payment-methods" \\
-  -H "Authorization: Bearer <token>"
-```
+Returns card details (brand, last 4 digits, expiry) for each saved payment method, with an indicator for the default payment method used for recurring charges. Returns an empty list if no Stripe customer exists. Only organization owners can view payment methods for tenant accounts.
 """,
+    response_description="List of saved payment methods with card details and default flag",
+    responses={
+        200: {"description": "Payment methods retrieved successfully (empty list if none saved)"},
+        400: {"description": "Stripe API error"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Only organization owners can manage payment methods"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/billing/payment-methods" \\\n  -H "Authorization: Bearer $TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.get(\n    "https://api.giga-pdf.com/api/v1/billing/payment-methods",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"}\n)\npayment_methods = response.json()["data"]\n\nfor pm in payment_methods:\n    card = pm.get("card", {})\n    default = " (default)" if pm["is_default"] else ""\n    print(f"{card.get(\'brand\', \'card\').upper()} ending in {card.get(\'last4\')}{default}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const response = await fetch("https://api.giga-pdf.com/api/v1/billing/payment-methods", {\n  headers: { "Authorization": "Bearer YOUR_API_TOKEN" }\n});\nconst { data: methods } = await response.json();\n\nmethods.forEach(pm => {\n  const card = pm.card || {};\n  const flag = pm.is_default ? " (default)" : "";\n  console.log(`${card.brand?.toUpperCase()} ending in ${card.last4}${flag}`);\n});',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$client = new GuzzleHttp\\Client();\n$response = $client->get("https://api.giga-pdf.com/api/v1/billing/payment-methods", [\n    "headers" => ["Authorization" => "Bearer " . $token]\n]);\n$methods = json_decode($response->getBody(), true)["data"];\n\nforeach ($methods as $pm) {\n    $card = $pm["card"] ?? [];\n    $flag = $pm["is_default"] ? " (default)" : "";\n    echo strtoupper($card["brand"] ?? "card") . " ending in " . ($card["last4"] ?? "") . $flag . "\\n";\n}',
+            },
+        ]
+    },
 )
 async def list_payment_methods(
     user: AuthenticatedUser,
@@ -1203,22 +1429,43 @@ async def list_payment_methods(
 @router.post(
     "/payment-methods",
     response_model=APIResponse[PaymentMethodResponse],
-    summary="Add payment method",
+    summary="Add a new payment method",
     description="""
-Add a new payment method.
+Attach a Stripe payment method to the authenticated user's or organization's billing account.
 
-**Permissions**: Only organization owners can add payment methods for tenants.
-
-The payment_method_id should be obtained from Stripe.js on the frontend.
-
-## Example (curl)
-```bash
-curl -X POST "https://giga-pdf.com/api/v1/billing/payment-methods" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"payment_method_id": "pm_1234567890"}'
-```
+The `payment_method_id` must be obtained from Stripe.js on the frontend after the customer enters their card details. If no Stripe customer account exists yet, one is created automatically. Only organization owners can add payment methods for tenant accounts. Returns 400 if the Stripe payment method ID is invalid or already attached.
 """,
+    response_description="The newly attached payment method with card details",
+    responses={
+        200: {"description": "Payment method attached successfully"},
+        400: {"description": "Invalid payment method ID or Stripe API error"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Only organization owners can add payment methods"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X POST "https://api.giga-pdf.com/api/v1/billing/payment-methods" \\\n  -H "Authorization: Bearer $TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"payment_method_id": "pm_1234567890abcdef"}\'',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.post(\n    "https://api.giga-pdf.com/api/v1/billing/payment-methods",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"},\n    json={"payment_method_id": "pm_1234567890abcdef"}\n)\npm = response.json()["data"]\ncard = pm.get("card", {})\nprint(f"Added {card.get(\'brand\', \'card\').upper()} ending in {card.get(\'last4\')}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const response = await fetch("https://api.giga-pdf.com/api/v1/billing/payment-methods", {\n  method: "POST",\n  headers: {\n    "Authorization": "Bearer YOUR_API_TOKEN",\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({ payment_method_id: "pm_1234567890abcdef" })\n});\nconst { data: pm } = await response.json();\nconst card = pm.card || {};\nconsole.log(`Added ${card.brand?.toUpperCase()} ending in ${card.last4}`);',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$client = new GuzzleHttp\\Client();\n$response = $client->post("https://api.giga-pdf.com/api/v1/billing/payment-methods", [\n    "headers" => [\n        "Authorization" => "Bearer " . $token,\n        "Content-Type" => "application/json"\n    ],\n    "json" => ["payment_method_id" => "pm_1234567890abcdef"]\n]);\n$pm = json_decode($response->getBody(), true)["data"];\n$card = $pm["card"] ?? [];\necho "Added " . strtoupper($card["brand"] ?? "card") . " ending in " . ($card["last4"] ?? "") . "\\n";',
+            },
+        ]
+    },
 )
 async def add_payment_method(
     user: AuthenticatedUser,
@@ -1274,12 +1521,43 @@ async def add_payment_method(
 @router.delete(
     "/payment-methods/{payment_method_id}",
     response_model=APIResponse[dict],
-    summary="Remove payment method",
+    summary="Remove a saved payment method",
     description="""
-Remove a payment method.
+Detach a saved payment method from the billing account, making it unavailable for future charges.
 
-**Permissions**: Only organization owners can remove payment methods for tenants.
+Removing the default payment method does not block the account but may cause future subscription renewals to fail if no other payment method is set as default. Only organization owners can remove payment methods for tenant accounts. Returns 400 if the Stripe detach operation fails (e.g., the payment method is not attached to this customer).
 """,
+    response_description="Confirmation message that the payment method was removed",
+    responses={
+        200: {"description": "Payment method removed successfully"},
+        400: {"description": "Stripe API error or payment method not attached to this account"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Only organization owners can remove payment methods"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X DELETE "https://api.giga-pdf.com/api/v1/billing/payment-methods/pm_1234567890abcdef" \\\n  -H "Authorization: Bearer $TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\npayment_method_id = "pm_1234567890abcdef"\nresponse = requests.delete(\n    f"https://api.giga-pdf.com/api/v1/billing/payment-methods/{payment_method_id}",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"}\n)\nresult = response.json()["data"]\nprint(result["message"])',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const paymentMethodId = "pm_1234567890abcdef";\nconst response = await fetch(\n  `https://api.giga-pdf.com/api/v1/billing/payment-methods/${paymentMethodId}`,\n  {\n    method: "DELETE",\n    headers: { "Authorization": "Bearer YOUR_API_TOKEN" }\n  }\n);\nconst { data } = await response.json();\nconsole.log(data.message);',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$paymentMethodId = "pm_1234567890abcdef";\n$client = new GuzzleHttp\\Client();\n$response = $client->delete(\n    "https://api.giga-pdf.com/api/v1/billing/payment-methods/" . $paymentMethodId,\n    ["headers" => ["Authorization" => "Bearer " . $token]]\n);\n$result = json_decode($response->getBody(), true)["data"];\necho $result["message"] . "\\n";',
+            },
+        ]
+    },
 )
 async def remove_payment_method(
     user: AuthenticatedUser,
@@ -1313,12 +1591,44 @@ async def remove_payment_method(
 @router.post(
     "/payment-methods/{payment_method_id}/default",
     response_model=APIResponse[PaymentMethodResponse],
-    summary="Set default payment method",
+    summary="Set the default payment method",
     description="""
-Set a payment method as the default.
+Designate an existing saved payment method as the default for future subscription charges and invoice payments.
 
-**Permissions**: Only organization owners can set default payment method for tenants.
+The payment method must already be attached to the account — use `POST /payment-methods` first to attach it. Returns 404 if the specified payment method is not found among the account's saved methods. Returns 400 if no Stripe billing account exists. Only organization owners can change the default payment method for tenant accounts.
 """,
+    response_description="The payment method that was set as default, with its card details and `is_default: true`",
+    responses={
+        200: {"description": "Default payment method updated successfully"},
+        400: {"description": "No billing account found or Stripe API error"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Only organization owners can set the default payment method"},
+        404: {"description": "Payment method not found on this account"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X POST "https://api.giga-pdf.com/api/v1/billing/payment-methods/pm_1234567890abcdef/default" \\\n  -H "Authorization: Bearer $TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\npayment_method_id = "pm_1234567890abcdef"\nresponse = requests.post(\n    f"https://api.giga-pdf.com/api/v1/billing/payment-methods/{payment_method_id}/default",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"}\n)\npm = response.json()["data"]\ncard = pm.get("card", {})\nprint(f"Default set to {card.get(\'brand\', \'card\').upper()} ending in {card.get(\'last4\')}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const paymentMethodId = "pm_1234567890abcdef";\nconst response = await fetch(\n  `https://api.giga-pdf.com/api/v1/billing/payment-methods/${paymentMethodId}/default`,\n  {\n    method: "POST",\n    headers: { "Authorization": "Bearer YOUR_API_TOKEN" }\n  }\n);\nconst { data: pm } = await response.json();\nconst card = pm.card || {};\nconsole.log(`Default set to ${card.brand?.toUpperCase()} ending in ${card.last4}`);',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$paymentMethodId = "pm_1234567890abcdef";\n$client = new GuzzleHttp\\Client();\n$response = $client->post(\n    "https://api.giga-pdf.com/api/v1/billing/payment-methods/" . $paymentMethodId . "/default",\n    ["headers" => ["Authorization" => "Bearer " . $token]]\n);\n$pm = json_decode($response->getBody(), true)["data"];\n$card = $pm["card"] ?? [];\necho "Default set to " . strtoupper($card["brand"] ?? "card") . " ending in " . ($card["last4"] ?? "") . "\\n";',
+            },
+        ]
+    },
 )
 async def set_default_payment_method(
     user: AuthenticatedUser,
@@ -1384,19 +1694,41 @@ async def set_default_payment_method(
 @router.get(
     "/usage",
     response_model=APIResponse[UsageSummaryResponse],
-    summary="Get usage summary",
+    summary="Get current billing period usage",
     description="""
-Get current usage and limits for the billing period.
+Retrieve usage statistics and plan limits for the current billing period.
 
-**For tenant members**: Returns the organization's shared usage.
-**For individuals**: Returns personal usage.
-
-## Example (curl)
-```bash
-curl -X GET "https://giga-pdf.com/api/v1/billing/usage" \\
-  -H "Authorization: Bearer <token>"
-```
+For organization members, returns the shared tenant usage (documents, storage, API calls) and the tenant's plan limits. For individual accounts, returns personal usage and limits derived from the active subscription plan or trial. The response also includes the billing period start and end dates, the billing entity type (`individual` or `tenant`), and trial status. All limits set to `null` indicate unlimited usage on the current plan.
 """,
+    response_description="Usage metrics and plan limits for the current billing period",
+    responses={
+        200: {"description": "Usage summary retrieved successfully"},
+        401: {"description": "Authentication required"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/billing/usage" \\\n  -H "Authorization: Bearer $TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.get(\n    "https://api.giga-pdf.com/api/v1/billing/usage",\n    headers={"Authorization": "Bearer YOUR_API_TOKEN"}\n)\ndata = response.json()["data"]\nusage = data["usage"]\nlimits = data["limits"]\n\nprint(f"Documents: {usage[\'documents\']} / {limits[\'documents\'] or \'unlimited\'}")\nprint(f"Storage: {usage[\'storage_gb\']:.2f} GB / {limits[\'storage_gb\'] or \'unlimited\'} GB")\nprint(f"API calls: {usage[\'api_calls\']} / {limits[\'api_calls\'] or \'unlimited\'}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": 'const response = await fetch("https://api.giga-pdf.com/api/v1/billing/usage", {\n  headers: { "Authorization": "Bearer YOUR_API_TOKEN" }\n});\nconst { data } = await response.json();\nconst { usage, limits } = data;\n\nconsole.log(`Documents: ${usage.documents} / ${limits.documents ?? "unlimited"}`);\nconsole.log(`Storage: ${usage.storage_gb.toFixed(2)} GB / ${limits.storage_gb ?? "unlimited"} GB`);\nconsole.log(`API calls: ${usage.api_calls} / ${limits.api_calls ?? "unlimited"}`);',
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": '<?php\n$client = new GuzzleHttp\\Client();\n$response = $client->get("https://api.giga-pdf.com/api/v1/billing/usage", [\n    "headers" => ["Authorization" => "Bearer " . $token]\n]);\n$data = json_decode($response->getBody(), true)["data"];\n$usage = $data["usage"];\n$limits = $data["limits"];\n\necho "Documents: " . $usage["documents"] . " / " . ($limits["documents"] ?? "unlimited") . "\\n";\necho "Storage: " . number_format($usage["storage_gb"], 2) . " GB / " . ($limits["storage_gb"] ?? "unlimited") . " GB\\n";\necho "API calls: " . $usage["api_calls"] . " / " . ($limits["api_calls"] ?? "unlimited") . "\\n";',
+            },
+        ]
+    },
 )
 async def get_usage(user: AuthenticatedUser) -> APIResponse[UsageSummaryResponse]:
     """Get usage summary for the current billing period."""

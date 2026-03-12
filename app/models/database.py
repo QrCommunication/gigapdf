@@ -713,3 +713,6 @@ class InfrastructureMetric(Base):
 # Import tenant models at the end to resolve forward references
 # This ensures TenantDocument is registered when the mapper is configured
 from app.models.tenant import TenantDocument, Tenant, TenantMember  # noqa: E402, F401
+
+# Import api_key model to register it with the SQLAlchemy mapper
+from app.models.api_key import ApiKey  # noqa: E402, F401

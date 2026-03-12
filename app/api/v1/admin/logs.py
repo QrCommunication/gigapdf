@@ -50,7 +50,104 @@ class LogStatsResponse(BaseModel):
     logs_this_week: int
 
 
-@router.get("", response_model=LogListResponse)
+@router.get(
+    "",
+    response_model=LogListResponse,
+    summary="List system logs",
+    description="""
+Retrieve a paginated and filtered list of system log entries.
+
+**Admin access required.** Logs are aggregated from three sources:
+- **job** — async processing job events (completed, failed, processing, cancelled, pending)
+- **document** — document upload and deletion events
+- **user** — storage usage warnings (triggered at 75%+ and 90%+ usage)
+
+Available filters:
+
+| Parameter | Description |
+|-----------|-------------|
+| `page` / `page_size` | Pagination (page_size max 100, default 50) |
+| `level` | Filter by severity: `info`, `warning`, `error`, `success` |
+| `source` | Filter by source: `job`, `document`, `user` |
+| `user_id` | Show only logs related to a specific user |
+| `start_date` | ISO 8601 datetime — include logs from this date onward |
+| `end_date` | ISO 8601 datetime — include logs up to this date |
+
+Results are sorted from newest to oldest across all sources.
+""",
+    response_description="Paginated list of log entries sorted from newest to oldest",
+    responses={
+        200: {"description": "Log list returned successfully"},
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        422: {"description": "Invalid filter parameter format (e.g. malformed date)"},
+        500: {"description": "Internal server error while aggregating logs"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/logs?level=error&source=job&page=1" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.get(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/logs",\n'
+                    '    params={"level": "error", "source": "job", "page": 1, "page_size": 50},\n'
+                    '    headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},\n'
+                    ")\n"
+                    "data = response.json()\n"
+                    'print(f"Total logs: {data[\'total\']}")\n'
+                    "for log in data['logs']:\n"
+                    '    print(f"[{log[\'level\'].upper()}] {log[\'message\']}")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const params = new URLSearchParams({ level: 'error', source: 'job', page: 1 });\n"
+                    "const response = await fetch(\n"
+                    '  `https://api.giga-pdf.com/api/v1/admin/logs?${params}`,\n'
+                    "  {\n"
+                    '    headers: { "Authorization": `Bearer ${ADMIN_TOKEN}` },\n'
+                    "  }\n"
+                    ");\n"
+                    "const { logs, total } = await response.json();\n"
+                    "console.log(`Total: ${total}`);\n"
+                    "logs.forEach(l => console.log(`[${l.level.toUpperCase()}] ${l.message}`));"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->get(\n"
+                    "    'https://api.giga-pdf.com/api/v1/admin/logs',\n"
+                    "    [\n"
+                    "        'query' => ['level' => 'error', 'source' => 'job', 'page' => 1],\n"
+                    "        'headers' => ['Authorization' => 'Bearer ' . $adminToken],\n"
+                    "    ]\n"
+                    ");\n"
+                    "$data = json_decode($response->getBody(), true);\n"
+                    "echo 'Total logs: ' . $data['total'] . '\\n';\n"
+                    "foreach ($data['logs'] as $log) {\n"
+                    "    echo '[' . strtoupper($log['level']) . '] ' . $log['message'] . '\\n';\n"
+                    "}"
+                ),
+            },
+        ],
+    },
+)
 async def list_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
@@ -204,7 +301,95 @@ async def list_logs(
     )
 
 
-@router.get("/stats", response_model=LogStatsResponse)
+@router.get(
+    "/stats",
+    response_model=LogStatsResponse,
+    summary="Get log statistics summary",
+    description="""
+Retrieve an aggregated summary of log counts broken down by severity level
+and time window.
+
+**Admin access required.** Statistics are derived from the async jobs table
+and mapped to log levels as follows:
+
+| Job status | Log level |
+|------------|-----------|
+| `completed` | `success` |
+| `failed` | `error` |
+| `pending` / `processing` | `info` |
+| `cancelled` | `warning` |
+
+Time-based counts (`logs_today`, `logs_this_week`) reflect jobs created
+within the current calendar day and the past 7 days respectively.
+
+Use this endpoint to populate summary cards or alert badges in the admin panel.
+""",
+    response_description="Log count summary grouped by level and time window",
+    responses={
+        200: {"description": "Log statistics returned successfully"},
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        500: {"description": "Internal server error while computing log statistics"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/logs/stats" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.get(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/logs/stats",\n'
+                    '    headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},\n'
+                    ")\n"
+                    "stats = response.json()\n"
+                    'print(f"Total: {stats[\'total_logs\']}")\n'
+                    'print(f"Errors: {stats[\'error_count\']}, Warnings: {stats[\'warning_count\']}")\n'
+                    'print(f"Today: {stats[\'logs_today\']}, This week: {stats[\'logs_this_week\']}")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const response = await fetch(\n"
+                    '  "https://api.giga-pdf.com/api/v1/admin/logs/stats",\n'
+                    "  {\n"
+                    '    headers: { "Authorization": `Bearer ${ADMIN_TOKEN}` },\n'
+                    "  }\n"
+                    ");\n"
+                    "const stats = await response.json();\n"
+                    "console.log(`Total: ${stats.total_logs}`);\n"
+                    "console.log(`Errors: ${stats.error_count}, Warnings: ${stats.warning_count}`);\n"
+                    "console.log(`Today: ${stats.logs_today}, This week: ${stats.logs_this_week}`);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->get(\n"
+                    "    'https://api.giga-pdf.com/api/v1/admin/logs/stats',\n"
+                    "    ['headers' => ['Authorization' => 'Bearer ' . $adminToken]]\n"
+                    ");\n"
+                    "$stats = json_decode($response->getBody(), true);\n"
+                    "echo 'Total: ' . $stats['total_logs'] . '\\n';\n"
+                    "echo 'Errors: ' . $stats['error_count'] . ', Warnings: ' . $stats['warning_count'] . '\\n';"
+                ),
+            },
+        ],
+    },
+)
 async def get_log_stats(
     db: AsyncSession = Depends(get_db),
 ):
@@ -261,7 +446,127 @@ async def get_log_stats(
     )
 
 
-@router.get("/export")
+@router.get(
+    "/export",
+    summary="Export logs as JSON or CSV",
+    description="""
+Export up to 1 000 log entries in JSON or CSV format.
+
+**Admin access required.** Use the `format` query parameter to choose the
+output format:
+- `json` (default) — returns a JSON object with a `logs` array, `total` count,
+  and `exported_at` timestamp
+- `csv` — returns a downloadable `logs.csv` file with columns:
+  `id`, `level`, `message`, `source`, `user_id`, `timestamp`
+
+Optionally narrow the export window with `start_date` and `end_date`
+(ISO 8601 format). Both parameters are inclusive.
+
+> **Note:** The export is capped at 1 000 entries. Use the `start_date` /
+> `end_date` filters to export specific time ranges if you need more data.
+""",
+    response_description="Log export as JSON object or CSV file attachment",
+    responses={
+        200: {"description": "Logs exported successfully (JSON object or CSV file)"},
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        422: {"description": "Invalid `format` value (must be `json` or `csv`) or malformed date"},
+        500: {"description": "Internal server error during log export"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    "# Export as JSON\n"
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/logs/export?format=json" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"\n\n'
+                    "# Export as CSV (download file)\n"
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/logs/export?format=csv&start_date=2026-01-01T00:00:00" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN" \\\n'
+                    '  --output logs.csv'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "# Export as JSON\n"
+                    "response = requests.get(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/logs/export",\n'
+                    '    params={"format": "json", "start_date": "2026-01-01T00:00:00"},\n'
+                    '    headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},\n'
+                    ")\n"
+                    "export_data = response.json()\n"
+                    'print(f"Exported {export_data[\'total\']} logs at {export_data[\'exported_at\']}")\n\n'
+                    "# Export as CSV\n"
+                    "csv_response = requests.get(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/logs/export",\n'
+                    '    params={"format": "csv"},\n'
+                    '    headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},\n'
+                    ")\n"
+                    "with open('logs.csv', 'wb') as f:\n"
+                    "    f.write(csv_response.content)"
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "// Export as JSON\n"
+                    "const jsonResponse = await fetch(\n"
+                    '  "https://api.giga-pdf.com/api/v1/admin/logs/export?format=json",\n'
+                    "  {\n"
+                    '    headers: { "Authorization": `Bearer ${ADMIN_TOKEN}` },\n'
+                    "  }\n"
+                    ");\n"
+                    "const exportData = await jsonResponse.json();\n"
+                    "console.log(`Exported ${exportData.total} logs`);\n\n"
+                    "// Export as CSV (trigger download in browser)\n"
+                    "const csvResponse = await fetch(\n"
+                    '  "https://api.giga-pdf.com/api/v1/admin/logs/export?format=csv",\n'
+                    "  {\n"
+                    '    headers: { "Authorization": `Bearer ${ADMIN_TOKEN}` },\n'
+                    "  }\n"
+                    ");\n"
+                    "const blob = await csvResponse.blob();\n"
+                    "const url = URL.createObjectURL(blob);\n"
+                    'const a = document.createElement("a");\n'
+                    'a.href = url; a.download = "logs.csv"; a.click();'
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$client = new \\GuzzleHttp\\Client();\n\n"
+                    "// Export as JSON\n"
+                    "$response = $client->get(\n"
+                    "    'https://api.giga-pdf.com/api/v1/admin/logs/export',\n"
+                    "    [\n"
+                    "        'query' => ['format' => 'json'],\n"
+                    "        'headers' => ['Authorization' => 'Bearer ' . $adminToken],\n"
+                    "    ]\n"
+                    ");\n"
+                    "$export = json_decode($response->getBody(), true);\n"
+                    "echo 'Exported ' . $export['total'] . ' logs\\n';\n\n"
+                    "// Export as CSV\n"
+                    "$csvResponse = $client->get(\n"
+                    "    'https://api.giga-pdf.com/api/v1/admin/logs/export',\n"
+                    "    [\n"
+                    "        'query' => ['format' => 'csv'],\n"
+                    "        'headers' => ['Authorization' => 'Bearer ' . $adminToken],\n"
+                    "        'sink' => 'logs.csv',\n"
+                    "    ]\n"
+                    ");"
+                ),
+            },
+        ],
+    },
+)
 async def export_logs(
     format: str = Query("json", regex="^(json|csv)$"),
     start_date: Optional[datetime] = Query(None),

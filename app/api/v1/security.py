@@ -72,6 +72,7 @@ class DecryptDocumentRequest(BaseModel):
     "/{document_id}/security/encrypt",
     response_model=APIResponse[dict],
     summary="Encrypt PDF document",
+    response_description="Encryption applied — contains the document ID, encryption status, algorithm used, and the full set of applied permission flags",
     description="""Add password protection and set permissions for a PDF document.
 
 You can set two types of passwords:
@@ -117,6 +118,7 @@ Supported encryption algorithms:
             },
         },
         400: {"description": "Invalid encryption parameters. This can occur when no password is provided, or an unsupported encryption algorithm is specified."},
+        401: {"description": "Unauthorized. Missing or invalid authentication token."},
         404: {"description": "Document not found. The specified document_id does not exist or the session has expired."},
     },
     openapi_extra={
@@ -351,6 +353,7 @@ async def encrypt_document(
     "/{document_id}/security/decrypt",
     response_model=APIResponse[dict],
     summary="Decrypt PDF document",
+    response_description="Decryption successful — confirms the document is now accessible without password protection",
     description="""Remove password protection from a PDF document.
 
 This endpoint removes all encryption and password protection from a PDF document, making it freely accessible without any credentials.
@@ -382,6 +385,7 @@ This endpoint removes all encryption and password protection from a PDF document
             },
         },
         400: {"description": "Invalid operation. The document is not encrypted or the provided password is incorrect."},
+        401: {"description": "Unauthorized. Missing or invalid authentication token."},
         404: {"description": "Document not found. The specified document_id does not exist or the session has expired."},
     },
     openapi_extra={
@@ -545,6 +549,7 @@ async def decrypt_document(
     "/{document_id}/security/permissions",
     response_model=APIResponse[dict],
     summary="Get document permissions",
+    response_description="Current security settings — contains encryption status, algorithm (if encrypted), and the complete map of permission flags",
     description="""Retrieve the current security permissions and encryption status for a PDF document.
 
 This endpoint returns comprehensive information about the document's security settings:
@@ -588,6 +593,7 @@ This endpoint returns comprehensive information about the document's security se
                 }
             },
         },
+        401: {"description": "Unauthorized. Missing or invalid authentication token."},
         404: {"description": "Document not found. The specified document_id does not exist or the session has expired."},
     },
     openapi_extra={

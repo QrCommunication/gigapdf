@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { uploadService } from '../services/uploads';
-import { documentKeys } from './use-documents';
+import { storageKeys } from './use-storage';
 import type { UploadResponse } from '@giga-pdf/types';
 
 /**
@@ -12,64 +12,8 @@ export const uploadKeys = {
 };
 
 /**
- * Hook to get presigned URL for upload
- */
-export const useGetPresignedUrl = () => {
-  return useMutation({
-    mutationFn: ({
-      fileName,
-      fileType,
-      fileSize,
-    }: {
-      fileName: string;
-      fileType: string;
-      fileSize: number;
-    }) => uploadService.getPresignedUrl(fileName, fileType, fileSize),
-  });
-};
-
-/**
- * Hook to upload file to presigned URL
- */
-export const useUploadToPresignedUrl = () => {
-  return useMutation({
-    mutationFn: ({
-      url,
-      file,
-      onProgress,
-    }: {
-      url: string;
-      file: File;
-      onProgress?: (progress: number) => void;
-    }) => uploadService.uploadToPresignedUrl(url, file, onProgress),
-  });
-};
-
-/**
- * Hook to complete upload
- */
-export const useCompleteUpload = () => {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({
-      uploadId,
-      documentData,
-    }: {
-      uploadId: string;
-      documentData?: {
-        title?: string;
-        folder_id?: string;
-      };
-    }) => uploadService.completeUpload(uploadId, documentData),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
-    },
-  });
-};
-
-/**
- * Hook to upload file directly
+ * Hook to upload a PDF file directly (multipart/form-data)
+ * Backend: POST /documents/upload
  */
 export const useUploadDirect = () => {
   const queryClient = useQueryClient();
@@ -88,13 +32,90 @@ export const useUploadDirect = () => {
       onProgress?: (progress: number) => void;
     }) => uploadService.uploadDirect(file, documentData, onProgress),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: storageKeys.documents() });
+    },
+  });
+};
+
+/**
+ * Hook to unlock a password-protected document
+ * Backend: POST /documents/{document_id}/unlock
+ */
+export const useUnlockDocument = () => {
+  return useMutation({
+    mutationFn: ({
+      documentId,
+      password,
+    }: {
+      documentId: string;
+      password: string;
+    }) => uploadService.unlockDocument(documentId, password),
+  });
+};
+
+/**
+ * Hook to get presigned URL for upload
+ * TODO: Backend endpoint not yet implemented — use useUploadDirect instead
+ */
+export const useGetPresignedUrl = () => {
+  return useMutation({
+    mutationFn: ({
+      fileName,
+      fileType,
+      fileSize,
+    }: {
+      fileName: string;
+      fileType: string;
+      fileSize: number;
+    }) => uploadService.getPresignedUrl(fileName, fileType, fileSize),
+  });
+};
+
+/**
+ * Hook to upload file to presigned URL
+ * TODO: Backend endpoint not yet implemented — use useUploadDirect instead
+ */
+export const useUploadToPresignedUrl = () => {
+  return useMutation({
+    mutationFn: ({
+      url,
+      file,
+      onProgress,
+    }: {
+      url: string;
+      file: File;
+      onProgress?: (progress: number) => void;
+    }) => uploadService.uploadToPresignedUrl(url, file, onProgress),
+  });
+};
+
+/**
+ * Hook to complete upload
+ * TODO: Backend endpoint not yet implemented — use useUploadDirect instead
+ */
+export const useCompleteUpload = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      uploadId,
+      documentData,
+    }: {
+      uploadId: string;
+      documentData?: {
+        title?: string;
+        folder_id?: string;
+      };
+    }) => uploadService.completeUpload(uploadId, documentData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: storageKeys.documents() });
     },
   });
 };
 
 /**
  * Hook to cancel upload
+ * TODO: Backend endpoint not yet implemented
  */
 export const useCancelUpload = () => {
   const queryClient = useQueryClient();
@@ -109,6 +130,7 @@ export const useCancelUpload = () => {
 
 /**
  * Hook to get upload status
+ * TODO: Backend endpoint not yet implemented
  */
 export const useUploadStatus = (uploadId: string, enabled = true) => {
   return useQuery({
@@ -124,12 +146,11 @@ export const useUploadStatus = (uploadId: string, enabled = true) => {
 };
 
 /**
- * Combined hook for full upload workflow with presigned URL
+ * Simplified combined hook for direct file upload
+ * Uses POST /documents/upload (multipart/form-data)
  */
 export const useFileUpload = () => {
-  const getPresignedUrl = useGetPresignedUrl();
-  const uploadToUrl = useUploadToPresignedUrl();
-  const completeUpload = useCompleteUpload();
+  const uploadDirect = useUploadDirect();
 
   const uploadFile = async (
     file: File,
@@ -139,33 +160,12 @@ export const useFileUpload = () => {
     },
     onProgress?: (progress: number) => void
   ) => {
-    // Step 1: Get presigned URL
-    const { upload_id, upload_url } = await getPresignedUrl.mutateAsync({
-      fileName: file.name,
-      fileType: file.type,
-      fileSize: file.size,
-    });
-
-    // Step 2: Upload to presigned URL
-    await uploadToUrl.mutateAsync({
-      url: upload_url,
-      file,
-      onProgress,
-    });
-
-    // Step 3: Complete upload
-    const result = await completeUpload.mutateAsync({
-      uploadId: upload_id,
-      documentData,
-    });
-
-    return result;
+    return uploadDirect.mutateAsync({ file, documentData, onProgress });
   };
 
   return {
     uploadFile,
-    isLoading:
-      getPresignedUrl.isPending || uploadToUrl.isPending || completeUpload.isPending,
-    error: getPresignedUrl.error || uploadToUrl.error || completeUpload.error,
+    isLoading: uploadDirect.isPending,
+    error: uploadDirect.error,
   };
 };

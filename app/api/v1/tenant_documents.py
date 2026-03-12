@@ -129,62 +129,47 @@ def has_permission(membership: TenantMember, permission: TenantPermission) -> bo
 @router.get(
     "/my-tenants",
     response_model=APIResponse[list[TenantMembershipResponse]],
-    summary="Get user's tenant memberships",
+    summary="List the user's organization memberships",
     description="""
-Get all organizations/tenants the current user belongs to.
+Retrieve all organizations (tenants) the current user belongs to.
 
-Returns tenant information along with user's role and permissions in each.
-Used to display organization options in the user interface.
+Returns one entry per active membership, including the user's role and resolved
+permission list for each organization.
 
-## Response Fields
-- **tenant_id**: Organization UUID
-- **tenant_name**: Organization display name
-- **tenant_slug**: URL-friendly identifier
-- **role**: User's role (owner, admin, manager, member, viewer)
-- **permissions**: List of granted permissions
-- **is_active**: Whether membership is active
+**Roles**: `owner`, `admin`, `manager`, `member`, `viewer`
 
-## Example (curl)
-```bash
-curl -X GET "http://localhost:8000/api/v1/tenant-documents/my-tenants?user_id=USER_ID" \\
-  -H "Authorization: Bearer <token>"
-```
-
-## Example (Python)
-```python
-import requests
-
-response = requests.get(
-    "http://localhost:8000/api/v1/tenant-documents/my-tenants",
-    headers={"Authorization": f"Bearer {token}"},
-    params={"user_id": user_id}
-)
-tenants = response.json()["data"]
-for t in tenants:
-    print(f"Organization: {t['tenant_name']} - Role: {t['role']}")
-```
-
-## Example (JavaScript)
-```javascript
-const response = await fetch(
-  `http://localhost:8000/api/v1/tenant-documents/my-tenants?user_id=${userId}`,
-  { headers: { 'Authorization': `Bearer ${token}` } }
-);
-const { data: tenants } = await response.json();
-tenants.forEach(t => console.log(`${t.tenant_name}: ${t.role}`));
-```
-
-## Example (PHP)
-```php
-$ch = curl_init("http://localhost:8000/api/v1/tenant-documents/my-tenants?user_id={$user_id}");
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => ["Authorization: Bearer {$token}"]
-]);
-$data = json_decode(curl_exec($ch), true);
-$tenants = $data['data'];
-```
+**Permissions** are derived from the role unless `custom_permissions` are set.
+Inactive organizations (`status != ACTIVE`) are excluded from the response.
 """,
+    response_description="Array of membership objects, one per active organization",
+    responses={
+        200: {"description": "Memberships returned (empty array if user belongs to no organization)"},
+        422: {"description": "Missing or invalid `user_id` query parameter"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/tenant-documents/my-tenants?user_id=USER_ID" \\\n  -H "Authorization: Bearer $TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.get(\n    "https://api.giga-pdf.com/api/v1/tenant-documents/my-tenants",\n    headers={"Authorization": "Bearer $TOKEN"},\n    params={"user_id": user_id}\n)\nfor t in response.json()["data"]:\n    print(f"{t[\'tenant_name\']}: {t[\'role\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": "const response = await fetch(\n  `https://api.giga-pdf.com/api/v1/tenant-documents/my-tenants?user_id=${userId}`,\n  { headers: { 'Authorization': `Bearer ${token}` } }\n);\nconst { data: tenants } = await response.json();\ntenants.forEach(t => console.log(`${t.tenant_name}: ${t.role}`));",
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": "<?php\n$ch = curl_init(\"https://api.giga-pdf.com/api/v1/tenant-documents/my-tenants?user_id={$userId}\");\ncurl_setopt_array($ch, [\n    CURLOPT_RETURNTRANSFER => true,\n    CURLOPT_HTTPHEADER => [\"Authorization: Bearer {$token}\"]\n]);\n$tenants = json_decode(curl_exec($ch), true)['data'];\nforeach ($tenants as $t) {\n    echo \"{$t['tenant_name']}: {$t['role']}\\n\";\n}",
+            },
+        ]
+    },
 )
 async def get_my_tenants(
     user_id: str = Query(..., description="User ID")
@@ -240,62 +225,54 @@ async def get_my_tenants(
 @router.get(
     "/{tenant_id}/documents",
     response_model=APIResponse[TenantDocumentListResponse],
-    summary="Get shared documents in tenant",
+    summary="List documents shared in an organization",
     description="""
-Get all documents shared within an organization that the user can access.
+Retrieve all documents currently shared within a specific organization.
 
-Returns documents shared by all members, with access levels and owner information.
-Supports pagination for large document collections.
+The user must be an **active member** of the organization and have the
+`VIEW_DOCUMENTS` permission. Documents marked as deleted are excluded.
 
-## Response Fields
-- **documents**: List of shared documents with metadata
-- **total**: Total number of shared documents
-- **page**: Current page number
-- **page_size**: Items per page
+Results are sorted by `added_at` descending (most recently shared first)
+and support **pagination** via `page` and `page_size` parameters.
 
-## Example (curl)
-```bash
-curl -X GET "http://localhost:8000/api/v1/tenant-documents/{tenant_id}/documents?user_id=USER_ID&page=1&page_size=20" \\
-  -H "Authorization: Bearer <token>"
-```
-
-## Example (Python)
-```python
-import requests
-
-response = requests.get(
-    f"http://localhost:8000/api/v1/tenant-documents/{tenant_id}/documents",
-    headers={"Authorization": f"Bearer {token}"},
-    params={"user_id": user_id, "page": 1, "page_size": 20}
-)
-data = response.json()["data"]
-for doc in data["documents"]:
-    print(f"{doc['document_name']} - {doc['access_level']} - Owner: {doc['owner_email']}")
-```
-
-## Example (JavaScript)
-```javascript
-const response = await fetch(
-  `http://localhost:8000/api/v1/tenant-documents/${tenantId}/documents?user_id=${userId}`,
-  { headers: { 'Authorization': `Bearer ${token}` } }
-);
-const { data } = await response.json();
-data.documents.forEach(doc => {
-  console.log(`${doc.document_name}: ${doc.access_level}`);
-});
-```
-
-## Example (PHP)
-```php
-$ch = curl_init("http://localhost:8000/api/v1/tenant-documents/{$tenant_id}/documents?user_id={$user_id}");
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => ["Authorization: Bearer {$token}"]
-]);
-$result = json_decode(curl_exec($ch), true);
-$documents = $result['data']['documents'];
-```
+**Response fields per document**:
+- `document_id`, `document_name`, `file_size_bytes`, `page_count`
+- `access_level`: `read` or `write`
+- `owner_id`, `owner_email`: The document's original owner
+- `shared_by_id`, `shared_by_email`: Who shared it to this organization
+- `added_at`: ISO timestamp when it was shared
 """,
+    response_description="Paginated list of shared documents with metadata",
+    responses={
+        200: {"description": "Documents listed successfully"},
+        403: {"description": "Not a member of this organization or missing VIEW_DOCUMENTS permission"},
+        404: {"description": "User not found"},
+        422: {"description": "Invalid query parameters"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/tenant-documents/{tenant_id}/documents?user_id=USER_ID&page=1&page_size=20" \\\n  -H "Authorization: Bearer $TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.get(\n    f"https://api.giga-pdf.com/api/v1/tenant-documents/{tenant_id}/documents",\n    headers={"Authorization": "Bearer $TOKEN"},\n    params={"user_id": user_id, "page": 1, "page_size": 20}\n)\ndata = response.json()["data"]\nfor doc in data["documents"]:\n    print(f"{doc[\'document_name\']} [{doc[\'access_level\']}] - {doc[\'owner_email\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": "const response = await fetch(\n  `https://api.giga-pdf.com/api/v1/tenant-documents/${tenantId}/documents?user_id=${userId}&page=1&page_size=20`,\n  { headers: { 'Authorization': `Bearer ${token}` } }\n);\nconst { data } = await response.json();\ndata.documents.forEach(doc => console.log(`${doc.document_name}: ${doc.access_level}`));",
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": "<?php\n$ch = curl_init(\"https://api.giga-pdf.com/api/v1/tenant-documents/{$tenantId}/documents?user_id={$userId}&page=1&page_size=20\");\ncurl_setopt_array($ch, [\n    CURLOPT_RETURNTRANSFER => true,\n    CURLOPT_HTTPHEADER => [\"Authorization: Bearer {$token}\"]\n]);\n$data = json_decode(curl_exec($ch), true)['data'];\nforeach ($data['documents'] as $doc) {\n    echo \"{$doc['document_name']} [{$doc['access_level']}]\\n\";\n}",
+            },
+        ]
+    },
 )
 async def get_tenant_documents(
     tenant_id: str,
@@ -389,84 +366,50 @@ async def get_tenant_documents(
     "/{tenant_id}/share",
     response_model=APIResponse[SharedDocumentResponse],
     status_code=status.HTTP_201_CREATED,
-    summary="Share document with organization",
+    summary="Share a document with an organization",
     description="""
-Share your document with all members of an organization.
+Share one of your documents with all members of an organization.
 
-**Important**: Only document owners can share their documents.
-If the document is already shared, the access level will be updated.
+**Rules**:
+- Only the **document owner** can share a document.
+- The user must have the `SHARE_DOCUMENTS` permission in the target organization.
+- `access_level` must be `read` (view-only) or `write` (edit access).
+- If the document is already shared with this organization, the access level is **updated** (idempotent).
 
-## Access Levels
-- **read**: Members can view but not modify the document
-- **write**: Members can view and edit the document
-
-## Request Body
-- **document_id**: UUID of the document to share (must be owned by the user)
-- **access_level**: Either 'read' or 'write'
-
-## Example (curl)
-```bash
-curl -X POST "http://localhost:8000/api/v1/tenant-documents/{tenant_id}/share?user_id=USER_ID" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"document_id": "uuid", "access_level": "read"}'
-```
-
-## Example (Python)
-```python
-import requests
-
-# Share a document with read access
-response = requests.post(
-    f"http://localhost:8000/api/v1/tenant-documents/{tenant_id}/share",
-    headers={"Authorization": f"Bearer {token}"},
-    params={"user_id": user_id},
-    json={
-        "document_id": "document-uuid-here",
-        "access_level": "read"  # or "write" for edit access
-    }
-)
-shared_doc = response.json()["data"]
-print(f"Shared: {shared_doc['document_name']}")
-```
-
-## Example (JavaScript)
-```javascript
-const response = await fetch(
-  `http://localhost:8000/api/v1/tenant-documents/${tenantId}/share?user_id=${userId}`,
-  {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      document_id: documentId,
-      access_level: 'write'
-    })
-  }
-);
-const { data: sharedDoc } = await response.json();
-```
-
-## Example (PHP)
-```php
-$ch = curl_init("http://localhost:8000/api/v1/tenant-documents/{$tenant_id}/share?user_id={$user_id}");
-curl_setopt_array($ch, [
-    CURLOPT_POST => true,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        'Content-Type: application/json',
-        "Authorization: Bearer {$token}"
-    ],
-    CURLOPT_POSTFIELDS => json_encode([
-        'document_id' => $document_id,
-        'access_level' => 'read'
-    ])
-]);
-$result = json_decode(curl_exec($ch), true);
-```
+Returns the shared document record with owner and sharing metadata.
 """,
+    response_description="Shared document record including access level and owner information",
+    responses={
+        201: {"description": "Document shared successfully (or access level updated)"},
+        400: {"description": "Invalid access level"},
+        403: {"description": "Not a member, missing SHARE_DOCUMENTS permission, or not the document owner"},
+        404: {"description": "User or document not found"},
+        422: {"description": "Validation error in request body"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X POST "https://api.giga-pdf.com/api/v1/tenant-documents/{tenant_id}/share?user_id=USER_ID" \\\n  -H "Authorization: Bearer $TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"document_id": "DOC_UUID", "access_level": "read"}\'',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.post(\n    f"https://api.giga-pdf.com/api/v1/tenant-documents/{tenant_id}/share",\n    headers={"Authorization": "Bearer $TOKEN"},\n    params={"user_id": user_id},\n    json={"document_id": "DOC_UUID", "access_level": "read"}\n)\nshared_doc = response.json()["data"]\nprint(f"Shared: {shared_doc[\'document_name\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": "const response = await fetch(\n  `https://api.giga-pdf.com/api/v1/tenant-documents/${tenantId}/share?user_id=${userId}`,\n  {\n    method: 'POST',\n    headers: {\n      'Content-Type': 'application/json',\n      'Authorization': `Bearer ${token}`\n    },\n    body: JSON.stringify({ document_id: documentId, access_level: 'read' })\n  }\n);\nconst { data: sharedDoc } = await response.json();",
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": "<?php\n$ch = curl_init(\"https://api.giga-pdf.com/api/v1/tenant-documents/{$tenantId}/share?user_id={$userId}\");\ncurl_setopt_array($ch, [\n    CURLOPT_POST => true,\n    CURLOPT_RETURNTRANSFER => true,\n    CURLOPT_HTTPHEADER => [\n        'Content-Type: application/json',\n        \"Authorization: Bearer {$token}\"\n    ],\n    CURLOPT_POSTFIELDS => json_encode(['document_id' => $docId, 'access_level' => 'read'])\n]);\n$sharedDoc = json_decode(curl_exec($ch), true)['data'];",
+            },
+        ]
+    },
 )
 async def share_document_with_tenant(
     tenant_id: str,
@@ -594,18 +537,49 @@ async def share_document_with_tenant(
 @router.delete(
     "/{tenant_id}/documents/{document_id}",
     response_model=APIResponse[dict],
-    summary="Unshare document from tenant",
+    summary="Unshare a document from an organization",
     description="""
-Remove a document from tenant sharing.
+Remove a document from an organization's shared document pool.
 
-Only the document owner or tenant admins can unshare documents.
+**Who can unshare**:
+- The **document owner** can always unshare their own document.
+- **Tenant admins** (role `owner` or `admin`) can unshare any document.
 
-## Example (curl)
-```bash
-curl -X DELETE "http://localhost:8000/api/v1/tenant-documents/{tenant_id}/documents/{document_id}" \\
-  -H "Authorization: Bearer <token>"
-```
+Other members will receive a `403 Forbidden` response.
+
+On success, the document remains in the owner's personal library but is no longer
+accessible to organization members.
 """,
+    response_description="Confirmation message with the document name",
+    responses={
+        200: {"description": "Document unshared successfully"},
+        403: {"description": "Not a member, or not the document owner or admin"},
+        404: {"description": "User not found, or document not shared with this organization"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X DELETE "https://api.giga-pdf.com/api/v1/tenant-documents/{tenant_id}/documents/{document_id}?user_id=USER_ID" \\\n  -H "Authorization: Bearer $TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.delete(\n    f"https://api.giga-pdf.com/api/v1/tenant-documents/{tenant_id}/documents/{document_id}",\n    headers={"Authorization": "Bearer $TOKEN"},\n    params={"user_id": user_id}\n)\nprint(response.json()["data"]["message"])',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": "const response = await fetch(\n  `https://api.giga-pdf.com/api/v1/tenant-documents/${tenantId}/documents/${documentId}?user_id=${userId}`,\n  {\n    method: 'DELETE',\n    headers: { 'Authorization': `Bearer ${token}` }\n  }\n);\nconst { data } = await response.json();\nconsole.log(data.message);",
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": "<?php\n$ch = curl_init(\"https://api.giga-pdf.com/api/v1/tenant-documents/{$tenantId}/documents/{$documentId}?user_id={$userId}\");\ncurl_setopt_array($ch, [\n    CURLOPT_CUSTOMREQUEST => 'DELETE',\n    CURLOPT_RETURNTRANSFER => true,\n    CURLOPT_HTTPHEADER => [\"Authorization: Bearer {$token}\"]\n]);\n$result = json_decode(curl_exec($ch), true);\necho $result['data']['message'];",
+            },
+        ]
+    },
 )
 async def unshare_document(
     tenant_id: str,
@@ -673,20 +647,49 @@ async def unshare_document(
 @router.patch(
     "/{tenant_id}/documents/{document_id}/access",
     response_model=APIResponse[SharedDocumentResponse],
-    summary="Update document access level",
+    summary="Update access level for a shared document",
     description="""
-Update the access level for a shared document.
+Change the access level (`read` or `write`) for a document already shared with an organization.
 
-Only the document owner can change access levels.
+**Only the document owner** can modify the access level. Tenant admins cannot change
+access levels — only the person who owns the document has this right.
 
-## Example (curl)
-```bash
-curl -X PATCH "http://localhost:8000/api/v1/tenant-documents/{tenant_id}/documents/{document_id}/access" \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"access_level": "write"}'
-```
+**Access levels**:
+- `read` — Organization members can view the document but not edit it.
+- `write` — Organization members can view and edit the document.
 """,
+    response_description="Updated shared document record with the new access level",
+    responses={
+        200: {"description": "Access level updated successfully"},
+        400: {"description": "Invalid access level — must be 'read' or 'write'"},
+        403: {"description": "Only the document owner can change the access level"},
+        404: {"description": "User not found, or document not shared with this organization"},
+        422: {"description": "Missing query parameters"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X PATCH "https://api.giga-pdf.com/api/v1/tenant-documents/{tenant_id}/documents/{document_id}/access?user_id=USER_ID&access_level=write" \\\n  -H "Authorization: Bearer $TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.patch(\n    f"https://api.giga-pdf.com/api/v1/tenant-documents/{tenant_id}/documents/{document_id}/access",\n    headers={"Authorization": "Bearer $TOKEN"},\n    params={"user_id": user_id, "access_level": "write"}\n)\nshared_doc = response.json()["data"]\nprint(f"Access updated to: {shared_doc[\'access_level\']}")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": "const response = await fetch(\n  `https://api.giga-pdf.com/api/v1/tenant-documents/${tenantId}/documents/${documentId}/access?user_id=${userId}&access_level=write`,\n  {\n    method: 'PATCH',\n    headers: { 'Authorization': `Bearer ${token}` }\n  }\n);\nconst { data: sharedDoc } = await response.json();\nconsole.log(`Access: ${sharedDoc.access_level}`);",
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": "<?php\n$ch = curl_init(\"https://api.giga-pdf.com/api/v1/tenant-documents/{$tenantId}/documents/{$documentId}/access?user_id={$userId}&access_level=write\");\ncurl_setopt_array($ch, [\n    CURLOPT_CUSTOMREQUEST => 'PATCH',\n    CURLOPT_RETURNTRANSFER => true,\n    CURLOPT_HTTPHEADER => [\"Authorization: Bearer {$token}\"]\n]);\n$sharedDoc = json_decode(curl_exec($ch), true)['data'];\necho \"Access: {$sharedDoc['access_level']}\";",
+            },
+        ]
+    },
 )
 async def update_document_access(
     tenant_id: str,
@@ -761,18 +764,48 @@ async def update_document_access(
 @router.get(
     "/{tenant_id}/can-access/{document_id}",
     response_model=APIResponse[dict],
-    summary="Check document access",
+    summary="Check a user's access to a shared document",
     description="""
-Check if user can access a document and at what level.
+Determine what level of access a user has for a specific document within an organization.
 
-Returns access level ('none', 'read', 'write', 'owner') and permissions.
+**Response fields**:
+- `has_access` (bool): Whether the user can access the document at all.
+- `access_level` (str): One of `none`, `read`, `write`, `owner`.
+- `can_view` (bool): True if the user can view the document.
+- `can_edit` (bool): True if the user can edit the document.
+- `is_owner` (bool): True if the user owns the document.
 
-## Example (curl)
-```bash
-curl -X GET "http://localhost:8000/api/v1/tenant-documents/{tenant_id}/can-access/{document_id}?user_id=xxx" \\
-  -H "Authorization: Bearer <token>"
-```
+This endpoint always returns `200` — check `has_access` and `access_level` in the payload.
 """,
+    response_description="Access details: level, view/edit rights, and ownership flag",
+    responses={
+        200: {"description": "Access check completed (always 200, check payload for result)"},
+        422: {"description": "Missing `user_id` query parameter"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/tenant-documents/{tenant_id}/can-access/{document_id}?user_id=USER_ID" \\\n  -H "Authorization: Bearer $TOKEN"',
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": 'import requests\n\nresponse = requests.get(\n    f"https://api.giga-pdf.com/api/v1/tenant-documents/{tenant_id}/can-access/{document_id}",\n    headers={"Authorization": "Bearer $TOKEN"},\n    params={"user_id": user_id}\n)\naccess = response.json()["data"]\nif access["can_edit"]:\n    print("User can edit")\nelif access["can_view"]:\n    print("User can view only")\nelse:\n    print("No access")',
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": "const response = await fetch(\n  `https://api.giga-pdf.com/api/v1/tenant-documents/${tenantId}/can-access/${documentId}?user_id=${userId}`,\n  { headers: { 'Authorization': `Bearer ${token}` } }\n);\nconst { data: access } = await response.json();\nconsole.log(`Access level: ${access.access_level}, can_edit: ${access.can_edit}`);",
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": "<?php\n$ch = curl_init(\"https://api.giga-pdf.com/api/v1/tenant-documents/{$tenantId}/can-access/{$documentId}?user_id={$userId}\");\ncurl_setopt_array($ch, [\n    CURLOPT_RETURNTRANSFER => true,\n    CURLOPT_HTTPHEADER => [\"Authorization: Bearer {$token}\"]\n]);\n$access = json_decode(curl_exec($ch), true)['data'];\necho \"Access level: {$access['access_level']}\";",
+            },
+        ]
+    },
 )
 async def check_document_access(
     tenant_id: str,

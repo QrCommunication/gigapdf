@@ -20,6 +20,7 @@ from app.api.websocket import cleanup_task, get_socketio_app
 from app.config import get_settings
 from app.core.cache import close_redis, get_redis
 from app.core.database import close_database, init_database
+from app.middleware.api_key_auth import ApiKeyAuthMiddleware
 from app.middleware.api_quota import APIQuotaMiddleware
 from app.middleware.error_handler import setup_exception_handlers
 from app.middleware.rate_limiter import RateLimitMiddleware
@@ -356,6 +357,12 @@ Rate limit headers are included in all responses:
 
     # API quota tracking middleware
     app.add_middleware(APIQuotaMiddleware)
+
+    # API key authentication middleware
+    # Runs after quota/rate tracking so that per-key rate limits are applied
+    # independently of the plan-level quota.  Placed here so it executes
+    # before the JWT auth dependency inside route handlers.
+    app.add_middleware(ApiKeyAuthMiddleware)
 
     # Setup exception handlers
     setup_exception_handlers(app)

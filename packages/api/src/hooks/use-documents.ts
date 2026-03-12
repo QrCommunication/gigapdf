@@ -5,6 +5,7 @@ import {
   useInfiniteQuery,
 } from '@tanstack/react-query';
 import { documentService } from '../services/documents';
+import { storageKeys } from './use-storage';
 import type {
   Document,
   CreateDocumentRequest,
@@ -17,8 +18,6 @@ import type {
  */
 export const documentKeys = {
   all: ['documents'] as const,
-  lists: () => [...documentKeys.all, 'list'] as const,
-  list: (params?: DocumentListParams) => [...documentKeys.lists(), params] as const,
   details: () => [...documentKeys.all, 'detail'] as const,
   detail: (id: string) => [...documentKeys.details(), id] as const,
   history: (id: string) => [...documentKeys.detail(id), 'history'] as const,
@@ -26,10 +25,11 @@ export const documentKeys = {
 
 /**
  * Hook to list documents with pagination
+ * Backend: GET /storage/documents
  */
 export const useDocuments = (params?: DocumentListParams) => {
   return useQuery({
-    queryKey: documentKeys.list(params),
+    queryKey: [...storageKeys.documents(), params],
     queryFn: () => documentService.list(params),
     staleTime: 30 * 1000, // 30 seconds
   });
@@ -37,10 +37,11 @@ export const useDocuments = (params?: DocumentListParams) => {
 
 /**
  * Hook to list documents with infinite scroll
+ * Backend: GET /storage/documents
  */
 export const useInfiniteDocuments = (params?: Omit<DocumentListParams, 'offset'>) => {
   return useInfiniteQuery({
-    queryKey: documentKeys.list(params),
+    queryKey: [...storageKeys.documents(), 'infinite', params],
     queryFn: ({ pageParam = 0 }) =>
       documentService.list({ ...params, offset: pageParam }),
     getNextPageParam: (lastPage, allPages) => {
@@ -54,6 +55,7 @@ export const useInfiniteDocuments = (params?: Omit<DocumentListParams, 'offset'>
 
 /**
  * Hook to get a single document
+ * Backend: GET /documents/{document_id}
  */
 export const useDocument = (id: string, enabled = true) => {
   return useQuery({
@@ -66,6 +68,7 @@ export const useDocument = (id: string, enabled = true) => {
 
 /**
  * Hook to create a document
+ * Backend: POST /storage/documents
  */
 export const useCreateDocument = () => {
   const queryClient = useQueryClient();
@@ -73,13 +76,14 @@ export const useCreateDocument = () => {
   return useMutation({
     mutationFn: (data: CreateDocumentRequest) => documentService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: storageKeys.documents() });
     },
   });
 };
 
 /**
  * Hook to update a document
+ * Backend: PATCH /storage/documents/{id}
  */
 export const useUpdateDocument = () => {
   const queryClient = useQueryClient();
@@ -89,13 +93,14 @@ export const useUpdateDocument = () => {
       documentService.update(id, data),
     onSuccess: (data: Document) => {
       queryClient.setQueryData(documentKeys.detail(data.id), data);
-      queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: storageKeys.documents() });
     },
   });
 };
 
 /**
  * Hook to delete a document
+ * Backend: DELETE /documents/{document_id}
  */
 export const useDeleteDocument = () => {
   const queryClient = useQueryClient();
@@ -104,13 +109,14 @@ export const useDeleteDocument = () => {
     mutationFn: (id: string) => documentService.delete(id),
     onSuccess: (_, id) => {
       queryClient.removeQueries({ queryKey: documentKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: storageKeys.documents() });
     },
   });
 };
 
 /**
  * Hook to duplicate a document
+ * TODO: Backend endpoint not yet implemented
  */
 export const useDuplicateDocument = () => {
   const queryClient = useQueryClient();
@@ -119,13 +125,14 @@ export const useDuplicateDocument = () => {
     mutationFn: ({ id, title }: { id: string; title?: string }) =>
       documentService.duplicate(id, title),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: storageKeys.documents() });
     },
   });
 };
 
 /**
  * Hook to share a document
+ * Backend: POST /sharing/share
  */
 export const useShareDocument = () => {
   const queryClient = useQueryClient();
@@ -145,14 +152,16 @@ export const useShareDocument = () => {
 };
 
 /**
- * Hook to remove collaborator
+ * Hook to remove a share
+ * Backend: DELETE /sharing/shares/{id}
+ * NOTE: shareId is the sharing record ID, not the userId
  */
 export const useRemoveCollaborator = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ documentId, userId }: { documentId: string; userId: string }) =>
-      documentService.removeCollaborator(documentId, userId),
+    mutationFn: ({ documentId, shareId }: { documentId: string; shareId: string }) =>
+      documentService.removeCollaborator(documentId, shareId),
     onSuccess: (data: Document) => {
       queryClient.setQueryData(documentKeys.detail(data.id), data);
     },
@@ -161,6 +170,8 @@ export const useRemoveCollaborator = () => {
 
 /**
  * Hook to update collaborator permission
+ * Backend: PATCH /sharing/shares/{id}/permission
+ * NOTE: shareId is the sharing record ID, not the userId
  */
 export const useUpdateCollaboratorPermission = () => {
   const queryClient = useQueryClient();
@@ -168,13 +179,13 @@ export const useUpdateCollaboratorPermission = () => {
   return useMutation({
     mutationFn: ({
       documentId,
-      userId,
+      shareId,
       permission,
     }: {
       documentId: string;
-      userId: string;
+      shareId: string;
       permission: 'view' | 'edit';
-    }) => documentService.updateCollaboratorPermission(documentId, userId, permission),
+    }) => documentService.updateCollaboratorPermission(documentId, shareId, permission),
     onSuccess: (data: Document) => {
       queryClient.setQueryData(documentKeys.detail(data.id), data);
     },
@@ -182,7 +193,8 @@ export const useUpdateCollaboratorPermission = () => {
 };
 
 /**
- * Hook to get document history
+ * Hook to get document activity history
+ * Backend: GET /activity/documents/{document_id}/history
  */
 export const useDocumentHistory = (id: string) => {
   return useQuery({
@@ -193,6 +205,8 @@ export const useDocumentHistory = (id: string) => {
 
 /**
  * Hook to restore document version
+ * Backend: POST /storage/documents/{id}/versions
+ * TODO: Backend restore endpoint not yet implemented — creates a version snapshot
  */
 export const useRestoreDocumentVersion = () => {
   const queryClient = useQueryClient();

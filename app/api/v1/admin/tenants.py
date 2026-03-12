@@ -761,7 +761,34 @@ async def list_members(
     }
 
 
-@router.post("/{tenant_id}/members", response_model=MemberResponse)
+@router.post(
+    "/{tenant_id}/members",
+    response_model=MemberResponse,
+    status_code=201,
+    summary="Add member to tenant",
+    description=(
+        "Add an existing GigaPDF user as a member of an organization.\n\n"
+        "**Admin access required.** The user must already exist in the system. "
+        "Returns 400 if the member limit is reached or the user is already a member.\n\n"
+        "Available roles: `owner`, `admin`, `manager`, `member`, `viewer`."
+    ),
+    response_description="Created membership record with role and resolved permissions",
+    responses={
+        201: {"description": "Member added successfully"},
+        400: {"description": "Member limit reached or user already a member"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Tenant or user not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {"lang": "curl", "label": "cURL", "source": 'curl -X POST "https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/members" \\\n  -H "Authorization: Bearer $ADMIN_TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"user_id": "uuid-here", "role": "member"}\''},
+            {"lang": "python", "label": "Python", "source": 'import requests\nresponse = requests.post(\n    f"https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/members",\n    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n    json={"user_id": "uuid-here", "role": "member"},\n)\nmember = response.json()'},
+            {"lang": "javascript", "label": "JavaScript", "source": 'const response = await fetch(`https://api.giga-pdf.com/api/v1/admin/tenants/${tenantId}/members`, {\n  method: "POST",\n  headers: { "Content-Type": "application/json", "Authorization": "Bearer " + ADMIN_TOKEN },\n  body: JSON.stringify({ user_id: "uuid-here", role: "member" }),\n});\nconst member = await response.json();'},
+            {"lang": "php", "label": "PHP", "source": '<?php\n$ch = curl_init("https://api.giga-pdf.com/api/v1/admin/tenants/{$tenant_id}/members");\ncurl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ["Content-Type: application/json", "Authorization: Bearer " . $adminToken], CURLOPT_POSTFIELDS => json_encode(["user_id" => "uuid-here", "role" => "member"])]);\n$member = json_decode(curl_exec($ch), true);'},
+        ]
+    },
+)
 async def add_member(
     tenant_id: UUID,
     data: MemberCreate,
@@ -820,7 +847,32 @@ async def add_member(
     )
 
 
-@router.patch("/{tenant_id}/members/{member_id}", response_model=MemberResponse)
+@router.patch(
+    "/{tenant_id}/members/{member_id}",
+    response_model=MemberResponse,
+    summary="Update member role or status",
+    description=(
+        "Update a member's role, active status, or custom permissions within an organization.\n\n"
+        "**Admin access required.** All fields are optional — only provided fields are updated. "
+        "Use `is_active: false` to suspend a member without removing them. "
+        "`custom_permissions` overrides role-default permissions with a specific list."
+    ),
+    response_description="Updated membership record with new role and resolved permissions",
+    responses={
+        200: {"description": "Member updated successfully"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Member not found in this tenant"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {"lang": "curl", "label": "cURL", "source": 'curl -X PATCH "https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/members/{member_id}" \\\n  -H "Authorization: Bearer $ADMIN_TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"role": "admin", "is_active": true}\''},
+            {"lang": "python", "label": "Python", "source": 'import requests\nresponse = requests.patch(\n    f"https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/members/{member_id}",\n    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n    json={"role": "admin"},\n)\nmember = response.json()'},
+            {"lang": "javascript", "label": "JavaScript", "source": 'const response = await fetch(`https://api.giga-pdf.com/api/v1/admin/tenants/${tenantId}/members/${memberId}`, {\n  method: "PATCH",\n  headers: { "Content-Type": "application/json", "Authorization": "Bearer " + ADMIN_TOKEN },\n  body: JSON.stringify({ role: "admin" }),\n});\nconst member = await response.json();'},
+            {"lang": "php", "label": "PHP", "source": '<?php\n$ch = curl_init("https://api.giga-pdf.com/api/v1/admin/tenants/{$tenant_id}/members/{$member_id}");\ncurl_setopt_array($ch, [CURLOPT_CUSTOMREQUEST => "PATCH", CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ["Content-Type: application/json", "Authorization: Bearer " . $adminToken], CURLOPT_POSTFIELDS => json_encode(["role" => "admin"])]);\n$member = json_decode(curl_exec($ch), true);'},
+        ]
+    },
+)
 async def update_member(
     tenant_id: UUID,
     member_id: UUID,
@@ -864,7 +916,32 @@ async def update_member(
     )
 
 
-@router.delete("/{tenant_id}/members/{member_id}")
+@router.delete(
+    "/{tenant_id}/members/{member_id}",
+    summary="Remove member from tenant",
+    description=(
+        "Permanently remove a member from an organization.\n\n"
+        "**Admin access required.** The last owner of a tenant cannot be removed — "
+        "at least one owner must remain at all times. "
+        "To temporarily revoke access without removing, use `PATCH` with `is_active: false`."
+    ),
+    response_description="Confirmation of member removal",
+    responses={
+        200: {"description": "Member removed successfully"},
+        400: {"description": "Cannot remove the last owner"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Member not found in this tenant"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {"lang": "curl", "label": "cURL", "source": 'curl -X DELETE "https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/members/{member_id}" \\\n  -H "Authorization: Bearer $ADMIN_TOKEN"'},
+            {"lang": "python", "label": "Python", "source": 'import requests\nresponse = requests.delete(\n    f"https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/members/{member_id}",\n    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n)\nprint(response.json())'},
+            {"lang": "javascript", "label": "JavaScript", "source": 'const response = await fetch(`https://api.giga-pdf.com/api/v1/admin/tenants/${tenantId}/members/${memberId}`, {\n  method: "DELETE",\n  headers: { "Authorization": "Bearer " + ADMIN_TOKEN },\n});\nconst result = await response.json();'},
+            {"lang": "php", "label": "PHP", "source": '<?php\n$ch = curl_init("https://api.giga-pdf.com/api/v1/admin/tenants/{$tenant_id}/members/{$member_id}");\ncurl_setopt_array($ch, [CURLOPT_CUSTOMREQUEST => "DELETE", CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ["Authorization: Bearer " . $adminToken]]);\n$result = json_decode(curl_exec($ch), true);'},
+        ]
+    },
+)
 async def remove_member(
     tenant_id: UUID,
     member_id: UUID,
@@ -899,7 +976,32 @@ async def remove_member(
 
 # ============== Invitation Endpoints ==============
 
-@router.get("/{tenant_id}/invitations", response_model=dict)
+@router.get(
+    "/{tenant_id}/invitations",
+    response_model=dict,
+    summary="List tenant invitations",
+    description=(
+        "List all invitations for an organization, optionally including already-accepted ones.\n\n"
+        "**Admin access required.** By default only pending invitations are returned. "
+        "Pass `include_accepted=true` to include invitations that have already been accepted. "
+        "Each invitation includes its unique token, expiry date, and current status."
+    ),
+    response_description="List of invitations with token, role, and status",
+    responses={
+        200: {"description": "Invitations retrieved successfully"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Tenant not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {"lang": "curl", "label": "cURL", "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/invitations" \\\n  -H "Authorization: Bearer $ADMIN_TOKEN"'},
+            {"lang": "python", "label": "Python", "source": 'import requests\nresponse = requests.get(\n    f"https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/invitations",\n    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n    params={"include_accepted": False},\n)\ninvitations = response.json()["invitations"]'},
+            {"lang": "javascript", "label": "JavaScript", "source": 'const response = await fetch(`https://api.giga-pdf.com/api/v1/admin/tenants/${tenantId}/invitations`,\n  { headers: { "Authorization": "Bearer " + ADMIN_TOKEN } }\n);\nconst { invitations } = await response.json();'},
+            {"lang": "php", "label": "PHP", "source": '<?php\n$ch = curl_init("https://api.giga-pdf.com/api/v1/admin/tenants/{$tenant_id}/invitations");\ncurl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ["Authorization: Bearer " . $adminToken]]);\n$data = json_decode(curl_exec($ch), true);'},
+        ]
+    },
+)
 async def list_invitations(
     tenant_id: UUID,
     include_accepted: bool = False,
@@ -1047,7 +1149,31 @@ async def create_invitation(
     )
 
 
-@router.delete("/{tenant_id}/invitations/{invitation_id}")
+@router.delete(
+    "/{tenant_id}/invitations/{invitation_id}",
+    summary="Cancel a pending invitation",
+    description=(
+        "Permanently delete a pending invitation, preventing the invited user from joining.\n\n"
+        "**Admin access required.** Once cancelled, the invitation token becomes invalid. "
+        "This action cannot be undone — create a new invitation if needed. "
+        "Returns 404 if the invitation does not belong to the specified tenant."
+    ),
+    response_description="Confirmation of invitation cancellation",
+    responses={
+        200: {"description": "Invitation cancelled successfully"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Invitation not found for this tenant"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {"lang": "curl", "label": "cURL", "source": 'curl -X DELETE "https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/invitations/{invitation_id}" \\\n  -H "Authorization: Bearer $ADMIN_TOKEN"'},
+            {"lang": "python", "label": "Python", "source": 'import requests\nresponse = requests.delete(\n    f"https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/invitations/{invitation_id}",\n    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n)\nprint(response.json())'},
+            {"lang": "javascript", "label": "JavaScript", "source": 'await fetch(`https://api.giga-pdf.com/api/v1/admin/tenants/${tenantId}/invitations/${invitationId}`, {\n  method: "DELETE",\n  headers: { "Authorization": "Bearer " + ADMIN_TOKEN },\n});'},
+            {"lang": "php", "label": "PHP", "source": '<?php\n$ch = curl_init("https://api.giga-pdf.com/api/v1/admin/tenants/{$tenant_id}/invitations/{$invitation_id}");\ncurl_setopt_array($ch, [CURLOPT_CUSTOMREQUEST => "DELETE", CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ["Authorization: Bearer " . $adminToken]]);\n$result = json_decode(curl_exec($ch), true);'},
+        ]
+    },
+)
 async def cancel_invitation(
     tenant_id: UUID,
     invitation_id: UUID,
@@ -1073,7 +1199,32 @@ async def cancel_invitation(
 
 # ============== Document Endpoints ==============
 
-@router.get("/{tenant_id}/documents", response_model=dict)
+@router.get(
+    "/{tenant_id}/documents",
+    response_model=dict,
+    summary="List documents shared with tenant",
+    description=(
+        "Retrieve a paginated list of documents that have been shared with an organization.\n\n"
+        "**Admin access required.** Returns document name, access level (`read`, `write`, `admin`), "
+        "the email of the user who shared it, and the sharing timestamp. "
+        "Results are ordered by most recently shared first."
+    ),
+    response_description="Paginated list of shared documents with access level details",
+    responses={
+        200: {"description": "Documents retrieved successfully"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Tenant not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {"lang": "curl", "label": "cURL", "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/documents?page=1&page_size=20" \\\n  -H "Authorization: Bearer $ADMIN_TOKEN"'},
+            {"lang": "python", "label": "Python", "source": 'import requests\nresponse = requests.get(\n    f"https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/documents",\n    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n    params={"page": 1, "page_size": 20},\n)\ndocs = response.json()["documents"]'},
+            {"lang": "javascript", "label": "JavaScript", "source": 'const response = await fetch(`https://api.giga-pdf.com/api/v1/admin/tenants/${tenantId}/documents?page=1`,\n  { headers: { "Authorization": "Bearer " + ADMIN_TOKEN } }\n);\nconst { documents } = await response.json();'},
+            {"lang": "php", "label": "PHP", "source": '<?php\n$ch = curl_init("https://api.giga-pdf.com/api/v1/admin/tenants/{$tenant_id}/documents?page=1");\ncurl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ["Authorization: Bearer " . $adminToken]]);\n$data = json_decode(curl_exec($ch), true);'},
+        ]
+    },
+)
 async def list_tenant_documents(
     tenant_id: UUID,
     page: int = Query(1, ge=1),
@@ -1124,7 +1275,36 @@ async def list_tenant_documents(
     }
 
 
-@router.post("/{tenant_id}/documents", response_model=TenantDocumentResponse)
+@router.post(
+    "/{tenant_id}/documents",
+    response_model=TenantDocumentResponse,
+    status_code=201,
+    summary="Share document with tenant",
+    description=(
+        "Grant an organization access to a specific document.\n\n"
+        "**Admin access required.** Both the tenant and the document must exist. "
+        "The `access_level` field controls what organization members can do: "
+        "`read` (view only), `write` (edit), or `admin` (full control). "
+        "Returns 400 if the document is already shared with this tenant.\n\n"
+        "**Query parameter:** `added_by_id` — ID of the user performing the share (required)."
+    ),
+    response_description="Sharing record with document name and access level",
+    responses={
+        201: {"description": "Document shared successfully"},
+        400: {"description": "Document already shared with this tenant"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Tenant or document not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {"lang": "curl", "label": "cURL", "source": 'curl -X POST "https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/documents?added_by_id={user_id}" \\\n  -H "Authorization: Bearer $ADMIN_TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"document_id": "uuid-here", "access_level": "read"}\''},
+            {"lang": "python", "label": "Python", "source": 'import requests\nresponse = requests.post(\n    f"https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/documents",\n    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n    params={"added_by_id": user_id},\n    json={"document_id": "uuid-here", "access_level": "read"},\n)\nshare = response.json()'},
+            {"lang": "javascript", "label": "JavaScript", "source": 'const response = await fetch(`https://api.giga-pdf.com/api/v1/admin/tenants/${tenantId}/documents?added_by_id=${userId}`, {\n  method: "POST",\n  headers: { "Content-Type": "application/json", "Authorization": "Bearer " + ADMIN_TOKEN },\n  body: JSON.stringify({ document_id: "uuid-here", access_level: "read" }),\n});\nconst share = await response.json();'},
+            {"lang": "php", "label": "PHP", "source": '<?php\n$ch = curl_init("https://api.giga-pdf.com/api/v1/admin/tenants/{$tenant_id}/documents?added_by_id={$userId}");\ncurl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ["Content-Type: application/json", "Authorization: Bearer " . $adminToken], CURLOPT_POSTFIELDS => json_encode(["document_id" => "uuid-here", "access_level" => "read"])]);\n$share = json_decode(curl_exec($ch), true);'},
+        ]
+    },
+)
 async def share_document_with_tenant(
     tenant_id: UUID,
     data: DocumentShareRequest,
@@ -1178,7 +1358,31 @@ async def share_document_with_tenant(
     )
 
 
-@router.delete("/{tenant_id}/documents/{document_id}")
+@router.delete(
+    "/{tenant_id}/documents/{document_id}",
+    summary="Unshare document from tenant",
+    description=(
+        "Revoke an organization's access to a previously shared document.\n\n"
+        "**Admin access required.** The document is not deleted — only the sharing link "
+        "between the tenant and the document is removed. Organization members will immediately "
+        "lose access. Returns 404 if the document was not shared with this tenant."
+    ),
+    response_description="Confirmation of document unsharing",
+    responses={
+        200: {"description": "Document unshared successfully"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Admin access required"},
+        404: {"description": "Document not shared with this tenant"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {"lang": "curl", "label": "cURL", "source": 'curl -X DELETE "https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/documents/{document_id}" \\\n  -H "Authorization: Bearer $ADMIN_TOKEN"'},
+            {"lang": "python", "label": "Python", "source": 'import requests\nresponse = requests.delete(\n    f"https://api.giga-pdf.com/api/v1/admin/tenants/{tenant_id}/documents/{document_id}",\n    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n)\nprint(response.json())'},
+            {"lang": "javascript", "label": "JavaScript", "source": 'await fetch(`https://api.giga-pdf.com/api/v1/admin/tenants/${tenantId}/documents/${documentId}`, {\n  method: "DELETE",\n  headers: { "Authorization": "Bearer " + ADMIN_TOKEN },\n});'},
+            {"lang": "php", "label": "PHP", "source": '<?php\n$ch = curl_init("https://api.giga-pdf.com/api/v1/admin/tenants/{$tenant_id}/documents/{$document_id}");\ncurl_setopt_array($ch, [CURLOPT_CUSTOMREQUEST => "DELETE", CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ["Authorization: Bearer " . $adminToken]]);\n$result = json_decode(curl_exec($ch), true);'},
+        ]
+    },
+)
 async def unshare_document(
     tenant_id: UUID,
     document_id: UUID,
@@ -1204,7 +1408,31 @@ async def unshare_document(
 
 # ============== Stats Endpoint ==============
 
-@router.get("/stats/overview")
+@router.get(
+    "/stats/overview",
+    summary="Get tenant overview statistics",
+    description=(
+        "Retrieve aggregated statistics across all tenants on the platform.\n\n"
+        "**Admin access required.** Returns total tenant counts broken down by status "
+        "(active, trial, suspended), total members across all organizations, "
+        "and combined storage usage (bytes and human-readable format).\n\n"
+        "Useful for dashboard KPIs and platform health monitoring."
+    ),
+    response_description="Aggregated platform statistics: tenant counts, members, storage",
+    responses={
+        200: {"description": "Platform-wide tenant statistics"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Admin access required"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {"lang": "curl", "label": "cURL", "source": 'curl -X GET "https://api.giga-pdf.com/api/v1/admin/tenants/stats/overview" \\\n  -H "Authorization: Bearer $ADMIN_TOKEN"'},
+            {"lang": "python", "label": "Python", "source": 'import requests\nresponse = requests.get(\n    "https://api.giga-pdf.com/api/v1/admin/tenants/stats/overview",\n    headers={"Authorization": "Bearer $ADMIN_TOKEN"},\n)\nstats = response.json()\nprint(f"Active: {stats[\'active_tenants\']} / Total: {stats[\'total_tenants\']}")'},
+            {"lang": "javascript", "label": "JavaScript", "source": 'const response = await fetch("https://api.giga-pdf.com/api/v1/admin/tenants/stats/overview",\n  { headers: { "Authorization": "Bearer " + ADMIN_TOKEN } }\n);\nconst stats = await response.json();\nconsole.log(`Active: ${stats.active_tenants} / Total: ${stats.total_tenants}`);'},
+            {"lang": "php", "label": "PHP", "source": '<?php\n$ch = curl_init("https://api.giga-pdf.com/api/v1/admin/tenants/stats/overview");\ncurl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ["Authorization: Bearer " . $adminToken]]);\n$stats = json_decode(curl_exec($ch), true);\necho $stats["active_tenants"] . "/" . $stats["total_tenants"];'},
+        ]
+    },
+)
 async def get_tenant_stats(
     db: AsyncSession = Depends(get_db),
 ):

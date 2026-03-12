@@ -28,15 +28,15 @@ function ApiConfigProvider({ children }: { children?: React.ReactNode }) {
 
 export function Providers({ children }: { children?: React.ReactNode }) {
   return (
-    <DynamicThemeProvider
-      attribute="class"
-      defaultTheme="light"
-      enableSystem
-      disableTransitionOnChange
-    >
-      <QueryProvider>
+    <QueryProvider>
+      <DynamicThemeProvider
+        attribute="class"
+        defaultTheme="light"
+        enableSystem
+        disableTransitionOnChange
+      >
         <ApiConfigProvider>{children as React.ReactNode}</ApiConfigProvider>
-      </QueryProvider>
-    </DynamicThemeProvider>
+      </DynamicThemeProvider>
+    </QueryProvider>
   );
 }

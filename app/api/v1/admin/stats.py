@@ -65,7 +65,84 @@ class RecentActivity(BaseModel):
     user_id: Optional[str] = None
 
 
-@router.get("/overview", response_model=DashboardStats)
+@router.get(
+    "/overview",
+    response_model=DashboardStats,
+    summary="Get dashboard overview statistics",
+    description="""
+Retrieve aggregated statistics for the admin dashboard.
+
+**Admin access required.** Returns a snapshot of the platform's current state including:
+- Total registered users and documents
+- Cumulative storage usage (raw bytes + human-readable format)
+- Active, completed and failed async jobs for the current day
+- Health status and latency of all critical system components (API, Database, Redis, Storage)
+
+This endpoint is intended for the GigaPDF admin panel home screen.
+""",
+    response_description="Dashboard statistics with system health indicators",
+    responses={
+        200: {"description": "Dashboard statistics returned successfully"},
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        500: {"description": "Internal server error while querying statistics"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/stats/overview" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.get(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/stats/overview",\n'
+                    '    headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},\n'
+                    ")\n"
+                    "stats = response.json()\n"
+                    'print(f"Total users: {stats[\'total_users\']}")\n'
+                    'print(f"Active jobs: {stats[\'active_jobs\']}")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const response = await fetch(\n"
+                    '  "https://api.giga-pdf.com/api/v1/admin/stats/overview",\n'
+                    "  {\n"
+                    '    headers: { "Authorization": `Bearer ${ADMIN_TOKEN}` },\n'
+                    "  }\n"
+                    ");\n"
+                    "const stats = await response.json();\n"
+                    "console.log(`Total users: ${stats.total_users}`);\n"
+                    "console.log(`Active jobs: ${stats.active_jobs}`);"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->get(\n"
+                    "    'https://api.giga-pdf.com/api/v1/admin/stats/overview',\n"
+                    "    ['headers' => ['Authorization' => 'Bearer ' . $adminToken]]\n"
+                    ");\n"
+                    "$stats = json_decode($response->getBody(), true);\n"
+                    "echo 'Total users: ' . $stats['total_users'];"
+                ),
+            },
+        ],
+    },
+)
 async def get_dashboard_stats(
     db: AsyncSession = Depends(get_db),
 ):
@@ -153,7 +230,91 @@ async def get_dashboard_stats(
     )
 
 
-@router.get("/usage", response_model=list[UsageDataPoint])
+@router.get(
+    "/usage",
+    response_model=list[UsageDataPoint],
+    summary="Get usage statistics over time",
+    description="""
+Retrieve document upload and storage usage trends aggregated by month.
+
+**Admin access required.** Use the `months` query parameter to control how many
+months of historical data are returned (1–12). Each data point contains:
+- `month` — label in "MMM YYYY" format (e.g. "Jan 2026")
+- `documents` — number of documents uploaded during that month
+- `storage_gb` — cumulative storage occupied at the end of that month (in GB)
+
+Useful for rendering time-series charts in the admin dashboard.
+""",
+    response_description="List of monthly usage data points ordered chronologically",
+    responses={
+        200: {"description": "Usage statistics returned successfully"},
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        422: {"description": "Invalid value for `months` parameter (must be 1–12)"},
+        500: {"description": "Internal server error while querying usage data"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/stats/usage?months=6" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.get(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/stats/usage",\n'
+                    '    params={"months": 6},\n'
+                    '    headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},\n'
+                    ")\n"
+                    "for point in response.json():\n"
+                    '    print(f"{point[\'month\']}: {point[\'documents\']} docs, {point[\'storage_gb\']} GB")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const response = await fetch(\n"
+                    '  "https://api.giga-pdf.com/api/v1/admin/stats/usage?months=6",\n'
+                    "  {\n"
+                    '    headers: { "Authorization": `Bearer ${ADMIN_TOKEN}` },\n'
+                    "  }\n"
+                    ");\n"
+                    "const data = await response.json();\n"
+                    "data.forEach(({ month, documents, storage_gb }) =>\n"
+                    "  console.log(`${month}: ${documents} docs, ${storage_gb} GB`)\n"
+                    ");"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->get(\n"
+                    "    'https://api.giga-pdf.com/api/v1/admin/stats/usage',\n"
+                    "    [\n"
+                    "        'query' => ['months' => 6],\n"
+                    "        'headers' => ['Authorization' => 'Bearer ' . $adminToken],\n"
+                    "    ]\n"
+                    ");\n"
+                    "$points = json_decode($response->getBody(), true);\n"
+                    "foreach ($points as $point) {\n"
+                    "    echo $point['month'] . ': ' . $point['documents'] . ' docs\\n';\n"
+                    "}"
+                ),
+            },
+        ],
+    },
+)
 async def get_usage_stats(
     months: int = Query(6, ge=1, le=12),
     db: AsyncSession = Depends(get_db),
@@ -204,7 +365,97 @@ async def get_usage_stats(
     return data
 
 
-@router.get("/revenue", response_model=list[RevenueDataPoint])
+@router.get(
+    "/revenue",
+    response_model=list[RevenueDataPoint],
+    summary="Get revenue statistics over time",
+    description="""
+Retrieve estimated monthly revenue and paid subscriber counts.
+
+**Admin access required.** Returns one data point per month for the requested
+period (1–12 months). Revenue is approximated by multiplying the number of paid
+subscribers (Pro + Enterprise plans) by the average active plan price fetched
+from the database.
+
+Each data point contains:
+- `month` — label in "MMM YYYY" format
+- `revenue` — estimated revenue in the platform's base currency
+- `subscribers` — number of active paid subscribers at that point in time
+
+> **Note:** Revenue figures are estimates based on current plan pricing and
+> active subscriber counts. They do not account for discounts, refunds, or
+> prorated billing.
+""",
+    response_description="List of monthly revenue data points ordered chronologically",
+    responses={
+        200: {"description": "Revenue statistics returned successfully"},
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        422: {"description": "Invalid value for `months` parameter (must be 1–12)"},
+        500: {"description": "Internal server error while computing revenue data"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/stats/revenue?months=12" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.get(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/stats/revenue",\n'
+                    '    params={"months": 12},\n'
+                    '    headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},\n'
+                    ")\n"
+                    "for point in response.json():\n"
+                    '    print(f"{point[\'month\']}: ${point[\'revenue\']:.2f} ({point[\'subscribers\']} subscribers)")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const response = await fetch(\n"
+                    '  "https://api.giga-pdf.com/api/v1/admin/stats/revenue?months=12",\n'
+                    "  {\n"
+                    '    headers: { "Authorization": `Bearer ${ADMIN_TOKEN}` },\n'
+                    "  }\n"
+                    ");\n"
+                    "const data = await response.json();\n"
+                    "data.forEach(({ month, revenue, subscribers }) =>\n"
+                    "  console.log(`${month}: $${revenue.toFixed(2)} — ${subscribers} subscribers`)\n"
+                    ");"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->get(\n"
+                    "    'https://api.giga-pdf.com/api/v1/admin/stats/revenue',\n"
+                    "    [\n"
+                    "        'query' => ['months' => 12],\n"
+                    "        'headers' => ['Authorization' => 'Bearer ' . $adminToken],\n"
+                    "    ]\n"
+                    ");\n"
+                    "$points = json_decode($response->getBody(), true);\n"
+                    "foreach ($points as $point) {\n"
+                    "    echo $point['month'] . ': $' . number_format($point['revenue'], 2) . '\\n';\n"
+                    "}"
+                ),
+            },
+        ],
+    },
+)
 async def get_revenue_stats(
     months: int = Query(6, ge=1, le=12),
     db: AsyncSession = Depends(get_db),
@@ -248,7 +499,97 @@ async def get_revenue_stats(
     return data
 
 
-@router.get("/activity", response_model=list[RecentActivity])
+@router.get(
+    "/activity",
+    response_model=list[RecentActivity],
+    summary="Get recent platform activity",
+    description="""
+Retrieve the most recent events across the GigaPDF platform.
+
+**Admin access required.** Returns a chronologically sorted list of recent
+activities, combining document uploads and async job events. Use the `limit`
+parameter to control how many events are returned (1–50, default 10).
+
+Activity types include:
+- `document_upload` — a user uploaded a new PDF document
+- `job_completed` — an async processing job finished successfully
+- `job_failed` — an async processing job encountered an error
+- `job_processing` — a job is currently being processed
+- `job_pending` — a job is waiting to be picked up
+
+Each item includes the affected `user_id` when available, enabling quick
+navigation to the user's admin profile.
+""",
+    response_description="List of recent activity events sorted from newest to oldest",
+    responses={
+        200: {"description": "Recent activity list returned successfully"},
+        401: {"description": "Missing or invalid authentication token"},
+        403: {"description": "Admin access required"},
+        422: {"description": "Invalid value for `limit` parameter (must be 1–50)"},
+        500: {"description": "Internal server error while fetching recent activity"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": (
+                    'curl -X GET "https://api.giga-pdf.com/api/v1/admin/stats/activity?limit=20" \\\n'
+                    '  -H "Authorization: Bearer $ADMIN_TOKEN"'
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": (
+                    "import requests\n\n"
+                    "response = requests.get(\n"
+                    '    "https://api.giga-pdf.com/api/v1/admin/stats/activity",\n'
+                    '    params={"limit": 20},\n'
+                    '    headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},\n'
+                    ")\n"
+                    "for event in response.json():\n"
+                    '    print(f"[{event[\'type\']}] {event[\'description\']} at {event[\'timestamp\']}")'
+                ),
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": (
+                    "const response = await fetch(\n"
+                    '  "https://api.giga-pdf.com/api/v1/admin/stats/activity?limit=20",\n'
+                    "  {\n"
+                    '    headers: { "Authorization": `Bearer ${ADMIN_TOKEN}` },\n'
+                    "  }\n"
+                    ");\n"
+                    "const events = await response.json();\n"
+                    "events.forEach(({ type, description, timestamp }) =>\n"
+                    "  console.log(`[${type}] ${description} at ${timestamp}`)\n"
+                    ");"
+                ),
+            },
+            {
+                "lang": "php",
+                "label": "PHP",
+                "source": (
+                    "<?php\n"
+                    "$client = new \\GuzzleHttp\\Client();\n"
+                    "$response = $client->get(\n"
+                    "    'https://api.giga-pdf.com/api/v1/admin/stats/activity',\n"
+                    "    [\n"
+                    "        'query' => ['limit' => 20],\n"
+                    "        'headers' => ['Authorization' => 'Bearer ' . $adminToken],\n"
+                    "    ]\n"
+                    ");\n"
+                    "$events = json_decode($response->getBody(), true);\n"
+                    "foreach ($events as $event) {\n"
+                    "    echo '[' . $event['type'] . '] ' . $event['description'] . '\\n';\n"
+                    "}"
+                ),
+            },
+        ],
+    },
+)
 async def get_recent_activity(
     limit: int = Query(10, ge=1, le=50),
     db: AsyncSession = Depends(get_db),

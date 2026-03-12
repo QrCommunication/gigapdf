@@ -1,7 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { BookOpen, FileJson, ExternalLink, Download, Braces, FileCode } from "lucide-react";
+import Link from "next/link";
+import { BookOpen, FileJson, ExternalLink, Download, Braces, FileCode, Blocks, ArrowRight } from "lucide-react";
 import { Button } from "@giga-pdf/ui";
 
 export default function DocsPage() {
@@ -22,6 +23,42 @@ export default function DocsPage() {
           {t("description")}
         </p>
       </div>
+
+      {/* Embed SDK Highlight */}
+      <section className="mb-12">
+        <Link
+          href="/docs/embed"
+          className="group block rounded-xl border border-terminal-purple/30 bg-gradient-to-r from-terminal-purple/5 to-primary/5 p-6 hover:border-terminal-purple/50 transition-all not-prose"
+        >
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-lg bg-terminal-purple/10 flex items-center justify-center shrink-0">
+              <Blocks className="h-6 w-6 text-terminal-purple" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <h2 className="font-bold text-xl">{t("embedSdk.title")}</h2>
+                <span className="inline-flex items-center rounded-full bg-terminal-green/10 px-2 py-0.5 text-xs font-medium text-terminal-green">
+                  {t("embedSdk.badge")}
+                </span>
+                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-terminal-purple group-hover:translate-x-1 transition-all ml-auto" />
+              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                {t("embedSdk.description")}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {["Vanilla JS", "React", "CDN", "TypeScript"].map((tag) => (
+                  <span
+                    key={tag}
+                    className="font-mono text-xs bg-muted/50 rounded px-2 py-1 text-muted-foreground"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Link>
+      </section>
 
       {/* Interactive Documentation */}
       <section className="mb-12">

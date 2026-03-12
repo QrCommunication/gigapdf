@@ -74,6 +74,7 @@ class CreateFormFieldRequest(BaseModel):
     "/{document_id}/forms/fields",
     response_model=APIResponse[dict],
     summary="Get form fields",
+    response_description="Complete list of form fields with name, type, current value, page number, position bounds, and properties. Includes total field count and filled field count",
     description="""Retrieve all interactive form fields from a PDF document.
 
 This endpoint returns a comprehensive list of all form fields present in the document,
@@ -255,6 +256,7 @@ async def list_form_fields(
     "/{document_id}/forms/fill",
     response_model=APIResponse[dict],
     summary="Fill form fields",
+    response_description="Fill operation results with success/failure count per field, old and new values for each field processed",
     description="""Fill multiple form fields in a PDF document with provided values.
 
 This endpoint allows bulk filling of form fields by providing a mapping of field names
@@ -504,6 +506,7 @@ async def fill_form_fields(
     response_model=APIResponse[dict],
     status_code=201,
     summary="Create form field",
+    response_description="Created form field object with generated element_id, field type, name, position bounds, initial value, options (for dropdowns/listboxes), and applied style",
     description="""Create a new interactive form field on a specific page of a PDF document.
 
 This endpoint allows you to programmatically add form fields to PDF documents.
@@ -763,6 +766,7 @@ async def create_form_field(
     "/{document_id}/forms/flatten",
     response_model=APIResponse[dict],
     summary="Flatten form fields",
+    response_description="Number of fields flattened into static content, list of affected page numbers, and names of all flattened fields",
     description="""Flatten all form fields in a PDF document into static content.
 
 This operation permanently converts interactive form fields into static PDF content,

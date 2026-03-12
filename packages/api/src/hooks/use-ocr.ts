@@ -7,6 +7,9 @@ import type { OcrJob, OcrRequest } from '@giga-pdf/types';
  */
 export const ocrKeys = {
   all: ['ocr'] as const,
+  status: (documentId: string) => [...ocrKeys.all, 'status', documentId] as const,
+  languages: (documentId: string) => [...ocrKeys.all, 'languages', documentId] as const,
+  // Legacy keys kept for backward compatibility
   lists: () => [...ocrKeys.all, 'list'] as const,
   list: (documentId: string) => [...ocrKeys.lists(), documentId] as const,
   details: () => [...ocrKeys.all, 'detail'] as const,
@@ -16,6 +19,7 @@ export const ocrKeys = {
 
 /**
  * Hook to start OCR processing
+ * Backend: POST /documents/{document_id}/ocr
  */
 export const useStartOcr = () => {
   const queryClient = useQueryClient();
@@ -24,18 +28,19 @@ export const useStartOcr = () => {
     mutationFn: ({ documentId, data }: { documentId: string; data: OcrRequest }) =>
       ocrService.startOcr(documentId, data),
     onSuccess: (_, { documentId }) => {
-      queryClient.invalidateQueries({ queryKey: ocrKeys.list(documentId) });
+      queryClient.invalidateQueries({ queryKey: ocrKeys.status(documentId) });
     },
   });
 };
 
 /**
- * Hook to get OCR job status
+ * Hook to get OCR status for a document
+ * Backend: GET /documents/{document_id}/ocr/status
  */
-export const useOcrStatus = (jobId: string, enabled = true) => {
+export const useOcrStatus = (documentId: string, enabled = true) => {
   return useQuery({
-    queryKey: ocrKeys.detail(jobId),
-    queryFn: () => ocrService.getOcrStatus(jobId),
+    queryKey: ocrKeys.status(documentId),
+    queryFn: () => ocrService.getOcrStatus(documentId),
     enabled,
     refetchInterval: (query) => {
       const data = query.state.data as OcrJob | undefined;
@@ -46,7 +51,21 @@ export const useOcrStatus = (jobId: string, enabled = true) => {
 };
 
 /**
+ * Hook to get supported OCR languages
+ * Backend: GET /documents/{document_id}/ocr/languages
+ */
+export const useOcrLanguages = (documentId: string, enabled = true) => {
+  return useQuery({
+    queryKey: ocrKeys.languages(documentId),
+    queryFn: () => ocrService.getOcrLanguages(documentId),
+    enabled,
+    staleTime: 10 * 60 * 1000, // 10 minutes — language list rarely changes
+  });
+};
+
+/**
  * Hook to get OCR results
+ * TODO: Backend endpoint not yet implemented
  */
 export const useOcrResults = (jobId: string, enabled = true) => {
   return useQuery({
@@ -58,20 +77,22 @@ export const useOcrResults = (jobId: string, enabled = true) => {
 
 /**
  * Hook to cancel OCR job
+ * Backend: DELETE /jobs/{job_id}
  */
 export const useCancelOcr = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (jobId: string) => ocrService.cancelOcr(jobId),
-    onSuccess: (_, jobId) => {
-      queryClient.invalidateQueries({ queryKey: ocrKeys.detail(jobId) });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ocrKeys.details() });
     },
   });
 };
 
 /**
  * Hook to list OCR jobs for a document
+ * TODO: Backend endpoint not yet implemented
  */
 export const useOcrJobs = (documentId: string, enabled = true) => {
   return useQuery({
@@ -83,6 +104,7 @@ export const useOcrJobs = (documentId: string, enabled = true) => {
 
 /**
  * Hook to apply OCR results to document
+ * TODO: Backend endpoint not yet implemented
  */
 export const useApplyOcrResults = () => {
   const queryClient = useQueryClient();

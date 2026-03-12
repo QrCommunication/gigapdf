@@ -1289,6 +1289,123 @@
         "export": "Export to PNG, JPEG, DOCX, HTML",
         "ocr": "OCR text extraction from scanned PDFs",
         "realtime": "Real-time collaboration via WebSocket"
+      },
+      "embedSdk": {
+        "title": "Embed SDK",
+        "badge": "New",
+        "description": "Embed the GigaPDF editor into any website with just a few lines of code. Available in Vanilla JS, React, and via CDN."
+      },
+      "embed": {
+        "backToDocs": "Back to documentation",
+        "title": "Embed SDK",
+        "description": "Embed the GigaPDF PDF editor directly into your website or application. Your users can edit PDFs without leaving your platform.",
+        "howItWorks": {
+          "title": "How it works",
+          "step1": {
+            "title": "Create an API key",
+            "description": "Generate an API key from your GigaPDF dashboard. Configure allowed domains to secure access."
+          },
+          "step2": {
+            "title": "Add the SDK",
+            "description": "Install the npm package or include the CDN script in your page. Initialize the editor with your API key."
+          },
+          "step3": {
+            "title": "Embedded editor",
+            "description": "The PDF editor renders in a secure iframe. Communicate via postMessage to save, export, and more."
+          }
+        },
+        "installation": {
+          "title": "Installation",
+          "npm": {
+            "description": "Install the package from the npm registry to use in your JavaScript/TypeScript project."
+          },
+          "cdn": {
+            "description": "Include the script directly in your HTML page. No build step required."
+          }
+        },
+        "quickstart": {
+          "title": "Quick Start",
+          "cdn": {
+            "title": "CDN Script (plain HTML)",
+            "description": "The fastest method. Add the script and initialize the editor in a few lines."
+          },
+          "esm": {
+            "title": "Vanilla JS / ES Modules",
+            "description": "For projects with a bundler (Vite, Webpack, etc.). Direct import with TypeScript support."
+          },
+          "react": {
+            "title": "React Component",
+            "description": "React component with ref to control the editor programmatically. Compatible with React 18+."
+          }
+        },
+        "options": {
+          "title": "Configuration Options",
+          "option": "Option",
+          "type": "Type",
+          "default": "Default",
+          "required": "required",
+          "descriptions": {
+            "apiKey": "Your GigaPDF API key (starts with giga_pk_)",
+            "container": "Target HTML element or CSS selector (Vanilla JS only)",
+            "documentId": "Document ID to load. Opens an empty editor if omitted",
+            "baseUrl": "URL of your GigaPDF instance (self-hosted or staging)",
+            "width": "iframe width (number = pixels)",
+            "height": "iframe height (number = pixels)",
+            "locale": "UI language",
+            "theme": "Color theme",
+            "hideToolbar": "Hide the top toolbar",
+            "tools": "Restrict available tools: text, image, shape, annotation, form, signature"
+          }
+        },
+        "events": {
+          "title": "Events",
+          "event": "Event",
+          "descriptions": {
+            "ready": "The editor is loaded and ready to use",
+            "save": "The document was saved successfully",
+            "export": "The document export is complete",
+            "error": "An error occurred",
+            "pageChange": "The active page has changed"
+          }
+        },
+        "methods": {
+          "title": "Methods",
+          "method": "Method",
+          "descriptions": {
+            "on": "Subscribe to an event",
+            "off": "Unsubscribe from an event",
+            "savePdf": "Trigger a document save",
+            "exportPdf": "Trigger an export (default format: PDF)",
+            "loadDocument": "Load a different document by ID",
+            "destroy": "Remove the iframe and clean up all listeners"
+          }
+        },
+        "security": {
+          "title": "Security",
+          "apiKeys": {
+            "title": "API Keys",
+            "description": "API keys are created from your dashboard or via the REST API. Each key is SHA-256 hashed server-side — the plaintext key is only visible at creation time.",
+            "createExample": "Create an API key with allowed domains"
+          },
+          "domains": {
+            "title": "Domain Restriction",
+            "description": "Configure allowed domains when creating your API key. The iframe will only work from these domains, preventing unauthorized use of your key."
+          },
+          "scopes": {
+            "title": "Scopes and Permissions",
+            "description": "Limit each API key's permissions with scopes: read-only, edit, export, etc. The principle of least privilege applies."
+          }
+        },
+        "selfHosted": {
+          "title": "Self-Hosting",
+          "description": "If you are using a self-hosted GigaPDF instance, specify your instance URL via the baseUrl option:"
+        },
+        "cta": {
+          "title": "Ready to integrate?",
+          "description": "Create a free account to get your API key and start embedding the PDF editor in your site.",
+          "signup": "Create an account",
+          "apiDocs": "API Documentation"
+        }
       }
     },
     "contact": {

@@ -53,6 +53,7 @@ class SplitDocumentRequest(BaseModel):
     "/merge",
     response_model=APIResponse[dict],
     summary="Merge multiple PDF documents",
+    response_description="Merged document details — contains the new document_id, total page count, filename, and number of source documents combined",
     description="""Combine multiple PDF documents into a single file.
 
 Documents are merged in the order provided. You can optionally specify page ranges
@@ -97,6 +98,7 @@ for each document to include only specific pages in the merged result.
         400: {
             "description": "Invalid request - Less than 2 documents provided, invalid document IDs, or invalid page ranges",
         },
+        401: {"description": "Unauthorized. Missing or invalid authentication token."},
         404: {
             "description": "One or more documents not found in the current session",
         },
@@ -239,6 +241,7 @@ async def merge_documents(
     "/{document_id}/split",
     response_model=APIResponse[dict],
     summary="Split a PDF document into multiple parts",
+    response_description="Split result — contains the original document ID and an array of newly created documents, each with its ID, filename, page count, and page range",
     description="""Split a single PDF document into multiple separate documents at specified page boundaries.
 
 Specify the page numbers where you want to split the document. The split points define
@@ -303,6 +306,7 @@ creates three documents:
         400: {
             "description": "Invalid split points - out of range, or output names count mismatch",
         },
+        401: {"description": "Unauthorized. Missing or invalid authentication token."},
         404: {
             "description": "Document not found in the current session",
         },
