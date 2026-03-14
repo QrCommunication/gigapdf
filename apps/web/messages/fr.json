@@ -36,6 +36,7 @@
     "documents": "Documents",
     "organization": "Entreprise",
     "settings": "Paramètres",
+    "developers": "Développeurs",
     "billing": "Facturation",
     "sharedWithMe": "Partagés avec moi"
   },
@@ -79,6 +80,22 @@
       "security": {
         "title": "Sécurité Entreprise",
         "description": "Vos documents sont chiffrés et sécurisés. Conforme SOC 2 avec des fonctionnalités de sécurité de niveau entreprise."
+      },
+      "api": {
+        "title": "API REST",
+        "description": "Accès programmatique complet à toutes les fonctionnalités. Automatisez vos flux documentaires avec notre API complète."
+      },
+      "export": {
+        "title": "Export multi-format",
+        "description": "Exportez en PNG, JPEG, DOCX, HTML et plus encore. Support OCR pour les documents scannés avec Tesseract."
+      },
+      "selfHostable": {
+        "title": "Auto-hébergeable",
+        "description": "Déployez sur votre propre infrastructure. Gardez le contrôle total sur vos documents et vos données."
+      },
+      "pdfModification": {
+        "title": "Modification de PDF",
+        "description": "Ajoutez, modifiez ou supprimez du texte, des images, des formes et des annotations. Modifiez vos PDF en batch via l'API."
       }
     },
     "openSource": {
@@ -1451,6 +1468,83 @@
           "newMessage": "Envoyer un autre message"
         }
       }
+    }
+  },
+  "developers": {
+    "title": "Clés API",
+    "description": "Gérez vos clés API pour intégrer l'éditeur PDF dans vos applications",
+    "createKey": "Créer une clé",
+    "noKeys": {
+      "title": "Aucune clé API",
+      "description": "Créez votre première clé API pour commencer à intégrer l'éditeur PDF."
+    },
+    "card": {
+      "publishableKey": "Clé publique",
+      "secretKey": "Clé secrète",
+      "scopes": "Permissions",
+      "domains": "Domaines autorisés",
+      "noDomains": "Tous les domaines",
+      "rateLimit": "Limite de requêtes",
+      "rateLimitValue": "{count}/min",
+      "lastUsed": "Dernière utilisation",
+      "never": "Jamais",
+      "active": "Actif",
+      "inactive": "Inactif",
+      "created": "Créé le",
+      "expires": "Expire le",
+      "noExpiry": "Sans expiration"
+    },
+    "actions": {
+      "copy": "Copier",
+      "copied": "Copié !",
+      "regeneratePublishable": "Régénérer la clé publique",
+      "regenerateSecret": "Régénérer la clé secrète",
+      "delete": "Supprimer la clé",
+      "toggleStatus": "Activer/Désactiver"
+    },
+    "createDialog": {
+      "title": "Créer une clé API",
+      "description": "Configurez votre nouvelle clé API",
+      "name": "Nom de la clé",
+      "namePlaceholder": "ex: Mon application",
+      "scopes": "Permissions",
+      "scopesPlaceholder": "read,write,admin",
+      "domains": "Domaines autorisés",
+      "domainsPlaceholder": "example.com,app.example.com",
+      "domainsHelp": "Séparez les domaines par des virgules. Laissez vide pour autoriser tous les domaines.",
+      "rateLimit": "Limite de requêtes (par minute)",
+      "create": "Créer la clé",
+      "creating": "Création..."
+    },
+    "createSuccess": {
+      "title": "Clé API créée",
+      "description": "Copiez vos clés maintenant. La clé secrète ne sera plus visible après la fermeture de cette fenêtre.",
+      "publishableKey": "Clé publique (pour le widget)",
+      "secretKey": "Clé secrète (pour le serveur)",
+      "warning": "Sauvegardez la clé secrète en lieu sûr. Elle ne sera plus affichée.",
+      "done": "J'ai copié mes clés"
+    },
+    "regenerateDialog": {
+      "title": "Régénérer la clé",
+      "publishableDescription": "La clé publique actuelle sera immédiatement invalidée. Tous les widgets utilisant cette clé cesseront de fonctionner.",
+      "secretDescription": "La clé secrète actuelle sera immédiatement invalidée. Tous les appels API utilisant cette clé échoueront.",
+      "warning": "Cette action est irréversible.",
+      "confirm": "Régénérer",
+      "regenerating": "Régénération...",
+      "success": "Nouvelle clé générée. Copiez-la maintenant, elle ne sera plus affichée."
+    },
+    "deleteDialog": {
+      "title": "Supprimer la clé API",
+      "description": "Êtes-vous sûr de vouloir supprimer la clé « {name} » ? Cette action est irréversible et tous les services utilisant cette clé cesseront de fonctionner.",
+      "confirm": "Supprimer",
+      "deleting": "Suppression..."
+    },
+    "errors": {
+      "loadFailed": "Impossible de charger les clés API",
+      "createFailed": "Impossible de créer la clé API",
+      "deleteFailed": "Impossible de supprimer la clé API",
+      "regenerateFailed": "Impossible de régénérer la clé",
+      "updateFailed": "Impossible de mettre à jour la clé"
     }
   },
   "sharing": {

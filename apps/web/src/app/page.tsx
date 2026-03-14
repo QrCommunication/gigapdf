@@ -25,6 +25,7 @@ import {
   ExternalLink,
   ChevronRight,
   Sparkles,
+  Pencil,
 } from "lucide-react";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
@@ -288,9 +289,9 @@ export default function HomePage() {
                   <div className="w-12 h-12 rounded-lg bg-terminal-amber/10 flex items-center justify-center mb-6">
                     <Braces className="h-6 w-6 text-terminal-amber" />
                   </div>
-                  <h3 className="text-xl font-semibold mb-3">REST API</h3>
+                  <h3 className="text-xl font-semibold mb-3">{t("landing.features.api.title")}</h3>
                   <p className="text-muted-foreground leading-relaxed">
-                    Full programmatic access to all features. Automate document workflows with our comprehensive API.
+                    {t("landing.features.api.description")}
                   </p>
                 </div>
               </div>
@@ -302,9 +303,9 @@ export default function HomePage() {
                   <div className="w-12 h-12 rounded-lg bg-terminal-cyan/10 flex items-center justify-center mb-6">
                     <Layers className="h-6 w-6 text-terminal-cyan" />
                   </div>
-                  <h3 className="text-xl font-semibold mb-3">Multi-format Export</h3>
+                  <h3 className="text-xl font-semibold mb-3">{t("landing.features.export.title")}</h3>
                   <p className="text-muted-foreground leading-relaxed">
-                    Export to PNG, JPEG, DOCX, HTML and more. OCR support for scanned documents with Tesseract.
+                    {t("landing.features.export.description")}
                   </p>
                 </div>
               </div>
@@ -316,10 +317,26 @@ export default function HomePage() {
                   <div className="w-12 h-12 rounded-lg bg-terminal-green/10 flex items-center justify-center mb-6">
                     <Lock className="h-6 w-6 text-terminal-green" />
                   </div>
-                  <h3 className="text-xl font-semibold mb-3">Self-hostable</h3>
+                  <h3 className="text-xl font-semibold mb-3">{t("landing.features.selfHostable.title")}</h3>
                   <p className="text-muted-foreground leading-relaxed">
-                    Deploy on your own infrastructure. Keep complete control over your documents and data.
+                    {t("landing.features.selfHostable.description")}
                   </p>
+                </div>
+              </div>
+
+              {/* Feature Card 7 - PDF Modification */}
+              <div className="group relative rounded-xl border border-border bg-card/50 backdrop-blur-sm p-8 card-hover md:col-span-2 lg:col-span-3">
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary/5 via-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="relative flex flex-col md:flex-row md:items-center gap-6">
+                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 group-hover:glow-green transition-shadow">
+                    <Pencil className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold mb-2">{t("landing.features.pdfModification.title")}</h3>
+                    <p className="text-muted-foreground leading-relaxed">
+                      {t("landing.features.pdfModification.description")}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

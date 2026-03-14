@@ -14,12 +14,14 @@ from app.api.v1 import (
     bookmarks,
     documents,
     elements,
+    embed,
     export,
     forms,
     history,
     jobs,
     layers,
     merge_split,
+    modify,
     pages,
     plans,
     public_billing,
@@ -108,6 +110,12 @@ api_router.include_router(
 )
 
 api_router.include_router(
+    modify.router,
+    prefix="/documents",
+    tags=["PDF Modification"],
+)
+
+api_router.include_router(
     jobs.router,
     prefix="/jobs",
     tags=["Jobs"],
@@ -165,6 +173,12 @@ api_router.include_router(
     api_keys.router,
     prefix="/api-keys",
     tags=["API Keys"],
+)
+
+api_router.include_router(
+    embed.router,
+    prefix="/embed",
+    tags=["Embed"],
 )
 
 # Admin endpoints

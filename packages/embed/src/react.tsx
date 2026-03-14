@@ -11,7 +11,7 @@ import type { GigaPdfOptions, GigaPdfEvents } from './types';
 export type { GigaPdfEvents };
 
 /** Props for the React component — container is managed internally */
-export interface GigaPdfEditorProps extends Omit<GigaPdfOptions, 'container'> {
+export interface GigaPdfEditorProps extends Omit<GigaPdfOptions, 'container' | 'onComplete'> {
   /** Called when the editor is ready */
   onReady?: GigaPdfEvents['ready'];
   /** Called when the document is saved */
@@ -22,6 +22,8 @@ export interface GigaPdfEditorProps extends Omit<GigaPdfOptions, 'container'> {
   onError?: GigaPdfEvents['error'];
   /** Called when the current page changes */
   onPageChange?: GigaPdfEvents['pageChange'];
+  /** Called when the user clicks "Done" — receives the modified PDF as a Blob */
+  onComplete?: GigaPdfEvents['complete'];
   /** Additional style for the wrapper div */
   style?: CSSProperties;
   /** Additional className for the wrapper div */
@@ -33,6 +35,7 @@ export interface GigaPdfEditorRef {
   exportPdf(format?: string): void;
   savePdf(): void;
   loadDocument(documentId: string): void;
+  getFile(): Promise<Blob>;
 }
 
 export const GigaPdfEditorComponent = forwardRef<GigaPdfEditorRef, GigaPdfEditorProps>(
@@ -43,11 +46,14 @@ export const GigaPdfEditorComponent = forwardRef<GigaPdfEditorRef, GigaPdfEditor
       onExport,
       onError,
       onPageChange,
+      onComplete,
       style,
       className,
       // All remaining props are GigaPdfOptions (minus container)
       apiKey,
+      publicKey,
       documentId,
+      file,
       baseUrl,
       width,
       height,
@@ -55,6 +61,7 @@ export const GigaPdfEditorComponent = forwardRef<GigaPdfEditorRef, GigaPdfEditor
       theme,
       hideToolbar,
       tools,
+      showDoneButton,
     } = props;
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -71,15 +78,25 @@ export const GigaPdfEditorComponent = forwardRef<GigaPdfEditorRef, GigaPdfEditor
       loadDocument(documentId: string) {
         editorRef.current?.loadDocument(documentId);
       },
+      getFile() {
+        if (!editorRef.current) return Promise.reject(new Error('[GigaPdf] Editor not ready'));
+        return editorRef.current.getFile();
+      },
     }));
 
     useEffect(() => {
       if (!containerRef.current) return;
 
+      const handleComplete = onComplete
+        ? (blob: Blob) => onComplete({ blob })
+        : undefined;
+
       const options: GigaPdfOptions = {
         apiKey,
+        publicKey,
         container: containerRef.current,
         documentId,
+        file,
         baseUrl,
         width,
         height,
@@ -87,6 +104,8 @@ export const GigaPdfEditorComponent = forwardRef<GigaPdfEditorRef, GigaPdfEditor
         theme,
         hideToolbar,
         tools,
+        showDoneButton,
+        onComplete: handleComplete,
       };
 
       const editor = new GigaPdfEditor(options);
@@ -106,7 +125,7 @@ export const GigaPdfEditorComponent = forwardRef<GigaPdfEditorRef, GigaPdfEditor
       // Callbacks are intentionally excluded to avoid needless re-mounts;
       // callers should memoize them if they care about identity.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [apiKey, documentId, baseUrl, width, height, locale, theme, hideToolbar, tools]);
+    }, [apiKey, publicKey, documentId, file, baseUrl, width, height, locale, theme, hideToolbar, tools, showDoneButton]);
 
     // Sync event handlers without re-creating the editor
     useEffect(() => {
@@ -153,6 +172,14 @@ export const GigaPdfEditorComponent = forwardRef<GigaPdfEditorRef, GigaPdfEditor
         if (onPageChange) editor.off('pageChange', onPageChange);
       };
     }, [onPageChange]);
+
+    useEffect(() => {
+      const editor = editorRef.current;
+      if (!editor || !onComplete) return;
+      const handler = (data: { blob: Blob }) => onComplete(data);
+      editor.on('complete', handler);
+      return () => { editor.off('complete', handler); };
+    }, [onComplete]);
 
     return <div ref={containerRef} style={style} className={className} />;
   },

@@ -154,12 +154,19 @@ class ApiKeyResponse(BaseModel):
     The secret key hash is never exposed; only the prefix
     (first 16 characters of the original key) is included
     so users can identify which key is which.
+
+    The ``publishable_key_prefix`` exposes the beginning of the
+    publishable key (``giga_pub_*``) which is safe for client-side use.
     """
 
     id: str = Field(description="Unique API key identifier (UUID).")
     name: str = Field(description="Human-readable label.")
     key_prefix: str = Field(
-        description="First 16 characters of the key for identification (e.g. 'giga_pk_xxxxxxxx')."
+        description="First 16 characters of the secret key for identification (e.g. 'giga_pk_xxxxxxxx')."
+    )
+    publishable_key_prefix: Optional[str] = Field(
+        default=None,
+        description="First 20 characters of the publishable key (e.g. 'giga_pub_xxxxxxxxxx').",
     )
     scopes: List[str] = Field(description="List of authorized scopes.")
     allowed_domains: Optional[List[str]] = Field(
@@ -183,6 +190,7 @@ class ApiKeyResponse(BaseModel):
                 "id": "550e8400-e29b-41d4-a716-446655440000",
                 "name": "My mobile app",
                 "key_prefix": "giga_pk_abcdefgh",
+                "publishable_key_prefix": "giga_pub_abcdefghij",
                 "scopes": ["read", "write"],
                 "allowed_domains": ["https://app.example.com"],
                 "rate_limit": 60,
@@ -198,16 +206,26 @@ class CreateApiKeyResponse(BaseModel):
     """
     Response returned once when an API key is created.
 
-    The ``key`` field contains the full plaintext key and is shown
+    The ``key`` field contains the full plaintext secret key and is shown
     **only this one time** — it is never retrievable again.
+
+    The ``publishable_key`` is safe to embed in client-side code
+    and is always retrievable via the ``publishable_key_prefix``.
     """
 
     key: str = Field(
         description=(
-            "Full plaintext API key — store this securely. "
+            "Full plaintext secret API key — store this securely. "
             "It will NOT be shown again."
         ),
         examples=["giga_pk_AbCdEfGhIjKlMnOpQrStUvWxYz012345"],
+    )
+    publishable_key: str = Field(
+        description=(
+            "Full plaintext publishable key — safe to use in client-side code. "
+            "Use this in the embed widget SDK."
+        ),
+        examples=["giga_pub_AbCdEfGhIjKlMnOpQrStUvWxYz012345"],
     )
     api_key: ApiKeyResponse = Field(description="Persisted API key metadata.")
 
@@ -215,10 +233,12 @@ class CreateApiKeyResponse(BaseModel):
         json_schema_extra = {
             "example": {
                 "key": "giga_pk_AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+                "publishable_key": "giga_pub_XyZaBcDeFgHiJkLmNoPqRsTuVwXy012345",
                 "api_key": {
                     "id": "550e8400-e29b-41d4-a716-446655440000",
                     "name": "My mobile app",
                     "key_prefix": "giga_pk_AbCdEfGh",
+                    "publishable_key_prefix": "giga_pub_XyZaBcDeFg",
                     "scopes": ["read", "write"],
                     "allowed_domains": None,
                     "rate_limit": 60,
@@ -229,3 +249,12 @@ class CreateApiKeyResponse(BaseModel):
                 },
             }
         }
+
+
+class RegenerateKeyResponse(BaseModel):
+    """Response returned when a key is regenerated."""
+
+    key: str = Field(
+        description="The newly generated key in plaintext — store securely. Shown only once."
+    )
+    api_key: ApiKeyResponse = Field(description="Updated API key metadata.")

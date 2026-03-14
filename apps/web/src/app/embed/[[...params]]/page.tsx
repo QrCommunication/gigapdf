@@ -35,13 +35,13 @@ import {
 
 interface GigaPdfOutboundMessage {
   type: "gigapdf:command";
-  action: "save" | "export" | "load";
+  action: "save" | "export" | "load" | "getFile";
   payload?: unknown;
 }
 
 interface GigaPdfInboundMessage {
   type: "gigapdf:event";
-  event: "ready" | "save" | "export" | "error" | "pageChange";
+  event: "ready" | "save" | "export" | "error" | "pageChange" | "complete";
   data?: unknown;
 }
 
@@ -168,6 +168,7 @@ export default function EmbedPage() {
   // --- Parse query params from SDK ---
   const apiKey = searchParams?.get("apiKey") ?? "";
   const hideToolbar = searchParams?.get("hideToolbar") === "true";
+  const showDoneButton = searchParams?.get("showDoneButton") === "true";
   const toolsParam = searchParams?.get("tools") ?? null;
   const allowedTools: AllowedTool[] | null = toolsParam
     ? (toolsParam.split(",") as AllowedTool[])
@@ -392,6 +393,73 @@ export default function EmbedPage() {
     sendToParent,
   ]);
 
+  // --- Get final modified file (for "Done" button or getFile command) ---
+  const handleGetFile = useCallback(async () => {
+    try {
+      let fileToExport: File | Blob = currentPdfFile!;
+
+      if (!fileToExport) {
+        sendToParent({
+          type: "gigapdf:event",
+          event: "error",
+          data: { code: "NO_FILE", message: "No PDF file loaded" },
+        });
+        return;
+      }
+
+      const canvasElements = currentPage?.elements ?? [];
+      const canvasOps = canvasElements.map((el) => ({
+        action: "add" as const,
+        pageNumber: currentPageIndex + 1,
+        element: el as unknown as Record<string, unknown>,
+      }));
+
+      const allOperations = [
+        ...canvasOps,
+        ...contentModifications.map((mod) => ({
+          ...mod,
+          pageNumber: mod.pageNumber + 1,
+        })),
+      ];
+
+      if (allOperations.length > 0) {
+        const modifiedBlob = await applyElements.mutateAsync({
+          file: fileToExport,
+          operations: allOperations,
+        });
+        fileToExport = modifiedBlob;
+      }
+
+      const blob =
+        fileToExport instanceof Blob
+          ? fileToExport
+          : new Blob([fileToExport]);
+
+      sendToParent({
+        type: "gigapdf:event",
+        event: "complete",
+        data: { blob },
+      });
+    } catch (err) {
+      console.error("[Embed] getFile failed:", err);
+      sendToParent({
+        type: "gigapdf:event",
+        event: "error",
+        data: {
+          code: "GET_FILE_FAILED",
+          message: err instanceof Error ? err.message : "Failed to get file",
+        },
+      });
+    }
+  }, [
+    currentPdfFile,
+    currentPage,
+    currentPageIndex,
+    contentModifications,
+    applyElements,
+    sendToParent,
+  ]);
+
   // --- Listen for postMessage commands from parent SDK ---
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
@@ -421,12 +489,16 @@ export default function EmbedPage() {
           }
           break;
         }
+
+        case "getFile":
+          handleGetFile();
+          break;
       }
     }
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [save, handleExport, sendToParent]);
+  }, [save, handleExport, handleGetFile, sendToParent]);
 
   // --- Element handlers ---
   const handleElementAdded = useCallback(
@@ -833,6 +905,18 @@ export default function EmbedPage() {
           />
         </main>
       </div>
+
+      {/* "Done" button for file-in/file-out flow */}
+      {showDoneButton && (
+        <div className="flex items-center justify-end border-t px-4 py-2 bg-background">
+          <button
+            onClick={handleGetFile}
+            className="rounded-md bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            Terminé
+          </button>
+        </div>
+      )}
 
       {/* Minimal status bar — shows save state */}
       <footer className="flex items-center justify-between border-t px-3 py-1 text-xs text-muted-foreground bg-background">

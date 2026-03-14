@@ -647,5 +647,37 @@ class DocumentSessionManager:
             logger.debug(f"Evicted LRU session {oldest_id}")
 
 
+    # ------------------------------------------------------------------
+    # Embed session mapping (session_id → document_id + user_id)
+    # ------------------------------------------------------------------
+
+    def set_embed_session(
+        self, session_id: str, document_id: str, user_id: str
+    ) -> None:
+        """Store an embed session mapping."""
+        if not hasattr(self, "_embed_sessions"):
+            self._embed_sessions: dict[str, dict[str, str]] = {}
+        self._embed_sessions[session_id] = {
+            "document_id": document_id,
+            "user_id": user_id,
+        }
+
+    def get_embed_session(self, session_id: str) -> Optional[dict[str, str]]:
+        """Retrieve an embed session mapping."""
+        if not hasattr(self, "_embed_sessions"):
+            return None
+        return self._embed_sessions.get(session_id)
+
+    def remove_embed_session(self, session_id: str) -> bool:
+        """Remove an embed session mapping."""
+        if not hasattr(self, "_embed_sessions"):
+            return False
+        return self._embed_sessions.pop(session_id, None) is not None
+
+    def remove_session(self, document_id: str) -> bool:
+        """Alias for delete_session for backward compat."""
+        return self.delete_session(document_id)
+
+
 # Global session manager instance
 document_sessions = DocumentSessionManager()

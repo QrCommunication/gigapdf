@@ -13,15 +13,17 @@ Documentation complète de l'API REST de GigaPDF.
 3. [Documents](#documents)
 4. [Pages](#pages)
 5. [Elements](#elements)
-6. [Annotations](#annotations)
-7. [Forms](#forms)
-8. [Merge & Split](#merge--split)
-9. [Export](#export)
-10. [OCR](#ocr)
-11. [Storage](#storage)
-12. [Billing](billing.md)
-13. [Webhooks](#webhooks)
-14. [Error Handling](#error-handling)
+6. [Text Operations](#text-operations)
+7. [PDF Modification](#pdf-modification)
+8. [Annotations](#annotations)
+9. [Forms](#forms)
+10. [Merge & Split](#merge--split)
+11. [Export](#export)
+12. [OCR](#ocr)
+13. [Storage](#storage)
+14. [Billing](billing.md)
+15. [Webhooks](#webhooks)
+16. [Error Handling](#error-handling)
 
 ---
 
@@ -520,6 +522,380 @@ PATCH /api/v1/documents/{document_id}/elements/{element_id}
 ```http
 DELETE /api/v1/documents/{document_id}/elements/{element_id}
 ```
+
+---
+
+## Text Operations
+
+### Search Text / Rechercher du texte
+
+Search for text within a PDF document with advanced options.
+
+```http
+POST /api/v1/documents/{document_id}/text/search
+```
+
+#### Body / Corps
+
+```json
+{
+  "query": "chapter",
+  "regex": false,
+  "case_sensitive": false,
+  "whole_word": true,
+  "page_range": "1-10"
+}
+```
+
+#### Parameters / Paramètres
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `query` | string | — | Text to search for |
+| `regex` | boolean | false | Use regex pattern matching |
+| `case_sensitive` | boolean | false | Case sensitive search |
+| `whole_word` | boolean | false | Match whole words only |
+| `page_range` | string | null | Page range filter (e.g., "1-5,10") |
+
+#### Response / Réponse
+
+```json
+{
+  "success": true,
+  "data": {
+    "matches": [
+      {
+        "page_number": 1,
+        "element_id": "txt-001-abc123",
+        "bounds": {"x": 100, "y": 200, "width": 50, "height": 20},
+        "matched_text": "introduction",
+        "context": "...the introduction to this chapter covers..."
+      }
+    ],
+    "total_matches": 15,
+    "pages_searched": 10
+  }
+}
+```
+
+---
+
+### Replace Text / Remplacer du texte
+
+Search and replace text within a PDF document.
+
+```http
+POST /api/v1/documents/{document_id}/text/replace
+```
+
+#### Body / Corps
+
+```json
+{
+  "search": "Acme Corporation",
+  "replace": "NewCo Industries",
+  "regex": false,
+  "case_sensitive": true,
+  "whole_word": true,
+  "max_replacements": 100
+}
+```
+
+#### Response / Réponse
+
+```json
+{
+  "success": true,
+  "data": {
+    "replacements_made": 5,
+    "pages_affected": [1, 3, 5, 12],
+    "replaced_elements": ["txt-001-abc123", "txt-002-def456"]
+  }
+}
+```
+
+---
+
+### Extract Text / Extraire du texte
+
+Extract all text content from a PDF document.
+
+```http
+GET /api/v1/documents/{document_id}/text/extract
+```
+
+#### Query Parameters / Paramètres de requête
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page_range` | string | null | Page range filter |
+| `include_formatting` | boolean | false | Include font/style information |
+| `preserve_layout` | boolean | true | Preserve original text layout |
+
+#### Response / Réponse
+
+```json
+{
+  "success": true,
+  "data": {
+    "pages": [
+      {
+        "page_number": 1,
+        "text": "Chapter 1: Introduction\n\nThis document provides...",
+        "elements": [
+          {
+            "element_id": "txt-001-abc123",
+            "content": "Chapter 1: Introduction",
+            "bounds": {"x": 100, "y": 50, "width": 200, "height": 24},
+            "style": {"font": "Helvetica-Bold", "size": 18}
+          }
+        ]
+      }
+    ],
+    "full_text": "Chapter 1: Introduction\n\nThis document provides...",
+    "total_pages": 10,
+    "total_characters": 5432
+  }
+}
+```
+
+---
+
+## PDF Modification
+
+### Modify Document / Modifier un document
+
+Apply batch modifications to a PDF document. Supports adding, updating, and deleting elements (text, images, shapes, annotations) on specific pages.
+
+```http
+POST /api/v1/documents/{document_id}/modify
+```
+
+#### Body / Corps
+
+```json
+{
+  "operations": [
+    {
+      "action": "add",
+      "element_type": "text",
+      "page_number": 1,
+      "element": {
+        "content": "Hello World",
+        "bounds": {"x": 100, "y": 200, "width": 300, "height": 50},
+        "style": {
+          "font_family": "Helvetica",
+          "font_size": 14,
+          "color": "#000000"
+        }
+      }
+    },
+    {
+      "action": "update",
+      "element_type": "text",
+      "page_number": 2,
+      "element_id": "txt-001-abc123",
+      "element": {
+        "content": "Updated text",
+        "bounds": {"x": 100, "y": 200, "width": 300, "height": 50},
+        "style": {"font_size": 16}
+      },
+      "old_bounds": {"x": 100, "y": 200, "width": 300, "height": 50}
+    },
+    {
+      "action": "delete",
+      "element_type": "annotation",
+      "page_number": 3,
+      "element_id": "ann-002-def456"
+    }
+  ]
+}
+```
+
+#### Operation Fields / Champs d'opération
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `action` | string | Yes | `add`, `update`, or `delete` |
+| `element_type` | string | Yes | `text`, `image`, `shape`, or `annotation` |
+| `page_number` | integer | Yes | Target page (1-indexed) |
+| `element` | object | add/update | Element data with `content`, `bounds`, `style` |
+| `element_id` | string | update/delete | ID of existing element |
+| `old_bounds` | object | update | Previous position/dimensions |
+
+#### Element Style / Style d'élément
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `font_family` | string | Font name (e.g., "Helvetica") |
+| `font_size` | number | Size in points (1-1000) |
+| `color` | string | Hex color (#RRGGBB) |
+| `opacity` | number | 0.0 to 1.0 |
+| `bold` | boolean | Bold text |
+| `italic` | boolean | Italic text |
+| `fill_color` | string | Shape fill color |
+| `line_width` | number | Stroke width |
+
+#### Examples / Exemples
+
+**cURL:**
+```bash
+curl -X POST "https://api.your-domain.com/api/v1/documents/doc_123abc/modify" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operations": [
+      {
+        "action": "add",
+        "element_type": "text",
+        "page_number": 1,
+        "element": {
+          "content": "Confidential",
+          "bounds": {"x": 200, "y": 400, "width": 200, "height": 30},
+          "style": {"font_size": 18, "color": "#FF0000", "opacity": 0.5},
+          "rotation": -45
+        }
+      }
+    ]
+  }'
+```
+
+**JavaScript:**
+```javascript
+const response = await fetch(`/api/v1/documents/${documentId}/modify`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    operations: [
+      {
+        action: 'add',
+        element_type: 'image',
+        page_number: 1,
+        element: {
+          content: 'data:image/png;base64,...',
+          bounds: { x: 400, y: 50, width: 100, height: 100 }
+        }
+      }
+    ]
+  })
+});
+```
+
+**Python:**
+```python
+response = requests.post(
+    f'https://api.your-domain.com/api/v1/documents/{document_id}/modify',
+    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+    json={
+        'operations': [
+            {
+                'action': 'add',
+                'element_type': 'text',
+                'page_number': 1,
+                'element': {
+                    'content': 'Watermark',
+                    'bounds': {'x': 200, 'y': 400, 'width': 200, 'height': 30},
+                    'style': {'font_size': 48, 'color': '#CCCCCC', 'opacity': 0.3},
+                    'rotation': -45
+                }
+            }
+        ]
+    }
+)
+```
+
+#### Response / Réponse
+
+```json
+{
+  "success": true,
+  "data": {
+    "document_id": "doc_123abc",
+    "total_operations": 3,
+    "successful": 2,
+    "failed": 1,
+    "results": [
+      {
+        "index": 0,
+        "action": "add",
+        "element_type": "text",
+        "page_number": 1,
+        "status": "success",
+        "element_id": "txt-new-001"
+      },
+      {
+        "index": 1,
+        "action": "update",
+        "element_type": "text",
+        "page_number": 2,
+        "status": "success",
+        "element_id": "txt-001-abc123"
+      },
+      {
+        "index": 2,
+        "action": "delete",
+        "element_type": "annotation",
+        "page_number": 3,
+        "status": "error",
+        "error": "Element not found: ann-002-def456"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Annotations
+
+### List Annotations / Lister les annotations
+
+```http
+GET /api/v1/documents/{document_id}/pages/{page_number}/elements?type=annotation
+```
+
+Annotations are managed through the Elements API with `type=annotation`.
+
+### Create Annotation / Créer une annotation
+
+```http
+POST /api/v1/documents/{document_id}/pages/{page_number}/elements
+```
+
+#### Body / Corps
+
+```json
+{
+  "type": "annotation",
+  "x": 100,
+  "y": 200,
+  "width": 200,
+  "height": 50,
+  "content": "This is a note",
+  "style": {
+    "color": "#FFFF00",
+    "opacity": 0.5
+  },
+  "annotation_type": "highlight"
+}
+```
+
+#### Annotation Types / Types d'annotations
+
+| Type | Description |
+|------|-------------|
+| `highlight` | Text highlight |
+| `underline` | Text underline |
+| `strikeout` | Text strikethrough |
+| `note` | Sticky note |
+| `stamp` | Stamp annotation |
+| `link` | Hyperlink |
+| `freetext` | Free text annotation |
+
+Annotations can also be added or removed via the [PDF Modification](#pdf-modification) endpoint using batch operations.
 
 ---
 

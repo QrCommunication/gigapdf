@@ -1,8 +1,12 @@
 export interface GigaPdfOptions {
-  /** API key for authentication */
+  /** API key for authentication (secret key giga_pk_* or publishable key giga_pub_*) */
   apiKey: string;
+  /** Alias for apiKey — publishable key for widget usage (giga_pub_*) */
+  publicKey?: string;
   /** Document ID to load (optional - opens empty editor if not provided) */
   documentId?: string;
+  /** PDF file to edit — triggers the file-in/file-out widget flow */
+  file?: File | Blob;
   /** Base URL of GigaPDF (default: https://giga-pdf.com) */
   baseUrl?: string;
   /** Container element or CSS selector */
@@ -19,6 +23,10 @@ export interface GigaPdfOptions {
   hideToolbar?: boolean;
   /** Allowed tools */
   tools?: ('text' | 'image' | 'shape' | 'annotation' | 'form' | 'signature')[];
+  /** Show a "Done" button in the editor (default: true when file is provided) */
+  showDoneButton?: boolean;
+  /** Callback when the user clicks "Done" — receives the modified PDF as a Blob */
+  onComplete?: (file: Blob) => void;
 }
 
 export interface GigaPdfEvents {
@@ -27,6 +35,7 @@ export interface GigaPdfEvents {
   export: (data: { blob: Blob; format: string }) => void;
   error: (error: { code: string; message: string }) => void;
   pageChange: (data: { page: number; total: number }) => void;
+  complete: (data: { blob: Blob }) => void;
 }
 
 export type GigaPdfEventName = keyof GigaPdfEvents;
@@ -34,7 +43,7 @@ export type GigaPdfEventName = keyof GigaPdfEvents;
 /** Message sent from SDK to iframe */
 export interface GigaPdfOutboundMessage {
   type: 'gigapdf:command';
-  action: 'save' | 'export' | 'load';
+  action: 'save' | 'export' | 'load' | 'getFile';
   payload?: unknown;
 }
 

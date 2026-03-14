@@ -873,6 +873,60 @@ class APIClient {
     );
   }
 
+  // ===== API Keys =====
+
+  async listApiKeys(): Promise<ApiKeyResponse[]> {
+    const response = await this.request<APIResponse<ApiKeyResponse[]>>(
+      "/api/v1/api-keys"
+    );
+    return response.data;
+  }
+
+  async createApiKey(body: CreateApiKeyRequest): Promise<CreateApiKeyResponse> {
+    const response = await this.request<APIResponse<CreateApiKeyResponse>>(
+      "/api/v1/api-keys",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      }
+    );
+    return response.data;
+  }
+
+  async updateApiKey(
+    keyId: string,
+    body: { name?: string; scopes?: string; allowed_domains?: string; rate_limit?: number; is_active?: boolean }
+  ): Promise<ApiKeyResponse> {
+    const response = await this.request<APIResponse<ApiKeyResponse>>(
+      `/api/v1/api-keys/${keyId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }
+    );
+    return response.data;
+  }
+
+  async deleteApiKey(keyId: string): Promise<void> {
+    await this.request(`/api/v1/api-keys/${keyId}`, { method: "DELETE" });
+  }
+
+  async regeneratePublishableKey(keyId: string): Promise<RegenerateKeyResponse> {
+    const response = await this.request<APIResponse<RegenerateKeyResponse>>(
+      `/api/v1/api-keys/${keyId}/regenerate-publishable`,
+      { method: "POST" }
+    );
+    return response.data;
+  }
+
+  async regenerateSecretKey(keyId: string): Promise<RegenerateKeyResponse> {
+    const response = await this.request<APIResponse<RegenerateKeyResponse>>(
+      `/api/v1/api-keys/${keyId}/regenerate-secret`,
+      { method: "POST" }
+    );
+    return response.data;
+  }
+
   // ===== Sharing API =====
 
   /**
@@ -1452,6 +1506,41 @@ export interface NotificationsResponse {
   page: number;
   per_page: number;
   total_pages: number;
+}
+
+// ===== API Keys types =====
+
+export interface ApiKeyResponse {
+  id: string;
+  name: string;
+  key_prefix: string;
+  publishable_key_prefix: string | null;
+  scopes: string[];
+  allowed_domains: string[] | null;
+  rate_limit: number;
+  is_active: boolean;
+  last_used_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export interface CreateApiKeyRequest {
+  name: string;
+  scopes?: string;
+  allowed_domains?: string;
+  rate_limit?: number;
+  expires_at?: string;
+}
+
+export interface CreateApiKeyResponse {
+  key: string;
+  publishable_key: string;
+  api_key: ApiKeyResponse;
+}
+
+export interface RegenerateKeyResponse {
+  key: string;
+  api_key: ApiKeyResponse;
 }
 
 // Singleton instance

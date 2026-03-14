@@ -68,6 +68,12 @@ class ApiKey(Base):
     expires_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )  # NULL means the key never expires
+    publishable_key_hash: Mapped[Optional[str]] = mapped_column(
+        String(128), nullable=True, unique=True
+    )  # SHA-256 of the publishable key (giga_pub_*)
+    publishable_key_prefix: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True
+    )  # First chars of the publishable key for display
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -77,4 +83,5 @@ class ApiKey(Base):
         Index("idx_api_keys_key_hash", "key_hash", unique=True),
         Index("idx_api_keys_is_active", "is_active"),
         Index("idx_api_keys_user_active", "user_id", "is_active"),
+        Index("idx_api_keys_pub_key_hash", "publishable_key_hash", unique=True),
     )

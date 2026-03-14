@@ -27,6 +27,7 @@ from app.schemas.api_keys import (
     ApiKeyResponse,
     CreateApiKeyRequest,
     CreateApiKeyResponse,
+    RegenerateKeyResponse,
     UpdateApiKeyRequest,
 )
 from app.schemas.responses.common import APIResponse, MetaInfo, SuccessResponse
@@ -45,7 +46,7 @@ _SCOPES_SEPARATOR = ","
 
 def _generate_raw_key() -> str:
     """
-    Generate a new cryptographically random API key.
+    Generate a new cryptographically random secret API key.
 
     Format: ``giga_pk_<43 URL-safe chars>``
 
@@ -53,6 +54,18 @@ def _generate_raw_key() -> str:
         str: The full plaintext key.
     """
     return f"giga_pk_{secrets.token_urlsafe(32)}"
+
+
+def _generate_publishable_key() -> str:
+    """
+    Generate a new cryptographically random publishable key.
+
+    Format: ``giga_pub_<43 URL-safe chars>``
+
+    Returns:
+        str: The full plaintext publishable key (safe for client-side use).
+    """
+    return f"giga_pub_{secrets.token_urlsafe(32)}"
 
 
 def _hash_key(raw_key: str) -> str:
@@ -93,6 +106,7 @@ def _orm_to_response(api_key: ApiKey) -> ApiKeyResponse:
         id=api_key.id,
         name=api_key.name,
         key_prefix=api_key.key_prefix,
+        publishable_key_prefix=api_key.publishable_key_prefix,
         scopes=scopes,
         allowed_domains=allowed_domains,
         rate_limit=api_key.rate_limit,
@@ -193,11 +207,18 @@ async def create_api_key(
     key_hash = _hash_key(raw_key)
     prefix = _key_prefix(raw_key)
 
+    # Generate the publishable key (safe for client-side use)
+    raw_pub_key = _generate_publishable_key()
+    pub_key_hash = _hash_key(raw_pub_key)
+    pub_key_prefix = raw_pub_key[:20]
+
     api_key = ApiKey(
         user_id=current_user.user_id,
         name=body.name,
         key_prefix=prefix,
         key_hash=key_hash,
+        publishable_key_hash=pub_key_hash,
+        publishable_key_prefix=pub_key_prefix,
         scopes=body.scopes or "read,write",
         allowed_domains=body.allowed_domains or None,
         rate_limit=body.rate_limit if body.rate_limit is not None else 60,
@@ -216,6 +237,7 @@ async def create_api_key(
 
     response_data = CreateApiKeyResponse(
         key=raw_key,
+        publishable_key=raw_pub_key,
         api_key=_orm_to_response(api_key),
     )
 
@@ -449,6 +471,170 @@ async def update_api_key(
     return APIResponse(
         success=True,
         data=_orm_to_response(api_key),
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api-keys/{key_id}/regenerate-publishable — Regenerate publishable key
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{key_id}/regenerate-publishable",
+    response_model=APIResponse[RegenerateKeyResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Regenerate publishable key",
+    description="""
+Regenerate the publishable key (``giga_pub_*``) for an API key.
+
+The previous publishable key is **immediately invalidated**.  The new key
+is returned in plaintext and is safe to embed in client-side code.
+""",
+    responses={
+        200: {"description": "New publishable key generated"},
+        401: {"description": "Authentication required"},
+        404: {"description": "API key not found"},
+    },
+)
+async def regenerate_publishable_key(
+    key_id: str,
+    current_user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[RegenerateKeyResponse]:
+    """
+    Regenerate the publishable key for an API key.
+
+    The old publishable key is immediately invalidated.
+
+    Args:
+        key_id: UUID of the API key.
+        current_user: The JWT-authenticated caller.
+        db: Async database session.
+
+    Returns:
+        APIResponse[RegenerateKeyResponse]: The new publishable key in plaintext.
+    """
+    result = await db.execute(
+        select(ApiKey).where(
+            ApiKey.id == key_id,
+            ApiKey.user_id == current_user.user_id,
+        )
+    )
+    api_key = result.scalar_one_or_none()
+
+    if api_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "API_KEY_NOT_FOUND",
+                "message": f"API key not found: {key_id}",
+            },
+        )
+
+    raw_pub_key = _generate_publishable_key()
+    api_key.publishable_key_hash = _hash_key(raw_pub_key)
+    api_key.publishable_key_prefix = raw_pub_key[:20]
+
+    await db.flush()
+    await db.refresh(api_key)
+
+    logger.info(
+        "Publishable key regenerated",
+        extra={"key_id": key_id, "user_id": current_user.user_id},
+    )
+
+    return APIResponse(
+        success=True,
+        data=RegenerateKeyResponse(
+            key=raw_pub_key,
+            api_key=_orm_to_response(api_key),
+        ),
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api-keys/{key_id}/regenerate-secret — Regenerate secret key
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{key_id}/regenerate-secret",
+    response_model=APIResponse[RegenerateKeyResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Regenerate secret key",
+    description="""
+Regenerate the secret key (``giga_pk_*``) for an API key.
+
+The previous secret key is **immediately invalidated**.  The new key is
+returned in plaintext **only once** — store it securely.
+""",
+    responses={
+        200: {"description": "New secret key generated — shown only once"},
+        401: {"description": "Authentication required"},
+        404: {"description": "API key not found"},
+    },
+)
+async def regenerate_secret_key(
+    key_id: str,
+    current_user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[RegenerateKeyResponse]:
+    """
+    Regenerate the secret key for an API key.
+
+    The old secret key is immediately invalidated.
+
+    Args:
+        key_id: UUID of the API key.
+        current_user: The JWT-authenticated caller.
+        db: Async database session.
+
+    Returns:
+        APIResponse[RegenerateKeyResponse]: The new secret key in plaintext (shown once).
+    """
+    result = await db.execute(
+        select(ApiKey).where(
+            ApiKey.id == key_id,
+            ApiKey.user_id == current_user.user_id,
+        )
+    )
+    api_key = result.scalar_one_or_none()
+
+    if api_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "API_KEY_NOT_FOUND",
+                "message": f"API key not found: {key_id}",
+            },
+        )
+
+    raw_key = _generate_raw_key()
+    api_key.key_hash = _hash_key(raw_key)
+    api_key.key_prefix = _key_prefix(raw_key)
+
+    await db.flush()
+    await db.refresh(api_key)
+
+    logger.info(
+        "Secret key regenerated",
+        extra={"key_id": key_id, "user_id": current_user.user_id},
+    )
+
+    return APIResponse(
+        success=True,
+        data=RegenerateKeyResponse(
+            key=raw_key,
+            api_key=_orm_to_response(api_key),
+        ),
         meta=MetaInfo(
             request_id=get_request_id(),
             timestamp=now_utc(),

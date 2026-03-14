@@ -29,11 +29,15 @@ function resolveContainer(container: HTMLElement | string): HTMLElement {
   return container;
 }
 
-function buildEmbedUrl(options: GigaPdfOptions): string {
+function buildEmbedUrl(
+  options: GigaPdfOptions,
+  extra?: { sessionId?: string; documentId?: string },
+): string {
   const base = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, '');
+  const key = options.publicKey || options.apiKey;
   const params = new URLSearchParams();
 
-  params.set('apiKey', options.apiKey);
+  params.set('apiKey', key);
 
   if (options.locale) params.set('locale', options.locale);
   if (options.theme) params.set('theme', options.theme);
@@ -42,11 +46,38 @@ function buildEmbedUrl(options: GigaPdfOptions): string {
     params.set('tools', options.tools.join(','));
   }
 
-  const path = options.documentId
-    ? `/embed/${options.documentId}`
-    : '/embed';
+  const showDone = options.showDoneButton ?? !!options.file;
+  if (showDone) params.set('showDoneButton', 'true');
+
+  if (extra?.sessionId) params.set('sessionId', extra.sessionId);
+
+  const docId = extra?.documentId ?? options.documentId;
+  const path = docId ? `/embed/${docId}` : '/embed';
 
   return `${base}${path}?${params.toString()}`;
+}
+
+async function uploadFileSession(
+  options: GigaPdfOptions,
+): Promise<{ sessionId: string; documentId: string }> {
+  const base = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, '');
+  const key = options.publicKey || options.apiKey;
+  const form = new FormData();
+  form.append('file', options.file!, 'document.pdf');
+
+  const res = await fetch(`${base}/api/v1/embed/sessions`, {
+    method: 'POST',
+    headers: { 'X-API-Key': key },
+    body: form,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Upload failed (${res.status})`);
+  }
+
+  const json = await res.json();
+  return json.data ?? json;
 }
 
 type EventMap = {
@@ -57,14 +88,23 @@ export class GigaPdfEditor {
   private readonly iframe: HTMLIFrameElement;
   private readonly containerEl: HTMLElement;
   private readonly allowedOrigin: string;
+  private readonly baseUrl: string;
+  private readonly apiKey: string;
   private readonly listeners: EventMap;
   private readonly messageHandler: (event: MessageEvent) => void;
+  private readonly onComplete?: (file: Blob) => void;
+  private sessionId: string | null = null;
   private destroyed = false;
+  private resolveReady: () => void = () => {};
 
   constructor(options: GigaPdfOptions) {
-    const baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, '');
-    this.allowedOrigin = new URL(baseUrl).origin;
+    this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, '');
+    this.allowedOrigin = new URL(this.baseUrl).origin;
     this.containerEl = resolveContainer(options.container);
+    this.apiKey = options.publicKey || options.apiKey;
+    this.onComplete = options.onComplete;
+
+    // no-op resolveReady, overridden when ready listener is registered
 
     this.listeners = {
       ready: [],
@@ -72,10 +112,10 @@ export class GigaPdfEditor {
       export: [],
       error: [],
       pageChange: [],
+      complete: [],
     };
 
     this.iframe = document.createElement('iframe');
-    this.iframe.src = buildEmbedUrl(options);
     this.iframe.style.width = normalizeSize(options.width, DEFAULT_WIDTH);
     this.iframe.style.height = normalizeSize(options.height, DEFAULT_HEIGHT);
     this.iframe.style.border = 'none';
@@ -86,9 +126,26 @@ export class GigaPdfEditor {
     this.messageHandler = (event: MessageEvent) => {
       this.handleMessage(event);
     };
-
     window.addEventListener('message', this.messageHandler);
-    this.containerEl.appendChild(this.iframe);
+
+    if (options.file) {
+      // File flow: upload first, then create iframe
+      uploadFileSession(options)
+        .then(({ sessionId, documentId }) => {
+          this.sessionId = sessionId;
+          this.iframe.src = buildEmbedUrl(options, { sessionId, documentId });
+          this.containerEl.appendChild(this.iframe);
+        })
+        .catch((err) => {
+          const errorCbs = this.listeners.error;
+          for (const cb of errorCbs) {
+            cb({ code: 'UPLOAD_FAILED', message: err.message ?? String(err) });
+          }
+        });
+    } else {
+      this.iframe.src = buildEmbedUrl(options);
+      this.containerEl.appendChild(this.iframe);
+    }
   }
 
   private handleMessage(event: MessageEvent): void {
@@ -130,6 +187,15 @@ export class GigaPdfEditor {
         for (const cb of callbacks) cb(payload);
         break;
       }
+      case 'complete': {
+        const payload = data as Parameters<GigaPdfEvents['complete']>[0];
+        const callbacks = this.listeners.complete;
+        for (const cb of callbacks) cb(payload);
+        if (this.onComplete && payload?.blob) {
+          this.onComplete(payload.blob);
+        }
+        break;
+      }
     }
   }
 
@@ -144,6 +210,12 @@ export class GigaPdfEditor {
   on<E extends GigaPdfEventName>(event: E, callback: GigaPdfEvents[E]): this {
     if (this.destroyed) return this;
     (this.listeners[event] as GigaPdfEvents[E][]).push(callback);
+    if (event === 'ready') {
+      // Also resolve the internal ready promise
+      const origResolve = this.resolveReady;
+      const wrappedCb = () => { origResolve(); };
+      (this.listeners.ready as GigaPdfEvents['ready'][]).push(wrappedCb);
+    }
     return this;
   }
 
@@ -166,6 +238,31 @@ export class GigaPdfEditor {
     this.postCommand('load', { documentId });
   }
 
+  /** Request the modified file from the editor */
+  getFile(): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      if (this.destroyed) {
+        reject(new Error('[GigaPdf] Editor is destroyed'));
+        return;
+      }
+
+      const onComplete = (data: { blob: Blob }) => {
+        this.off('complete', onComplete);
+        this.off('error', onError);
+        resolve(data.blob);
+      };
+      const onError = (err: { code: string; message: string }) => {
+        this.off('complete', onComplete);
+        this.off('error', onError);
+        reject(new Error(err.message));
+      };
+
+      this.on('complete', onComplete);
+      this.on('error', onError);
+      this.postCommand('getFile');
+    });
+  }
+
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
@@ -173,11 +270,21 @@ export class GigaPdfEditor {
     if (this.iframe.parentNode) {
       this.iframe.parentNode.removeChild(this.iframe);
     }
+
+    // Cleanup embed session on the server
+    if (this.sessionId) {
+      fetch(`${this.baseUrl}/api/v1/embed/sessions/${this.sessionId}`, {
+        method: 'DELETE',
+        headers: { 'X-API-Key': this.apiKey },
+      }).catch(() => { /* best-effort */ });
+    }
+
     (this.listeners as Partial<EventMap>).ready = [];
     (this.listeners as Partial<EventMap>).save = [];
     (this.listeners as Partial<EventMap>).export = [];
     (this.listeners as Partial<EventMap>).error = [];
     (this.listeners as Partial<EventMap>).pageChange = [];
+    (this.listeners as Partial<EventMap>).complete = [];
   }
 }
 

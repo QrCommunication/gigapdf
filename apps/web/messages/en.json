@@ -36,6 +36,7 @@
     "documents": "Documents",
     "organization": "Organization",
     "settings": "Settings",
+    "developers": "Developers",
     "billing": "Billing",
     "sharedWithMe": "Shared with me"
   },
@@ -79,6 +80,22 @@
       "security": {
         "title": "Enterprise Security",
         "description": "Your documents are encrypted and secure. SOC 2 compliant with enterprise-grade security features."
+      },
+      "api": {
+        "title": "REST API",
+        "description": "Full programmatic access to all features. Automate document workflows with our comprehensive API."
+      },
+      "export": {
+        "title": "Multi-format Export",
+        "description": "Export to PNG, JPEG, DOCX, HTML and more. OCR support for scanned documents with Tesseract."
+      },
+      "selfHostable": {
+        "title": "Self-hostable",
+        "description": "Deploy on your own infrastructure. Keep complete control over your documents and data."
+      },
+      "pdfModification": {
+        "title": "PDF Modification",
+        "description": "Add, update, or remove text, images, shapes, and annotations. Batch modify PDFs programmatically via API."
       }
     },
     "openSource": {
@@ -1451,6 +1468,83 @@
           "newMessage": "Send another message"
         }
       }
+    }
+  },
+  "developers": {
+    "title": "API Keys",
+    "description": "Manage your API keys to integrate the PDF editor into your applications",
+    "createKey": "Create a key",
+    "noKeys": {
+      "title": "No API keys",
+      "description": "Create your first API key to start integrating the PDF editor."
+    },
+    "card": {
+      "publishableKey": "Publishable key",
+      "secretKey": "Secret key",
+      "scopes": "Permissions",
+      "domains": "Allowed domains",
+      "noDomains": "All domains",
+      "rateLimit": "Rate limit",
+      "rateLimitValue": "{count}/min",
+      "lastUsed": "Last used",
+      "never": "Never",
+      "active": "Active",
+      "inactive": "Inactive",
+      "created": "Created on",
+      "expires": "Expires on",
+      "noExpiry": "No expiry"
+    },
+    "actions": {
+      "copy": "Copy",
+      "copied": "Copied!",
+      "regeneratePublishable": "Regenerate publishable key",
+      "regenerateSecret": "Regenerate secret key",
+      "delete": "Delete key",
+      "toggleStatus": "Enable/Disable"
+    },
+    "createDialog": {
+      "title": "Create an API key",
+      "description": "Configure your new API key",
+      "name": "Key name",
+      "namePlaceholder": "e.g. My application",
+      "scopes": "Permissions",
+      "scopesPlaceholder": "read,write,admin",
+      "domains": "Allowed domains",
+      "domainsPlaceholder": "example.com,app.example.com",
+      "domainsHelp": "Separate domains with commas. Leave empty to allow all domains.",
+      "rateLimit": "Rate limit (per minute)",
+      "create": "Create key",
+      "creating": "Creating..."
+    },
+    "createSuccess": {
+      "title": "API key created",
+      "description": "Copy your keys now. The secret key will not be shown again after closing this window.",
+      "publishableKey": "Publishable key (for widget)",
+      "secretKey": "Secret key (for server)",
+      "warning": "Save the secret key in a safe place. It will not be displayed again.",
+      "done": "I've copied my keys"
+    },
+    "regenerateDialog": {
+      "title": "Regenerate key",
+      "publishableDescription": "The current publishable key will be immediately invalidated. All widgets using this key will stop working.",
+      "secretDescription": "The current secret key will be immediately invalidated. All API calls using this key will fail.",
+      "warning": "This action is irreversible.",
+      "confirm": "Regenerate",
+      "regenerating": "Regenerating...",
+      "success": "New key generated. Copy it now, it will not be shown again."
+    },
+    "deleteDialog": {
+      "title": "Delete API key",
+      "description": "Are you sure you want to delete the key \"{name}\"? This action is irreversible and all services using this key will stop working.",
+      "confirm": "Delete",
+      "deleting": "Deleting..."
+    },
+    "errors": {
+      "loadFailed": "Failed to load API keys",
+      "createFailed": "Failed to create API key",
+      "deleteFailed": "Failed to delete API key",
+      "regenerateFailed": "Failed to regenerate key",
+      "updateFailed": "Failed to update key"
     }
   },
   "sharing": {

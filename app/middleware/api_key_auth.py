@@ -174,18 +174,33 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
         if not raw_key:
             return await call_next(request)
 
+        # Determine if this is a publishable key or a secret key
+        is_publishable = raw_key.startswith("giga_pub_")
+
         # Validate key against the database
-        key_record = await self._lookup_key(raw_key)
+        key_record = await self._lookup_key(raw_key, publishable=is_publishable)
 
         if key_record is None:
             logger.warning(
                 "API key not found or inactive",
-                extra={"path": path, "method": request.method},
+                extra={"path": path, "method": request.method, "publishable": is_publishable},
             )
             return _build_error_response(
                 status.HTTP_401_UNAUTHORIZED,
                 "API_KEY_INVALID",
                 "API key is invalid or has been revoked.",
+            )
+
+        # Publishable keys can only access embed routes
+        if is_publishable and not path.startswith("/api/v1/embed"):
+            logger.warning(
+                "Publishable key used on non-embed route",
+                extra={"key_id": key_record.id, "path": path},
+            )
+            return _build_error_response(
+                status.HTTP_403_FORBIDDEN,
+                "API_KEY_SCOPE_DENIED",
+                "Publishable keys can only access embed endpoints.",
             )
 
         # Check expiration
@@ -235,7 +250,8 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
         # Inject user identity into request state
         request.state.api_key_user_id = key_record.user_id
         request.state.api_key_id = key_record.id
-        request.state.api_key_scopes = key_record.scopes
+        request.state.api_key_scopes = "embed" if is_publishable else key_record.scopes
+        request.state.api_key_is_publishable = is_publishable
 
         logger.debug(
             "Request authenticated via API key",
@@ -266,12 +282,16 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
     # Private helpers
     # ------------------------------------------------------------------
 
-    async def _lookup_key(self, raw_key: str) -> Optional[ApiKey]:
+    async def _lookup_key(self, raw_key: str, *, publishable: bool = False) -> Optional[ApiKey]:
         """
         Hash *raw_key* and return the matching active ``ApiKey`` row.
 
+        When *publishable* is ``True`` the lookup is performed against the
+        ``publishable_key_hash`` column instead of ``key_hash``.
+
         Args:
             raw_key: The plaintext API key from the request header.
+            publishable: Whether this is a publishable key lookup.
 
         Returns:
             Optional[ApiKey]: The database record, or ``None`` when not found
@@ -281,17 +301,22 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
 
         try:
             async with get_db_session() as session:
-                result = await session.execute(
-                    select(ApiKey).where(
+                if publishable:
+                    stmt = select(ApiKey).where(
+                        ApiKey.publishable_key_hash == key_hash,
+                        ApiKey.is_active.is_(True),
+                    )
+                else:
+                    stmt = select(ApiKey).where(
                         ApiKey.key_hash == key_hash,
                         ApiKey.is_active.is_(True),
                     )
-                )
+                result = await session.execute(stmt)
                 return result.scalar_one_or_none()
         except Exception as exc:  # noqa: BLE001
             logger.error(
                 "Database error during API key lookup",
-                extra={"error": str(exc)},
+                extra={"error": str(exc), "publishable": publishable},
             )
             return None
 
