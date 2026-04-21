@@ -1,10 +1,53 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GigaPdfEditor, GigaPdf } from '../index';
+import { GigaPdfEditor, GigaPdf, isPublishableKey } from '../index';
 import type { GigaPdfInboundMessage } from '../types';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const FAKE_SESSION_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.fake.token';
+const SESSION_TOKEN_EXPIRES_IN = 1800;
+
+/**
+ * Mock global `fetch` so that:
+ *   POST /api/v1/embed/session-token → returns a fake JWT
+ *   Everything else → 200 OK empty JSON
+ */
+function mockFetchSessionToken(overrides?: Partial<{ token: string; expiresIn: number; status: number }>) {
+  const token = overrides?.token ?? FAKE_SESSION_TOKEN;
+  const expiresIn = overrides?.expiresIn ?? SESSION_TOKEN_EXPIRES_IN;
+  const httpStatus = overrides?.status ?? 200;
+
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const url = typeof input === 'string' ? input : (input as Request).url;
+    if (url.includes('/api/v1/embed/session-token')) {
+      return new Response(
+        JSON.stringify({ data: { session_token: token, expires_in: expiresIn } }),
+        { status: httpStatus, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    // Default for file-upload and session-delete calls
+    return new Response(JSON.stringify({ data: {} }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  });
+}
+
+/**
+ * Wait for the editor to mount the iframe (async token fetch + appendChild).
+ * Uses a short polling loop so tests remain fast.
+ */
+async function waitForIframe(container: HTMLElement, timeoutMs = 500): Promise<HTMLIFrameElement> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const iframe = container.querySelector<HTMLIFrameElement>('iframe');
+    if (iframe) return iframe;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error('[test] iframe not mounted within timeout — did you mock fetch?');
+}
 
 /**
  * Simulate an inbound postMessage from the iframe as if the GigaPDF origin
@@ -34,10 +77,34 @@ let editorContainer: HTMLDivElement;
 beforeEach(() => {
   editorContainer = makeContainer();
   editorContainer.id = 'editor';
+
+  // jsdom does not implement DOMTokenList on iframe.sandbox — patch it.
+  const origCreate = document.createElement.bind(document);
+  vi.spyOn(document, 'createElement').mockImplementation((tag: string, options?: ElementCreationOptions) => {
+    const el = origCreate(tag, options);
+    if (tag === 'iframe') {
+      const iframeEl = el as HTMLIFrameElement;
+      if (!iframeEl.sandbox) {
+        const tokenSet = new Set<string>();
+        Object.defineProperty(iframeEl, 'sandbox', {
+          value: {
+            add: (...tokens: string[]) => { tokens.forEach((t) => tokenSet.add(t)); },
+            remove: (...tokens: string[]) => { tokens.forEach((t) => tokenSet.delete(t)); },
+            contains: (token: string) => tokenSet.has(token),
+            toString: () => [...tokenSet].join(' '),
+          },
+          configurable: true,
+        });
+      }
+    }
+    return el;
+  });
+
+  // Provide a default fetch mock for every test (can be overridden per test)
+  mockFetchSessionToken();
 });
 
 afterEach(() => {
-  // Remove all children added during the test
   while (document.body.firstChild) {
     document.body.removeChild(document.body.firstChild);
   }
@@ -45,25 +112,96 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// URL construction
+// Session token exchange (WID-05 — core security requirement)
 // ---------------------------------------------------------------------------
 
-describe('GigaPdfEditor — URL construction', () => {
-  it('builds correct embed URL with apiKey', () => {
+describe('GigaPdfEditor — session token exchange', () => {
+  it('calls /api/v1/embed/session-token with X-API-Key header on init', async () => {
+    const fetchSpy = vi.mocked(globalThis.fetch);
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'my-key', container });
-    const iframe = container.querySelector('iframe')!;
-    const url = new URL(iframe.src);
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_my_key', container });
 
-    expect(url.searchParams.get('apiKey')).toBe('my-key');
+    await waitForIframe(container);
+
+    const sessionTokenCall = fetchSpy.mock.calls.find(([url]) =>
+      (typeof url === 'string' ? url : (url as Request).url).includes('/api/v1/embed/session-token'),
+    );
+    expect(sessionTokenCall).toBeDefined();
+    const [, init] = sessionTokenCall!;
+    expect((init as RequestInit).headers).toMatchObject({ 'X-API-Key': 'giga_pub_my_key' });
 
     editor.destroy();
   });
 
-  it('builds URL with documentId — path is /embed/{documentId}', () => {
+  it('uses ?token= in the iframe URL — never exposes the raw key', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container, documentId: 'doc-123' });
-    const iframe = container.querySelector('iframe')!;
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_my_key', container });
+
+    const iframe = await waitForIframe(container);
+    const url = new URL(iframe.src);
+
+    expect(url.searchParams.get('token')).toBe(FAKE_SESSION_TOKEN);
+    expect(url.searchParams.has('apiKey')).toBe(false);
+
+    editor.destroy();
+  });
+
+  it('fires SESSION_TOKEN_FAILED error event when the token fetch fails', async () => {
+    vi.mocked(globalThis.fetch).mockRejectedValue(new Error('network failure'));
+
+    const container = makeContainer();
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_my_key', container });
+    const errorCb = vi.fn();
+    editor.on('error', errorCb);
+
+    // Wait for async rejection to propagate
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(errorCb).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'SESSION_TOKEN_FAILED' }),
+    );
+
+    editor.destroy();
+  });
+
+  it('fires SESSION_TOKEN_FAILED when backend returns HTTP 401', async () => {
+    mockFetchSessionToken({ status: 401 });
+
+    const container = makeContainer();
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_invalid', container });
+    const errorCb = vi.fn();
+    editor.on('error', errorCb);
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(errorCb).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'SESSION_TOKEN_FAILED' }),
+    );
+
+    editor.destroy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// URL construction
+// ---------------------------------------------------------------------------
+
+describe('GigaPdfEditor — URL construction', () => {
+  it('builds correct embed URL with ?token= and publicKey', async () => {
+    const container = makeContainer();
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_my_key', container });
+    const iframe = await waitForIframe(container);
+    const url = new URL(iframe.src);
+
+    expect(url.searchParams.get('token')).toBe(FAKE_SESSION_TOKEN);
+
+    editor.destroy();
+  });
+
+  it('builds URL with documentId — path is /embed/{documentId}', async () => {
+    const container = makeContainer();
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container, documentId: 'doc-123' });
+    const iframe = await waitForIframe(container);
     const url = new URL(iframe.src);
 
     expect(url.pathname).toBe('/embed/doc-123');
@@ -71,10 +209,10 @@ describe('GigaPdfEditor — URL construction', () => {
     editor.destroy();
   });
 
-  it('builds URL without documentId — path is /embed', () => {
+  it('builds URL without documentId — path is /embed', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
-    const iframe = container.querySelector('iframe')!;
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
+    const iframe = await waitForIframe(container);
     const url = new URL(iframe.src);
 
     expect(url.pathname).toBe('/embed');
@@ -82,28 +220,29 @@ describe('GigaPdfEditor — URL construction', () => {
     editor.destroy();
   });
 
-  it('uses a custom baseUrl', () => {
+  it('uses a custom baseUrl', async () => {
+    // The beforeEach fetch mock already handles any URL — no override needed.
     const container = makeContainer();
     const editor = new GigaPdfEditor({
-      apiKey: 'k',
+      publicKey: 'giga_pub_test',
       container,
       baseUrl: 'https://custom.example.com',
     });
-    const iframe = container.querySelector('iframe')!;
+    const iframe = await waitForIframe(container);
 
     expect(iframe.src).toMatch(/^https:\/\/custom\.example\.com/);
 
     editor.destroy();
   });
 
-  it('strips a trailing slash from baseUrl', () => {
+  it('strips a trailing slash from baseUrl', async () => {
     const container = makeContainer();
     const editor = new GigaPdfEditor({
-      apiKey: 'k',
+      publicKey: 'giga_pub_test',
       container,
       baseUrl: 'https://custom.example.com/',
     });
-    const iframe = container.querySelector('iframe')!;
+    const iframe = await waitForIframe(container);
     const url = new URL(iframe.src);
 
     expect(url.origin).toBe('https://custom.example.com');
@@ -111,10 +250,10 @@ describe('GigaPdfEditor — URL construction', () => {
     editor.destroy();
   });
 
-  it('includes locale param when provided', () => {
+  it('includes locale param when provided', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container, locale: 'en' });
-    const iframe = container.querySelector('iframe')!;
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container, locale: 'en' });
+    const iframe = await waitForIframe(container);
     const url = new URL(iframe.src);
 
     expect(url.searchParams.get('locale')).toBe('en');
@@ -122,10 +261,10 @@ describe('GigaPdfEditor — URL construction', () => {
     editor.destroy();
   });
 
-  it('includes theme param when provided', () => {
+  it('includes theme param when provided', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container, theme: 'dark' });
-    const iframe = container.querySelector('iframe')!;
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container, theme: 'dark' });
+    const iframe = await waitForIframe(container);
     const url = new URL(iframe.src);
 
     expect(url.searchParams.get('theme')).toBe('dark');
@@ -133,10 +272,10 @@ describe('GigaPdfEditor — URL construction', () => {
     editor.destroy();
   });
 
-  it('includes hideToolbar param when true', () => {
+  it('includes hideToolbar param when true', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container, hideToolbar: true });
-    const iframe = container.querySelector('iframe')!;
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container, hideToolbar: true });
+    const iframe = await waitForIframe(container);
     const url = new URL(iframe.src);
 
     expect(url.searchParams.get('hideToolbar')).toBe('true');
@@ -144,10 +283,10 @@ describe('GigaPdfEditor — URL construction', () => {
     editor.destroy();
   });
 
-  it('does not include hideToolbar param when false', () => {
+  it('does not include hideToolbar param when false', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container, hideToolbar: false });
-    const iframe = container.querySelector('iframe')!;
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container, hideToolbar: false });
+    const iframe = await waitForIframe(container);
     const url = new URL(iframe.src);
 
     expect(url.searchParams.has('hideToolbar')).toBe(false);
@@ -155,14 +294,14 @@ describe('GigaPdfEditor — URL construction', () => {
     editor.destroy();
   });
 
-  it('includes tools param as comma-joined list', () => {
+  it('includes tools param as comma-joined list', async () => {
     const container = makeContainer();
     const editor = new GigaPdfEditor({
-      apiKey: 'k',
+      publicKey: 'giga_pub_test',
       container,
       tools: ['text', 'image'],
     });
-    const iframe = container.querySelector('iframe')!;
+    const iframe = await waitForIframe(container);
     const url = new URL(iframe.src);
 
     expect(url.searchParams.get('tools')).toBe('text,image');
@@ -176,15 +315,15 @@ describe('GigaPdfEditor — URL construction', () => {
 // ---------------------------------------------------------------------------
 
 describe('GigaPdfEditor — iframe dimensions', () => {
-  it('applies width and height to iframe when given as strings', () => {
+  it('applies width and height to iframe when given as strings', async () => {
     const container = makeContainer();
     const editor = new GigaPdfEditor({
-      apiKey: 'k',
+      publicKey: 'giga_pub_test',
       container,
       width: '800px',
       height: '400px',
     });
-    const iframe = container.querySelector('iframe')!;
+    const iframe = await waitForIframe(container);
 
     expect(iframe.style.width).toBe('800px');
     expect(iframe.style.height).toBe('400px');
@@ -192,15 +331,15 @@ describe('GigaPdfEditor — iframe dimensions', () => {
     editor.destroy();
   });
 
-  it('converts numeric width and height to pixel strings', () => {
+  it('converts numeric width and height to pixel strings', async () => {
     const container = makeContainer();
     const editor = new GigaPdfEditor({
-      apiKey: 'k',
+      publicKey: 'giga_pub_test',
       container,
       width: 1024,
       height: 768,
     });
-    const iframe = container.querySelector('iframe')!;
+    const iframe = await waitForIframe(container);
 
     expect(iframe.style.width).toBe('1024px');
     expect(iframe.style.height).toBe('768px');
@@ -208,10 +347,10 @@ describe('GigaPdfEditor — iframe dimensions', () => {
     editor.destroy();
   });
 
-  it('applies default width (100%) and height (600px) when not specified', () => {
+  it('applies default width (100%) and height (600px) when not specified', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
-    const iframe = container.querySelector('iframe')!;
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
+    const iframe = await waitForIframe(container);
 
     expect(iframe.style.width).toBe('100%');
     expect(iframe.style.height).toBe('600px');
@@ -225,38 +364,41 @@ describe('GigaPdfEditor — iframe dimensions', () => {
 // ---------------------------------------------------------------------------
 
 describe('GigaPdfEditor — DOM integration', () => {
-  it('creates an iframe element inside the container', () => {
+  it('creates an iframe element inside the container after token fetch', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
 
-    expect(container.querySelector('iframe')).not.toBeNull();
+    const iframe = await waitForIframe(container);
+    expect(iframe).not.toBeNull();
 
     editor.destroy();
   });
 
-  it('sets data-gigapdf attribute on the iframe', () => {
+  it('sets data-gigapdf attribute on the iframe', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
-    const iframe = container.querySelector('iframe')!;
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
+    const iframe = await waitForIframe(container);
 
     expect(iframe.getAttribute('data-gigapdf')).toBe('true');
 
     editor.destroy();
   });
 
-  it('resolves container from a CSS selector string', () => {
+  it('resolves container from a CSS selector string', async () => {
     // #editor is already in the DOM via beforeEach
-    const editor = new GigaPdfEditor({ apiKey: 'k', container: '#editor' });
-    const target = document.querySelector('#editor')!;
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container: '#editor' });
+    const target = document.querySelector<HTMLElement>('#editor')!;
 
+    await waitForIframe(target);
     expect(target.querySelector('iframe')).not.toBeNull();
 
     editor.destroy();
   });
 
-  it('throws when container CSS selector is not found in DOM', () => {
+  it('throws synchronously when container CSS selector is not found in DOM', () => {
+    // Container resolution is synchronous — no token fetch occurs
     expect(() => {
-      new GigaPdfEditor({ apiKey: 'k', container: '#nonexistent' });
+      new GigaPdfEditor({ publicKey: 'giga_pub_test', container: '#nonexistent' });
     }).toThrow('[GigaPdf] Container not found: "#nonexistent"');
   });
 });
@@ -266,9 +408,9 @@ describe('GigaPdfEditor — DOM integration', () => {
 // ---------------------------------------------------------------------------
 
 describe('GigaPdfEditor — on / off', () => {
-  it('registers a handler and invokes it when the matching event arrives', () => {
+  it('registers a handler and invokes it when the matching event arrives', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const readyCb = vi.fn();
     editor.on('ready', readyCb);
 
@@ -281,7 +423,7 @@ describe('GigaPdfEditor — on / off', () => {
 
   it('unregisters a handler so it is no longer called after off()', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const readyCb = vi.fn();
     editor.on('ready', readyCb);
     editor.off('ready', readyCb);
@@ -295,7 +437,7 @@ describe('GigaPdfEditor — on / off', () => {
 
   it('supports multiple handlers for the same event', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const cb1 = vi.fn();
     const cb2 = vi.fn();
     editor.on('ready', cb1);
@@ -311,7 +453,7 @@ describe('GigaPdfEditor — on / off', () => {
 
   it('off() removes only the specified handler, not others', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const cb1 = vi.fn();
     const cb2 = vi.fn();
     editor.on('ready', cb1);
@@ -328,7 +470,7 @@ describe('GigaPdfEditor — on / off', () => {
 
   it('on() is chainable — returns the editor instance', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
 
     const returned = editor.on('ready', vi.fn());
 
@@ -339,7 +481,7 @@ describe('GigaPdfEditor — on / off', () => {
 
   it('off() is chainable — returns the editor instance', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const cb = vi.fn();
     editor.on('ready', cb);
 
@@ -358,7 +500,7 @@ describe('GigaPdfEditor — on / off', () => {
 describe('GigaPdfEditor — event payloads', () => {
   it('forwards save event payload to registered handler', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const saveCb = vi.fn();
     editor.on('save', saveCb);
 
@@ -372,7 +514,7 @@ describe('GigaPdfEditor — event payloads', () => {
 
   it('forwards export event payload to registered handler', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const exportCb = vi.fn();
     editor.on('export', exportCb);
 
@@ -386,7 +528,7 @@ describe('GigaPdfEditor — event payloads', () => {
 
   it('forwards error event payload to registered handler', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const errorCb = vi.fn();
     editor.on('error', errorCb);
 
@@ -400,7 +542,7 @@ describe('GigaPdfEditor — event payloads', () => {
 
   it('forwards pageChange event payload to registered handler', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const pageChangeCb = vi.fn();
     editor.on('pageChange', pageChangeCb);
 
@@ -414,7 +556,7 @@ describe('GigaPdfEditor — event payloads', () => {
 
   it('handles ready event from iframe — callback receives no arguments', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const readyCb = vi.fn();
     editor.on('ready', readyCb);
 
@@ -434,7 +576,7 @@ describe('GigaPdfEditor — event payloads', () => {
 describe('GigaPdfEditor — origin security', () => {
   it('ignores messages from a wrong origin', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const readyCb = vi.fn();
     editor.on('ready', readyCb);
 
@@ -447,7 +589,7 @@ describe('GigaPdfEditor — origin security', () => {
 
   it('accepts messages from the correct default origin (https://giga-pdf.com)', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const readyCb = vi.fn();
     editor.on('ready', readyCb);
 
@@ -458,16 +600,18 @@ describe('GigaPdfEditor — origin security', () => {
     editor.destroy();
   });
 
-  it('accepts messages from the allowed custom baseUrl origin', () => {
+  it('accepts messages from the allowed custom baseUrl origin', async () => {
+    // The beforeEach fetch mock already handles any URL — no override needed.
     const container = makeContainer();
     const editor = new GigaPdfEditor({
-      apiKey: 'k',
+      publicKey: 'giga_pub_test',
       container,
       baseUrl: 'https://custom.example.com',
     });
     const readyCb = vi.fn();
     editor.on('ready', readyCb);
 
+    await waitForIframe(container);
     dispatchInboundMessage(
       { type: 'gigapdf:event', event: 'ready' },
       'https://custom.example.com',
@@ -480,7 +624,7 @@ describe('GigaPdfEditor — origin security', () => {
 
   it('ignores messages with unknown type (not gigapdf:event)', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const readyCb = vi.fn();
     editor.on('ready', readyCb);
 
@@ -501,9 +645,10 @@ describe('GigaPdfEditor — origin security', () => {
 // ---------------------------------------------------------------------------
 
 describe('GigaPdfEditor — destroy()', () => {
-  it('removes the iframe from the DOM', () => {
+  it('removes the iframe from the DOM', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
+    await waitForIframe(container);
 
     expect(container.querySelector('iframe')).not.toBeNull();
 
@@ -512,12 +657,13 @@ describe('GigaPdfEditor — destroy()', () => {
     expect(container.querySelector('iframe')).toBeNull();
   });
 
-  it('removes the window message listener so events are no longer dispatched', () => {
+  it('removes the window message listener so events are no longer dispatched', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const readyCb = vi.fn();
     editor.on('ready', readyCb);
 
+    await waitForIframe(container);
     editor.destroy();
     dispatchInboundMessage({ type: 'gigapdf:event', event: 'ready' });
 
@@ -526,7 +672,7 @@ describe('GigaPdfEditor — destroy()', () => {
 
   it('on() after destroy is a no-op — returns this without registering', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     const readyCb = vi.fn();
     editor.destroy();
 
@@ -538,7 +684,7 @@ describe('GigaPdfEditor — destroy()', () => {
 
   it('calling destroy() twice does not throw', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     editor.destroy();
 
     expect(() => editor.destroy()).not.toThrow();
@@ -552,7 +698,7 @@ describe('GigaPdfEditor — destroy()', () => {
 describe('GigaPdfEditor — methods after destroy()', () => {
   it('on() returns the instance but does not register after destroy', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     editor.destroy();
 
     const cb = vi.fn();
@@ -560,14 +706,13 @@ describe('GigaPdfEditor — methods after destroy()', () => {
 
     expect(returned).toBe(editor);
 
-    // Handler must not fire
     dispatchInboundMessage({ type: 'gigapdf:event', event: 'ready' });
     expect(cb).not.toHaveBeenCalled();
   });
 
   it('exportPdf() is a no-op after destroy — does not throw', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     editor.destroy();
 
     expect(() => editor.exportPdf()).not.toThrow();
@@ -575,7 +720,7 @@ describe('GigaPdfEditor — methods after destroy()', () => {
 
   it('savePdf() is a no-op after destroy — does not throw', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     editor.destroy();
 
     expect(() => editor.savePdf()).not.toThrow();
@@ -583,7 +728,7 @@ describe('GigaPdfEditor — methods after destroy()', () => {
 
   it('loadDocument() is a no-op after destroy — does not throw', () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
     editor.destroy();
 
     expect(() => editor.loadDocument('doc-99')).not.toThrow();
@@ -595,10 +740,10 @@ describe('GigaPdfEditor — methods after destroy()', () => {
 // ---------------------------------------------------------------------------
 
 describe('GigaPdfEditor — postCommand sends message to iframe', () => {
-  it('exportPdf() calls contentWindow.postMessage with action "export"', () => {
+  it('exportPdf() calls contentWindow.postMessage with action "export"', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
-    const iframe = container.querySelector('iframe')!;
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
+    const iframe = await waitForIframe(container);
     const postMessageMock = vi.fn();
     Object.defineProperty(iframe, 'contentWindow', {
       value: { postMessage: postMessageMock },
@@ -615,10 +760,10 @@ describe('GigaPdfEditor — postCommand sends message to iframe', () => {
     editor.destroy();
   });
 
-  it('savePdf() calls contentWindow.postMessage with action "save"', () => {
+  it('savePdf() calls contentWindow.postMessage with action "save"', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
-    const iframe = container.querySelector('iframe')!;
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
+    const iframe = await waitForIframe(container);
     const postMessageMock = vi.fn();
     Object.defineProperty(iframe, 'contentWindow', {
       value: { postMessage: postMessageMock },
@@ -634,10 +779,10 @@ describe('GigaPdfEditor — postCommand sends message to iframe', () => {
     editor.destroy();
   });
 
-  it('loadDocument() calls contentWindow.postMessage with action "load" and documentId payload', () => {
+  it('loadDocument() calls contentWindow.postMessage with action "load" and documentId payload', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
-    const iframe = container.querySelector('iframe')!;
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
+    const iframe = await waitForIframe(container);
     const postMessageMock = vi.fn();
     Object.defineProperty(iframe, 'contentWindow', {
       value: { postMessage: postMessageMock },
@@ -657,10 +802,10 @@ describe('GigaPdfEditor — postCommand sends message to iframe', () => {
     editor.destroy();
   });
 
-  it('does not call postMessage when contentWindow is null', () => {
+  it('does not call postMessage when contentWindow is null', async () => {
     const container = makeContainer();
-    const editor = new GigaPdfEditor({ apiKey: 'k', container });
-    const iframe = container.querySelector('iframe')!;
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_test', container });
+    const iframe = await waitForIframe(container);
     Object.defineProperty(iframe, 'contentWindow', { value: null, writable: true });
 
     expect(() => editor.exportPdf()).not.toThrow();
@@ -676,34 +821,87 @@ describe('GigaPdfEditor — postCommand sends message to iframe', () => {
 describe('GigaPdf.init', () => {
   it('creates and returns a GigaPdfEditor instance', () => {
     const container = makeContainer();
-    const editor = GigaPdf.init({ apiKey: 'k', container });
+    const editor = GigaPdf.init({ publicKey: 'giga_pub_test', container });
 
     expect(editor).toBeInstanceOf(GigaPdfEditor);
 
     editor.destroy();
   });
 
-  it('the returned editor has an iframe in the container', () => {
+  it('the returned editor eventually mounts an iframe in the container', async () => {
     const container = makeContainer();
-    const editor = GigaPdf.init({ apiKey: 'k', container });
+    const editor = GigaPdf.init({ publicKey: 'giga_pub_test', container });
 
-    expect(container.querySelector('iframe')).not.toBeNull();
+    const iframe = await waitForIframe(container);
+    expect(iframe).not.toBeNull();
 
     editor.destroy();
   });
 
-  it('two consecutive init() calls produce independent editors', () => {
+  it('two consecutive init() calls produce independent editors', async () => {
     const c1 = makeContainer();
     const c2 = makeContainer();
 
-    const e1 = GigaPdf.init({ apiKey: 'key1', container: c1 });
-    const e2 = GigaPdf.init({ apiKey: 'key2', container: c2 });
+    const e1 = GigaPdf.init({ publicKey: 'giga_pub_key1', container: c1 });
+    const e2 = GigaPdf.init({ publicKey: 'giga_pub_key2', container: c2 });
 
     expect(e1).not.toBe(e2);
+    await Promise.all([waitForIframe(c1), waitForIframe(c2)]);
     expect(c1.querySelector('iframe')).not.toBeNull();
     expect(c2.querySelector('iframe')).not.toBeNull();
 
     e1.destroy();
     e2.destroy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Key validation — isPublishableKey + validatePublicKey behaviour
+// ---------------------------------------------------------------------------
+
+describe('isPublishableKey', () => {
+  it('returns true for giga_pub_* keys', () => {
+    expect(isPublishableKey('giga_pub_abc123')).toBe(true);
+  });
+
+  it('returns false for giga_pk_* (secret) keys', () => {
+    expect(isPublishableKey('giga_pk_abc123')).toBe(false);
+  });
+
+  it('returns false for arbitrary strings', () => {
+    expect(isPublishableKey('somekey')).toBe(false);
+    expect(isPublishableKey('')).toBe(false);
+  });
+});
+
+describe('GigaPdfEditor — key validation', () => {
+  it('accepts a valid publishable key without warning', () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    const container = makeContainer();
+    const editor = new GigaPdfEditor({ publicKey: 'giga_pub_valid', container });
+
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    editor.destroy();
+  });
+
+  it('throws synchronously when a secret key (giga_pk_*) is used', () => {
+    const container = makeContainer();
+
+    expect(() => {
+      new GigaPdfEditor({ publicKey: 'giga_pk_secret123', container });
+    }).toThrow('[GigaPdf] Do not use secret keys (giga_pk_*) in client-side code.');
+  });
+
+  it('warns when key format is unrecognised (not giga_pub_*)', () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    const container = makeContainer();
+    const editor = new GigaPdfEditor({ publicKey: 'unknown_key_format', container });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid key format'),
+    );
+
+    editor.destroy();
   });
 });

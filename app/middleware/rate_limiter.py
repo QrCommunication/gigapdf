@@ -3,9 +3,20 @@ Rate limiting middleware.
 
 Implements sliding window rate limiting using Redis
 to protect API endpoints from abuse.
+
+Rate limit key strategy:
+  - Authenticated requests  → keyed by (user_id + endpoint_category)
+  - Anonymous requests      → keyed by (authoritative_ip + endpoint_category)
+
+IP resolution strategy:
+  X-Forwarded-For is only trusted when the direct peer is a declared trusted
+  proxy (TRUSTED_PROXIES env var, comma-separated CIDRs or IPs).  Otherwise
+  the raw connection IP is used, preventing header-spoofing attacks.
 """
 
+import ipaddress
 import logging
+import os
 from typing import Annotated, Optional
 
 from fastapi import Depends, Header, Request, status
@@ -17,6 +28,39 @@ from app.middleware.request_id import get_request_id
 from app.utils.helpers import now_utc
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_trusted_proxies() -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    """
+    Parse TRUSTED_PROXIES environment variable into network objects.
+
+    Expected format: comma-separated IPs or CIDRs, e.g.
+      TRUSTED_PROXIES=10.0.0.1,172.16.0.0/12,::1
+
+    Returns an empty list when the variable is absent or empty,
+    which disables X-Forwarded-For trust entirely.
+    """
+    raw = os.environ.get("TRUSTED_PROXIES", "").strip()
+    if not raw:
+        return []
+
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        try:
+            # strict=False allows host bits set in CIDR notation
+            networks.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError:
+            logger.warning(f"TRUSTED_PROXIES: invalid entry ignored — {entry!r}")
+    return networks
+
+
+# Computed once at import time; restart the process to pick up env changes.
+_TRUSTED_PROXY_NETWORKS: list[
+    ipaddress.IPv4Network | ipaddress.IPv6Network
+] = _parse_trusted_proxies()
 
 
 # Rate limit configurations per endpoint category
@@ -31,29 +75,82 @@ RATE_LIMITS = {
 }
 
 
+def _is_trusted_proxy(ip_str: str) -> bool:
+    """
+    Return True when *ip_str* belongs to a declared trusted-proxy network.
+
+    An empty TRUSTED_PROXIES list means no proxy is trusted.
+    """
+    if not _TRUSTED_PROXY_NETWORKS:
+        return False
+    try:
+        addr = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False
+    return any(addr in net for net in _TRUSTED_PROXY_NETWORKS)
+
+
+def _resolve_client_ip(request: Request) -> str:
+    """
+    Resolve the authoritative client IP.
+
+    Strategy:
+    1. If the direct peer (request.client.host) is a trusted proxy,
+       walk X-Forwarded-For right-to-left and return the first IP that
+       is NOT itself a trusted proxy — this is the real originating IP.
+    2. Otherwise, return request.client.host directly, ignoring any
+       X-Forwarded-For header (prevents spoofing when there is no
+       trusted proxy in front of the application).
+
+    Returns:
+        str: The authoritative client IP address.
+    """
+    peer_ip = request.client.host if request.client else ""
+
+    if not _is_trusted_proxy(peer_ip):
+        # Direct connection or un-declared proxy — use the raw peer IP.
+        return peer_ip or "unknown"
+
+    # The direct peer is a trusted proxy; parse X-Forwarded-For.
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        # Header may contain a comma-separated chain from left (client) to
+        # right (last proxy). Walk right-to-left and skip trusted proxies.
+        ips = [ip.strip() for ip in forwarded_for.split(",")]
+        for ip in reversed(ips):
+            if ip and not _is_trusted_proxy(ip):
+                return ip
+
+    # Fallback: all IPs in the chain are trusted proxies — return the
+    # leftmost (closest to the real client) entry, or the peer IP.
+    if forwarded_for:
+        leftmost = forwarded_for.split(",")[0].strip()
+        if leftmost:
+            return leftmost
+
+    return peer_ip or "unknown"
+
+
 def get_rate_limit_key(request: Request, user_id: Optional[str] = None) -> str:
     """
     Generate rate limit key from request.
 
-    Uses user ID if authenticated, otherwise client IP.
+    Authenticated requests are keyed by user_id to prevent bypass via
+    IP rotation.  Anonymous requests are keyed by the authoritative
+    client IP resolved through the trusted-proxy chain.
 
     Args:
         request: FastAPI request.
-        user_id: Authenticated user ID.
+        user_id: Authenticated user ID (from request.state, populated by
+                 the auth middleware).  When present, IP is not used.
 
     Returns:
-        str: Rate limit key.
+        str: Rate limit key prefix (without endpoint category suffix).
     """
     if user_id:
         return f"user:{user_id}"
 
-    # Get client IP from headers or connection
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        client_ip = forwarded.split(",")[0].strip()
-    else:
-        client_ip = request.client.host if request.client else "unknown"
-
+    client_ip = _resolve_client_ip(request)
     return f"ip:{client_ip}"
 
 
@@ -212,9 +309,13 @@ class RateLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # Extract user_id populated by the auth middleware (BACK-01).
+        # getattr with None default makes this safe even when the auth
+        # middleware hasn't run yet (e.g., public endpoints).
+        user_id: Optional[str] = getattr(request.state, "user_id", None)
+
         # Check rate limit
-        # Note: User ID would come from auth middleware in real implementation
-        is_allowed, info = await check_rate_limit(request, user_id=None)
+        is_allowed, info = await check_rate_limit(request, user_id=user_id)
 
         if not is_allowed:
             # Get language from header
@@ -248,9 +349,13 @@ async def rate_limit_dependency(
     """
     FastAPI dependency for rate limiting.
 
+    Reads the user_id set by the auth middleware on request.state so that
+    authenticated users are rate-limited by identity rather than IP.
+
     Raises 429 if rate limit exceeded.
     """
-    is_allowed, info = await check_rate_limit(request)
+    user_id: Optional[str] = getattr(request.state, "user_id", None)
+    is_allowed, info = await check_rate_limit(request, user_id=user_id)
 
     if not is_allowed:
         language = parse_accept_language(accept_language)

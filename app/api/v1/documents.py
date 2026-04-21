@@ -4,19 +4,23 @@ Document management endpoints.
 Handles document upload, retrieval, download, and deletion.
 """
 
+import logging
 import time
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, File, Form, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response, StreamingResponse
 
 from app.dependencies import preload_document_session
 from app.middleware.auth import AuthenticatedUser, OptionalUser
 from app.middleware.request_id import get_request_id
+from app.repositories.document_repo import document_sessions
 from app.schemas.requests.documents import DownloadDocumentParams, UnlockDocumentRequest
 from app.schemas.responses.common import APIResponse, MetaInfo, SuccessResponse
 from app.services.document_service import document_service
 from app.utils.helpers import now_utc
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -237,8 +241,52 @@ async def upload_document(
     """Upload and parse a PDF document."""
     start_time = time.time()
 
-    # Read file content
-    file_data = await file.read()
+    # Stream-read the file in chunks to prevent PDF-bomb / OOM attacks.
+    # Validation order (fail-fast):
+    #   1. Validate PDF magic bytes (%PDF-) on the very first chunk.
+    #   2. Enforce hard size cap while reading — reject before buffering all bytes.
+    # The hard ceiling (100 MB) is enforced regardless of the server-side setting
+    # to limit blast radius if max_upload_size_mb is misconfigured.
+    MAX_SIZE_BYTES = min(
+        document_service.settings.max_upload_size_bytes,
+        100 * 1024 * 1024,  # hard ceiling: 100 MB
+    )
+    CHUNK_SIZE = 64 * 1024  # 64 KB per read
+    PDF_MAGIC = b"%PDF-"
+
+    chunks: list[bytes] = []
+    total_read = 0
+    first_chunk = True
+
+    while True:
+        chunk = await file.read(CHUNK_SIZE)
+        if not chunk:
+            break
+
+        if first_chunk:
+            # Validate PDF magic bytes before accepting any data
+            if not chunk.startswith(PDF_MAGIC):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "Invalid file type. Only PDF files are accepted "
+                        "(%PDF- header missing)."
+                    ),
+                )
+            first_chunk = False
+
+        total_read += len(chunk)
+        if total_read > MAX_SIZE_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=(
+                    f"File too large. Maximum allowed size is "
+                    f"{MAX_SIZE_BYTES // (1024 * 1024)} MB."
+                ),
+            )
+        chunks.append(chunk)
+
+    file_data = b"".join(chunks)
 
     # Get owner ID from authenticated user
     owner_id = user.user_id if user else None
@@ -476,6 +524,22 @@ async def get_document(
     # Preload session from Redis if needed
     await preload_document_session(document_id)
 
+    # Enforce ownership: if the session has an owner, only that user may access it.
+    # Anonymous sessions (owner_id=None) remain publicly accessible by document_id.
+    session = await document_sessions.get_session_async(document_id)
+    if session and session.owner_id is not None:
+        if user is None or user.user_id != session.owner_id:
+            logger.warning(
+                "Unauthorized GET attempt on document %s by user %s",
+                document_id,
+                user.user_id if user else "anonymous",
+            )
+            # Return 404 to avoid confirming document existence to unauthorized callers
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found",
+            )
+
     document = document_service.get_document(
         document_id=document_id,
         include_elements=include_elements,
@@ -699,6 +763,20 @@ async def download_document(
     # Preload session from Redis if needed
     await preload_document_session(document_id)
 
+    # Enforce ownership: if the session has an owner, only that user may download it.
+    session = await document_sessions.get_session_async(document_id)
+    if session and session.owner_id is not None:
+        if user is None or user.user_id != session.owner_id:
+            logger.warning(
+                "Unauthorized DOWNLOAD attempt on document %s by user %s",
+                document_id,
+                user.user_id if user else "anonymous",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found",
+            )
+
     pdf_bytes, filename = document_service.download_document(
         document_id=document_id,
         flatten_forms=flatten_forms,
@@ -873,7 +951,21 @@ async def delete_document(
     # Preload session from Redis if needed
     await preload_document_session(document_id)
 
-    document_service.delete_document(document_id)
+    # Enforce ownership: if the session has an owner, only that user may delete it.
+    session = await document_sessions.get_session_async(document_id)
+    if session and session.owner_id is not None:
+        if user is None or user.user_id != session.owner_id:
+            logger.warning(
+                "Unauthorized DELETE attempt on document %s by user %s",
+                document_id,
+                user.user_id if user else "anonymous",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found",
+            )
+
+    await document_service.delete_document(document_id)
 
 
 @router.post(

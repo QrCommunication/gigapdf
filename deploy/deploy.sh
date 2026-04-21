@@ -23,11 +23,25 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 APP_DIR="/opt/gigapdf"
 ENV_FILE="$APP_DIR/.env"
+SNAPSHOT_BASE="/opt/gigapdf-snapshots"
+DEPLOY_TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+SNAPSHOT_DIR="$SNAPSHOT_BASE/$DEPLOY_TIMESTAMP"
 
 cd "$APP_DIR"
 
 # =============================================================================
-# 0. Fix permissions
+# 0. Bootstrap directories
+# =============================================================================
+log_info "Bootstrapping directories..."
+sudo mkdir -p "$SNAPSHOT_BASE"
+sudo chown ubuntu:ubuntu "$SNAPSHOT_BASE"
+mkdir -p /var/log/gigapdf
+
+# Ensure rollback script is executable
+chmod +x "$APP_DIR/scripts/rollback.sh" 2>/dev/null || true
+
+# =============================================================================
+# 0.5 Fix permissions
 # =============================================================================
 log_info "Fixing permissions..."
 sudo chown -R ubuntu:ubuntu /var/lib/gigapdf 2>/dev/null || true
@@ -141,6 +155,38 @@ cp -r /opt/gigapdf/apps/admin/.next/static /opt/gigapdf/apps/admin/.next/standal
 cp -r /opt/gigapdf/apps/admin/public /opt/gigapdf/apps/admin/.next/standalone/apps/admin/ 2>/dev/null || true
 
 # =============================================================================
+# 7.5. Snapshot build artefacts (zero-downtime rollback support)
+# =============================================================================
+# Build is done BEFORE any service restart. We snapshot the artefacts now so
+# that rollback.sh can restore them without needing a full rebuild.
+log_info "Snapshotting build artefacts to $SNAPSHOT_DIR ..."
+mkdir -p "$SNAPSHOT_DIR/apps/web" "$SNAPSHOT_DIR/apps/admin"
+
+# Copy .next directories (they contain standalone + static)
+cp -a "$APP_DIR/apps/web/.next"   "$SNAPSHOT_DIR/apps/web/.next"
+cp -a "$APP_DIR/apps/admin/.next" "$SNAPSHOT_DIR/apps/admin/.next"
+
+# Copy package dist artefacts if present
+if [ -d "$APP_DIR/packages" ]; then
+    mkdir -p "$SNAPSHOT_DIR/packages"
+    # Only copy compiled output, not node_modules (saves space)
+    find "$APP_DIR/packages" -maxdepth 2 -name "dist" -type d | while read -r dist_dir; do
+        rel="${dist_dir#"$APP_DIR/"}"
+        mkdir -p "$SNAPSHOT_DIR/$rel"
+        cp -a "$dist_dir/." "$SNAPSHOT_DIR/$rel/"
+    done
+fi
+
+# Update the "latest" symlink atomically
+ln -sfn "$SNAPSHOT_DIR" "$SNAPSHOT_BASE/latest"
+log_info "Snapshot created. Total snapshots: $(ls -1 "$SNAPSHOT_BASE" | grep -c '^[0-9]' || echo 0)"
+
+# Prune snapshots older than 7 days (keep at most 5)
+log_info "Pruning old snapshots (keeping last 5)..."
+ls -1dt "$SNAPSHOT_BASE"/[0-9]* 2>/dev/null | tail -n +6 | xargs -r rm -rf
+log_info "Snapshot pruning complete."
+
+# =============================================================================
 # 8. Database Migrations
 # =============================================================================
 # IMPORTANT: Migration order matters!
@@ -211,9 +257,16 @@ sudo systemctl enable gigapdf-celery
 sudo systemctl enable gigapdf-celery-billing
 
 # =============================================================================
-# 8. Update Nginx Configuration
+# 8. Update Nginx Configuration + Maintenance Page
 # =============================================================================
 log_info "Updating Nginx configuration..."
+
+# Install maintenance page (served by nginx on 502/503/504 during restarts)
+sudo mkdir -p /var/www/gigapdf-maintenance
+sudo cp "$APP_DIR/deploy/nginx/maintenance.html" /var/www/gigapdf-maintenance/maintenance.html
+sudo chown -R www-data:www-data /var/www/gigapdf-maintenance
+log_info "Maintenance page installed at /var/www/gigapdf-maintenance/maintenance.html"
+
 if [ -f /etc/letsencrypt/live/giga-pdf.com/fullchain.pem ]; then
     sudo cp deploy/nginx.conf /etc/nginx/sites-available/gigapdf
     sudo nginx -t && sudo systemctl reload nginx
@@ -223,57 +276,117 @@ else
 fi
 
 # =============================================================================
-# 9. Restart Services
+# 9. Zero-downtime service restart (build already complete — services up so far)
 # =============================================================================
-log_info "Restarting services..."
+# Strategy:
+#   a) API (uvicorn multi-worker): send SIGHUP for graceful reload.
+#      Workers finish in-flight requests then reload the new code.
+#      Falls back to stop+start if the service was not running.
+#   b) Celery workers: restart AFTER API is healthy. Celery tasks survive
+#      restarts via Redis broker, so this causes no data loss.
+#   c) Next.js apps (web + admin): restart AFTER API is healthy.
+#      Each restart takes ~3-5 s; nginx serves existing keepalive connections
+#      during that window.
+#
+# Error handling: if any critical service fails to become healthy, the script
+# exits non-zero so the calling CI/CD system can trigger rollback.sh.
+# =============================================================================
 
-# Stop all services first
-sudo systemctl stop gigapdf-api || true
-sudo systemctl stop gigapdf-web || true
-sudo systemctl stop gigapdf-admin || true
-sudo systemctl stop gigapdf-celery || true
-sudo systemctl stop gigapdf-celery-billing || true
+# Helper: wait for an HTTP endpoint to return 2xx (max N attempts x delay)
+wait_healthy() {
+    local name="$1"
+    local url="$2"
+    local max_attempts="${3:-12}"
+    local delay="${4:-5}"
+    log_info "Waiting for $name to become healthy at $url ..."
+    for i in $(seq 1 "$max_attempts"); do
+        if curl -sf "$url" > /dev/null 2>&1; then
+            log_info "$name is healthy (attempt $i)."
+            return 0
+        fi
+        sleep "$delay"
+    done
+    log_error "$name did NOT become healthy after $((max_attempts * delay))s — triggering rollback."
+    bash "$APP_DIR/scripts/rollback.sh" --non-interactive 2>&1 || true
+    exit 1
+}
 
-# Start services
-sudo systemctl start gigapdf-api
-sudo systemctl start gigapdf-web
-sudo systemctl start gigapdf-admin
-sudo systemctl start gigapdf-celery
-sudo systemctl start gigapdf-celery-billing
+log_info "--- Step 9a: Reload FastAPI (graceful, zero dropped connections) ---"
+if sudo systemctl is-active --quiet gigapdf-api; then
+    # uvicorn multi-worker: SIGHUP triggers graceful worker reload
+    # (workers finish in-flight requests, then exec new code)
+    sudo systemctl reload gigapdf-api
+    log_info "SIGHUP sent to gigapdf-api (graceful reload)."
+else
+    log_warn "gigapdf-api was stopped — performing cold start."
+    sudo systemctl start gigapdf-api
+fi
+
+# Gate: API must be healthy before touching anything else
+wait_healthy "gigapdf-api" "http://localhost:8000/health" 12 5
+
+log_info "--- Step 9b: Restart Celery workers (tasks survive via broker) ---"
+sudo systemctl restart gigapdf-celery
+sudo systemctl restart gigapdf-celery-billing
+log_info "Celery workers restarted."
+
+log_info "--- Step 9c: Restart Next.js Web (nginx serves stale keepalives) ---"
+sudo systemctl restart gigapdf-web
+# Brief grace period so the new process binds port 3000 before admin restarts
+sleep 4
+
+log_info "--- Step 9d: Restart Next.js Admin ---"
+sudo systemctl restart gigapdf-admin
 
 # =============================================================================
-# 10. Health Check
+# 10. Final Health Checks
 # =============================================================================
-log_info "Performing health checks..."
+log_info "Performing final health checks..."
 sleep 5
 
+DEPLOY_OK=true
+
 check_service() {
-    if systemctl is-active --quiet $1; then
-        echo -e "  ${GREEN}✓${NC} $1 is running"
+    local svc="$1"
+    if sudo systemctl is-active --quiet "$svc"; then
+        echo -e "  ${GREEN}✓${NC} $svc is running"
     else
-        echo -e "  ${RED}✗${NC} $1 failed to start"
-        systemctl status $1 --no-pager -l || true
+        echo -e "  ${RED}✗${NC} $svc failed to start"
+        sudo systemctl status "$svc" --no-pager -l 2>/dev/null | tail -20 || true
+        DEPLOY_OK=false
     fi
 }
 
+check_http() {
+    local label="$1"
+    local url="$2"
+    local http_code
+    http_code="$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")"
+    if echo "$http_code" | grep -qE "^[23]"; then
+        echo -e "  ${GREEN}✓${NC} $label responded HTTP $http_code"
+    else
+        echo -e "  ${YELLOW}!${NC} $label responded HTTP $http_code (may still be warming up)"
+    fi
+}
+
+echo ""
+echo "Systemd services:"
 check_service gigapdf-api
 check_service gigapdf-web
 check_service gigapdf-admin
 check_service gigapdf-celery
 check_service gigapdf-celery-billing
 
-# Check HTTP endpoints
-sleep 2
-if curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health | grep -q "200"; then
-    echo -e "  ${GREEN}✓${NC} API health check passed"
-else
-    echo -e "  ${YELLOW}!${NC} API health check pending..."
-fi
+echo ""
+echo "HTTP endpoints:"
+check_http "API     (localhost:8000)" "http://localhost:8000/health"
+check_http "Web     (localhost:3000)" "http://localhost:3000"
+check_http "Admin   (localhost:3001)" "http://localhost:3001"
 
-if curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 | grep -q "200"; then
-    echo -e "  ${GREEN}✓${NC} Web health check passed"
-else
-    echo -e "  ${YELLOW}!${NC} Web health check pending..."
+if [ "$DEPLOY_OK" = false ]; then
+    log_error "One or more services failed. Triggering automatic rollback..."
+    bash "$APP_DIR/scripts/rollback.sh" 2>&1 || true
+    exit 1
 fi
 
 echo ""

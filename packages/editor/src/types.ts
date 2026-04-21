@@ -2,7 +2,7 @@
  * Internal store types for the editor package
  */
 
-import type { UUID, PageObject, Tool } from "@giga-pdf/types";
+import type { UUID, PageObject, Tool, ShapeType, AnnotationType } from "@giga-pdf/types";
 import type { Socket } from "socket.io-client";
 
 // Document Store Types
@@ -36,6 +36,12 @@ export interface CanvasState {
   gridSize: number;
   showRulers: boolean;
   currentPageIndex: number;
+  // Tool options
+  shapeType: ShapeType;
+  annotationType: AnnotationType;
+  strokeColor: string;
+  fillColor: string;
+  strokeWidth: number;
 }
 
 // Selection Store Types
@@ -141,6 +147,9 @@ export interface UIState {
     y: number;
     items: ContextMenuItem[];
   } | null;
+  // Editor-specific UI modes
+  showFormsPanel: boolean;
+  isContentEditActive: boolean;
 }
 
 export interface Notification {

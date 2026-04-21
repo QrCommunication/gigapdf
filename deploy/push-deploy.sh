@@ -12,10 +12,11 @@ echo "  GigaPDF - Push to Production"
 echo "=========================================="
 
 # Configuration
-REMOTE_USER="root"
-REMOTE_HOST="51.15.197.29"
+# Override DEPLOY_HOST env var to target a different server (e.g. staging)
+REMOTE_USER="${DEPLOY_USER:-ubuntu}"
+REMOTE_HOST="${DEPLOY_HOST:-51.159.105.179}"
 REMOTE_NAME="production"
-SSH_KEY="$HOME/.ssh/gigapdf_deploy"
+SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 
 # Check if SSH key exists
 if [ ! -f "$SSH_KEY" ]; then

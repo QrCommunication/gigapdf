@@ -5,7 +5,10 @@ This module handles JWT token validation for requests authenticated
 by an external service (Node.js BetterAuth or Laravel).
 """
 
+import asyncio
+import json
 import logging
+import time
 from dataclasses import dataclass
 from typing import Annotated, Optional
 
@@ -16,6 +19,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import Response
 
 from app.config import get_settings
+from app.core.cache import get_redis
 from app.middleware.error_handler import AuthInvalidError, AuthRequiredError
 
 logger = logging.getLogger(__name__)
@@ -53,7 +57,13 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
     """
     Middleware for validating JWT tokens on protected routes.
 
-    Tokens are validated against a public key or JWKS endpoint.
+    Decodes the Bearer token from the Authorization header and populates
+    ``request.state.user_id`` so downstream middleware (e.g. quota tracking)
+    can identify the caller without waiting for route-level dependencies.
+
+    This is best-effort: if decoding fails the request still proceeds and the
+    route-level ``get_current_user`` dependency will reject it with a proper
+    error. We never block here to avoid double-error responses.
     """
 
     # Routes that don't require authentication
@@ -68,7 +78,15 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         """
-        Process the request and validate JWT if required.
+        Decode the JWT (best-effort) and inject ``request.state.user_id``.
+
+        On success: ``request.state.user_id`` and ``request.state.current_user``
+        are populated so middleware executed earlier in the chain (lower
+        ``add_middleware`` position = runs later in Starlette's LIFO order) can
+        read them.
+
+        On failure: the state attributes are left unset; route handlers will
+        produce the appropriate 401 response via ``get_current_user``.
 
         Args:
             request: The incoming request.
@@ -86,6 +104,41 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             return await call_next(request)
 
+        # Best-effort JWT decode — never block the request here
+        authorization = request.headers.get("Authorization")
+        if authorization:
+            parts = authorization.split()
+            if len(parts) == 2 and parts[0].lower() == "bearer":
+                try:
+                    user = await get_current_user(authorization)
+                    request.state.user_id = user.user_id
+                    request.state.current_user = user
+                    logger.debug(
+                        "JWT middleware: user_id set",
+                        extra={"user_id": user.user_id, "path": path},
+                    )
+                    # Attach user context to the active Sentry scope.
+                    # send_default_pii=False is set globally; we only forward
+                    # the opaque user_id — never email or name.
+                    try:
+                        import sentry_sdk
+
+                        sentry_sdk.set_user({"id": user.user_id})
+                    except ImportError:
+                        pass
+                except Exception as exc:
+                    # Auth failure is handled at the route level; log for
+                    # observability but do not block the request.
+                    logger.debug(
+                        "JWT middleware: could not decode token (will be enforced at route level)",
+                        extra={"path": path, "reason": str(exc)},
+                    )
+        else:
+            logger.debug(
+                "JWT middleware: no Authorization header on protected path",
+                extra={"path": path},
+            )
+
         return await call_next(request)
 
 
@@ -95,39 +148,149 @@ def is_jwt_token(token: str) -> bool:
     return len(parts) == 3 and all(len(p) > 10 for p in parts)
 
 
-# Cache for JWKS to avoid fetching on every request
-_jwks_cache: dict = {}
-_jwks_cache_time: float = 0
+# L1 Cache: In-memory, shared across request handlers in the same worker
+# Stores JWKS data briefly (5 min TTL) to reduce Redis hits
+_jwks_l1_cache: dict[str, dict] = {}  # issuer_url -> {"data": dict, "expires_at": float}
+
+
+@dataclass
+class CacheEntry:
+    """Represents a cached JWKS entry with TTL."""
+
+    data: dict
+    expires_at: float
+
+    def is_expired(self) -> bool:
+        """Check if cache entry has expired."""
+        return time.time() >= self.expires_at
 
 
 async def get_jwks_keys(jwks_url: str) -> dict:
     """
-    Fetch and cache JWKS keys from URL.
+    Fetch and cache JWKS keys from URL using L1 (local) + L2 (Redis) cache.
+
+    Implements:
+    - L1 cache: In-memory, 5 min TTL, per-worker
+    - L2 cache: Redis, 1h TTL, shared across all workers
+    - Thundering herd protection: SETNX lock to ensure only one worker refreshes
 
     Args:
         jwks_url: URL to fetch JWKS from.
 
     Returns:
         dict: JWKS data with keys.
+
+    Raises:
+        AuthInvalidError: If JWKS fetch fails.
     """
-    import time
+    # ── L1 Cache Check ──────────────────────────────────────────────────────
+    if jwks_url in _jwks_l1_cache:
+        entry = _jwks_l1_cache[jwks_url]
+        if not entry.is_expired():
+            logger.debug(f"JWKS cache L1 hit for {jwks_url}")
+            return entry.data
 
-    global _jwks_cache, _jwks_cache_time
+    # ── L2 Cache Check (Redis) ─────────────────────────────────────────────
+    try:
+        redis_client = await get_redis()
+        redis_key = f"jwks:{jwks_url}"
 
-    # Cache for 5 minutes
-    if _jwks_cache and (time.time() - _jwks_cache_time) < 300:
-        return _jwks_cache
+        cached = await redis_client.get(redis_key)
+        if cached:
+            jwks_data = json.loads(cached)
+            # Populate L1 cache from L2
+            _jwks_l1_cache[jwks_url] = CacheEntry(
+                data=jwks_data,
+                expires_at=time.time() + 300,  # 5 min L1 TTL
+            )
+            logger.debug(f"JWKS cache L2 hit for {jwks_url}")
+            return jwks_data
+    except Exception as e:
+        logger.warning(f"L2 JWKS cache check failed: {e}")
+        # Continue to fetch from provider
 
-    # In development, disable SSL verification for self-signed certificates
+    # ── Cache Miss: Fetch from Provider with Thundering Herd Protection ────
     settings = get_settings()
     verify_ssl = not settings.is_development
+    redis_key = f"jwks:{jwks_url}"
+    lock_key = f"jwks:lock:{jwks_url}"
+    lock_acquired = False
+    redis_client = None
 
-    async with httpx.AsyncClient(verify=verify_ssl) as client:
-        response = await client.get(jwks_url, timeout=10.0)
-        response.raise_for_status()
-        _jwks_cache = response.json()
-        _jwks_cache_time = time.time()
-        return _jwks_cache
+    try:
+        redis_client = await get_redis()
+
+        # Try to acquire lock using SETNX (atomic test-and-set)
+        lock_acquired = await redis_client.set(
+            lock_key,
+            "1",
+            nx=True,  # Only set if key doesn't exist
+            ex=10,    # Auto-expire lock after 10s to prevent deadlock
+        )
+
+        if lock_acquired:
+            # We acquired the lock — fetch from provider
+            logger.debug(f"Fetching JWKS from {jwks_url}")
+            async with httpx.AsyncClient(verify=verify_ssl) as client:
+                response = await client.get(jwks_url, timeout=10.0)
+                response.raise_for_status()
+                jwks_data = response.json()
+
+            # Store in L2 cache (Redis, 1h TTL)
+            try:
+                await redis_client.setex(
+                    redis_key,
+                    3600,  # 1 hour TTL
+                    json.dumps(jwks_data),
+                )
+                logger.debug(f"Stored JWKS in L2 cache: {redis_key}")
+            except Exception as e:
+                logger.warning(f"Failed to store JWKS in L2 cache: {e}")
+
+            # Populate L1 cache
+            _jwks_l1_cache[jwks_url] = CacheEntry(
+                data=jwks_data,
+                expires_at=time.time() + 300,  # 5 min L1 TTL
+            )
+
+            return jwks_data
+        else:
+            # Another worker is refreshing — wait briefly and retry from L2
+            logger.debug(f"Another worker is refreshing JWKS for {jwks_url}, waiting...")
+            await asyncio.sleep(0.5)
+
+            # Check L2 cache again
+            cached = await redis_client.get(redis_key)
+            if cached:
+                jwks_data = json.loads(cached)
+                _jwks_l1_cache[jwks_url] = CacheEntry(
+                    data=jwks_data,
+                    expires_at=time.time() + 300,
+                )
+                logger.debug(f"JWKS retrieved from L2 after lock wait")
+                return jwks_data
+
+            # Fallback: direct fetch (safe, but may duplicate request if lock holder also fails)
+            logger.debug(f"Lock timeout, fetching JWKS directly from {jwks_url}")
+            async with httpx.AsyncClient(verify=verify_ssl) as client:
+                response = await client.get(jwks_url, timeout=10.0)
+                response.raise_for_status()
+                return response.json()
+
+    except httpx.HTTPError as e:
+        logger.error(f"Failed to fetch JWKS from {jwks_url}: {e}")
+        raise AuthInvalidError(f"Could not fetch JWKS: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error fetching JWKS: {e}")
+        raise AuthInvalidError(f"Unexpected error: {str(e)}")
+    finally:
+        # Release lock if we acquired it
+        if lock_acquired and redis_client:
+            try:
+                await redis_client.delete(lock_key)
+                logger.debug(f"Released JWKS lock: {lock_key}")
+            except Exception as e:
+                logger.warning(f"Failed to release JWKS lock: {e}")
 
 
 async def decode_jwt_token(token: str) -> dict:
@@ -288,11 +451,17 @@ async def get_current_user(
                 user_id = unverified_claims.get("sub", unverified_claims.get("user_id", ""))
                 if user_id:
                     logger.debug(f"Dev mode: Extracted user ID from JWT: {user_id}")
+                    # Respect roles/is_admin claim from the unverified JWT in dev mode too.
+                    dev_claims_admin = (
+                        unverified_claims.get("is_admin") is True
+                        or unverified_claims.get("role") == "admin"
+                        or "admin" in (unverified_claims.get("roles") or [])
+                    )
                     return CurrentUser(
                         user_id=user_id,
                         email=unverified_claims.get("email"),
                         name=unverified_claims.get("name"),
-                        roles=["user"],
+                        roles=["admin"] if dev_claims_admin else ["user"],
                     )
             except Exception as e:
                 logger.warning(f"Dev mode: Failed to decode JWT, using token as user ID: {e}")
@@ -331,11 +500,15 @@ async def get_current_user(
             user = session_data.get("user", {})
             if user.get("id"):
                 logger.info(f"Session validated for user: {user.get('id')}")
+                # Derive role from Better Auth user data.
+                # Better Auth exposes `role` (string) or `is_admin` (bool) depending on the plugin.
+                is_admin = user.get("is_admin") is True or user.get("role") == "admin"
+                roles = ["admin"] if is_admin else ["user"]
                 return CurrentUser(
                     user_id=user.get("id", ""),
                     email=user.get("email"),
                     name=user.get("name"),
-                    roles=["user"],
+                    roles=roles,
                 )
         except AuthInvalidError:
             pass  # Fall through to error

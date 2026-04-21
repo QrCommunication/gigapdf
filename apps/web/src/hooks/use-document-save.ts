@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
+import { offlineQueue, type PendingOperation } from "@/lib/offline-queue";
+import { useLogger } from "@giga-pdf/logger";
 
 export type SavePriority = "immediate" | "debounced" | "auto";
 
@@ -45,6 +47,12 @@ export interface UseDocumentSaveReturn {
   cancelPendingSave: () => void;
   /** Nombre de modifications en attente */
   pendingChanges: number;
+  /** Appareil actuellement hors ligne */
+  isOffline: boolean;
+  /** Synchronisation de la queue offline en cours */
+  isSyncing: boolean;
+  /** Nombre d'opérations en attente dans la queue offline */
+  offlineQueueSize: number;
 }
 
 /**
@@ -85,17 +93,43 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
     setDirty,
   } = options;
 
+  const logger = useLogger({ component: 'useDocumentSave' });
+
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [pendingChanges, setPendingChanges] = useState(0);
+  const [isOffline, setIsOffline] = useState(() =>
+    typeof navigator !== 'undefined' ? !navigator.onLine : false
+  );
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [offlineQueueSize, setOfflineQueueSize] = useState(0);
 
   // Refs pour éviter les problèmes de closure
   const savingRef = useRef(false);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingChangesRef = useRef(0);
+  const isOfflineRef = useRef(isOffline);
+  const isSyncingRef = useRef(false);
 
-  // Fonction de sauvegarde vers S3
+  // Maintenir isOfflineRef synchronisé avec l'état React
+  useEffect(() => {
+    isOfflineRef.current = isOffline;
+  }, [isOffline]);
+
+  // --------------------------------------------------------------------------
+  // Helpers queue offline
+  // --------------------------------------------------------------------------
+
+  const refreshQueueSize = useCallback(async () => {
+    const size = await offlineQueue.size();
+    setOfflineQueueSize(size);
+  }, []);
+
+  // --------------------------------------------------------------------------
+  // Fonction de sauvegarde vers S3 (online path)
+  // --------------------------------------------------------------------------
+
   const performSave = useCallback(
     async (
       saveName: string,
@@ -106,12 +140,30 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
         return false;
       }
 
+      // Si hors ligne : enqueue l'opération et retourner immédiatement
+      if (isOfflineRef.current) {
+        await offlineQueue.enqueue({
+          type: 'save_document',
+          payload: {
+            documentId,
+            storedDocumentId: storedDocumentId ?? null,
+            name: saveName,
+            folderId: saveFolderId ?? folderId ?? null,
+            tags,
+            forceNewDocument,
+          },
+        });
+        await refreshQueueSize();
+        logger.info('Document queued for offline sync', { documentId, saveName });
+        return true;
+      }
+
       savingRef.current = true;
       setSaving(true);
       setSaveError(null);
 
       try {
-        console.log("[Save] Sauvegarde vers S3...", { documentId, name: saveName });
+        logger.info('Saving document to S3', { documentId, name: saveName });
 
         let storedId: string;
 
@@ -137,20 +189,148 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
         setDirty?.(false);
         onSaved?.(storedId);
 
-        console.log("[Save] Sauvegarde réussie:", storedId);
+        logger.info('Document saved successfully', { storedId });
         return true;
       } catch (err) {
         const message = err instanceof Error ? err.message : "Erreur de sauvegarde";
         setSaveError(message);
-        console.error("[Save] Erreur:", err);
+        logger.error('Save failed', { documentId, errorMessage: message });
+
+        // Enqueue en cas d'erreur réseau (connexion perdue pendant la requête)
+        await offlineQueue.enqueue({
+          type: 'save_document',
+          payload: {
+            documentId,
+            storedDocumentId: storedDocumentId ?? null,
+            name: saveName,
+            folderId: saveFolderId ?? folderId ?? null,
+            tags,
+            forceNewDocument,
+          },
+        });
+        await refreshQueueSize();
+        logger.warn('Document queued after save error', { documentId });
+
         return false;
       } finally {
         setSaving(false);
         savingRef.current = false;
       }
     },
-    [documentId, folderId, tags, storedDocumentId, onSaved, setDirty]
+    [documentId, folderId, tags, storedDocumentId, onSaved, setDirty, logger, refreshQueueSize]
   );
+
+  // --------------------------------------------------------------------------
+  // Handler de replay pour le flush offline
+  // --------------------------------------------------------------------------
+
+  const replayOperation = useCallback(
+    async (op: PendingOperation): Promise<void> => {
+      if (op.type !== 'save_document') {
+        logger.warn('Unknown op type during replay, skipping', { opType: op.type });
+        return;
+      }
+
+      const {
+        documentId: opDocId,
+        storedDocumentId: opStoredId,
+        name: opName,
+        folderId: opFolderId,
+        tags: opTags,
+        forceNewDocument,
+      } = op.payload as {
+        documentId: string;
+        storedDocumentId: string | null;
+        name: string;
+        folderId: string | null;
+        tags: string[];
+        forceNewDocument: boolean;
+      };
+
+      if (opStoredId && !forceNewDocument) {
+        await api.createDocumentVersion(opStoredId, {
+          document_id: opDocId,
+          comment: "Synchronisation offline",
+        });
+      } else {
+        const result = await api.saveDocument({
+          document_id: opDocId,
+          name: opName,
+          folder_id: opFolderId,
+          tags: opTags,
+        });
+        onSaved?.(result.stored_document_id);
+      }
+    },
+    [onSaved, logger]
+  );
+
+  // --------------------------------------------------------------------------
+  // Flush de la queue au retour en ligne
+  // --------------------------------------------------------------------------
+
+  const flushOfflineQueue = useCallback(async () => {
+    const size = await offlineQueue.size();
+    if (size === 0 || isSyncingRef.current) return;
+
+    isSyncingRef.current = true;
+    setIsSyncing(true);
+    logger.info('Flushing offline queue', { pendingOps: size });
+
+    try {
+      const synced = await offlineQueue.flush(replayOperation);
+      logger.info('Offline queue flushed', { syncedOps: synced });
+
+      if (synced > 0) {
+        setLastSaved(new Date());
+        setPendingChanges(0);
+        pendingChangesRef.current = 0;
+        setDirty?.(false);
+      }
+    } catch (err) {
+      logger.error('Offline queue flush error', {
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      isSyncingRef.current = false;
+      setIsSyncing(false);
+      await refreshQueueSize();
+    }
+  }, [replayOperation, setDirty, logger, refreshQueueSize]);
+
+  // --------------------------------------------------------------------------
+  // Listeners online / offline
+  // --------------------------------------------------------------------------
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      logger.info('Connection restored, starting offline sync');
+      flushOfflineQueue();
+    };
+
+    const handleOffline = () => {
+      setIsOffline(true);
+      logger.warn('Connection lost, entering offline mode');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [flushOfflineQueue, logger]);
+
+  // Initialiser la taille de la queue au montage
+  useEffect(() => {
+    refreshQueueSize();
+  }, [refreshQueueSize]);
+
+  // --------------------------------------------------------------------------
+  // API publique : save / saveAs / saveWithPriority / cancelPendingSave
+  // --------------------------------------------------------------------------
 
   // Sauvegarde avec nom actuel (immédiate)
   const save = useCallback(async () => {
@@ -185,7 +365,7 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
       switch (priority) {
         case "immediate":
           // Action critique -> sauvegarde immédiate
-          console.log("[Save] Action critique - sauvegarde immédiate");
+          logger.debug('Immediate save triggered');
           if (debounceTimerRef.current) {
             clearTimeout(debounceTimerRef.current);
             debounceTimerRef.current = null;
@@ -195,12 +375,12 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
 
         case "debounced":
           // Modification mineure -> debounce
-          console.log("[Save] Modification mineure - debounce", debounceDelay, "ms");
+          logger.debug('Debounced save scheduled', { debounceDelayMs: debounceDelay });
           if (debounceTimerRef.current) {
             clearTimeout(debounceTimerRef.current);
           }
           debounceTimerRef.current = setTimeout(() => {
-            console.log("[Save] Debounce terminé - sauvegarde");
+            logger.debug('Debounce timer fired, saving');
             save();
             debounceTimerRef.current = null;
           }, debounceDelay);
@@ -211,7 +391,7 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
           break;
       }
     },
-    [save, debounceDelay]
+    [save, debounceDelay, logger]
   );
 
   // Annuler la sauvegarde debounced en attente
@@ -219,11 +399,14 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
-      console.log("[Save] Sauvegarde debounced annulée");
+      logger.debug('Pending debounced save cancelled');
     }
-  }, []);
+  }, [logger]);
 
+  // --------------------------------------------------------------------------
   // Auto-save périodique (filet de sécurité)
+  // --------------------------------------------------------------------------
+
   useEffect(() => {
     if (!autoSaveInterval || autoSaveInterval <= 0 || !documentId) {
       return;
@@ -232,15 +415,18 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
     const interval = setInterval(() => {
       // Sauvegarder seulement s'il y a des modifications et pas de sauvegarde en cours
       if (isDirty && !savingRef.current && !debounceTimerRef.current) {
-        console.log("[Auto-save] Sauvegarde automatique...");
+        logger.debug('Auto-save triggered');
         save();
       }
     }, autoSaveInterval);
 
     return () => clearInterval(interval);
-  }, [autoSaveInterval, documentId, isDirty, save]);
+  }, [autoSaveInterval, documentId, isDirty, save, logger]);
 
+  // --------------------------------------------------------------------------
   // Cleanup du debounce timer au démontage
+  // --------------------------------------------------------------------------
+
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) {
@@ -249,10 +435,17 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
     };
   }, []);
 
-  // Sauvegarde avant fermeture de la page
+  // --------------------------------------------------------------------------
+  // beforeunload : avertir si queue non-vide ou modifications en attente
+  // --------------------------------------------------------------------------
+
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isDirty || pendingChangesRef.current > 0) {
+      const hasLocalChanges = isDirty || pendingChangesRef.current > 0;
+      // Vérification synchrone de la taille mémoire de la queue (IDB async non dispo ici)
+      const hasQueuedOps = offlineQueueSize > 0;
+
+      if (hasLocalChanges || hasQueuedOps) {
         e.preventDefault();
         e.returnValue = "Vous avez des modifications non sauvegardées. Voulez-vous vraiment quitter?";
         return e.returnValue;
@@ -261,7 +454,7 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [isDirty]);
+  }, [isDirty, offlineQueueSize]);
 
   return {
     saving,
@@ -272,5 +465,8 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
     saveWithPriority,
     cancelPendingSave,
     pendingChanges,
+    isOffline,
+    isSyncing,
+    offlineQueueSize,
   };
 }

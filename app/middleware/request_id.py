@@ -56,6 +56,15 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         # Set context variable
         token = request_id_var.set(request_id)
 
+        # Attach request_id to the active Sentry scope so every event emitted
+        # during this request carries a traceable identifier.
+        try:
+            import sentry_sdk
+
+            sentry_sdk.set_tag("request_id", request_id)
+        except ImportError:
+            pass
+
         try:
             # Process request
             response = await call_next(request)

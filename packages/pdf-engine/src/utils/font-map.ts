@@ -1,9 +1,11 @@
 import { StandardFonts } from 'pdf-lib';
 
 /**
- * Map common font families to pdf-lib StandardFonts.
+ * Map des familles connues vers pdf-lib StandardFonts.
+ * Seules les polices listées ici sont des polices standard PDF.
+ * Tout nom absent de cette map = police custom → ne pas faire de fallback silencieux.
  */
-const FONT_MAP: Record<string, StandardFonts> = {
+const STANDARD_FONT_MAP: Record<string, StandardFonts> = {
   'helvetica': StandardFonts.Helvetica,
   'helv': StandardFonts.Helvetica,
   'arial': StandardFonts.Helvetica,
@@ -40,12 +42,28 @@ const FONT_MAP: Record<string, StandardFonts> = {
 };
 
 /**
- * Normalize a font name to a pdf-lib StandardFont.
- * Returns Helvetica as fallback.
+ * Normalise un nom de police (casse + trim), sans résolution vers une StandardFont.
+ * Utilisé pour la comparaison avant décision de rendu.
  */
-export function normalizeFontName(fontName: string): StandardFonts {
-  const key = fontName.toLowerCase().trim();
-  return FONT_MAP[key] ?? StandardFonts.Helvetica;
+export function normalizeFontName(fontName: string): string {
+  return fontName.toLowerCase().trim();
+}
+
+/**
+ * Résout un nom de police vers une pdf-lib StandardFont.
+ * Retourne null si la police n'est pas une StandardFont connue — dans ce cas,
+ * l'appelant doit embed les bytes de la police custom plutôt que de faire un fallback.
+ */
+export function resolveStandardFont(fontName: string): StandardFonts | null {
+  const key = normalizeFontName(fontName);
+  return STANDARD_FONT_MAP[key] ?? null;
+}
+
+/**
+ * Vérifie si un nom de police correspond à une pdf Standard Font (Type1).
+ */
+export function isStandardFont(fontName: string): boolean {
+  return resolveStandardFont(fontName) !== null;
 }
 
 /**

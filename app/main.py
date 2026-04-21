@@ -12,6 +12,7 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
@@ -22,9 +23,11 @@ from app.core.cache import close_redis, get_redis
 from app.core.database import close_database, init_database
 from app.middleware.api_key_auth import ApiKeyAuthMiddleware
 from app.middleware.api_quota import APIQuotaMiddleware
+from app.middleware.auth import JWTAuthMiddleware
 from app.middleware.error_handler import setup_exception_handlers
 from app.middleware.rate_limiter import RateLimitMiddleware
 from app.middleware.request_id import RequestIDMiddleware
+from app.sentry import init_sentry
 
 # Configure logging
 logging.basicConfig(
@@ -50,6 +53,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     logger.info("Starting Giga-PDF API...")
     settings = get_settings()
+
+    # Initialise Sentry (no-op when SENTRY_DSN is empty)
+    init_sentry(
+        dsn=settings.sentry_dsn,
+        environment=settings.sentry_environment,
+        release=settings.sentry_release,
+        traces_sample_rate=settings.sentry_traces_sample_rate,
+        profiles_sample_rate=settings.sentry_profiles_sample_rate,
+    )
 
     # Ensure storage directory exists
     settings.storage_path.mkdir(parents=True, exist_ok=True)
@@ -349,6 +361,11 @@ Rate limit headers are included in all responses:
             allow_headers=["*"],
         )
 
+    # GZip compression middleware (outermost layer, added last per LIFO order)
+    # minimum_size=1024: skip compression for small payloads (< 1KB)
+    # compresslevel=5: balance between CPU usage and compression ratio
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
+
     # Request ID middleware
     app.add_middleware(RequestIDMiddleware)
 
@@ -356,12 +373,21 @@ Rate limit headers are included in all responses:
     app.add_middleware(RateLimitMiddleware)
 
     # API quota tracking middleware
+    # Runs after both auth middlewares so request.state.user_id is already
+    # populated by JWTAuthMiddleware or request.state.api_key_user_id by
+    # ApiKeyAuthMiddleware before quota is checked.
     app.add_middleware(APIQuotaMiddleware)
 
+    # JWT authentication middleware
+    # Decodes the Bearer token (best-effort) and sets request.state.user_id
+    # so that APIQuotaMiddleware (which runs later in the LIFO chain) can
+    # enforce per-user quotas for JWT-authenticated requests.
+    app.add_middleware(JWTAuthMiddleware)
+
     # API key authentication middleware
-    # Runs after quota/rate tracking so that per-key rate limits are applied
-    # independently of the plan-level quota.  Placed here so it executes
-    # before the JWT auth dependency inside route handlers.
+    # Outermost auth layer: runs first on every request.  Sets
+    # request.state.api_key_user_id when an X-API-Key header is present.
+    # If the header is absent the middleware is a no-op and JWT auth takes over.
     app.add_middleware(ApiKeyAuthMiddleware)
 
     # Setup exception handlers

@@ -1,8 +1,9 @@
 """Repository modules for data access."""
 
-from app.repositories.document_repo import DocumentSessionManager, document_sessions
+from app.repositories.document_repo import document_sessions
+from app.repositories.redis_document_repo import RedisDocumentSessionManager
 
 __all__ = [
-    "DocumentSessionManager",
+    "RedisDocumentSessionManager",
     "document_sessions",
 ]

@@ -173,7 +173,7 @@ export default function EmbedDocsPage() {
 <script src="https://cdn.giga-pdf.com/embed.js"></script>
 <script>
   const editor = GigaPdf.init({
-    apiKey: 'giga_pk_your_api_key',
+    publicKey: 'giga_pub_your_publishable_key',
     container: '#pdf-editor',
     height: 700,
     theme: 'light',
@@ -203,7 +203,7 @@ export default function EmbedDocsPage() {
               code={`import { GigaPdf } from '@giga-pdf/embed';
 
 const editor = GigaPdf.init({
-  apiKey: 'giga_pk_your_api_key',
+  publicKey: 'giga_pub_your_publishable_key',
   container: '#pdf-editor',
   documentId: 'doc_abc123',
   locale: 'fr',
@@ -245,7 +245,7 @@ export function PdfEditor() {
     <div>
       <GigaPdfEditor
         ref={editorRef}
-        apiKey="giga_pk_your_api_key"
+        publicKey="giga_pub_your_publishable_key"
         documentId="doc_abc123"
         height={700}
         locale="fr"
@@ -292,7 +292,7 @@ export function PdfEditor() {
               </thead>
               <tbody className="divide-y divide-border">
                 {[
-                  { name: "apiKey", type: "string", def: "—", required: true, desc: "apiKey" },
+                  { name: "publicKey", type: "string", def: "—", required: true, desc: "publicKey" },
                   { name: "container", type: "HTMLElement | string", def: "—", required: true, desc: "container" },
                   { name: "documentId", type: "string", def: "—", required: false, desc: "documentId" },
                   { name: "baseUrl", type: "string", def: "https://giga-pdf.com", required: false, desc: "baseUrl" },
@@ -469,7 +469,7 @@ export function PdfEditor() {
           <CodeBlock
             lang="typescript"
             code={`const editor = GigaPdf.init({
-  apiKey: 'giga_pk_your_api_key',
+  publicKey: 'giga_pub_your_publishable_key',
   container: '#editor',
   baseUrl: 'https://pdf.your-domain.com', // Your self-hosted instance
 });`}

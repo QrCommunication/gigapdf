@@ -11,11 +11,12 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.database import get_db_session
+from app.core.database import get_db
 from app.middleware.auth import AuthenticatedUser
 from app.middleware.request_id import get_request_id
 from app.models.database import Plan, UserQuota
@@ -63,6 +64,7 @@ router = APIRouter()
 
 async def get_billing_context_or_error(
     user: AuthenticatedUser,
+    session: AsyncSession,
     require_manage: bool = True,
 ) -> BillingContext:
     """
@@ -70,6 +72,7 @@ async def get_billing_context_or_error(
 
     Args:
         user: Authenticated user
+        session: Database session (injected)
         require_manage: If True, require MANAGE_BILLING permission
 
     Returns:
@@ -78,19 +81,18 @@ async def get_billing_context_or_error(
     Raises:
         HTTPException: If permission denied
     """
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
-        )
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, session
+    )
 
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=require_manage
-        )
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=require_manage
+    )
 
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
 
-        return context
+    return context
 
 
 def get_plan_name(plan_type: str) -> str:
@@ -207,69 +209,71 @@ For tenant members, returns the organization's shared subscription. Individual u
         ]
     },
 )
-async def get_subscription(user: AuthenticatedUser) -> APIResponse[SubscriptionResponse]:
+async def get_subscription(
+    user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[SubscriptionResponse]:
     """Get current subscription status."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    # Check view permission
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=False
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    # Determine current plan and status based on context
+    if context.billing_entity_type == "tenant":
+        tenant = context.tenant
+        plan_type = tenant.plan.slug if tenant.plan else "free"
+        plan_name = tenant.plan.name if tenant.plan else "Free"
+        status = "trialing" if context.is_in_trial else str(tenant.status.value)
+        current_period_end = context.trial_ends_at if context.is_in_trial else None
+    else:
+        user_quota = context.user_quota
+        plan_type = user_quota.plan_type
+        plan_name = get_plan_name(plan_type)
+        status = user_quota.subscription_status
+        current_period_end = (
+            context.trial_ends_at if context.is_in_trial
+            else user_quota.current_period_end
         )
 
-        # Check view permission
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=False
-        )
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
+    # Build response with trial info
+    subscription_data = SubscriptionResponse(
+        status=status,
+        current_plan=plan_type,
+        plan_name=plan_name,
+        billing_cycle="month" if status not in ("none", "free") else None,
+        current_period_end=current_period_end,
+        cancel_at_period_end=(
+            context.user_quota.cancel_at_period_end
+            if context.billing_entity_type == "user"
+            else False
+        ),
+        stripe_customer_id=context.stripe_customer_id,
+        stripe_subscription_id=context.stripe_subscription_id,
+    )
 
-        # Determine current plan and status based on context
-        if context.billing_entity_type == "tenant":
-            tenant = context.tenant
-            plan_type = tenant.plan.slug if tenant.plan else "free"
-            plan_name = tenant.plan.name if tenant.plan else "Free"
-            status = "trialing" if context.is_in_trial else str(tenant.status.value)
-            current_period_end = context.trial_ends_at if context.is_in_trial else None
-        else:
-            user_quota = context.user_quota
-            plan_type = user_quota.plan_type
-            plan_name = get_plan_name(plan_type)
-            status = user_quota.subscription_status
-            current_period_end = (
-                context.trial_ends_at if context.is_in_trial
-                else user_quota.current_period_end
-            )
+    # Add trial information to response
+    response_data = subscription_data.model_dump()
+    response_data["is_in_trial"] = context.is_in_trial
+    response_data["trial_days_remaining"] = context.trial_days_remaining
+    response_data["trial_ends_at"] = context.trial_ends_at
+    response_data["has_used_trial"] = context.has_used_trial
+    response_data["billing_entity_type"] = context.billing_entity_type
+    if context.is_tenant_member:
+        response_data["tenant_name"] = context.tenant.name
+        response_data["tenant_id"] = str(context.tenant.id)
 
-        # Build response with trial info
-        subscription_data = SubscriptionResponse(
-            status=status,
-            current_plan=plan_type,
-            plan_name=plan_name,
-            billing_cycle="month" if status not in ("none", "free") else None,
-            current_period_end=current_period_end,
-            cancel_at_period_end=(
-                context.user_quota.cancel_at_period_end
-                if context.billing_entity_type == "user"
-                else False
-            ),
-            stripe_customer_id=context.stripe_customer_id,
-            stripe_subscription_id=context.stripe_subscription_id,
-        )
-
-        # Add trial information to response
-        response_data = subscription_data.model_dump()
-        response_data["is_in_trial"] = context.is_in_trial
-        response_data["trial_days_remaining"] = context.trial_days_remaining
-        response_data["trial_ends_at"] = context.trial_ends_at
-        response_data["has_used_trial"] = context.has_used_trial
-        response_data["billing_entity_type"] = context.billing_entity_type
-        if context.is_tenant_member:
-            response_data["tenant_name"] = context.tenant.name
-            response_data["tenant_id"] = str(context.tenant.id)
-
-        return APIResponse(
-            success=True,
-            data=response_data,
-            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-        )
+    return APIResponse(
+        success=True,
+        data=response_data,
+        meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+    )
 
 
 @router.patch(
@@ -317,106 +321,106 @@ During an active trial period, plan changes are free and immediate with no prora
 async def update_subscription(
     user: AuthenticatedUser,
     request: UpdateSubscriptionRequest,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[SubscriptionResponse]:
     """Update subscription to a new plan."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    # Check manage permission
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=True
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    # Get the new plan
+    plan_result = await db.execute(
+        select(Plan).where(Plan.slug == request.plan_id, Plan.is_active == True)
+    )
+    plan = plan_result.scalar_one_or_none()
+
+    if not plan or not plan.stripe_price_id:
+        raise HTTPException(status_code=404, detail=f"Plan '{request.plan_id}' not found")
+
+    # Check if in trial period - handle differently
+    if context.is_in_trial:
+        # During trial, just change the plan without Stripe interaction
+        if context.billing_entity_type == "tenant":
+            context.tenant.plan_id = plan.id
+            context.tenant.storage_limit_bytes = plan.storage_limit_bytes
+            context.tenant.api_calls_limit = plan.api_calls_limit
+            context.tenant.document_limit = plan.document_limit
+        else:
+            context.user_quota.plan_type = request.plan_id
+            await quota_service.upgrade_plan(user.user_id, request.plan_id)
+
+        await db.commit()
+
+        return APIResponse(
+            success=True,
+            data={
+                "status": "trialing",
+                "current_plan": request.plan_id,
+                "plan_name": plan.name,
+                "is_in_trial": True,
+                "trial_days_remaining": context.trial_days_remaining,
+                "trial_ends_at": context.trial_ends_at,
+                "message": f"Plan changed to {plan.name}. No charge during trial period.",
+            },
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
         )
 
-        # Check manage permission
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=True
+    # Not in trial - need active subscription to update
+    if not context.stripe_subscription_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No active subscription to update. Please create a subscription first.",
         )
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
 
-        # Get the new plan
-        plan_result = await session.execute(
-            select(Plan).where(Plan.slug == request.plan_id, Plan.is_active == True)
+    try:
+        # Update subscription in Stripe
+        updated_sub = stripe_service.update_subscription(
+            context.stripe_subscription_id,
+            plan.stripe_price_id,
         )
-        plan = plan_result.scalar_one_or_none()
 
-        if not plan or not plan.stripe_price_id:
-            raise HTTPException(status_code=404, detail=f"Plan '{request.plan_id}' not found")
-
-        # Check if in trial period - handle differently
-        if context.is_in_trial:
-            # During trial, just change the plan without Stripe interaction
-            if context.billing_entity_type == "tenant":
-                context.tenant.plan_id = plan.id
-                context.tenant.storage_limit_bytes = plan.storage_limit_bytes
-                context.tenant.api_calls_limit = plan.api_calls_limit
-                context.tenant.document_limit = plan.document_limit
-            else:
-                context.user_quota.plan_type = request.plan_id
-                await quota_service.upgrade_plan(user.user_id, request.plan_id)
-
-            await session.commit()
-
-            return APIResponse(
-                success=True,
-                data={
-                    "status": "trialing",
-                    "current_plan": request.plan_id,
-                    "plan_name": plan.name,
-                    "is_in_trial": True,
-                    "trial_days_remaining": context.trial_days_remaining,
-                    "trial_ends_at": context.trial_ends_at,
-                    "message": f"Plan changed to {plan.name}. No charge during trial period.",
-                },
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+        # Update local records
+        if context.billing_entity_type == "tenant":
+            context.tenant.plan_id = plan.id
+            context.tenant.storage_limit_bytes = plan.storage_limit_bytes
+            context.tenant.api_calls_limit = plan.api_calls_limit
+            context.tenant.document_limit = plan.document_limit
+        else:
+            context.user_quota.plan_type = request.plan_id
+            context.user_quota.current_period_end = datetime.fromtimestamp(
+                updated_sub.current_period_end, tz=timezone.utc
             )
+            await quota_service.upgrade_plan(user.user_id, request.plan_id)
 
-        # Not in trial - need active subscription to update
-        if not context.stripe_subscription_id:
-            raise HTTPException(
-                status_code=400,
-                detail="No active subscription to update. Please create a subscription first.",
-            )
+        await db.commit()
 
-        try:
-            # Update subscription in Stripe
-            updated_sub = stripe_service.update_subscription(
-                context.stripe_subscription_id,
-                plan.stripe_price_id,
-            )
-
-            # Update local records
-            if context.billing_entity_type == "tenant":
-                context.tenant.plan_id = plan.id
-                context.tenant.storage_limit_bytes = plan.storage_limit_bytes
-                context.tenant.api_calls_limit = plan.api_calls_limit
-                context.tenant.document_limit = plan.document_limit
-            else:
-                context.user_quota.plan_type = request.plan_id
-                context.user_quota.current_period_end = datetime.fromtimestamp(
+        return APIResponse(
+            success=True,
+            data=SubscriptionResponse(
+                status=updated_sub.status,
+                current_plan=request.plan_id,
+                plan_name=plan.name,
+                billing_cycle=plan.interval,
+                current_period_end=datetime.fromtimestamp(
                     updated_sub.current_period_end, tz=timezone.utc
-                )
-                await quota_service.upgrade_plan(user.user_id, request.plan_id)
-
-            await session.commit()
-
-            return APIResponse(
-                success=True,
-                data=SubscriptionResponse(
-                    status=updated_sub.status,
-                    current_plan=request.plan_id,
-                    plan_name=plan.name,
-                    billing_cycle=plan.interval,
-                    current_period_end=datetime.fromtimestamp(
-                        updated_sub.current_period_end, tz=timezone.utc
-                    ),
-                    cancel_at_period_end=updated_sub.cancel_at_period_end,
-                    stripe_customer_id=context.stripe_customer_id,
-                    stripe_subscription_id=context.stripe_subscription_id,
                 ),
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-            )
+                cancel_at_period_end=updated_sub.cancel_at_period_end,
+                stripe_customer_id=context.stripe_customer_id,
+                stripe_subscription_id=context.stripe_subscription_id,
+            ),
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+        )
 
-        except StripeServiceError as e:
-            logger.error(f"Failed to update subscription: {e}")
-            raise HTTPException(status_code=400, detail=str(e))
+    except StripeServiceError as e:
+        logger.error(f"Failed to update subscription: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post(
@@ -463,85 +467,85 @@ Canceling during a trial immediately reverts the account to the free plan with n
 async def cancel_subscription(
     user: AuthenticatedUser,
     request: CancelSubscriptionRequest,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[SubscriptionResponse]:
     """Cancel the current subscription."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    # Check manage permission
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=True
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    # Handle trial cancellation
+    if context.is_in_trial:
+        # End trial and revert to free
+        await billing_permission_service.end_trial(
+            context, db, convert_to_paid=False
+        )
+        await db.commit()
+
+        return APIResponse(
+            success=True,
+            data={
+                "status": "canceled",
+                "current_plan": "free",
+                "plan_name": "Free",
+                "message": "Trial canceled. Reverted to free plan.",
+            },
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
         )
 
-        # Check manage permission
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=True
+    # No active subscription
+    if not context.stripe_subscription_id:
+        raise HTTPException(status_code=400, detail="No active subscription to cancel")
+
+    try:
+        canceled_sub = stripe_service.cancel_subscription(
+            context.stripe_subscription_id,
+            immediately=request.immediately,
         )
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
 
-        # Handle trial cancellation
-        if context.is_in_trial:
-            # End trial and revert to free
-            await billing_permission_service.end_trial(
-                context, session, convert_to_paid=False
-            )
-            await session.commit()
-
-            return APIResponse(
-                success=True,
-                data={
-                    "status": "canceled",
-                    "current_plan": "free",
-                    "plan_name": "Free",
-                    "message": "Trial canceled. Reverted to free plan.",
-                },
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-            )
-
-        # No active subscription
-        if not context.stripe_subscription_id:
-            raise HTTPException(status_code=400, detail="No active subscription to cancel")
-
-        try:
-            canceled_sub = stripe_service.cancel_subscription(
-                context.stripe_subscription_id,
-                immediately=request.immediately,
-            )
-
-            if request.immediately:
-                if context.billing_entity_type == "tenant":
-                    context.tenant.status = TenantStatus.CANCELLED
-                    context.tenant.plan_id = None
-                else:
-                    context.user_quota.subscription_status = "canceled"
-                    context.user_quota.plan_type = "free"
-                    await quota_service.upgrade_plan(user.user_id, "free")
+        if request.immediately:
+            if context.billing_entity_type == "tenant":
+                context.tenant.status = TenantStatus.CANCELLED
+                context.tenant.plan_id = None
             else:
-                if context.billing_entity_type == "user":
-                    context.user_quota.cancel_at_period_end = True
+                context.user_quota.subscription_status = "canceled"
+                context.user_quota.plan_type = "free"
+                await quota_service.upgrade_plan(user.user_id, "free")
+        else:
+            if context.billing_entity_type == "user":
+                context.user_quota.cancel_at_period_end = True
 
-            await session.commit()
+        await db.commit()
 
-            return APIResponse(
-                success=True,
-                data=SubscriptionResponse(
-                    status=canceled_sub.status,
-                    current_plan=(
-                        "free" if request.immediately
-                        else context.user_quota.plan_type if context.billing_entity_type == "user"
-                        else context.tenant.plan.slug if context.tenant.plan else "free"
-                    ),
-                    plan_name="Free" if request.immediately else get_plan_name(
-                        context.user_quota.plan_type if context.billing_entity_type == "user"
-                        else context.tenant.plan.slug if context.tenant.plan else "free"
-                    ),
-                    cancel_at_period_end=canceled_sub.cancel_at_period_end,
-                    stripe_customer_id=context.stripe_customer_id,
-                    stripe_subscription_id=context.stripe_subscription_id,
+        return APIResponse(
+            success=True,
+            data=SubscriptionResponse(
+                status=canceled_sub.status,
+                current_plan=(
+                    "free" if request.immediately
+                    else context.user_quota.plan_type if context.billing_entity_type == "user"
+                    else context.tenant.plan.slug if context.tenant.plan else "free"
                 ),
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-            )
+                plan_name="Free" if request.immediately else get_plan_name(
+                    context.user_quota.plan_type if context.billing_entity_type == "user"
+                    else context.tenant.plan.slug if context.tenant.plan else "free"
+                ),
+                cancel_at_period_end=canceled_sub.cancel_at_period_end,
+                stripe_customer_id=context.stripe_customer_id,
+                stripe_subscription_id=context.stripe_subscription_id,
+            ),
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+        )
 
-        except StripeServiceError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+    except StripeServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post(
@@ -587,59 +591,59 @@ This endpoint only works if the subscription is still active but has `cancel_at_
 )
 async def reactivate_subscription(
     user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[SubscriptionResponse]:
     """Reactivate a subscription scheduled for cancellation."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    # Check manage permission
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=True
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    if not context.stripe_subscription_id:
+        raise HTTPException(status_code=400, detail="No subscription to reactivate")
+
+    if context.billing_entity_type == "user" and not context.user_quota.cancel_at_period_end:
+        raise HTTPException(
+            status_code=400,
+            detail="Subscription is not scheduled for cancellation",
         )
 
-        # Check manage permission
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=True
+    try:
+        reactivated_sub = stripe_service.reactivate_subscription(
+            context.stripe_subscription_id
         )
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
 
-        if not context.stripe_subscription_id:
-            raise HTTPException(status_code=400, detail="No subscription to reactivate")
+        if context.billing_entity_type == "user":
+            context.user_quota.cancel_at_period_end = False
 
-        if context.billing_entity_type == "user" and not context.user_quota.cancel_at_period_end:
-            raise HTTPException(
-                status_code=400,
-                detail="Subscription is not scheduled for cancellation",
-            )
+        await db.commit()
 
-        try:
-            reactivated_sub = stripe_service.reactivate_subscription(
-                context.stripe_subscription_id
-            )
+        plan_type = (
+            context.user_quota.plan_type if context.billing_entity_type == "user"
+            else context.tenant.plan.slug if context.tenant.plan else "free"
+        )
 
-            if context.billing_entity_type == "user":
-                context.user_quota.cancel_at_period_end = False
+        return APIResponse(
+            success=True,
+            data=SubscriptionResponse(
+                status=reactivated_sub.status,
+                current_plan=plan_type,
+                plan_name=get_plan_name(plan_type),
+                cancel_at_period_end=False,
+                stripe_customer_id=context.stripe_customer_id,
+                stripe_subscription_id=context.stripe_subscription_id,
+            ),
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+        )
 
-            await session.commit()
-
-            plan_type = (
-                context.user_quota.plan_type if context.billing_entity_type == "user"
-                else context.tenant.plan.slug if context.tenant.plan else "free"
-            )
-
-            return APIResponse(
-                success=True,
-                data=SubscriptionResponse(
-                    status=reactivated_sub.status,
-                    current_plan=plan_type,
-                    plan_name=get_plan_name(plan_type),
-                    cancel_at_period_end=False,
-                    stripe_customer_id=context.stripe_customer_id,
-                    stripe_subscription_id=context.stripe_subscription_id,
-                ),
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-            )
-
-        except StripeServiceError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+    except StripeServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # =============================================================================
@@ -691,61 +695,61 @@ Each user or organization can only use the trial once. During the trial, you get
 async def start_trial(
     user: AuthenticatedUser,
     request: UpdateSubscriptionRequest,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """Start a free trial period."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    # Check manage permission
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=True
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    # Check if trial already used
+    if context.has_used_trial:
+        raise HTTPException(
+            status_code=400,
+            detail="Trial period already used. Please subscribe to continue.",
         )
 
-        # Check manage permission
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=True
+    # Check if already in trial
+    if context.is_in_trial:
+        raise HTTPException(
+            status_code=400,
+            detail="Already in trial period.",
         )
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
 
-        # Check if trial already used
-        if context.has_used_trial:
-            raise HTTPException(
-                status_code=400,
-                detail="Trial period already used. Please subscribe to continue.",
-            )
+    # Validate plan
+    if request.plan_id not in ("starter", "pro"):
+        raise HTTPException(
+            status_code=400,
+            detail="Trial is only available for Starter and Pro plans.",
+        )
 
-        # Check if already in trial
-        if context.is_in_trial:
-            raise HTTPException(
-                status_code=400,
-                detail="Already in trial period.",
-            )
+    try:
+        trial_start, trial_end = await billing_permission_service.start_trial(
+            context, db, plan_slug=request.plan_id
+        )
+        await db.commit()
 
-        # Validate plan
-        if request.plan_id not in ("starter", "pro"):
-            raise HTTPException(
-                status_code=400,
-                detail="Trial is only available for Starter and Pro plans.",
-            )
+        return APIResponse(
+            success=True,
+            data={
+                "message": f"Trial started successfully for {request.plan_id.capitalize()} plan",
+                "plan": request.plan_id,
+                "trial_start": trial_start.isoformat(),
+                "trial_ends": trial_end.isoformat(),
+                "trial_days": TRIAL_DURATION_DAYS,
+            },
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+        )
 
-        try:
-            trial_start, trial_end = await billing_permission_service.start_trial(
-                context, session, plan_slug=request.plan_id
-            )
-            await session.commit()
-
-            return APIResponse(
-                success=True,
-                data={
-                    "message": f"Trial started successfully for {request.plan_id.capitalize()} plan",
-                    "plan": request.plan_id,
-                    "trial_start": trial_start.isoformat(),
-                    "trial_ends": trial_end.isoformat(),
-                    "trial_days": TRIAL_DURATION_DAYS,
-                },
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-            )
-
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # =============================================================================
@@ -798,91 +802,91 @@ Returns a URL to redirect the user to the Stripe-hosted checkout page to complet
 async def create_checkout(
     user: AuthenticatedUser,
     request: CreateCheckoutRequest,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[CheckoutSessionResponse]:
     """Create a Stripe Checkout session."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    # Check manage permission
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=True
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    # Get plan details
+    plan_result = await db.execute(
+        select(Plan).where(Plan.slug == request.plan_id, Plan.is_active == True)
+    )
+    plan = plan_result.scalar_one_or_none()
+
+    if not plan or not plan.stripe_price_id:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Plan '{request.plan_id}' not found or not available for purchase",
         )
 
-        # Check manage permission
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=True
-        )
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
-
-        # Get plan details
-        plan_result = await session.execute(
-            select(Plan).where(Plan.slug == request.plan_id, Plan.is_active == True)
-        )
-        plan = plan_result.scalar_one_or_none()
-
-        if not plan or not plan.stripe_price_id:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Plan '{request.plan_id}' not found or not available for purchase",
-            )
-
-        # Create Stripe customer if not exists
-        if not context.stripe_customer_id:
-            try:
-                if context.billing_entity_type == "tenant":
-                    customer = stripe_service.create_customer(
-                        user_id=str(context.tenant.id),
-                        email=context.tenant.email,
-                        name=context.tenant.name,
-                        metadata={"tenant_id": str(context.tenant.id)},
-                    )
-                    context.tenant.stripe_customer_id = customer.id
-                else:
-                    customer = stripe_service.create_customer(
-                        user_id=user.user_id,
-                        email=user.email or f"{user.user_id}@giga-pdf.com",
-                        name=user.name,
-                    )
-                    context.user_quota.stripe_customer_id = customer.id
-
-                await session.flush()
-                context.stripe_customer_id = customer.id
-
-            except StripeServiceError as e:
-                raise HTTPException(status_code=400, detail=str(e))
-
+    # Create Stripe customer if not exists
+    if not context.stripe_customer_id:
         try:
-            # Determine trial days (only if trial not used)
-            trial_days = None
-            if not context.has_used_trial and plan.trial_days:
-                trial_days = plan.trial_days
+            if context.billing_entity_type == "tenant":
+                customer = stripe_service.create_customer(
+                    user_id=str(context.tenant.id),
+                    email=context.tenant.email,
+                    name=context.tenant.name,
+                    metadata={"tenant_id": str(context.tenant.id)},
+                )
+                context.tenant.stripe_customer_id = customer.id
+            else:
+                customer = stripe_service.create_customer(
+                    user_id=user.user_id,
+                    email=user.email or f"{user.user_id}@giga-pdf.com",
+                    name=user.name,
+                )
+                context.user_quota.stripe_customer_id = customer.id
 
-            # Create checkout session
-            checkout_session = stripe_service.create_checkout_session(
-                customer_id=context.stripe_customer_id,
-                price_id=plan.stripe_price_id,
-                success_url=request.success_url,
-                cancel_url=request.cancel_url,
-                trial_days=trial_days,
-                metadata={
-                    "user_id": user.user_id,
-                    "plan_slug": plan.slug,
-                    "billing_entity_type": context.billing_entity_type,
-                    "tenant_id": str(context.tenant.id) if context.tenant else None,
-                },
-            )
-
-            await session.commit()
-
-            return APIResponse(
-                success=True,
-                data=CheckoutSessionResponse(
-                    session_id=checkout_session.id,
-                    url=checkout_session.url,
-                ),
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-            )
+            await db.flush()
+            context.stripe_customer_id = customer.id
 
         except StripeServiceError as e:
             raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        # Determine trial days (only if trial not used)
+        trial_days = None
+        if not context.has_used_trial and plan.trial_days:
+            trial_days = plan.trial_days
+
+        # Create checkout session
+        checkout_session = stripe_service.create_checkout_session(
+            customer_id=context.stripe_customer_id,
+            price_id=plan.stripe_price_id,
+            success_url=request.success_url,
+            cancel_url=request.cancel_url,
+            trial_days=trial_days,
+            metadata={
+                "user_id": user.user_id,
+                "plan_slug": plan.slug,
+                "billing_entity_type": context.billing_entity_type,
+                "tenant_id": str(context.tenant.id) if context.tenant else None,
+            },
+        )
+
+        await db.commit()
+
+        return APIResponse(
+            success=True,
+            data=CheckoutSessionResponse(
+                session_id=checkout_session.id,
+                url=checkout_session.url,
+            ),
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+        )
+
+    except StripeServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post(
@@ -929,37 +933,37 @@ Returns a URL to the Stripe-hosted portal where users can manage their subscript
 async def create_portal(
     user: AuthenticatedUser,
     request: CreatePortalRequest,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[PortalSessionResponse]:
     """Create a Stripe Customer Portal session."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    # Check manage permission
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=True
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    # Create Stripe customer if it doesn't exist
+    stripe_customer_id = await ensure_stripe_customer(user, context, db)
+
+    try:
+        portal_session = stripe_service.create_portal_session(
+            customer_id=stripe_customer_id,
+            return_url=request.return_url,
         )
 
-        # Check manage permission
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=True
+        return APIResponse(
+            success=True,
+            data=PortalSessionResponse(url=portal_session.url),
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
         )
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
 
-        # Create Stripe customer if it doesn't exist
-        stripe_customer_id = await ensure_stripe_customer(user, context, session)
-
-        try:
-            portal_session = stripe_service.create_portal_session(
-                customer_id=stripe_customer_id,
-                return_url=request.return_url,
-            )
-
-            return APIResponse(
-                success=True,
-                data=PortalSessionResponse(url=portal_session.url),
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-            )
-
-        except StripeServiceError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+    except StripeServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # =============================================================================
@@ -1005,41 +1009,42 @@ All paid plans (starter and pro) include a 14-day free trial that can only be us
         ]
     },
 )
-async def list_plans() -> APIResponse[list[BillingPlanResponse]]:
+async def list_plans(
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[list[BillingPlanResponse]]:
     """List all available subscription plans."""
-    async with get_db_session() as session:
-        result = await session.execute(
-            select(Plan)
-            .where(Plan.is_active == True, Plan.is_tenant_plan == False)
-            .order_by(Plan.display_order)
-        )
-        plans = result.scalars().all()
+    result = await db.execute(
+        select(Plan)
+        .where(Plan.is_active == True, Plan.is_tenant_plan == False)
+        .order_by(Plan.display_order)
+    )
+    plans = result.scalars().all()
 
-        plan_responses = [
-            BillingPlanResponse(
-                id=str(plan.id),
-                slug=plan.slug,
-                name=plan.name,
-                description=plan.description,
-                price=float(plan.price),
-                currency=plan.currency,
-                interval=plan.interval,
-                storage_gb=plan.storage_limit_bytes / (1024**3),
-                api_calls_limit=plan.api_calls_limit,
-                document_limit=plan.document_limit,
-                features=plan.features,
-                is_popular=plan.is_popular,
-                stripe_price_id=plan.stripe_price_id,
-                trial_days=TRIAL_DURATION_DAYS if plan.slug in ("starter", "pro") else None,
-            )
-            for plan in plans
-        ]
-
-        return APIResponse(
-            success=True,
-            data=plan_responses,
-            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+    plan_responses = [
+        BillingPlanResponse(
+            id=str(plan.id),
+            slug=plan.slug,
+            name=plan.name,
+            description=plan.description,
+            price=float(plan.price),
+            currency=plan.currency,
+            interval=plan.interval,
+            storage_gb=plan.storage_limit_bytes / (1024**3),
+            api_calls_limit=plan.api_calls_limit,
+            document_limit=plan.document_limit,
+            features=plan.features,
+            is_popular=plan.is_popular,
+            stripe_price_id=plan.stripe_price_id,
+            trial_days=TRIAL_DURATION_DAYS if plan.slug in ("starter", "pro") else None,
         )
+        for plan in plans
+    ]
+
+    return APIResponse(
+        success=True,
+        data=plan_responses,
+        meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+    )
 
 
 # =============================================================================
@@ -1091,65 +1096,65 @@ Returns invoices sorted by creation date (newest first) from Stripe. Returns an 
 async def list_invoices(
     user: AuthenticatedUser,
     limit: int = Query(default=10, ge=1, le=100, description="Number of invoices to return"),
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[list[InvoiceResponse]]:
     """List invoices."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    # Check view permission
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=False
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    if not context.stripe_customer_id:
+        return APIResponse(
+            success=True,
+            data=[],
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
         )
 
-        # Check view permission
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=False
+    try:
+        invoices = stripe_service.list_invoices(
+            customer_id=context.stripe_customer_id,
+            limit=limit,
         )
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
 
-        if not context.stripe_customer_id:
-            return APIResponse(
-                success=True,
-                data=[],
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+        invoice_responses = [
+            InvoiceResponse(
+                id=inv.id,
+                number=inv.number,
+                status=inv.status,
+                amount_due=inv.amount_due,
+                amount_paid=inv.amount_paid,
+                currency=inv.currency,
+                created=datetime.fromtimestamp(inv.created, tz=timezone.utc),
+                due_date=datetime.fromtimestamp(inv.due_date, tz=timezone.utc)
+                if inv.due_date
+                else None,
+                pdf_url=inv.invoice_pdf,
+                hosted_invoice_url=inv.hosted_invoice_url,
+                period_start=datetime.fromtimestamp(inv.period_start, tz=timezone.utc)
+                if inv.period_start
+                else None,
+                period_end=datetime.fromtimestamp(inv.period_end, tz=timezone.utc)
+                if inv.period_end
+                else None,
             )
+            for inv in invoices
+        ]
 
-        try:
-            invoices = stripe_service.list_invoices(
-                customer_id=context.stripe_customer_id,
-                limit=limit,
-            )
+        return APIResponse(
+            success=True,
+            data=invoice_responses,
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+        )
 
-            invoice_responses = [
-                InvoiceResponse(
-                    id=inv.id,
-                    number=inv.number,
-                    status=inv.status,
-                    amount_due=inv.amount_due,
-                    amount_paid=inv.amount_paid,
-                    currency=inv.currency,
-                    created=datetime.fromtimestamp(inv.created, tz=timezone.utc),
-                    due_date=datetime.fromtimestamp(inv.due_date, tz=timezone.utc)
-                    if inv.due_date
-                    else None,
-                    pdf_url=inv.invoice_pdf,
-                    hosted_invoice_url=inv.hosted_invoice_url,
-                    period_start=datetime.fromtimestamp(inv.period_start, tz=timezone.utc)
-                    if inv.period_start
-                    else None,
-                    period_end=datetime.fromtimestamp(inv.period_end, tz=timezone.utc)
-                    if inv.period_end
-                    else None,
-                )
-                for inv in invoices
-            ]
-
-            return APIResponse(
-                success=True,
-                data=invoice_responses,
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-            )
-
-        except StripeServiceError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+    except StripeServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get(
@@ -1196,47 +1201,47 @@ The invoice must belong to the authenticated user's billing account. Returns ful
 async def get_invoice(
     user: AuthenticatedUser,
     invoice_id: str,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[InvoiceResponse]:
     """Get a single invoice by ID."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=False
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    try:
+        inv = stripe_service.get_invoice(invoice_id)
+
+        # Verify the invoice belongs to this billing entity
+        if inv.customer != context.stripe_customer_id:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
+        return APIResponse(
+            success=True,
+            data=InvoiceResponse(
+                id=inv.id,
+                number=inv.number,
+                status=inv.status,
+                amount_due=inv.amount_due,
+                amount_paid=inv.amount_paid,
+                currency=inv.currency,
+                created=datetime.fromtimestamp(inv.created, tz=timezone.utc),
+                due_date=datetime.fromtimestamp(inv.due_date, tz=timezone.utc)
+                if inv.due_date
+                else None,
+                pdf_url=inv.invoice_pdf,
+                hosted_invoice_url=inv.hosted_invoice_url,
+            ),
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
         )
 
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=False
-        )
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
-
-        try:
-            inv = stripe_service.get_invoice(invoice_id)
-
-            # Verify the invoice belongs to this billing entity
-            if inv.customer != context.stripe_customer_id:
-                raise HTTPException(status_code=404, detail="Invoice not found")
-
-            return APIResponse(
-                success=True,
-                data=InvoiceResponse(
-                    id=inv.id,
-                    number=inv.number,
-                    status=inv.status,
-                    amount_due=inv.amount_due,
-                    amount_paid=inv.amount_paid,
-                    currency=inv.currency,
-                    created=datetime.fromtimestamp(inv.created, tz=timezone.utc),
-                    due_date=datetime.fromtimestamp(inv.due_date, tz=timezone.utc)
-                    if inv.due_date
-                    else None,
-                    pdf_url=inv.invoice_pdf,
-                    hosted_invoice_url=inv.hosted_invoice_url,
-                ),
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-            )
-
-        except StripeServiceError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+    except StripeServiceError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get(
@@ -1282,36 +1287,36 @@ Returns a direct link to the invoice PDF hosted by Stripe. This link is time-lim
 async def download_invoice(
     user: AuthenticatedUser,
     invoice_id: str,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """Get invoice PDF download URL."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=False
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    try:
+        inv = stripe_service.get_invoice(invoice_id)
+
+        if inv.customer != context.stripe_customer_id:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
+        if not inv.invoice_pdf:
+            raise HTTPException(status_code=404, detail="PDF not available for this invoice")
+
+        return APIResponse(
+            success=True,
+            data={"pdf_url": inv.invoice_pdf},
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
         )
 
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=False
-        )
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
-
-        try:
-            inv = stripe_service.get_invoice(invoice_id)
-
-            if inv.customer != context.stripe_customer_id:
-                raise HTTPException(status_code=404, detail="Invoice not found")
-
-            if not inv.invoice_pdf:
-                raise HTTPException(status_code=404, detail="PDF not available for this invoice")
-
-            return APIResponse(
-                success=True,
-                data={"pdf_url": inv.invoice_pdf},
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-            )
-
-        except StripeServiceError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+    except StripeServiceError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 # =============================================================================
@@ -1362,68 +1367,68 @@ Returns card details (brand, last 4 digits, expiry) for each saved payment metho
 )
 async def list_payment_methods(
     user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[list[PaymentMethodResponse]]:
     """List payment methods."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    # Check manage permission for payment methods
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=True
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    if not context.stripe_customer_id:
+        return APIResponse(
+            success=True,
+            data=[],
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
         )
 
-        # Check manage permission for payment methods
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=True
+    try:
+        customer = stripe_service.get_customer(context.stripe_customer_id)
+        default_pm_id = (
+            customer.invoice_settings.default_payment_method
+            if customer.invoice_settings
+            else None
         )
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
 
-        if not context.stripe_customer_id:
-            return APIResponse(
-                success=True,
-                data=[],
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-            )
+        payment_methods = stripe_service.list_payment_methods(
+            customer_id=context.stripe_customer_id
+        )
 
-        try:
-            customer = stripe_service.get_customer(context.stripe_customer_id)
-            default_pm_id = (
-                customer.invoice_settings.default_payment_method
-                if customer.invoice_settings
-                else None
-            )
-
-            payment_methods = stripe_service.list_payment_methods(
-                customer_id=context.stripe_customer_id
-            )
-
-            pm_responses = []
-            for pm in payment_methods:
-                card_details = None
-                if pm.card:
-                    card_details = CardDetails(
-                        brand=pm.card.brand,
-                        last4=pm.card.last4,
-                        exp_month=pm.card.exp_month,
-                        exp_year=pm.card.exp_year,
-                    )
-
-                pm_responses.append(
-                    PaymentMethodResponse(
-                        id=pm.id,
-                        type=pm.type,
-                        card=card_details,
-                        is_default=pm.id == default_pm_id,
-                        created_at=datetime.fromtimestamp(pm.created, tz=timezone.utc),
-                    )
+        pm_responses = []
+        for pm in payment_methods:
+            card_details = None
+            if pm.card:
+                card_details = CardDetails(
+                    brand=pm.card.brand,
+                    last4=pm.card.last4,
+                    exp_month=pm.card.exp_month,
+                    exp_year=pm.card.exp_year,
                 )
 
-            return APIResponse(
-                success=True,
-                data=pm_responses,
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+            pm_responses.append(
+                PaymentMethodResponse(
+                    id=pm.id,
+                    type=pm.type,
+                    card=card_details,
+                    is_default=pm.id == default_pm_id,
+                    created_at=datetime.fromtimestamp(pm.created, tz=timezone.utc),
+                )
             )
 
-        except StripeServiceError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+        return APIResponse(
+            success=True,
+            data=pm_responses,
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+        )
+
+    except StripeServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post(
@@ -1470,52 +1475,52 @@ The `payment_method_id` must be obtained from Stripe.js on the frontend after th
 async def add_payment_method(
     user: AuthenticatedUser,
     request: AddPaymentMethodRequest,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[PaymentMethodResponse]:
     """Add a new payment method."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    # Check manage permission
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=True
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    # Create Stripe customer if it doesn't exist
+    stripe_customer_id = await ensure_stripe_customer(user, context, db)
+
+    try:
+        pm = stripe_service.attach_payment_method(
+            customer_id=stripe_customer_id,
+            payment_method_id=request.payment_method_id,
         )
 
-        # Check manage permission
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=True
+        card_details = None
+        if pm.card:
+            card_details = CardDetails(
+                brand=pm.card.brand,
+                last4=pm.card.last4,
+                exp_month=pm.card.exp_month,
+                exp_year=pm.card.exp_year,
+            )
+
+        return APIResponse(
+            success=True,
+            data=PaymentMethodResponse(
+                id=pm.id,
+                type=pm.type,
+                card=card_details,
+                is_default=False,
+                created_at=datetime.fromtimestamp(pm.created, tz=timezone.utc),
+            ),
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
         )
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
 
-        # Create Stripe customer if it doesn't exist
-        stripe_customer_id = await ensure_stripe_customer(user, context, session)
-
-        try:
-            pm = stripe_service.attach_payment_method(
-                customer_id=stripe_customer_id,
-                payment_method_id=request.payment_method_id,
-            )
-
-            card_details = None
-            if pm.card:
-                card_details = CardDetails(
-                    brand=pm.card.brand,
-                    last4=pm.card.last4,
-                    exp_month=pm.card.exp_month,
-                    exp_year=pm.card.exp_year,
-                )
-
-            return APIResponse(
-                success=True,
-                data=PaymentMethodResponse(
-                    id=pm.id,
-                    type=pm.type,
-                    card=card_details,
-                    is_default=False,
-                    created_at=datetime.fromtimestamp(pm.created, tz=timezone.utc),
-                ),
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-            )
-
-        except StripeServiceError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+    except StripeServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete(
@@ -1562,30 +1567,30 @@ Removing the default payment method does not block the account but may cause fut
 async def remove_payment_method(
     user: AuthenticatedUser,
     payment_method_id: str,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """Remove a payment method."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=True
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    try:
+        stripe_service.detach_payment_method(payment_method_id)
+
+        return APIResponse(
+            success=True,
+            data={"message": "Payment method removed successfully"},
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
         )
 
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=True
-        )
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
-
-        try:
-            stripe_service.detach_payment_method(payment_method_id)
-
-            return APIResponse(
-                success=True,
-                data={"message": "Payment method removed successfully"},
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-            )
-
-        except StripeServiceError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+    except StripeServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post(
@@ -1633,57 +1638,57 @@ The payment method must already be attached to the account — use `POST /paymen
 async def set_default_payment_method(
     user: AuthenticatedUser,
     payment_method_id: str,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[PaymentMethodResponse]:
     """Set a payment method as default."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    allowed, error_msg = billing_permission_service.check_billing_permission(
+        context, require_manage=True
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    if not context.stripe_customer_id:
+        raise HTTPException(status_code=400, detail="No billing account found")
+
+    try:
+        stripe_service.set_default_payment_method(
+            customer_id=context.stripe_customer_id,
+            payment_method_id=payment_method_id,
         )
 
-        allowed, error_msg = billing_permission_service.check_billing_permission(
-            context, require_manage=True
+        pms = stripe_service.list_payment_methods(context.stripe_customer_id)
+        pm = next((p for p in pms if p.id == payment_method_id), None)
+
+        if not pm:
+            raise HTTPException(status_code=404, detail="Payment method not found")
+
+        card_details = None
+        if pm.card:
+            card_details = CardDetails(
+                brand=pm.card.brand,
+                last4=pm.card.last4,
+                exp_month=pm.card.exp_month,
+                exp_year=pm.card.exp_year,
+            )
+
+        return APIResponse(
+            success=True,
+            data=PaymentMethodResponse(
+                id=pm.id,
+                type=pm.type,
+                card=card_details,
+                is_default=True,
+                created_at=datetime.fromtimestamp(pm.created, tz=timezone.utc),
+            ),
+            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
         )
-        if not allowed:
-            raise HTTPException(status_code=403, detail=error_msg)
 
-        if not context.stripe_customer_id:
-            raise HTTPException(status_code=400, detail="No billing account found")
-
-        try:
-            stripe_service.set_default_payment_method(
-                customer_id=context.stripe_customer_id,
-                payment_method_id=payment_method_id,
-            )
-
-            pms = stripe_service.list_payment_methods(context.stripe_customer_id)
-            pm = next((p for p in pms if p.id == payment_method_id), None)
-
-            if not pm:
-                raise HTTPException(status_code=404, detail="Payment method not found")
-
-            card_details = None
-            if pm.card:
-                card_details = CardDetails(
-                    brand=pm.card.brand,
-                    last4=pm.card.last4,
-                    exp_month=pm.card.exp_month,
-                    exp_year=pm.card.exp_year,
-                )
-
-            return APIResponse(
-                success=True,
-                data=PaymentMethodResponse(
-                    id=pm.id,
-                    type=pm.type,
-                    card=card_details,
-                    is_default=True,
-                    created_at=datetime.fromtimestamp(pm.created, tz=timezone.utc),
-                ),
-                meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
-            )
-
-        except StripeServiceError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+    except StripeServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # =============================================================================
@@ -1730,72 +1735,74 @@ For organization members, returns the shared tenant usage (documents, storage, A
         ]
     },
 )
-async def get_usage(user: AuthenticatedUser) -> APIResponse[UsageSummaryResponse]:
+async def get_usage(
+    user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[UsageSummaryResponse]:
     """Get usage summary for the current billing period."""
-    async with get_db_session() as session:
-        context = await billing_permission_service.get_billing_context(
-            user.user_id, session
+    context = await billing_permission_service.get_billing_context(
+        user.user_id, db
+    )
+
+    # Calculate period dates
+    now = datetime.now(timezone.utc)
+
+    if context.is_in_trial:
+        period_start = context.trial_start_at or now
+        period_end = context.trial_ends_at or (now + timedelta(days=TRIAL_DURATION_DAYS))
+    elif context.billing_entity_type == "tenant":
+        period_start = context.tenant.api_calls_reset_at or now.replace(day=1)
+        period_end = now.replace(month=now.month + 1, day=1) if now.month < 12 else now.replace(
+            year=now.year + 1, month=1, day=1
+        )
+    else:
+        period_start = context.user_quota.api_calls_reset_at or now.replace(day=1)
+        period_end = context.user_quota.current_period_end or (
+            now.replace(month=now.month + 1, day=1) if now.month < 12
+            else now.replace(year=now.year + 1, month=1, day=1)
         )
 
-        # Calculate period dates
-        now = datetime.now(timezone.utc)
-
-        if context.is_in_trial:
-            period_start = context.trial_start_at or now
-            period_end = context.trial_ends_at or (now + timedelta(days=TRIAL_DURATION_DAYS))
-        elif context.billing_entity_type == "tenant":
-            period_start = context.tenant.api_calls_reset_at or now.replace(day=1)
-            period_end = now.replace(month=now.month + 1, day=1) if now.month < 12 else now.replace(
-                year=now.year + 1, month=1, day=1
-            )
-        else:
-            period_start = context.user_quota.api_calls_reset_at or now.replace(day=1)
-            period_end = context.user_quota.current_period_end or (
-                now.replace(month=now.month + 1, day=1) if now.month < 12
-                else now.replace(year=now.year + 1, month=1, day=1)
-            )
-
-        # Get usage and limits based on billing entity
-        if context.billing_entity_type == "tenant":
-            tenant = context.tenant
-            usage = UsageMetrics(
-                documents=tenant.document_count,
-                storage_gb=tenant.storage_used_bytes / (1024**3),
-                api_calls=tenant.api_calls_used,
-            )
-            limits = UsageLimits(
-                documents=None if tenant.document_limit == -1 else tenant.document_limit,
-                storage_gb=None if tenant.storage_limit_bytes == -1 else tenant.storage_limit_bytes / (1024**3),
-                api_calls=None if tenant.api_calls_limit == -1 else tenant.api_calls_limit,
-            )
-        else:
-            user_quota = context.user_quota
-            usage = UsageMetrics(
-                documents=user_quota.document_count,
-                storage_gb=user_quota.storage_used_bytes / (1024**3),
-                api_calls=user_quota.api_calls_used,
-            )
-            limits = UsageLimits(
-                documents=None if user_quota.document_limit == -1 else user_quota.document_limit,
-                storage_gb=None if user_quota.storage_limit_bytes == -1 else user_quota.storage_limit_bytes / (1024**3),
-                api_calls=None if user_quota.api_calls_limit == -1 else user_quota.api_calls_limit,
-            )
-
-        response_data = UsageSummaryResponse(
-            current_period_start=period_start,
-            current_period_end=period_end,
-            usage=usage,
-            limits=limits,
-        ).model_dump()
-
-        # Add additional context
-        response_data["billing_entity_type"] = context.billing_entity_type
-        response_data["is_in_trial"] = context.is_in_trial
-        if context.is_tenant_member:
-            response_data["tenant_name"] = context.tenant.name
-
-        return APIResponse(
-            success=True,
-            data=response_data,
-            meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+    # Get usage and limits based on billing entity
+    if context.billing_entity_type == "tenant":
+        tenant = context.tenant
+        usage = UsageMetrics(
+            documents=tenant.document_count,
+            storage_gb=tenant.storage_used_bytes / (1024**3),
+            api_calls=tenant.api_calls_used,
         )
+        limits = UsageLimits(
+            documents=None if tenant.document_limit == -1 else tenant.document_limit,
+            storage_gb=None if tenant.storage_limit_bytes == -1 else tenant.storage_limit_bytes / (1024**3),
+            api_calls=None if tenant.api_calls_limit == -1 else tenant.api_calls_limit,
+        )
+    else:
+        user_quota = context.user_quota
+        usage = UsageMetrics(
+            documents=user_quota.document_count,
+            storage_gb=user_quota.storage_used_bytes / (1024**3),
+            api_calls=user_quota.api_calls_used,
+        )
+        limits = UsageLimits(
+            documents=None if user_quota.document_limit == -1 else user_quota.document_limit,
+            storage_gb=None if user_quota.storage_limit_bytes == -1 else user_quota.storage_limit_bytes / (1024**3),
+            api_calls=None if user_quota.api_calls_limit == -1 else user_quota.api_calls_limit,
+        )
+
+    response_data = UsageSummaryResponse(
+        current_period_start=period_start,
+        current_period_end=period_end,
+        usage=usage,
+        limits=limits,
+    ).model_dump()
+
+    # Add additional context
+    response_data["billing_entity_type"] = context.billing_entity_type
+    response_data["is_in_trial"] = context.is_in_trial
+    if context.is_tenant_member:
+        response_data["tenant_name"] = context.tenant.name
+
+    return APIResponse(
+        success=True,
+        data=response_data,
+        meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
+    )

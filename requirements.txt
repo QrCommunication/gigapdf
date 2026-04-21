@@ -49,3 +49,6 @@ boto3>=1.34.0
 
 # Payments
 stripe>=7.0.0
+
+# Error tracking & performance monitoring
+sentry-sdk[fastapi]>=2.0.0,<3.0

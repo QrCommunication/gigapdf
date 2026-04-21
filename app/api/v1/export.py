@@ -334,9 +334,9 @@ async def start_export(
     """Start export to format."""
     start_time = time.time()
 
-    # Verify document exists
+    # Verify document exists (load from Redis if not in local cache)
     from app.repositories.document_repo import document_sessions
-    doc_session = document_sessions.get_session(document_id)
+    doc_session = await document_sessions.get_session(document_id)
     if not doc_session:
         from app.middleware.error_handler import DocumentNotFoundError
         raise DocumentNotFoundError(document_id)

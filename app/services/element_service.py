@@ -8,7 +8,6 @@ annotations, form fields).
 import logging
 from typing import Any, Optional, Union
 
-from app.core.renderer import PDFRenderer
 from app.middleware.error_handler import (
     DocumentNotFoundError,
     ElementNotFoundError,
@@ -57,7 +56,7 @@ class ElementService:
         Returns:
             list[Element]: Page elements.
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -91,7 +90,7 @@ class ElementService:
         Returns:
             tuple: (element, page_number)
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -120,7 +119,7 @@ class ElementService:
         Returns:
             Element: Created element.
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -151,9 +150,7 @@ class ElementService:
         # Add to scene graph
         session.scene_graph.pages[page_number - 1].elements.append(element)
 
-        # Render to PDF
-        renderer = PDFRenderer(session.pdf_doc)
-        self._render_element(renderer, page_number, element)
+        # Rendering is handled by @giga-pdf/pdf-engine (TypeScript); no Python render needed.
 
         # Add history entry
         document_sessions.push_history(
@@ -183,7 +180,7 @@ class ElementService:
         Returns:
             Element: Updated element.
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -235,10 +232,7 @@ class ElementService:
         # Update in scene graph
         page.elements[element_index] = updated_element
 
-        # Re-render to PDF (delete old, add new)
-        renderer = PDFRenderer(session.pdf_doc)
-        renderer.delete_element_area(page_number, old_bounds)
-        self._render_element(renderer, page_number, updated_element)
+        # Rendering handled by @giga-pdf/pdf-engine (TypeScript); no Python render needed.
 
         # Add history entry
         document_sessions.push_history(
@@ -263,7 +257,7 @@ class ElementService:
             document_id: Document identifier.
             element_id: Element identifier.
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -274,9 +268,7 @@ class ElementService:
         # Remove from scene graph
         page.elements = [e for e in page.elements if e.element_id != element_id]
 
-        # Delete from PDF
-        renderer = PDFRenderer(session.pdf_doc)
-        renderer.delete_element_area(page_number, element.bounds)
+        # Rendering handled by @giga-pdf/pdf-engine (TypeScript); no Python render needed.
 
         # Add history entry
         document_sessions.push_history(
@@ -307,7 +299,7 @@ class ElementService:
         Returns:
             Element: Moved element.
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -344,10 +336,7 @@ class ElementService:
         # Add to target page
         target_page_obj.elements.append(element)
 
-        # Re-render
-        renderer = PDFRenderer(session.pdf_doc)
-        renderer.delete_element_area(source_page, element.bounds)
-        self._render_element(renderer, target_page, element)
+        # Rendering handled by @giga-pdf/pdf-engine (TypeScript); no Python render needed.
 
         # Add history entry
         document_sessions.push_history(
@@ -457,30 +446,24 @@ class ElementService:
 
     def _render_element(
         self,
-        renderer: PDFRenderer,
         page_number: int,
         element: Element,
         image_data: Optional[bytes] = None,
     ) -> None:
         """
-        Render an element to the PDF.
+        No-op stub — rendering is handled by @giga-pdf/pdf-engine (TypeScript).
+
+        Scene graph is the source of truth; the TS engine applies elements to
+        the PDF bytes when saving. This method is retained for call-site
+        compatibility during migration and can be removed once all callers
+        are confirmed migrated.
 
         Args:
-            renderer: PDF renderer instance.
             page_number: Page number (1-indexed).
-            element: Element to render.
-            image_data: Image bytes for image elements.
+            element: Element that was added/updated.
+            image_data: Image bytes (unused).
         """
-        if isinstance(element, TextElement):
-            renderer.add_text(page_number, element)
-        elif isinstance(element, ImageElement) and image_data:
-            renderer.add_image(page_number, element, image_data)
-        elif isinstance(element, ShapeElement):
-            renderer.add_shape(page_number, element)
-        elif isinstance(element, AnnotationElement):
-            renderer.add_annotation(page_number, element)
-        elif isinstance(element, FormFieldElement):
-            renderer.add_form_field(page_number, element)
+        # No-op: TS engine handles rendering.
 
 
 # Global service instance

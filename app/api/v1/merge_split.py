@@ -155,68 +155,72 @@ async def merge_documents(
     """
     start_time = time.time()
 
+    import io as _io
+    import pikepdf
     from app.repositories.document_repo import document_sessions
-    from app.core.pdf_engine import pdf_engine
+    from app.core.pdf_engine import LegacyDocumentProxy, pdf_engine
     from app.core.parser import PDFParser
     from app.utils.helpers import parse_page_range
-    # DEPRECATED: import fitz
-    try:
-        import fitz
-    except ImportError:
-        fitz = None  # type: ignore[assignment]
 
-    # Validate all documents exist
+    # Validate all documents exist (load from Redis if not in local cache)
     sessions = []
     for doc_id in request.document_ids:
-        session = document_sessions.get_session(doc_id)
+        session = await document_sessions.get_session(doc_id)
         if not session:
             from app.middleware.error_handler import DocumentNotFoundError
             raise DocumentNotFoundError(doc_id)
         sessions.append(session)
 
-    # Create new PDF document for merge
-    merged_pdf = fitz.open()
-
-    # Merge documents
+    # Merge documents with pikepdf.
+    # Source PDFs must remain open until save() completes — collect them to close afterwards.
+    merged_pdf = pikepdf.Pdf.new()
+    source_pdfs: list[pikepdf.Pdf] = []
     total_pages = 0
-    for i, (doc_id, session) in enumerate(zip(request.document_ids, sessions)):
-        pdf_doc = session.pdf_doc
 
-        # Determine which pages to include
-        if request.page_ranges and i < len(request.page_ranges) and request.page_ranges[i]:
-            # Parse page range
-            page_range = request.page_ranges[i]
-            pages_to_include = parse_page_range(page_range, pdf_doc.page_count)
-        else:
-            # Include all pages
-            pages_to_include = list(range(1, pdf_doc.page_count + 1))
+    try:
+        for i, (doc_id, session) in enumerate(zip(request.document_ids, sessions)):
+            pdf_bytes = session.pdf_doc.tobytes()
+            src = pikepdf.Pdf.open(_io.BytesIO(pdf_bytes))
+            source_pdfs.append(src)
+            src_page_count = len(src.pages)
 
-        # Insert pages
-        for page_num in pages_to_include:
-            merged_pdf.insert_pdf(
-                pdf_doc,
-                from_page=page_num - 1,
-                to_page=page_num - 1,
-            )
-            total_pages += 1
+            # Determine which pages to include (1-indexed)
+            if request.page_ranges and i < len(request.page_ranges) and request.page_ranges[i]:
+                pages_to_include = parse_page_range(request.page_ranges[i], src_page_count)
+            else:
+                pages_to_include = list(range(1, src_page_count + 1))
+
+            for page_num in pages_to_include:
+                merged_pdf.pages.append(src.pages[page_num - 1])
+                total_pages += 1
+
+        # Serialise merged PDF to bytes
+        buf = _io.BytesIO()
+        merged_pdf.save(buf)
+        merged_bytes = buf.getvalue()
+    finally:
+        for src in source_pdfs:
+            src.close()
+        merged_pdf.close()
 
     # Generate new document ID and register with engine
     merged_doc_id = generate_uuid()
-    pdf_engine._documents[merged_doc_id] = merged_pdf
+    pdf_engine._documents[merged_doc_id] = merged_bytes
+    proxy = LegacyDocumentProxy(merged_doc_id, merged_bytes, total_pages, False)
 
     # Parse the merged document
     parser = PDFParser(merged_doc_id)
-    scene_graph = parser.parse_document(merged_pdf)
+    scene_graph = parser.parse_document(proxy)
 
-    # Create session
+    # Create session and persist to Redis immediately
     owner_id = user.user_id if user else None
-    session = document_sessions.create_session(
+    session = await document_sessions.create_session(
         document_id=merged_doc_id,
-        pdf_doc=merged_pdf,
+        pdf_doc=proxy,
         scene_graph=scene_graph,
         owner_id=owner_id,
         filename=request.output_name,
-        file_size=0,  # Will be calculated on save
+        file_size=len(merged_bytes),
     )
 
     processing_time = int((time.time() - start_time) * 1000)
@@ -364,17 +368,14 @@ async def split_document(
     """
     start_time = time.time()
 
+    import io as _io
+    import pikepdf
     from app.repositories.document_repo import document_sessions
-    from app.core.pdf_engine import pdf_engine
+    from app.core.pdf_engine import LegacyDocumentProxy, pdf_engine
     from app.core.parser import PDFParser
-    # DEPRECATED: import fitz
-    try:
-        import fitz
-    except ImportError:
-        fitz = None  # type: ignore[assignment]
 
-    # Get source document
-    session = document_sessions.get_session(document_id)
+    # Get source document (load from Redis if not in local cache)
+    session = await document_sessions.get_session(document_id)
     if not session:
         from app.middleware.error_handler import DocumentNotFoundError
         raise DocumentNotFoundError(document_id)
@@ -418,35 +419,46 @@ async def split_document(
             base_name = base_name[:-4]
         output_names = [f"{base_name}_part{i+1}.pdf" for i in range(len(ranges))]
 
+    # Load source PDF bytes once for all split operations
+    src_bytes = pdf_doc.tobytes()
+
     # Create split documents
     split_docs = []
     owner_id = user.user_id if user else None
 
     for i, (start_page, end_page) in enumerate(ranges):
-        # Create new PDF with pages from range
-        split_pdf = fitz.open()
-        split_pdf.insert_pdf(
-            pdf_doc,
-            from_page=start_page - 1,
-            to_page=end_page - 1,
-        )
+        # Extract page range via pikepdf.
+        # Keep source open only for the duration of each split.
+        src = pikepdf.Pdf.open(_io.BytesIO(src_bytes))
+        try:
+            split_pdf = pikepdf.Pdf.new()
+            split_pdf.pages.extend(src.pages[start_page - 1:end_page])
+            buf = _io.BytesIO()
+            split_pdf.save(buf)
+            split_bytes = buf.getvalue()
+        finally:
+            split_pdf.close()
+            src.close()
+
+        split_page_count = end_page - start_page + 1
 
         # Generate document ID and register
         split_doc_id = generate_uuid()
-        pdf_engine._documents[split_doc_id] = split_pdf
+        pdf_engine._documents[split_doc_id] = split_bytes
+        split_proxy = LegacyDocumentProxy(split_doc_id, split_bytes, split_page_count, False)
 
         # Parse the split document
         parser = PDFParser(split_doc_id)
-        scene_graph = parser.parse_document(split_pdf)
+        scene_graph = parser.parse_document(split_proxy)
 
-        # Create session
-        split_session = document_sessions.create_session(
+        # Create session and persist to Redis immediately
+        split_session = await document_sessions.create_session(
             document_id=split_doc_id,
-            pdf_doc=split_pdf,
+            pdf_doc=split_proxy,
             scene_graph=scene_graph,
             owner_id=owner_id,
             filename=output_names[i],
-            file_size=0,
+            file_size=len(split_bytes),
         )
 
         split_docs.append({

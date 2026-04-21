@@ -3,9 +3,15 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useShallow } from "zustand/react/shallow";
 import Link from "next/link";
-import type { Tool, Element, ShapeType, AnnotationType } from "@giga-pdf/types";
+import type { Element } from "@giga-pdf/types";
 import { Button } from "@giga-pdf/ui";
+import {
+  useCanvasStore,
+  useSelectionStore,
+  useUIStore,
+} from "@giga-pdf/editor";
 import {
   ArrowLeft,
   Save,
@@ -106,30 +112,85 @@ export default function EditorPage() {
   // ID du document stocké (depuis l'URL)
   const storedDocumentId = params?.id as string;
 
-  // État local
-  const [activeTool, setActiveTool] = useState<Tool>("select");
-  const [zoom, setZoom] = useState(1);
-  const [selectedElementIds, setSelectedElementIds] = useState<string[]>([]);
+  // Canvas store — tool, zoom, tool options
+  const {
+    activeTool,
+    zoom,
+    shapeType,
+    annotationType,
+    strokeColor,
+    fillColor,
+    strokeWidth,
+    setActiveTool,
+    setZoom,
+    setShapeType,
+    setAnnotationType,
+    setStrokeColor,
+    setFillColor,
+    setStrokeWidth,
+  } = useCanvasStore(
+    useShallow((s) => ({
+      activeTool: s.activeTool,
+      zoom: s.zoom,
+      shapeType: s.shapeType,
+      annotationType: s.annotationType,
+      strokeColor: s.strokeColor,
+      fillColor: s.fillColor,
+      strokeWidth: s.strokeWidth,
+      setActiveTool: s.setActiveTool,
+      setZoom: s.setZoom,
+      setShapeType: s.setShapeType,
+      setAnnotationType: s.setAnnotationType,
+      setStrokeColor: s.setStrokeColor,
+      setFillColor: s.setFillColor,
+      setStrokeWidth: s.setStrokeWidth,
+    }))
+  );
 
-  // Options d'outils
-  const [shapeType, setShapeType] = useState<ShapeType>("rectangle");
-  const [annotationType, setAnnotationType] =
-    useState<AnnotationType>("highlight");
-  const [strokeColor, setStrokeColor] = useState("#000000");
-  const [fillColor, setFillColor] = useState("transparent");
-  const [strokeWidth, setStrokeWidth] = useState(2);
+  // Selection store — selected element ids
+  const {
+    selectedElementIds: selectedElementIdsSet,
+    selectElements,
+    clearSelection,
+    deselectElement,
+  } = useSelectionStore(
+    useShallow((s) => ({
+      selectedElementIds: s.selectedElementIds,
+      selectElements: s.selectElements,
+      clearSelection: s.clearSelection,
+      deselectElement: s.deselectElement,
+    }))
+  );
+  // Derived: array of selected IDs (compatible with the existing downstream API)
+  const selectedElementIds = useMemo(
+    () => Array.from(selectedElementIdsSet),
+    [selectedElementIdsSet]
+  );
 
-  // Canvas handle (via callback)
+  // UI store — panel visibility + editor modes
+  const {
+    showFormsPanel,
+    isContentEditActive,
+    toggleFormsPanel,
+    setContentEditActive,
+  } = useUIStore(
+    useShallow((s) => ({
+      showFormsPanel: s.showFormsPanel,
+      isContentEditActive: s.isContentEditActive,
+      toggleFormsPanel: s.toggleFormsPanel,
+      setContentEditActive: s.setContentEditActive,
+    }))
+  );
+
+  // Canvas handle (via callback) — kept local: transient imperative handle
   const [canvasHandle, setCanvasHandle] = useState<EditorCanvasHandle | null>(null);
   // Ref pour l'input file
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Forms panel visibility and current PDF file
-  const [showFormsPanel, setShowFormsPanel] = useState(false);
+  // Current PDF binary — kept local: File object (resource, not serializable)
   const [currentPdfFile, setCurrentPdfFile] = useState<File | null>(null);
 
-  // Content edit mode
-  const [isContentEditActive, setIsContentEditActive] = useState(false);
+  // Content modifications — kept local: transient editor state (not persisted)
   const [contentModifications, setContentModifications] = useState<ElementModification[]>([]);
 
   // Ref for the PDF canvas element (for background capture in content edit)
@@ -364,7 +425,7 @@ export default function EditorPage() {
     async (elementId: string) => {
       console.log("Element removed:", elementId);
       setDirty(true);
-      setSelectedElementIds((prev) => prev.filter((id) => id !== elementId));
+      deselectElement(elementId);
       // Émettre via WebSocket pour la collaboration
       emitElementDelete(elementId);
 
@@ -381,7 +442,7 @@ export default function EditorPage() {
       // Sauvegarder le PDF vers S3
       saveWithPriority("immediate");
     },
-    [setDirty, emitElementDelete, saveWithPriority, documentId]
+    [setDirty, emitElementDelete, saveWithPriority, documentId, deselectElement]
   );
 
   // Gérer le mouvement du curseur pour la collaboration
@@ -396,9 +457,16 @@ export default function EditorPage() {
     [zoom, currentPage, sendCursorPosition]
   );
 
-  const handleSelectionChanged = useCallback((elementIds: string[]) => {
-    setSelectedElementIds(elementIds);
-  }, []);
+  const handleSelectionChanged = useCallback(
+    (elementIds: string[]) => {
+      if (elementIds.length === 0) {
+        clearSelection();
+      } else if (currentPage) {
+        selectElements(elementIds, currentPage.pageId);
+      }
+    },
+    [currentPage, selectElements, clearSelection]
+  );
 
   const handleElementUpdate = useCallback(
     async (elementId: string, updates: Partial<Element>) => {
@@ -545,14 +613,14 @@ export default function EditorPage() {
   }, [currentPdfFile, pageOperation]);
 
   const handleToggleContentEdit = useCallback(() => {
-    setIsContentEditActive((prev) => {
-      if (prev) {
-        // Leaving content edit mode — clear modifications
-        setContentModifications([]);
-      }
-      return !prev;
-    });
-  }, []);
+    if (isContentEditActive) {
+      // Leaving content edit mode — clear modifications first
+      setContentModifications([]);
+      setContentEditActive(false);
+    } else {
+      setContentEditActive(true);
+    }
+  }, [isContentEditActive, setContentEditActive]);
 
   const handleContentModificationsChange = useCallback((modifications: ElementModification[]) => {
     setContentModifications(modifications);
@@ -696,7 +764,7 @@ export default function EditorPage() {
 
       // Escape - Deselect
       if (e.key === "Escape") {
-        setSelectedElementIds([]);
+        clearSelection();
         setActiveTool("select");
         return;
       }
@@ -729,14 +797,14 @@ export default function EditorPage() {
         }
       }
 
-      // Zoom shortcuts
+      // Zoom shortcuts (canvas-store setZoom clamps to [minZoom, maxZoom])
       if (cmdOrCtrl) {
         if (e.key === "=" || e.key === "+") {
           e.preventDefault();
-          setZoom((z) => Math.min(4, z + 0.25));
+          setZoom(zoom + 0.25);
         } else if (e.key === "-") {
           e.preventDefault();
-          setZoom((z) => Math.max(0.25, z - 0.25));
+          setZoom(zoom - 0.25);
         } else if (e.key === "0") {
           e.preventDefault();
           setZoom(1);
@@ -754,6 +822,10 @@ export default function EditorPage() {
     handleAddImage,
     save,
     selectedElementIds,
+    zoom,
+    clearSelection,
+    setActiveTool,
+    setZoom,
   ]);
 
   // Find the PDF canvas element for content edit background capture
@@ -962,7 +1034,7 @@ export default function EditorPage() {
         onDuplicate={handleDuplicate}
         onAddImage={handleAddImage}
         currentFile={currentPdfFile}
-        onToggleFormsPanel={() => setShowFormsPanel((prev) => !prev)}
+        onToggleFormsPanel={toggleFormsPanel}
         onFlattenPdf={handleFlattenPdf}
         isContentEditActive={isContentEditActive}
         onToggleContentEdit={handleToggleContentEdit}

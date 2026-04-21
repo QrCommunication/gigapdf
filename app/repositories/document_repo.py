@@ -320,11 +320,55 @@ class DocumentSessionManager:
             logger.error(f"Failed to save session to Redis: {e}")
             return False
 
-    def get_session(self, document_id: str) -> Optional[DocumentSession]:
+    async def _renew_redis_ttl(self, document_id: str) -> bool:
+        """
+        Renew Redis TTL for all keys of a session (sliding expiration).
+
+        Called fire-and-forget on every get_session() hit so that active
+        sessions never expire while a user is editing.
+
+        Args:
+            document_id: Document identifier.
+
+        Returns:
+            bool: True if all keys were renewed successfully.
+        """
+        redis_client = await self._get_redis()
+        if not redis_client:
+            return False
+
+        ttl = self.session_timeout_minutes * 60
+        try:
+            pipe = redis_client.pipeline()
+            pipe.expire(self._pdf_key(document_id), ttl)
+            pipe.expire(self._graph_key(document_id), ttl)
+            pipe.expire(self._meta_key(document_id), ttl)
+            results = await pipe.execute()
+            renewed = all(results)
+            if renewed:
+                logger.debug("Renewed Redis TTL for session %s (%ds)", document_id, ttl)
+            else:
+                logger.debug(
+                    "Redis TTL renewal partial for session %s (results=%s)",
+                    document_id,
+                    results,
+                )
+            return renewed
+        except Exception as exc:
+            logger.warning("Failed to renew Redis TTL for session %s: %s", document_id, exc)
+            return False
+
+    def get_session(self, document_id: str) -> Optional["DocumentSession"]:
         """
         Get an existing session from local cache.
 
-        For Redis loading, use get_session_async().
+        Renews the Redis TTL asynchronously (sliding expiration) each time
+        the session is accessed so that active editing sessions never expire
+        mid-work.  The renewal is fire-and-forget; a failure only means the
+        TTL is not refreshed for this access, which is non-fatal.
+
+        For Redis loading when a session is not in local cache, use
+        get_session_async().
 
         Args:
             document_id: Document identifier.
@@ -337,6 +381,16 @@ class DocumentSessionManager:
             if session:
                 session.touch()
                 self._sessions.move_to_end(document_id)
+                # Renew Redis TTL (sliding expiration) — fire-and-forget
+                if self.use_redis:
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            asyncio.create_task(
+                                self._renew_redis_ttl(document_id)
+                            )
+                    except Exception:
+                        pass  # Non-fatal: TTL renewal is best-effort
             return session
 
     async def get_session_async(self, document_id: str) -> Optional[DocumentSession]:
@@ -429,6 +483,10 @@ class DocumentSessionManager:
 
                 self._sessions[document_id] = session
                 self._sessions.move_to_end(document_id)
+
+            # Renew TTL on load: the keys were read but their TTL kept ticking.
+            # Reset it now to give the session a fresh 120-min window.
+            await self._renew_redis_ttl(document_id)
 
             logger.info(f"Loaded session {document_id} from Redis")
             return session
@@ -679,5 +737,22 @@ class DocumentSessionManager:
         return self.delete_session(document_id)
 
 
-# Global session manager instance
-document_sessions = DocumentSessionManager()
+# ---------------------------------------------------------------------------
+# Global session manager — Redis-backed for cross-worker consistency
+# ---------------------------------------------------------------------------
+# The legacy DocumentSessionManager (above) is kept for reference but the
+# active singleton is now RedisDocumentSessionManager so that sessions are
+# shared across all Uvicorn workers via Redis.
+#
+# Import is deferred to avoid a circular import: redis_document_repo imports
+# DocumentSession from this module.
+
+def _build_document_sessions():
+    from app.repositories.redis_document_repo import RedisDocumentSessionManager
+    return RedisDocumentSessionManager(
+        max_local_sessions=50,
+        session_timeout_minutes=120,
+    )
+
+
+document_sessions = _build_document_sessions()

@@ -4,17 +4,35 @@ Persistent storage endpoints.
 Handles saving, loading, versioning, and organizing documents in persistent storage.
 """
 
+import hashlib
+import logging
 import time
+import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import get_db, get_db_session
 from app.middleware.auth import AuthenticatedUser
+from app.middleware.error_handler import (
+    DocumentNotFoundError,
+    InvalidOperationError,
+    NotFoundError,
+)
 from app.middleware.request_id import get_request_id
+from app.models.database import DocumentVersion, Folder, StoredDocument
+from app.repositories.document_repo import document_sessions
 from app.schemas.responses.common import APIResponse, MetaInfo, PaginationInfo
-from app.services.activity_service import activity_service, ActivityAction
+from app.services.activity_service import ActivityAction, activity_service
+from app.services.document_service import document_service
+from app.services.quota_service import quota_service
+from app.services.s3_service import s3_service
 from app.utils.helpers import generate_uuid, now_utc
+
+_logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -207,50 +225,59 @@ async def save_document(
     request: SaveDocumentRequest,
     user: AuthenticatedUser,
 ) -> APIResponse[dict]:
-    """Save document to persistent storage."""
+    """Save document to persistent storage.
+
+    Atomicity guarantee (Saga pattern):
+      1. Validate session + quota.
+      2. Commit DB records (StoredDocument + DocumentVersion) first.
+      3. Upload to S3 after successful commit.
+      4. If S3 upload fails after commit → delete the orphan S3 key (compensation)
+         and re-raise so the caller gets a clean error.
+         The DB records remain; a reconciliation job can clean them up or
+         the next save attempt will reuse/overwrite the same s3_key.
+    """
     start_time = time.time()
 
-    from app.models.database import StoredDocument, DocumentVersion
-    from app.core.database import get_db_session
-    from app.repositories.document_repo import document_sessions
-    from app.services.quota_service import quota_service
-    import hashlib
-    from pathlib import Path
-
-    # Get document from session
-    doc_session = document_sessions.get_session(request.document_id)
+    # ── 1. Resolve session (load from Redis if not in local cache) ──────
+    doc_session = await document_sessions.get_session(request.document_id)
     if not doc_session:
-        from app.middleware.error_handler import DocumentNotFoundError
         raise DocumentNotFoundError(request.document_id)
 
-    # Get document bytes first to check size
-    from app.core.pdf_engine import pdf_engine
+    _logger.info(
+        "save_document: starting save",
+        extra={"document_id": request.document_id, "user_id": user.user_id},
+    )
+
+    # ── 2. Render PDF bytes & check size ────────────────────────────────
+    from app.core.pdf_engine import pdf_engine  # circular-safe: imported at call time
     doc_bytes = pdf_engine.save_document(request.document_id)
     file_size = len(doc_bytes)
+    file_hash = hashlib.sha256(doc_bytes).hexdigest()
 
-    # Get effective limits (considers tenant membership)
+    _logger.debug("save_document: rendered %d bytes (sha256=%s)", file_size, file_hash[:16])
+
+    # ── 3. Quota check ──────────────────────────────────────────────────
     effective_limits = await quota_service.get_effective_limits(user.user_id)
 
-    # Check if quota allows (using effective limits - tenant or personal)
     if effective_limits.storage_used_bytes + file_size > effective_limits.storage_limit_bytes:
-        from app.middleware.error_handler import InvalidOperationError
         raise InvalidOperationError(
             f"Storage quota exceeded. Used: {effective_limits.storage_used_bytes}, "
             f"Limit: {effective_limits.storage_limit_bytes}"
         )
 
     if effective_limits.document_limit != -1 and effective_limits.document_count >= effective_limits.document_limit:
-        from app.middleware.error_handler import InvalidOperationError
         raise InvalidOperationError(
             f"Document limit exceeded. Limit: {effective_limits.document_limit}"
         )
 
-    # Calculate file hash
-    file_hash = hashlib.sha256(doc_bytes).hexdigest()
+    # ── 4. Derive IDs before DB commit so S3 key is deterministic ───────
+    stored_doc_id = generate_uuid()
+    s3_key = s3_service.get_document_key(user.user_id, stored_doc_id, 1)
 
+    # ── 5. Commit DB records first (rollback-safe) ───────────────────────
+    # If anything inside the `async with` block raises, SQLAlchemy rolls
+    # back automatically — no S3 side-effect has happened yet.
     async with get_db_session() as session:
-        # Create stored document record
-        stored_doc_id = generate_uuid()
         stored_doc = StoredDocument(
             id=stored_doc_id,
             name=request.name,
@@ -263,39 +290,53 @@ async def save_document(
         )
         session.add(stored_doc)
 
-        # Upload file to S3
-        from app.services.s3_service import s3_service
-        s3_key = s3_service.get_document_key(user.user_id, stored_doc_id, 1)
-
-        try:
-            s3_result = s3_service.upload_file(
-                file_data=doc_bytes,
-                key=s3_key,
-                content_type="application/pdf",
-                metadata={
-                    "document_id": stored_doc_id,
-                    "user_id": user.user_id,
-                    "version": "1",
-                    "name": request.name,
-                }
-            )
-        except Exception as e:
-            from app.middleware.error_handler import InvalidOperationError
-            raise InvalidOperationError(f"Failed to upload to S3: {str(e)}")
-
-        # Create version record with S3 path
         version = DocumentVersion(
             document_id=stored_doc_id,
             version_number=1,
-            file_path=s3_key,  # Store S3 key instead of local path
+            file_path=s3_key,
             file_size_bytes=file_size,
             file_hash=file_hash,
             comment=request.version_comment,
             created_by=user.user_id,
         )
         session.add(version)
+        # session commits on __aexit__ — DB is durable at this point
 
-    # Update quota (tenant or personal based on membership)
+    _logger.info("save_document: DB committed (stored_doc_id=%s)", stored_doc_id)
+
+    # ── 6. Upload to S3 after DB commit (compensation on failure) ────────
+    try:
+        s3_service.upload_file(
+            file_data=doc_bytes,
+            key=s3_key,
+            content_type="application/pdf",
+            metadata={
+                "document_id": stored_doc_id,
+                "user_id": user.user_id,
+                "version": "1",
+                "name": request.name,
+            },
+        )
+        _logger.info("save_document: S3 upload OK (key=%s)", s3_key)
+    except Exception as exc:
+        # Compensation: the DB row references this s3_key but the file is
+        # absent. Attempt a best-effort delete of any partial upload, then
+        # surface the error. The DB rows are left in place; the orphan-gc
+        # Celery task will reconcile them.
+        _logger.error(
+            "save_document: S3 upload failed after DB commit — "
+            "compensation: deleting partial s3_key=%s (doc=%s)",
+            s3_key,
+            stored_doc_id,
+            exc_info=True,
+        )
+        s3_service.delete_file(s3_key)  # best-effort; ignore return value
+
+        raise InvalidOperationError(
+            f"Document saved to database but file upload failed: {exc}"
+        ) from exc
+
+    # ── 7. Update quota counters ─────────────────────────────────────────
     if effective_limits.is_tenant_based and effective_limits.tenant_id:
         await quota_service.update_tenant_storage(
             effective_limits.tenant_id, file_size, delta_documents=1
@@ -467,96 +508,91 @@ async def list_stored_documents(
     folder_id: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
     tags: Optional[str] = Query(default=None),
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """List stored documents with pagination."""
-    import uuid
     start_time = time.time()
 
-    from app.models.database import StoredDocument
-    from app.core.database import get_db_session
-    from sqlalchemy import select, func
+    # Build base query
+    base_query = select(StoredDocument).where(
+        StoredDocument.owner_id == user.user_id,
+        StoredDocument.is_deleted == False,
+    )
 
-    async with get_db_session() as session:
-        # Build base query
-        base_query = select(StoredDocument).where(
-            StoredDocument.owner_id == user.user_id,
-            StoredDocument.is_deleted == False,
-        )
-
-        # Filter by folder
-        # - None (not provided): no filter, return all documents
-        # - '' (empty string): filter for root-level documents (folder_id IS NULL)
-        # - UUID: filter for specific folder
-        if folder_id is not None:
-            if folder_id == '' or folder_id.lower() == 'null':
-                # Empty string or 'null' means filter for root-level documents (no folder)
+    # Filter by folder
+    # - None (not provided): no filter, return all documents
+    # - '' (empty string): filter for root-level documents (folder_id IS NULL)
+    # - UUID: filter for specific folder
+    if folder_id is not None:
+        if folder_id == '' or folder_id.lower() == 'null':
+            # Empty string or 'null' means filter for root-level documents (no folder)
+            base_query = base_query.where(StoredDocument.folder_id.is_(None))
+        else:
+            # Validate that folder_id is a valid UUID before querying
+            try:
+                uuid.UUID(folder_id)  # Validate UUID format
+                base_query = base_query.where(StoredDocument.folder_id == folder_id)
+            except ValueError:
+                # Invalid UUID format - treat as root-level filter
                 base_query = base_query.where(StoredDocument.folder_id.is_(None))
-            else:
-                # Validate that folder_id is a valid UUID before querying
-                try:
-                    uuid.UUID(folder_id)  # Validate UUID format
-                    base_query = base_query.where(StoredDocument.folder_id == folder_id)
-                except ValueError:
-                    # Invalid UUID format - treat as root-level filter
-                    base_query = base_query.where(StoredDocument.folder_id.is_(None))
 
-        # Search by name
-        if search:
-            base_query = base_query.where(StoredDocument.name.ilike(f"%{search}%"))
+    # Search by name
+    if search:
+        base_query = base_query.where(StoredDocument.name.ilike(f"%{search}%"))
 
-        # Filter by tags
-        if tags:
-            tag_list = [t.strip() for t in tags.split(",")]
-            base_query = base_query.where(StoredDocument.tags.op("&&")(tag_list))
+    # Filter by tags
+    if tags:
+        tag_list = [t.strip() for t in tags.split(",")]
+        base_query = base_query.where(StoredDocument.tags.op("&&")(tag_list))
 
-        # Get total count
-        count_query = select(func.count()).select_from(base_query.subquery())
-        total_result = await session.execute(count_query)
-        total = total_result.scalar() or 0
+    # Get total count
+    count_query = select(func.count()).select_from(base_query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
 
-        # Order and paginate
-        offset = (page - 1) * per_page
-        paginated_query = base_query.order_by(StoredDocument.updated_at.desc()).offset(offset).limit(per_page)
-        result = await session.execute(paginated_query)
-        documents = result.scalars().all()
+    # Order and paginate
+    offset = (page - 1) * per_page
+    paginated_query = base_query.order_by(StoredDocument.updated_at.desc()).offset(offset).limit(per_page)
+    result = await db.execute(paginated_query)
+    documents = result.scalars().all()
 
-        # Format results
-        items = []
-        for doc in documents:
-            items.append({
-                "stored_document_id": doc.id,
-                "name": doc.name,
-                "page_count": doc.page_count,
-                "version": doc.current_version,
-                "folder_id": doc.folder_id,
-                "tags": doc.tags or [],
-                "file_size_bytes": doc.file_size_bytes or 0,
-                "created_at": doc.created_at.isoformat(),
-                "modified_at": doc.updated_at.isoformat(),
-                "thumbnail_url": doc.thumbnail_path,
-            })
+    # Format results
+    items = []
+    for doc in documents:
+        items.append({
+            "stored_document_id": doc.id,
+            "name": doc.name,
+            "page_count": doc.page_count,
+            "version": doc.current_version,
+            "folder_id": doc.folder_id,
+            "tags": doc.tags or [],
+            "file_size_bytes": doc.file_size_bytes or 0,
+            "created_at": doc.created_at.isoformat(),
+            "modified_at": doc.updated_at.isoformat(),
+            "thumbnail_url": doc.thumbnail_path,
+        })
 
-        total_pages = (total + per_page - 1) // per_page
+    total_pages = (total + per_page - 1) // per_page
 
-        processing_time = int((time.time() - start_time) * 1000)
+    processing_time = int((time.time() - start_time) * 1000)
 
-        return APIResponse(
-            success=True,
-            data={
-                "items": items,
-                "pagination": PaginationInfo(
-                    total=total,
-                    page=page,
-                    per_page=per_page,
-                    total_pages=total_pages,
-                ).model_dump(),
-            },
-            meta=MetaInfo(
-                request_id=get_request_id(),
-                timestamp=now_utc(),
-                processing_time_ms=processing_time,
-            ),
-        )
+    return APIResponse(
+        success=True,
+        data={
+            "items": items,
+            "pagination": PaginationInfo(
+                total=total,
+                page=page,
+                per_page=per_page,
+                total_pages=total_pages,
+            ).model_dump(),
+        },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
 
 
 @router.post(
@@ -670,65 +706,57 @@ echo "Session document ID: " . $documentId . "\\n";
 async def load_stored_document(
     stored_document_id: str,
     user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """Load stored document to session."""
     start_time = time.time()
 
-    from app.models.database import StoredDocument
-    from app.core.database import get_db_session
-    from app.services.document_service import document_service
-    from sqlalchemy import select
-
-    async with get_db_session() as session:
-        # Get stored document
-        result = await session.execute(
-            select(StoredDocument).where(
-                StoredDocument.id == stored_document_id,
-                StoredDocument.owner_id == user.user_id,
-                StoredDocument.is_deleted == False,
-            )
+    # Get stored document
+    result = await db.execute(
+        select(StoredDocument).where(
+            StoredDocument.id == stored_document_id,
+            StoredDocument.owner_id == user.user_id,
+            StoredDocument.is_deleted == False,
         )
-        stored_doc = result.scalar_one_or_none()
+    )
+    stored_doc = result.scalar_one_or_none()
 
-        if not stored_doc:
-            from app.middleware.error_handler import NotFoundError
-            raise NotFoundError(f"Stored document not found: {stored_document_id}")
+    if not stored_doc:
+        raise NotFoundError(f"Stored document not found: {stored_document_id}")
 
-        # Download from S3
-        from app.services.s3_service import s3_service
-        s3_key = s3_service.get_document_key(
-            user.user_id, stored_document_id, stored_doc.current_version
-        )
+    # Download from S3
+    s3_key = s3_service.get_document_key(
+        user.user_id, stored_document_id, stored_doc.current_version
+    )
 
-        try:
-            file_data = s3_service.download_file(s3_key)
-        except Exception as e:
-            from app.middleware.error_handler import NotFoundError
-            raise NotFoundError(f"Document file not found in storage: {str(e)}")
+    try:
+        file_data = s3_service.download_file(s3_key)
+    except Exception as e:
+        raise NotFoundError(f"Document file not found in storage: {str(e)}")
 
-        # Upload to session
-        document_id, document = await document_service.upload_document(
-            file_data=file_data,
-            filename=f"{stored_doc.name}.pdf",
-            owner_id=user.user_id,
-        )
+    # Upload to session
+    document_id, document = await document_service.upload_document(
+        file_data=file_data,
+        filename=f"{stored_doc.name}.pdf",
+        owner_id=user.user_id,
+    )
 
-        processing_time = int((time.time() - start_time) * 1000)
+    processing_time = int((time.time() - start_time) * 1000)
 
-        return APIResponse(
-            success=True,
-            data={
-                "document_id": document_id,
-                "stored_document_id": stored_document_id,
-                "name": stored_doc.name,
-                "page_count": document.metadata.page_count,
-            },
-            meta=MetaInfo(
-                request_id=get_request_id(),
-                timestamp=now_utc(),
-                processing_time_ms=processing_time,
-            ),
-        )
+    return APIResponse(
+        success=True,
+        data={
+            "document_id": document_id,
+            "stored_document_id": stored_document_id,
+            "name": stored_doc.name,
+            "page_count": document.metadata.page_count,
+        },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
 
 
 @router.get(
@@ -864,61 +892,56 @@ foreach ($data["versions"] as $version) {
 async def list_versions(
     stored_document_id: str,
     user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """List document versions."""
     start_time = time.time()
 
-    from app.models.database import StoredDocument, DocumentVersion
-    from app.core.database import get_db_session
-    from sqlalchemy import select
-
-    async with get_db_session() as session:
-        # Verify ownership
-        result = await session.execute(
-            select(StoredDocument).where(
-                StoredDocument.id == stored_document_id,
-                StoredDocument.owner_id == user.user_id,
-            )
+    # Verify ownership
+    result = await db.execute(
+        select(StoredDocument).where(
+            StoredDocument.id == stored_document_id,
+            StoredDocument.owner_id == user.user_id,
         )
-        stored_doc = result.scalar_one_or_none()
+    )
+    stored_doc = result.scalar_one_or_none()
 
-        if not stored_doc:
-            from app.middleware.error_handler import NotFoundError
-            raise NotFoundError(f"Stored document not found: {stored_document_id}")
+    if not stored_doc:
+        raise NotFoundError(f"Stored document not found: {stored_document_id}")
 
-        # Get versions
-        versions_result = await session.execute(
-            select(DocumentVersion).where(
-                DocumentVersion.document_id == stored_document_id
-            ).order_by(DocumentVersion.version_number.desc())
-        )
-        versions = versions_result.scalars().all()
+    # Get versions
+    versions_result = await db.execute(
+        select(DocumentVersion).where(
+            DocumentVersion.document_id == stored_document_id
+        ).order_by(DocumentVersion.version_number.desc())
+    )
+    versions = versions_result.scalars().all()
 
-        version_list = []
-        for v in versions:
-            version_list.append({
-                "version": v.version_number,
-                "created_at": v.created_at.isoformat(),
-                "created_by": v.created_by,
-                "comment": v.comment,
-                "size_bytes": v.file_size_bytes,
-            })
+    version_list = []
+    for v in versions:
+        version_list.append({
+            "version": v.version_number,
+            "created_at": v.created_at.isoformat(),
+            "created_by": v.created_by,
+            "comment": v.comment,
+            "size_bytes": v.file_size_bytes,
+        })
 
-        processing_time = int((time.time() - start_time) * 1000)
+    processing_time = int((time.time() - start_time) * 1000)
 
-        return APIResponse(
-            success=True,
-            data={
-                "stored_document_id": stored_document_id,
-                "current_version": stored_doc.current_version,
-                "versions": version_list,
-            },
-            meta=MetaInfo(
-                request_id=get_request_id(),
-                timestamp=now_utc(),
-                processing_time_ms=processing_time,
-            ),
-        )
+    return APIResponse(
+        success=True,
+        data={
+            "stored_document_id": stored_document_id,
+            "current_version": stored_doc.current_version,
+            "versions": version_list,
+        },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
 
 
 @router.post(
@@ -1052,24 +1075,35 @@ async def create_version(
     request: CreateVersionRequest,
     user: AuthenticatedUser,
 ) -> APIResponse[dict]:
-    """Create new version from session document."""
+    """Create new version from session document.
+
+    Atomicity guarantee (Saga pattern):
+      1. Resolve session + verify DB ownership.
+      2. Commit new DocumentVersion + updated StoredDocument to DB first.
+      3. Upload new version to S3 after successful commit.
+      4. If S3 upload fails → compensate by deleting the partial upload
+         and rolling back current_version in a separate DB transaction,
+         then re-raise so the caller gets a clean error.
+    """
     start_time = time.time()
 
-    from app.models.database import StoredDocument, DocumentVersion
-    from app.core.database import get_db_session
-    from app.repositories.document_repo import document_sessions
-    from sqlalchemy import select
-    import hashlib
-    from pathlib import Path
-
-    # Get document from session
-    doc_session = document_sessions.get_session(request.document_id)
+    # ── 1. Resolve session (load from Redis if not in local cache) ──────
+    doc_session = await document_sessions.get_session(request.document_id)
     if not doc_session:
-        from app.middleware.error_handler import DocumentNotFoundError
         raise DocumentNotFoundError(request.document_id)
 
+    # ── 2. Render PDF bytes outside the transaction ──────────────────────
+    from app.core.pdf_engine import pdf_engine  # circular-safe: imported at call time
+    doc_bytes = pdf_engine.save_document(request.document_id)
+    file_size = len(doc_bytes)
+    file_hash = hashlib.sha256(doc_bytes).hexdigest()
+
+    # ── 3. Commit DB records first ───────────────────────────────────────
+    new_version_number: int
+    s3_key: str
+    version_created_at = None
+
     async with get_db_session() as session:
-        # Verify ownership
         result = await session.execute(
             select(StoredDocument).where(
                 StoredDocument.id == stored_document_id,
@@ -1079,44 +1113,15 @@ async def create_version(
         stored_doc = result.scalar_one_or_none()
 
         if not stored_doc:
-            from app.middleware.error_handler import NotFoundError
             raise NotFoundError(f"Stored document not found: {stored_document_id}")
 
-        # Get document bytes
-        from app.core.pdf_engine import pdf_engine
-        doc_bytes = pdf_engine.save_document(request.document_id)
-        file_size = len(doc_bytes)
-        file_hash = hashlib.sha256(doc_bytes).hexdigest()
-
-        # Increment version
         new_version_number = stored_doc.current_version + 1
+        s3_key = s3_service.get_document_key(user.user_id, stored_document_id, new_version_number)
 
-        # Upload to S3
-        from app.services.s3_service import s3_service
-        s3_key = s3_service.get_document_key(
-            user.user_id, stored_document_id, new_version_number
-        )
-
-        try:
-            s3_service.upload_file(
-                file_data=doc_bytes,
-                key=s3_key,
-                content_type="application/pdf",
-                metadata={
-                    "document_id": stored_document_id,
-                    "user_id": user.user_id,
-                    "version": str(new_version_number),
-                }
-            )
-        except Exception as e:
-            from app.middleware.error_handler import InvalidOperationError
-            raise InvalidOperationError(f"Failed to upload to S3: {str(e)}")
-
-        # Create version record with S3 key
         version = DocumentVersion(
             document_id=stored_document_id,
             version_number=new_version_number,
-            file_path=s3_key,  # Store S3 key
+            file_path=s3_key,
             file_size_bytes=file_size,
             file_hash=file_hash,
             comment=request.comment,
@@ -1124,28 +1129,88 @@ async def create_version(
         )
         session.add(version)
 
-        # Update stored document
         stored_doc.current_version = new_version_number
         stored_doc.page_count = doc_session.scene_graph.metadata.page_count
         stored_doc.file_size_bytes = file_size
+        # session commits on __aexit__ — version row + updated StoredDocument are durable
 
-        # Session commits automatically on exit
+    _logger.info(
+        "create_version: DB committed (stored_doc_id=%s, version=%d)",
+        stored_document_id,
+        new_version_number,
+    )
 
-        processing_time = int((time.time() - start_time) * 1000)
-
-        return APIResponse(
-            success=True,
-            data={
-                "stored_document_id": stored_document_id,
-                "version": new_version_number,
-                "created_at": version.created_at.isoformat(),
+    # ── 4. Upload to S3 after DB commit (compensation on failure) ────────
+    try:
+        s3_service.upload_file(
+            file_data=doc_bytes,
+            key=s3_key,
+            content_type="application/pdf",
+            metadata={
+                "document_id": stored_document_id,
+                "user_id": user.user_id,
+                "version": str(new_version_number),
             },
-            meta=MetaInfo(
-                request_id=get_request_id(),
-                timestamp=now_utc(),
-                processing_time_ms=processing_time,
-            ),
         )
+        _logger.info(
+            "create_version: S3 upload OK (key=%s)", s3_key
+        )
+    except Exception as exc:
+        # Compensation: revert current_version in DB and delete any partial upload.
+        _logger.error(
+            "create_version: S3 upload failed after DB commit — "
+            "compensation: reverting version to %d, deleting s3_key=%s",
+            new_version_number - 1,
+            s3_key,
+            exc_info=True,
+        )
+        s3_service.delete_file(s3_key)  # best-effort; ignore return value
+
+        # Revert DB: roll back version bump and delete orphan DocumentVersion row.
+        try:
+            async with get_db_session() as rollback_session:
+                result = await rollback_session.execute(
+                    select(StoredDocument).where(
+                        StoredDocument.id == stored_document_id,
+                    )
+                )
+                stored_doc_rb = result.scalar_one_or_none()
+                if stored_doc_rb:
+                    stored_doc_rb.current_version = new_version_number - 1
+
+                ver_result = await rollback_session.execute(
+                    select(DocumentVersion).where(
+                        DocumentVersion.document_id == stored_document_id,
+                        DocumentVersion.version_number == new_version_number,
+                    )
+                )
+                orphan_version = ver_result.scalar_one_or_none()
+                if orphan_version:
+                    await rollback_session.delete(orphan_version)
+        except Exception as rb_exc:
+            _logger.error(
+                "create_version: compensation DB rollback also failed: %s", rb_exc
+            )
+
+        raise InvalidOperationError(
+            f"Version {new_version_number} committed to database but file upload failed: {exc}"
+        ) from exc
+
+    processing_time = int((time.time() - start_time) * 1000)
+
+    return APIResponse(
+        success=True,
+        data={
+            "stored_document_id": stored_document_id,
+            "version": new_version_number,
+            "created_at": version.created_at.isoformat(),
+        },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
 
 
 class RenameDocumentRequest(BaseModel):
@@ -1274,35 +1339,31 @@ async def rename_stored_document(
     stored_document_id: str,
     request: RenameDocumentRequest,
     user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """Rename stored document."""
     start_time = time.time()
 
-    from app.models.database import StoredDocument
-    from app.core.database import get_db_session
-    from sqlalchemy import select
-
-    async with get_db_session() as session:
-        # Get stored document
-        result = await session.execute(
-            select(StoredDocument).where(
-                StoredDocument.id == stored_document_id,
-                StoredDocument.owner_id == user.user_id,
-                StoredDocument.is_deleted == False,
-            )
+    # Get stored document
+    result = await db.execute(
+        select(StoredDocument).where(
+            StoredDocument.id == stored_document_id,
+            StoredDocument.owner_id == user.user_id,
+            StoredDocument.is_deleted == False,
         )
-        stored_doc = result.scalar_one_or_none()
+    )
+    stored_doc = result.scalar_one_or_none()
 
-        if not stored_doc:
-            from app.middleware.error_handler import NotFoundError
-            raise NotFoundError(f"Stored document not found: {stored_document_id}")
+    if not stored_doc:
+        raise NotFoundError(f"Stored document not found: {stored_document_id}")
 
-        # Store old name for activity log
-        old_name = stored_doc.name
+    # Store old name for activity log
+    old_name = stored_doc.name
 
-        # Update name
-        stored_doc.name = request.name
-        stored_doc.updated_at = now_utc()
+    # Update name
+    stored_doc.name = request.name
+    stored_doc.updated_at = now_utc()
+    await db.commit()
 
     # Log the rename activity
     await activity_service.log_activity(
@@ -1438,46 +1499,38 @@ if ($result["deleted"]) {
 async def delete_stored_document(
     stored_document_id: str,
     user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """Delete stored document (soft delete)."""
-    import logging
-    logger = logging.getLogger(__name__)
-
     start_time = time.time()
-    logger.info(f"Deleting document {stored_document_id} for user {user.user_id}")
-
-    from app.models.database import StoredDocument
-    from app.core.database import get_db_session
-    from app.services.quota_service import quota_service
-    from sqlalchemy import select
+    _logger.info(f"Deleting document {stored_document_id} for user {user.user_id}")
 
     try:
         # Get effective limits to determine quota source (tenant or personal)
         effective_limits = await quota_service.get_effective_limits(user.user_id)
     except Exception as e:
-        logger.error(f"Error getting effective limits: {e}", exc_info=True)
+        _logger.error(f"Error getting effective limits: {e}", exc_info=True)
         raise
 
-    async with get_db_session() as session:
-        # Get stored document
-        result = await session.execute(
-            select(StoredDocument).where(
-                StoredDocument.id == stored_document_id,
-                StoredDocument.owner_id == user.user_id,
-                StoredDocument.is_deleted == False,
-            )
+    # Get stored document
+    result = await db.execute(
+        select(StoredDocument).where(
+            StoredDocument.id == stored_document_id,
+            StoredDocument.owner_id == user.user_id,
+            StoredDocument.is_deleted == False,
         )
-        stored_doc = result.scalar_one_or_none()
+    )
+    stored_doc = result.scalar_one_or_none()
 
-        if not stored_doc:
-            from app.middleware.error_handler import NotFoundError
-            raise NotFoundError(f"Stored document not found: {stored_document_id}")
+    if not stored_doc:
+        raise NotFoundError(f"Stored document not found: {stored_document_id}")
 
-        file_size = stored_doc.file_size_bytes or 0
+    file_size = stored_doc.file_size_bytes or 0
 
-        # Soft delete
-        stored_doc.is_deleted = True
-        stored_doc.deleted_at = now_utc()
+    # Soft delete
+    stored_doc.is_deleted = True
+    stored_doc.deleted_at = now_utc()
+    await db.commit()
 
     # Update quota (tenant or personal based on membership) - only if file_size > 0
     if file_size > 0:
@@ -1642,43 +1695,39 @@ foreach ($rootFolders as $folder) {
 )
 async def list_folders(
     user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """List user folders."""
     start_time = time.time()
 
-    from app.models.database import Folder
-    from app.core.database import get_db_session
-    from sqlalchemy import select
+    result = await db.execute(
+        select(Folder).where(
+            Folder.owner_id == user.user_id
+        ).order_by(Folder.path)
+    )
+    folders = result.scalars().all()
 
-    async with get_db_session() as session:
-        result = await session.execute(
-            select(Folder).where(
-                Folder.owner_id == user.user_id
-            ).order_by(Folder.path)
-        )
-        folders = result.scalars().all()
+    folder_list = []
+    for folder in folders:
+        folder_list.append({
+            "folder_id": folder.id,
+            "name": folder.name,
+            "parent_id": folder.parent_id,
+            "path": folder.path,
+            "created_at": folder.created_at.isoformat(),
+        })
 
-        folder_list = []
-        for folder in folders:
-            folder_list.append({
-                "folder_id": folder.id,
-                "name": folder.name,
-                "parent_id": folder.parent_id,
-                "path": folder.path,
-                "created_at": folder.created_at.isoformat(),
-            })
+    processing_time = int((time.time() - start_time) * 1000)
 
-        processing_time = int((time.time() - start_time) * 1000)
-
-        return APIResponse(
-            success=True,
-            data={"folders": folder_list},
-            meta=MetaInfo(
-                request_id=get_request_id(),
-                timestamp=now_utc(),
-                processing_time_ms=processing_time,
-            ),
-        )
+    return APIResponse(
+        success=True,
+        data={"folders": folder_list},
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
 
 
 @router.post(
@@ -1823,44 +1872,39 @@ echo "Created nested folder: " . $nestedFolder["path"] . "\\n";'''
 async def create_folder(
     request: CreateFolderRequest,
     user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """Create a new folder."""
     start_time = time.time()
 
-    from app.models.database import Folder
-    from app.core.database import get_db_session
-    from sqlalchemy import select
-
-    async with get_db_session() as session:
-        # Calculate path
-        if request.parent_id:
-            result = await session.execute(
-                select(Folder).where(
-                    Folder.id == request.parent_id,
-                    Folder.owner_id == user.user_id,
-                )
+    # Calculate path
+    if request.parent_id:
+        result = await db.execute(
+            select(Folder).where(
+                Folder.id == request.parent_id,
+                Folder.owner_id == user.user_id,
             )
-            parent = result.scalar_one_or_none()
-            if not parent:
-                from app.middleware.error_handler import NotFoundError
-                raise NotFoundError(f"Parent folder not found: {request.parent_id}")
-            path = f"{parent.path}{parent.id}/"
-        else:
-            path = "/"
-
-        # Create folder
-        folder_id = generate_uuid()
-        created_at = now_utc()
-        folder = Folder(
-            id=folder_id,
-            name=request.name,
-            owner_id=user.user_id,
-            parent_id=request.parent_id,
-            path=path,
-            created_at=created_at,
         )
-        session.add(folder)
-        # Session commits automatically on exit
+        parent = result.scalar_one_or_none()
+        if not parent:
+            raise NotFoundError(f"Parent folder not found: {request.parent_id}")
+        path = f"{parent.path}{parent.id}/"
+    else:
+        path = "/"
+
+    # Create folder
+    folder_id = generate_uuid()
+    created_at = now_utc()
+    folder = Folder(
+        id=folder_id,
+        name=request.name,
+        owner_id=user.user_id,
+        parent_id=request.parent_id,
+        path=path,
+        created_at=created_at,
+    )
+    db.add(folder)
+    await db.commit()
 
     processing_time = int((time.time() - start_time) * 1000)
 
@@ -2025,73 +2069,67 @@ async def delete_folder(
     folder_id: str,
     user: AuthenticatedUser,
     cascade: bool = Query(default=False),
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """Delete folder."""
     start_time = time.time()
 
-    from app.models.database import Folder, StoredDocument
-    from app.core.database import get_db_session
-    from sqlalchemy import select, func
+    # Get folder
+    result = await db.execute(
+        select(Folder).where(
+            Folder.id == folder_id,
+            Folder.owner_id == user.user_id,
+        )
+    )
+    folder = result.scalar_one_or_none()
 
-    async with get_db_session() as session:
-        # Get folder
-        result = await session.execute(
-            select(Folder).where(
-                Folder.id == folder_id,
-                Folder.owner_id == user.user_id,
+    if not folder:
+        raise NotFoundError(f"Folder not found: {folder_id}")
+
+    # Check if folder has documents
+    count_result = await db.execute(
+        select(func.count()).select_from(StoredDocument).where(
+            StoredDocument.folder_id == folder_id,
+            StoredDocument.is_deleted == False,
+        )
+    )
+    doc_count = count_result.scalar() or 0
+
+    if doc_count > 0 and not cascade:
+        raise InvalidOperationError(
+            f"Folder contains {doc_count} documents. Use cascade=true to delete all."
+        )
+
+    # Delete documents if cascade
+    if cascade:
+        docs_result = await db.execute(
+            select(StoredDocument).where(
+                StoredDocument.folder_id == folder_id
             )
         )
-        folder = result.scalar_one_or_none()
+        docs = docs_result.scalars().all()
+        for doc in docs:
+            doc.is_deleted = True
+            doc.deleted_at = now_utc()
 
-        if not folder:
-            from app.middleware.error_handler import NotFoundError
-            raise NotFoundError(f"Folder not found: {folder_id}")
+    # Delete folder (cascade delete children via SQLAlchemy relationship)
+    await db.delete(folder)
+    await db.commit()
 
-        # Check if folder has documents
-        count_result = await session.execute(
-            select(func.count()).select_from(StoredDocument).where(
-                StoredDocument.folder_id == folder_id,
-                StoredDocument.is_deleted == False,
-            )
-        )
-        doc_count = count_result.scalar() or 0
+    processing_time = int((time.time() - start_time) * 1000)
 
-        if doc_count > 0 and not cascade:
-            from app.middleware.error_handler import InvalidOperationError
-            raise InvalidOperationError(
-                f"Folder contains {doc_count} documents. Use cascade=true to delete all."
-            )
-
-        # Delete documents if cascade
-        if cascade:
-            docs_result = await session.execute(
-                select(StoredDocument).where(
-                    StoredDocument.folder_id == folder_id
-                )
-            )
-            docs = docs_result.scalars().all()
-            for doc in docs:
-                doc.is_deleted = True
-                doc.deleted_at = now_utc()
-
-        # Delete folder (cascade delete children via SQLAlchemy relationship)
-        await session.delete(folder)
-        # Session commits automatically on exit
-
-        processing_time = int((time.time() - start_time) * 1000)
-
-        return APIResponse(
-            success=True,
-            data={
-                "folder_id": folder_id,
-                "deleted": True,
-            },
-            meta=MetaInfo(
-                request_id=get_request_id(),
-                timestamp=now_utc(),
-                processing_time_ms=processing_time,
-            ),
-        )
+    return APIResponse(
+        success=True,
+        data={
+            "folder_id": folder_id,
+            "deleted": True,
+        },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
 
 
 class MoveDocumentRequest(BaseModel):
@@ -2258,46 +2296,41 @@ async def move_document(
     stored_document_id: str,
     request: MoveDocumentRequest,
     user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """Move document to a folder."""
     start_time = time.time()
 
-    from app.models.database import StoredDocument, Folder
-    from app.core.database import get_db_session
-    from sqlalchemy import select
+    # Get document
+    result = await db.execute(
+        select(StoredDocument).where(
+            StoredDocument.id == stored_document_id,
+            StoredDocument.owner_id == user.user_id,
+            StoredDocument.is_deleted == False,
+        )
+    )
+    document = result.scalar_one_or_none()
 
-    async with get_db_session() as session:
-        # Get document
-        result = await session.execute(
-            select(StoredDocument).where(
-                StoredDocument.id == stored_document_id,
-                StoredDocument.owner_id == user.user_id,
-                StoredDocument.is_deleted == False,
+    if not document:
+        raise NotFoundError(f"Document not found: {stored_document_id}")
+
+    # Verify target folder exists (if provided)
+    if request.folder_id:
+        folder_result = await db.execute(
+            select(Folder).where(
+                Folder.id == request.folder_id,
+                Folder.owner_id == user.user_id,
             )
         )
-        document = result.scalar_one_or_none()
+        folder = folder_result.scalar_one_or_none()
+        if not folder:
+            raise NotFoundError(f"Folder not found: {request.folder_id}")
 
-        if not document:
-            from app.middleware.error_handler import NotFoundError
-            raise NotFoundError(f"Document not found: {stored_document_id}")
-
-        # Verify target folder exists (if provided)
-        if request.folder_id:
-            folder_result = await session.execute(
-                select(Folder).where(
-                    Folder.id == request.folder_id,
-                    Folder.owner_id == user.user_id,
-                )
-            )
-            folder = folder_result.scalar_one_or_none()
-            if not folder:
-                from app.middleware.error_handler import NotFoundError
-                raise NotFoundError(f"Folder not found: {request.folder_id}")
-
-        # Move document
-        old_folder_id = document.folder_id
-        document.folder_id = request.folder_id
-        document.updated_at = now_utc()
+    # Move document
+    old_folder_id = document.folder_id
+    document.folder_id = request.folder_id
+    document.updated_at = now_utc()
+    await db.commit()
 
     # Log the move activity
     await activity_service.log_activity(
@@ -2495,77 +2528,71 @@ async def move_folder(
     folder_id: str,
     request: MoveFolderRequest,
     user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """Move folder to another folder."""
     start_time = time.time()
 
-    from app.models.database import Folder
-    from app.core.database import get_db_session
-    from sqlalchemy import select
-
     # Can't move folder into itself
     if folder_id == request.parent_id:
-        from app.middleware.error_handler import InvalidOperationError
         raise InvalidOperationError("Cannot move folder into itself")
 
-    async with get_db_session() as session:
-        # Get folder to move
-        result = await session.execute(
+    # Get folder to move
+    result = await db.execute(
+        select(Folder).where(
+            Folder.id == folder_id,
+            Folder.owner_id == user.user_id,
+        )
+    )
+    folder = result.scalar_one_or_none()
+
+    if not folder:
+        raise NotFoundError(f"Folder not found: {folder_id}")
+
+    # Verify target parent folder exists (if provided)
+    new_path = "/"
+    if request.parent_id:
+        parent_result = await db.execute(
             select(Folder).where(
-                Folder.id == folder_id,
+                Folder.id == request.parent_id,
                 Folder.owner_id == user.user_id,
             )
         )
-        folder = result.scalar_one_or_none()
+        parent_folder = parent_result.scalar_one_or_none()
+        if not parent_folder:
+            raise NotFoundError(f"Parent folder not found: {request.parent_id}")
 
-        if not folder:
-            from app.middleware.error_handler import NotFoundError
-            raise NotFoundError(f"Folder not found: {folder_id}")
+        # Check if target is a descendant of the folder being moved
+        if parent_folder.path.startswith(folder.path + folder.id + "/"):
+            raise InvalidOperationError("Cannot move folder into its own descendant")
 
-        # Verify target parent folder exists (if provided)
-        new_path = "/"
-        if request.parent_id:
-            parent_result = await session.execute(
-                select(Folder).where(
-                    Folder.id == request.parent_id,
-                    Folder.owner_id == user.user_id,
-                )
-            )
-            parent_folder = parent_result.scalar_one_or_none()
-            if not parent_folder:
-                from app.middleware.error_handler import NotFoundError
-                raise NotFoundError(f"Parent folder not found: {request.parent_id}")
+        new_path = f"{parent_folder.path}{parent_folder.id}/"
 
-            # Check if target is a descendant of the folder being moved
-            if parent_folder.path.startswith(folder.path + folder.id + "/"):
-                from app.middleware.error_handler import InvalidOperationError
-                raise InvalidOperationError("Cannot move folder into its own descendant")
+    # Update folder
+    old_parent_id = folder.parent_id
+    old_path = folder.path
+    folder.parent_id = request.parent_id
+    folder.path = new_path
+    folder.updated_at = now_utc()
 
-            new_path = f"{parent_folder.path}{parent_folder.id}/"
-
-        # Update folder
-        old_parent_id = folder.parent_id
-        old_path = folder.path
-        folder.parent_id = request.parent_id
-        folder.path = new_path
-        folder.updated_at = now_utc()
-
-        # Update paths of all descendants
-        descendants_result = await session.execute(
-            select(Folder).where(
-                Folder.owner_id == user.user_id,
-                Folder.path.startswith(old_path + folder_id + "/"),
-            )
+    # Update paths of all descendants
+    descendants_result = await db.execute(
+        select(Folder).where(
+            Folder.owner_id == user.user_id,
+            Folder.path.startswith(old_path + folder_id + "/"),
         )
-        descendants = descendants_result.scalars().all()
+    )
+    descendants = descendants_result.scalars().all()
 
-        for descendant in descendants:
-            # Replace old path prefix with new path prefix
-            descendant.path = descendant.path.replace(
-                old_path + folder_id + "/",
-                new_path + folder_id + "/",
-                1
-            )
+    for descendant in descendants:
+        # Replace old path prefix with new path prefix
+        descendant.path = descendant.path.replace(
+            old_path + folder_id + "/",
+            new_path + folder_id + "/",
+            1
+        )
+
+    await db.commit()
 
     processing_time = int((time.time() - start_time) * 1000)
 
@@ -2696,55 +2723,50 @@ echo "Subfolders: " . $stats["folder_count"] . "\\n";'''
 async def get_folder_stats(
     folder_id: str,
     user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """Get folder statistics (size, document count, etc.)."""
     start_time = time.time()
 
-    from app.models.database import Folder, StoredDocument
-    from app.core.database import get_db_session
-    from sqlalchemy import select, func
-
-    async with get_db_session() as session:
-        # Get folder
-        result = await session.execute(
-            select(Folder).where(
-                Folder.id == folder_id,
-                Folder.owner_id == user.user_id,
-            )
+    # Get folder
+    result = await db.execute(
+        select(Folder).where(
+            Folder.id == folder_id,
+            Folder.owner_id == user.user_id,
         )
-        folder = result.scalar_one_or_none()
+    )
+    folder = result.scalar_one_or_none()
 
-        if not folder:
-            from app.middleware.error_handler import NotFoundError
-            raise NotFoundError(f"Folder not found: {folder_id}")
+    if not folder:
+        raise NotFoundError(f"Folder not found: {folder_id}")
 
-        # Get all folders in this subtree (including the folder itself)
-        folder_ids = [folder_id]
-        descendants_result = await session.execute(
-            select(Folder.id).where(
-                Folder.owner_id == user.user_id,
-                Folder.path.startswith(folder.path + folder_id + "/"),
-            )
+    # Get all folders in this subtree (including the folder itself)
+    folder_ids = [folder_id]
+    descendants_result = await db.execute(
+        select(Folder.id).where(
+            Folder.owner_id == user.user_id,
+            Folder.path.startswith(folder.path + folder_id + "/"),
         )
-        folder_ids.extend([f[0] for f in descendants_result.all()])
+    )
+    folder_ids.extend([f[0] for f in descendants_result.all()])
 
-        # Count subfolders (excluding the folder itself)
-        subfolder_count = len(folder_ids) - 1
+    # Count subfolders (excluding the folder itself)
+    subfolder_count = len(folder_ids) - 1
 
-        # Get document stats for all folders in subtree
-        stats_result = await session.execute(
-            select(
-                func.count(StoredDocument.id),
-                func.coalesce(func.sum(StoredDocument.file_size_bytes), 0)
-            ).where(
-                StoredDocument.owner_id == user.user_id,
-                StoredDocument.folder_id.in_(folder_ids),
-                StoredDocument.is_deleted == False,
-            )
+    # Get document stats for all folders in subtree
+    stats_result = await db.execute(
+        select(
+            func.count(StoredDocument.id),
+            func.coalesce(func.sum(StoredDocument.file_size_bytes), 0)
+        ).where(
+            StoredDocument.owner_id == user.user_id,
+            StoredDocument.folder_id.in_(folder_ids),
+            StoredDocument.is_deleted == False,
         )
-        stats = stats_result.one()
-        document_count = stats[0] or 0
-        total_size = stats[1] or 0
+    )
+    stats = stats_result.one()
+    document_count = stats[0] or 0
+    total_size = stats[1] or 0
 
     processing_time = int((time.time() - start_time) * 1000)
 

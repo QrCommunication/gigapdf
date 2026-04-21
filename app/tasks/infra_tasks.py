@@ -1,7 +1,8 @@
 """
 Infrastructure monitoring tasks.
 
-Handles periodic collection and cleanup of infrastructure metrics.
+Handles periodic collection and cleanup of infrastructure metrics,
+and watchdog monitoring for stuck/pending tasks.
 """
 
 import logging
@@ -11,7 +12,7 @@ from celery import shared_task
 from sqlalchemy import delete, select
 
 from app.core.database import get_sync_session
-from app.models.database import InfrastructureMetric
+from app.models.database import InfrastructureMetric, AsyncJob
 from app.services.infra_metrics_service import infra_metrics_service
 
 logger = logging.getLogger(__name__)
@@ -115,4 +116,79 @@ def cleanup_old_metrics(self, retention_days: int = 365):
 
     except Exception as e:
         logger.error(f"Failed to cleanup old metrics: {e}")
+        raise self.retry(exc=e)
+
+
+@shared_task(
+    name="infra.watchdog_pending_tasks",
+    bind=True,
+    max_retries=1,
+)
+def watchdog_pending_tasks(self, timeout_hours: int = 1):
+    """
+    Detect and mark tasks stuck in PENDING state for too long.
+
+    Runs periodically to find and recover jobs that:
+    - Have celery_task_id set
+    - Have status='pending' or 'processing'
+    - Have been in that state for > timeout_hours (default: 1 hour)
+
+    Marks them as 'failed' with an error message.
+
+    Args:
+        timeout_hours: Hours threshold before marking as failed (default: 1)
+
+    Returns:
+        dict: Status with count of recovered tasks
+    """
+    try:
+        logger.info(
+            f"Starting watchdog check for tasks stuck > {timeout_hours}h in pending/processing"
+        )
+
+        timeout_threshold = datetime.utcnow() - timedelta(hours=timeout_hours)
+
+        with get_sync_session() as session:
+            # Find all jobs that are pending/processing AND have a celery_task_id
+            stuck_jobs_stmt = select(AsyncJob).where(
+                AsyncJob.celery_task_id != None,  # noqa: E711
+                AsyncJob.status.in_(["pending", "processing"]),
+                AsyncJob.created_at < timeout_threshold,
+            )
+
+            stuck_jobs = session.execute(stuck_jobs_stmt).scalars().all()
+            count = len(stuck_jobs)
+
+            if count > 0:
+                logger.warning(
+                    f"Found {count} tasks stuck in pending/processing state"
+                )
+
+                for job in stuck_jobs:
+                    logger.warning(
+                        f"Marking job {job.id} (task_id={job.celery_task_id}) "
+                        f"as failed after {timeout_hours}h"
+                    )
+                    job.status = "failed"
+                    job.error_message = (
+                        f"Task stuck in pending state for {timeout_hours}+ hours. "
+                        f"Marked as failed by watchdog at {datetime.utcnow().isoformat()}"
+                    )
+                    job.completed_at = datetime.utcnow()
+
+                session.commit()
+
+                logger.info(f"Watchdog recovered {count} stuck tasks")
+            else:
+                logger.debug("No stuck tasks detected by watchdog")
+
+            return {
+                "status": "success",
+                "recovered_count": count,
+                "threshold_hours": timeout_hours,
+                "checked_at": datetime.utcnow().isoformat(),
+            }
+
+    except Exception as e:
+        logger.error(f"Watchdog task failed: {e}")
         raise self.retry(exc=e)

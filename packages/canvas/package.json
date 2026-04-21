@@ -22,6 +22,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@giga-pdf/types": "workspace:*",
     "fabric": "^7.1.0",
     "pdfjs-dist": "^5.4.530"
   },
@@ -36,8 +37,7 @@
     "typescript": "^5.9.3"
   },
   "peerDependencies": {
-    "@giga-pdf/types": "workspace:*",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }
 }

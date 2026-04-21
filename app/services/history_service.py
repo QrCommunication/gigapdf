@@ -378,7 +378,7 @@ class HistoryService:
         Returns:
             HistoryState: Current history state.
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -400,7 +400,7 @@ class HistoryService:
             affected_elements: Modified element IDs.
             affected_pages: Modified page numbers.
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -427,7 +427,7 @@ class HistoryService:
         Returns:
             tuple: (undone_actions, current_document)
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -448,7 +448,7 @@ class HistoryService:
         Returns:
             tuple: (redone_actions, current_document)
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -469,7 +469,7 @@ class HistoryService:
         Returns:
             DocumentObject: Document at that state.
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 

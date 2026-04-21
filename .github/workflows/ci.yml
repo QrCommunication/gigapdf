@@ -1,0 +1,204 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # ─────────────────────────────────────────────
+  # JS/TS — Lint (Turbo)
+  # ─────────────────────────────────────────────
+  lint:
+    name: Lint (JS/TS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run lint
+        run: pnpm lint
+
+  # ─────────────────────────────────────────────
+  # JS/TS — Type-check (Turbo)
+  # ─────────────────────────────────────────────
+  type-check:
+    name: Type Check (JS/TS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run type-check
+        run: pnpm type-check
+
+  # ─────────────────────────────────────────────
+  # JS/TS — Tests packages (pdf-engine + editor)
+  # ─────────────────────────────────────────────
+  test-packages:
+    name: Test (packages)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages (required by Turbo dependency graph)
+        run: pnpm build:packages
+
+      - name: Run package tests
+        run: pnpm test --filter=@giga-pdf/pdf-engine --filter=@giga-pdf/editor
+
+  # ─────────────────────────────────────────────
+  # JS/TS — Tests web app
+  # ─────────────────────────────────────────────
+  test-web:
+    name: Test (web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages (required by Turbo dependency graph)
+        run: pnpm build:packages
+
+      - name: Run web tests
+        run: pnpm test --filter=web
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+          NEXT_PUBLIC_WS_URL: ws://localhost:8000
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+  # ─────────────────────────────────────────────
+  # Python — Lint (ruff) + Type-check (mypy)
+  # ─────────────────────────────────────────────
+  lint-python:
+    name: Lint + Type Check (Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run ruff (lint)
+        run: ruff check app/
+
+      - name: Run mypy (type-check)
+        run: mypy app/ --ignore-missing-imports
+
+  # ─────────────────────────────────────────────
+  # Python — Tests unitaires
+  # ─────────────────────────────────────────────
+  test-backend:
+    name: Test (Python backend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run unit tests
+        run: pytest tests/unit -v --cov=app --cov-report=term-missing
+        env:
+          DATABASE_URL: sqlite:///./test.db
+          REDIS_URL: redis://localhost:6379
+
+  # ─────────────────────────────────────────────
+  # Build final (gate de merge)
+  # ─────────────────────────────────────────────
+  build:
+    name: Build (JS/TS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [lint, type-check, test-packages, test-web, lint-python, test-backend]
+    env:
+      NEXT_PUBLIC_API_URL: https://api.giga-pdf.com
+      NEXT_PUBLIC_WS_URL: wss://api.giga-pdf.com
+      NEXT_PUBLIC_APP_URL: https://app.giga-pdf.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all
+        run: pnpm build

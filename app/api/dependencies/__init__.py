@@ -1,0 +1,3 @@
+"""
+FastAPI shared dependencies.
+"""

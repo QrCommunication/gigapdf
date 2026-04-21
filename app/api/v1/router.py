@@ -16,6 +16,7 @@ from app.api.v1 import (
     elements,
     embed,
     export,
+    fonts,
     forms,
     history,
     jobs,
@@ -179,6 +180,12 @@ api_router.include_router(
     embed.router,
     prefix="/embed",
     tags=["Embed"],
+)
+
+api_router.include_router(
+    fonts.router,
+    prefix="/pdf/fonts",
+    tags=["Fonts"],
 )
 
 # Admin endpoints

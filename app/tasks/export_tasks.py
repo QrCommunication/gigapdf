@@ -5,6 +5,7 @@ Export Celery tasks.
 Async tasks for document export to various formats.
 """
 
+import asyncio
 import io
 import logging
 import os
@@ -13,11 +14,8 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 from uuid import uuid4
 
-# DEPRECATED: import fitz  # PyMuPDF
-try:
-    import fitz  # PyMuPDF
-except ImportError:
-    fitz = None  # type: ignore[assignment]
+import pikepdf
+import pdfplumber
 
 from celery import shared_task
 
@@ -103,8 +101,8 @@ def _get_document_bytes(document_id: str) -> Optional[bytes]:
         """Try to load from Redis session."""
         from app.repositories.document_repo import document_sessions
 
-        # Try async session first (Redis)
-        session = await document_sessions.get_session_async(document_id)
+        # Try session from Redis (get_session_async is an alias for get_session)
+        session = await document_sessions.get_session(document_id)
         if session and session.pdf_doc:
             # Return the document bytes from session
             return session.original_bytes
@@ -167,20 +165,24 @@ def export_document(
 
     logger.info(f"Starting export for document {document_id} to {format}")
 
-    # Try to get session from local memory first
-    session = document_sessions.get_session(document_id)
+    # Try to get session from local cache or Redis
+    session = asyncio.run(document_sessions.get_session(document_id))
 
     if session:
-        doc = session.pdf_doc
+        pdf_bytes = session.pdf_doc.tobytes()
+        page_count = session.pdf_doc.page_count
     else:
         # Load from Redis/Storage
         pdf_bytes = _get_document_bytes(document_id)
         if not pdf_bytes:
             raise ValueError(f"Document not found: {document_id}")
 
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        with pikepdf.Pdf.open(io.BytesIO(pdf_bytes)) as _pdf:
+            page_count = len(_pdf.pages)
 
-    page_count = doc.page_count
+    logger.debug(
+        "Export task: document=%s format=%s pages=%d", document_id, format, page_count
+    )
 
     # Parse page range
     if page_range:
@@ -193,7 +195,7 @@ def export_document(
 
     # Image formats
     if format in ("png", "jpeg", "webp", "svg"):
-        generator = PreviewGenerator(doc)
+        generator = PreviewGenerator(pdf_bytes)
 
         for idx, page_num in enumerate(pages):
             # Update progress
@@ -253,20 +255,20 @@ def export_document(
                 "file_path": file_path,
             }
 
-    # Text format
+    # Text format — pdfplumber replaces fitz page.get_text()
     elif format == "txt":
         text_parts = []
 
-        for idx, page_num in enumerate(pages):
-            progress = ((idx + 1) / total_pages) * 100
-            self.update_state(
-                state="PROGRESS",
-                meta={"progress": progress, "message": f"Extracting text from page {page_num}"},
-            )
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as plumber_pdf:
+            for idx, page_num in enumerate(pages):
+                progress = ((idx + 1) / total_pages) * 100
+                self.update_state(
+                    state="PROGRESS",
+                    meta={"progress": progress, "message": f"Extracting text from page {page_num}"},
+                )
 
-            page = doc[page_num - 1]
-            text = page.get_text("text")
-            text_parts.append(f"--- Page {page_num} ---\n{text}\n")
+                text = plumber_pdf.pages[page_num - 1].extract_text() or ""
+                text_parts.append(f"--- Page {page_num} ---\n{text}\n")
 
         text_content = "\n".join(text_parts).encode("utf-8")
         file_path = _save_export_data(text_content, "txt", document_id)
@@ -278,7 +280,7 @@ def export_document(
             "file_path": file_path,
         }
 
-    # HTML format
+    # HTML format — pdfplumber replaces fitz page.get_text("html")
     elif format == "html":
         html_parts = [
             '<!DOCTYPE html>',
@@ -291,24 +293,28 @@ def export_document(
             'body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }',
             '.page { margin-bottom: 40px; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px; }',
             '.page-header { color: #666; font-size: 14px; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }',
+            '.page-text { white-space: pre-wrap; }',
             '</style>',
             '</head>',
-            '<body>'
+            '<body>',
         ]
 
-        for idx, page_num in enumerate(pages):
-            progress = ((idx + 1) / total_pages) * 100
-            self.update_state(
-                state="PROGRESS",
-                meta={"progress": progress, "message": f"Converting page {page_num}"},
-            )
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as plumber_pdf:
+            for idx, page_num in enumerate(pages):
+                progress = ((idx + 1) / total_pages) * 100
+                self.update_state(
+                    state="PROGRESS",
+                    meta={"progress": progress, "message": f"Converting page {page_num}"},
+                )
 
-            page = doc[page_num - 1]
-            text = page.get_text("html")
-            html_parts.append(f'<div class="page" data-page="{page_num}">')
-            html_parts.append(f'<div class="page-header">Page {page_num}</div>')
-            html_parts.append(text)
-            html_parts.append('</div>')
+                text = plumber_pdf.pages[page_num - 1].extract_text() or ""
+                # Escape HTML special chars to prevent injection
+                import html as _html_mod
+                text_escaped = _html_mod.escape(text)
+                html_parts.append(f'<div class="page" data-page="{page_num}">')
+                html_parts.append(f'<div class="page-header">Page {page_num}</div>')
+                html_parts.append(f'<div class="page-text">{text_escaped}</div>')
+                html_parts.append('</div>')
 
         html_parts.append("</body>")
         html_parts.append("</html>")
@@ -323,60 +329,43 @@ def export_document(
             "file_path": file_path,
         }
 
-    # Word (DOCX) format
+    # Word (DOCX) format — pdfplumber replaces fitz page.get_text("dict")
     elif format == "docx":
         from docx import Document as DocxDocument
-        from docx.shared import Inches, Pt
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.shared import Pt
 
         docx_doc = DocxDocument()
 
-        for idx, page_num in enumerate(pages):
-            progress = ((idx + 1) / total_pages) * 100
-            self.update_state(
-                state="PROGRESS",
-                meta={"progress": progress, "message": f"Converting page {page_num} to Word"},
-            )
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as plumber_pdf:
+            for idx, page_num in enumerate(pages):
+                progress = ((idx + 1) / total_pages) * 100
+                self.update_state(
+                    state="PROGRESS",
+                    meta={"progress": progress, "message": f"Converting page {page_num} to Word"},
+                )
 
-            page = doc[page_num - 1]
+                # Page break between pages
+                if idx > 0:
+                    docx_doc.add_page_break()
 
-            # Add page header
-            if idx > 0:
-                docx_doc.add_page_break()
+                plumber_page = plumber_pdf.pages[page_num - 1]
+                text = plumber_page.extract_text() or ""
 
-            # Extract text blocks with their positions
-            blocks = page.get_text("dict")["blocks"]
+                # Add each non-empty line as a paragraph
+                for line in text.splitlines():
+                    stripped = line.strip()
+                    if stripped:
+                        docx_doc.add_paragraph(stripped)
 
-            for block in blocks:
-                if "lines" in block:
-                    # Text block
-                    for line in block["lines"]:
-                        para_text = ""
-                        for span in line["spans"]:
-                            para_text += span["text"]
-
-                        if para_text.strip():
-                            para = docx_doc.add_paragraph(para_text)
-                            # Try to preserve some formatting
-                            if line["spans"]:
-                                font_size = line["spans"][0].get("size", 12)
-                                for run in para.runs:
-                                    run.font.size = Pt(font_size)
-
-                elif "image" in block:
-                    # Image block - extract and embed
-                    try:
-                        img_rect = block["bbox"]
-                        # Get image from page
-                        pix = page.get_pixmap(clip=img_rect, dpi=150)
-                        img_data = pix.tobytes("png")
-
-                        # Save to temp stream and add to doc
-                        img_stream = io.BytesIO(img_data)
-                        width = Inches(min(6.0, (img_rect[2] - img_rect[0]) / 72.0))
-                        docx_doc.add_picture(img_stream, width=width)
-                    except Exception as e:
-                        logger.warning(f"Could not extract image: {e}")
+                # Extract tables via pdfplumber
+                try:
+                    for table in plumber_page.extract_tables():
+                        for row_data in table:
+                            cells = [str(c or "") for c in row_data]
+                            docx_doc.add_paragraph("\t".join(cells))
+                        docx_doc.add_paragraph("")  # blank line after table
+                except Exception as exc:
+                    logger.debug("Table extraction skipped for page %d: %s", page_num, exc)
 
         # Save to bytes
         docx_buffer = io.BytesIO()
@@ -392,10 +381,10 @@ def export_document(
             "file_path": file_path,
         }
 
-    # Excel (XLSX) format
+    # Excel (XLSX) format — pdfplumber replaces fitz page.get_text() + page.find_tables()
     elif format == "xlsx":
         from openpyxl import Workbook
-        from openpyxl.styles import Font, Alignment
+        from openpyxl.styles import Font
 
         wb = Workbook()
         ws = wb.active
@@ -403,50 +392,47 @@ def export_document(
 
         current_row = 1
 
-        for idx, page_num in enumerate(pages):
-            progress = ((idx + 1) / total_pages) * 100
-            self.update_state(
-                state="PROGRESS",
-                meta={"progress": progress, "message": f"Converting page {page_num} to Excel"},
-            )
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as plumber_pdf:
+            for idx, page_num in enumerate(pages):
+                progress = ((idx + 1) / total_pages) * 100
+                self.update_state(
+                    state="PROGRESS",
+                    meta={"progress": progress, "message": f"Converting page {page_num} to Excel"},
+                )
 
-            page = doc[page_num - 1]
+                # Page header row
+                ws.cell(row=current_row, column=1, value=f"--- Page {page_num} ---")
+                ws.cell(row=current_row, column=1).font = Font(bold=True, size=14)
+                current_row += 2
 
-            # Add page header
-            ws.cell(row=current_row, column=1, value=f"--- Page {page_num} ---")
-            ws.cell(row=current_row, column=1).font = Font(bold=True, size=14)
-            current_row += 2
-
-            # Extract text with layout preserved
-            text = page.get_text("text")
-            lines = text.split("\n")
-
-            for line in lines:
-                if line.strip():
-                    ws.cell(row=current_row, column=1, value=line)
-                    current_row += 1
-
-            current_row += 2  # Space between pages
-
-            # Try to extract tables
-            try:
-                tables = page.find_tables()
-                for table in tables:
-                    # Add table header
-                    ws.cell(row=current_row, column=1, value="[Table]")
-                    ws.cell(row=current_row, column=1).font = Font(italic=True)
-                    current_row += 1
-
-                    # Extract table data
-                    table_data = table.extract()
-                    for row_data in table_data:
-                        for col_idx, cell_value in enumerate(row_data):
-                            ws.cell(row=current_row, column=col_idx + 1, value=cell_value or "")
+                plumber_page = plumber_pdf.pages[page_num - 1]
+                text = plumber_page.extract_text() or ""
+                for line in text.splitlines():
+                    if line.strip():
+                        ws.cell(row=current_row, column=1, value=line)
                         current_row += 1
 
-                    current_row += 1  # Space after table
-            except Exception as e:
-                logger.debug(f"No tables found or error extracting: {e}")
+                current_row += 2  # Space between pages
+
+                # Tables via pdfplumber
+                try:
+                    for table in plumber_page.extract_tables():
+                        ws.cell(row=current_row, column=1, value="[Table]")
+                        ws.cell(row=current_row, column=1).font = Font(italic=True)
+                        current_row += 1
+
+                        for row_data in table:
+                            for col_idx, cell_value in enumerate(row_data):
+                                ws.cell(
+                                    row=current_row,
+                                    column=col_idx + 1,
+                                    value=cell_value or "",
+                                )
+                            current_row += 1
+
+                        current_row += 1  # Space after table
+                except Exception as exc:
+                    logger.debug("Table extraction skipped for page %d: %s", page_num, exc)
 
         # Auto-fit column width
         for column in ws.columns:
@@ -456,10 +442,9 @@ def export_document(
                 try:
                     if cell.value:
                         max_length = max(max_length, len(str(cell.value)))
-                except:
+                except Exception:
                     pass
-            adjusted_width = min(max_length + 2, 100)
-            ws.column_dimensions[column_letter].width = adjusted_width
+            ws.column_dimensions[column_letter].width = min(max_length + 2, 100)
 
         # Save to bytes
         xlsx_buffer = io.BytesIO()

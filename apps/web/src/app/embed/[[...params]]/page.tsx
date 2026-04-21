@@ -28,6 +28,9 @@ import {
   ContentEditLayer,
   type ElementModification,
 } from "@/components/editor/content-edit-layer";
+import { createDefaultLogger } from "@giga-pdf/logger";
+
+const embedLogger = createDefaultLogger({ enableRemote: false });
 
 // ---------------------------------------------------------------------------
 // postMessage types (mirrors packages/embed/src/types.ts)
@@ -58,22 +61,36 @@ type AllowedTool =
   | "signature";
 
 // ---------------------------------------------------------------------------
-// API key validation (server-side fetch via internal API route)
+// Token / key validation helpers
 // ---------------------------------------------------------------------------
 
-async function validateApiKey(apiKey: string): Promise<boolean> {
+/**
+ * Validate an ephemeral JWT session token via the backend.
+ *
+ * Returns `{ valid: true, expiresIn: number }` on success or
+ * `{ valid: false, reason: string }` on failure.
+ */
+async function validateSessionToken(
+  token: string
+): Promise<{ valid: boolean; expiresIn?: number; reason?: string }> {
   try {
-    const res = await fetch("/api/v1/embed/validate-key", {
+    const res = await fetch("/api/v1/embed/validate-token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_key: apiKey }),
+      body: JSON.stringify({ token }),
       credentials: "include",
     });
-    if (!res.ok) return false;
-    const json = (await res.json()) as { valid?: boolean };
-    return json.valid === true;
+    if (!res.ok) return { valid: false, reason: "http_error" };
+    const json = (await res.json()) as {
+      data?: { valid?: boolean; expires_in?: number; reason?: string };
+    };
+    const data = json.data ?? {};
+    if (data.valid === true) {
+      return { valid: true, expiresIn: data.expires_in };
+    }
+    return { valid: false, reason: data.reason ?? "invalid" };
   } catch {
-    return false;
+    return { valid: false, reason: "network_error" };
   }
 }
 
@@ -166,7 +183,11 @@ export default function EmbedPage() {
   const searchParams = useSearchParams();
 
   // --- Parse query params from SDK ---
-  const apiKey = searchParams?.get("apiKey") ?? "";
+  //
+  // Only `?token=<jwt>` is supported — the SDK exchanges the publishable key
+  // for an ephemeral JWT before mounting the iframe.
+  const sessionToken = searchParams?.get("token") ?? "";
+
   const hideToolbar = searchParams?.get("hideToolbar") === "true";
   const showDoneButton = searchParams?.get("showDoneButton") === "true";
   const toolsParam = searchParams?.get("tools") ?? null;
@@ -178,26 +199,64 @@ export default function EmbedPage() {
   const catchAll = params?.params as string[] | undefined;
   const documentId = catchAll?.[0] ?? undefined;
 
-  // --- API key validation state ---
+  // --- Auth validation state ---
   const [keyValidated, setKeyValidated] = useState<
-    "pending" | "valid" | "invalid"
+    "pending" | "valid" | "invalid" | "expired"
   >("pending");
 
-  useEffect(() => {
-    if (!apiKey) {
-      setKeyValidated("invalid");
-      return;
-    }
+  // Remaining TTL of the session token (seconds) — used to schedule reload
+  const tokenExpiresInRef = useRef<number>(0);
+  const tokenReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Cleanup reload timer on unmount
+  useEffect(() => {
+    return () => {
+      if (tokenReloadTimerRef.current !== null) {
+        clearTimeout(tokenReloadTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
-    validateApiKey(apiKey).then((valid) => {
-      if (!cancelled) setKeyValidated(valid ? "valid" : "invalid");
-    });
+
+    if (sessionToken) {
+      // Validate the ephemeral JWT session token issued by the SDK.
+      validateSessionToken(sessionToken).then((result) => {
+        if (cancelled) return;
+        if (result.valid) {
+          setKeyValidated("valid");
+          const expiresIn = result.expiresIn ?? 0;
+          tokenExpiresInRef.current = expiresIn;
+
+          // Schedule an "expired" state slightly before the token expires so
+          // the page can show the user an error and prompt a reload (which will
+          // trigger the SDK to refresh the token).
+          if (expiresIn > 0) {
+            const delayMs = Math.max(0, (expiresIn - 10) * 1000);
+            tokenReloadTimerRef.current = setTimeout(() => {
+              if (!cancelled) setKeyValidated("expired");
+            }, delayMs);
+          }
+        } else {
+          embedLogger.warn("Embed session token invalid", {
+            reason: result.reason,
+          });
+          setKeyValidated("invalid");
+        }
+      });
+    } else {
+      setKeyValidated("invalid");
+    }
 
     return () => {
       cancelled = true;
+      if (tokenReloadTimerRef.current !== null) {
+        clearTimeout(tokenReloadTimerRef.current);
+        tokenReloadTimerRef.current = null;
+      }
     };
-  }, [apiKey]);
+  }, [sessionToken]);
 
   // --- postMessage helper ---
   const sendToParent = useCallback(
@@ -482,10 +541,14 @@ export default function EmbedPage() {
           break;
 
         case "load": {
+          // WID-08: validate documentId to prevent open redirect attacks
+          const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
           const payload = message.payload as { documentId?: string } | undefined;
-          if (payload?.documentId) {
+          if (payload?.documentId && UUID_V4_REGEX.test(payload.documentId)) {
             // Navigate to embed page for the new document
-            window.location.href = `/embed/${payload.documentId}${window.location.search}`;
+            window.location.href = `/embed/${encodeURIComponent(payload.documentId)}${window.location.search}`;
+          } else {
+            embedLogger.warn("Invalid or missing documentId in load command", { documentId: payload?.documentId });
           }
           break;
         }
@@ -628,7 +691,17 @@ export default function EmbedPage() {
   const handleHyperlinkClick = useCallback(
     (linkUrl?: string | null, linkPage?: number | null) => {
       if (linkUrl) {
-        window.open(linkUrl, "_blank");
+        // WID-09: validate URL protocol before opening to prevent javascript: injection
+        try {
+          const parsed = new URL(linkUrl, window.location.href);
+          if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+            window.open(linkUrl, "_blank", "noopener,noreferrer");
+          } else {
+            embedLogger.warn("Blocked URL with non-http(s) protocol", { protocol: parsed.protocol });
+          }
+        } catch {
+          embedLogger.warn("Invalid URL in PDF link", { linkUrl });
+        }
       } else if (linkPage) {
         goToPage(linkPage - 1);
       }
@@ -758,17 +831,39 @@ export default function EmbedPage() {
     );
   }
 
+  if (keyValidated === "expired") {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3 text-center px-4">
+          <AlertCircle className="h-10 w-10 text-amber-500" />
+          <p className="text-sm font-medium text-foreground">
+            Session expired
+          </p>
+          <p className="text-xs text-muted-foreground max-w-xs">
+            Your editing session has expired. The page will reload automatically.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-1 rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            Reload now
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (keyValidated === "invalid") {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3 text-center px-4">
           <AlertCircle className="h-10 w-10 text-destructive" />
           <p className="text-sm font-medium text-destructive">
-            Invalid or missing API key
+            Invalid or missing session token
           </p>
           <p className="text-xs text-muted-foreground max-w-xs">
-            Provide a valid <code className="font-mono">apiKey</code> when
-            initialising the GigaPDF embed SDK.
+            Use the latest GigaPDF embed SDK — it automatically handles secure
+            session token exchange.
           </p>
         </div>
       </div>

@@ -71,10 +71,11 @@ export type { RenderOptions, ThumbnailOptions, PreviewFormat } from './preview';
 export {
   htmlToPDF,
   urlToPDF,
+  urlToPDFSafe,
   setPlaywrightPoolSize,
   destroyPlaywrightPool,
 } from './convert';
-export type { ConvertOptions } from './convert';
+export type { ConvertOptions, UrlToPDFSafeOptions } from './convert';
 
 // Errors
 export {
@@ -101,5 +102,9 @@ export {
 // Utils
 export { hexToRgb, rgbToHex, normalizeColor } from './utils';
 export { webToPdf, pdfToWeb, scaleRect } from './utils';
-export { normalizeFontName, mapPdfFontToStandard } from './utils';
+export { normalizeFontName, resolveStandardFont, isStandardFont, mapPdfFontToStandard } from './utils';
 export { parsePageRange, type PageRange } from './utils';
+export { engineLogger } from './utils';
+
+// Text renderer utilities (cache management)
+export { clearFontCache } from './render/text-renderer';

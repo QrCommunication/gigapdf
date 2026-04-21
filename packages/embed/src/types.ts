@@ -1,8 +1,9 @@
 export interface GigaPdfOptions {
-  /** API key for authentication (secret key giga_pk_* or publishable key giga_pub_*) */
-  apiKey: string;
-  /** Alias for apiKey — publishable key for widget usage (giga_pub_*) */
-  publicKey?: string;
+  /**
+   * Publishable key for client-side widget usage (giga_pub_*).
+   * Always use a publishable key here — never a secret key (giga_pk_*).
+   */
+  publicKey: string;
   /** Document ID to load (optional - opens empty editor if not provided) */
   documentId?: string;
   /** PDF file to edit — triggers the file-in/file-out widget flow */

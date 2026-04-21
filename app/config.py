@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # Limits
     # -------------------------------------------------------------------------
-    max_upload_size_mb: int = 500
+    max_upload_size_mb: int = 100  # Hard cap lowered to 100 MB (PDF-bomb mitigation)
     max_pages_per_document: int = 5000
     preview_max_dpi: int = 600
     history_max_states: int = 100
@@ -140,6 +140,58 @@ class Settings(BaseSettings):
     scw_secret_key: str = ""
     scw_default_organization_id: str = ""
     scw_default_project_id: str = ""
+
+    # -------------------------------------------------------------------------
+    # Sentry — Error Tracking & Performance
+    # -------------------------------------------------------------------------
+    sentry_dsn: str = Field(
+        default="",
+        description="Sentry DSN.  Leave empty to disable Sentry (feature-toggled).",
+    )
+    sentry_environment: str = Field(
+        default="production",
+        description="Sentry environment tag (production | staging | development).",
+    )
+    sentry_release: str = Field(
+        default="unknown",
+        description="Release identifier sent to Sentry (e.g. git SHA or semver tag).",
+    )
+    sentry_traces_sample_rate: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of transactions sampled for performance monitoring (0.0–1.0).",
+    )
+    sentry_profiles_sample_rate: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of sampled transactions that also receive a profiling trace.",
+    )
+
+    # -------------------------------------------------------------------------
+    # Embed JWT Session Tokens
+    # -------------------------------------------------------------------------
+    embed_jwt_secret: str = Field(
+        default="",
+        description=(
+            "HMAC-SHA256 secret used to sign ephemeral embed session tokens. "
+            "Must be at least 32 characters. Different from APP_SECRET_KEY. "
+            "Required in production — leave empty only in development (insecure fallback used)."
+        ),
+    )
+    embed_jwt_token_ttl_seconds: int = Field(
+        default=1800,  # 30 minutes
+        description="Lifetime of embed session tokens in seconds (default: 1800 = 30 min).",
+    )
+
+    # -------------------------------------------------------------------------
+    # Feature Flags
+    # -------------------------------------------------------------------------
+    font_extraction_enabled: bool = Field(
+        default=True,
+        description="Enable the /api/v1/pdf/fonts/* endpoints. Set to False to return 503.",
+    )
 
     # -------------------------------------------------------------------------
     # Computed Properties

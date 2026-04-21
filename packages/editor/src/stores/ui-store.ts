@@ -45,6 +45,12 @@ export interface UIStore extends UIState {
   openContextMenu: (x: number, y: number, items: ContextMenuItem[]) => void;
   closeContextMenu: () => void;
 
+  // Editor panel/mode actions
+  toggleFormsPanel: () => void;
+  setShowFormsPanel: (show: boolean) => void;
+  toggleContentEdit: () => void;
+  setContentEditActive: (active: boolean) => void;
+
   reset: () => void;
 }
 
@@ -59,6 +65,8 @@ const initialState: UIState = {
   showGuides: true,
   notifications: [],
   contextMenu: null,
+  showFormsPanel: false,
+  isContentEditActive: false,
 };
 
 export const useUIStore: UseBoundStore<StoreApi<UIStore>> = create<UIStore>()(
@@ -182,6 +190,27 @@ export const useUIStore: UseBoundStore<StoreApi<UIStore>> = create<UIStore>()(
     closeContextMenu: () =>
       set((state) => {
         state.contextMenu = null;
+      }),
+
+    // Editor panel/mode actions
+    toggleFormsPanel: () =>
+      set((state) => {
+        state.showFormsPanel = !state.showFormsPanel;
+      }),
+
+    setShowFormsPanel: (show) =>
+      set((state) => {
+        state.showFormsPanel = show;
+      }),
+
+    toggleContentEdit: () =>
+      set((state) => {
+        state.isContentEditActive = !state.isContentEditActive;
+      }),
+
+    setContentEditActive: (active) =>
+      set((state) => {
+        state.isContentEditActive = active;
       }),
 
     reset: () => set(initialState),

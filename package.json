@@ -8,7 +8,12 @@
     "overrides": {
       "react": "19.2.3",
       "react-dom": "19.2.3"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "@sentry/cli",
+      "prisma",
+      "sharp"
+    ]
   },
   "scripts": {
     "dev": "turbo dev --filter=web --filter=admin --concurrency=15",

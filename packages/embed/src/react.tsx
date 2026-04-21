@@ -50,7 +50,6 @@ export const GigaPdfEditorComponent = forwardRef<GigaPdfEditorRef, GigaPdfEditor
       style,
       className,
       // All remaining props are GigaPdfOptions (minus container)
-      apiKey,
       publicKey,
       documentId,
       file,
@@ -92,7 +91,6 @@ export const GigaPdfEditorComponent = forwardRef<GigaPdfEditorRef, GigaPdfEditor
         : undefined;
 
       const options: GigaPdfOptions = {
-        apiKey,
         publicKey,
         container: containerRef.current,
         documentId,
@@ -125,7 +123,7 @@ export const GigaPdfEditorComponent = forwardRef<GigaPdfEditorRef, GigaPdfEditor
       // Callbacks are intentionally excluded to avoid needless re-mounts;
       // callers should memoize them if they care about identity.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [apiKey, publicKey, documentId, file, baseUrl, width, height, locale, theme, hideToolbar, tools, showDoneButton]);
+    }, [publicKey, documentId, file, baseUrl, width, height, locale, theme, hideToolbar, tools, showDoneButton]);
 
     // Sync event handlers without re-creating the editor
     useEffect(() => {

@@ -16,6 +16,25 @@ export * from "./selectors";
 // Export middleware
 export * from "./middleware";
 
+// Export hooks
+export { useEmbeddedFonts } from "./hooks/use-embedded-fonts";
+export type {
+  LoadedFont,
+  FontLoadStatus,
+  UseEmbeddedFontsOptions,
+  UseEmbeddedFontsResult,
+  ExtractedFontMetadata,
+} from "./hooks/use-embedded-fonts";
+
+// Export utilities
+export { FontCache, defaultFontCache } from "./utils/font-cache";
+export {
+  normalizePdfFontName,
+  extractSubsetPrefix,
+  isSubsetFontName,
+  resolveFontMatch,
+} from "./utils/font-resolver";
+
 // Export types
 export type {
   DocumentState,

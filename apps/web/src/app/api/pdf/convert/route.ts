@@ -15,18 +15,35 @@
  *   printBackground?:    boolean         (default: true)
  *   scale?:              number          (default: 1)
  *   waitForNetworkIdle?: boolean         (default: true)
- *   timeout?:            number          (ms, default: 30000)
+ *   timeout?:            number          (ms, default: 15000, max enforced: 15000)
  *   customCSS?:          string
  *   headers?:            Record<string, string>
  *   outputFilename?:     string          (default: "converted.pdf")
  * }
  *
  * Returns the generated PDF as application/pdf binary.
+ *
+ * Security:
+ *   - SSRF prevention: DNS pre-flight + Playwright request interception
+ *   - Private/reserved IP ranges are blocked (RFC 1918, link-local, loopback, …)
+ *   - Optional domain allowlist via URL_TO_PDF_DOMAIN_ALLOWLIST env var
+ *   - Playwright timeout capped at 15 s to limit resource abuse
  */
 
 import { NextResponse } from 'next/server';
-import { htmlToPDF, urlToPDF } from '@giga-pdf/pdf-engine';
+import { htmlToPDF, urlToPDFSafe } from '@giga-pdf/pdf-engine';
 import type { ConvertOptions } from '@giga-pdf/pdf-engine';
+import {
+  validateUrlForPdfConversion,
+  shouldBlockPlaywrightRequest,
+  SsrfBlockedError,
+} from '@/lib/security/url-validation';
+import { serverLogger } from '@/lib/server-logger';
+
+// Maximum Playwright timeout for URL-to-PDF conversions.
+// A generous per-user timeout is fine for HTML (no external fetch), but for
+// URL mode we cap tightly to limit the attack surface and resource usage.
+const URL_TO_PDF_TIMEOUT_MS = 15_000;
 
 export async function POST(request: Request): Promise<Response> {
   try {
@@ -74,6 +91,9 @@ export async function POST(request: Request): Promise<Response> {
       }
       pdfBuffer = await htmlToPDF(html, options);
     } else {
+      // -----------------------------------------------------------------------
+      // URL → PDF: full SSRF prevention pipeline
+      // -----------------------------------------------------------------------
       const url = body.url as string | undefined;
       if (!url || typeof url !== 'string') {
         return NextResponse.json(
@@ -81,23 +101,55 @@ export async function POST(request: Request): Promise<Response> {
           { status: 400 },
         );
       }
-      // Basic URL validation to prevent SSRF against internal networks
-      let parsedUrl: URL;
+
+      // Step 1 — Pre-flight: parse, protocol check, allowlist, DNS resolution.
+      // Throws SsrfBlockedError for private/blocked targets, Error for bad URLs.
       try {
-        parsedUrl = new URL(url);
-      } catch {
+        await validateUrlForPdfConversion(url);
+      } catch (err) {
+        if (err instanceof SsrfBlockedError) {
+          serverLogger.warn('[SSRF-BLOCKED] Request rejected before Playwright launch', {
+            ip: err.blockedIp,
+          });
+          return NextResponse.json(
+            { success: false, error: 'The provided URL is not permitted.' },
+            { status: 422 },
+          );
+        }
+        // Bad URL or DNS failure — surface as 400.
         return NextResponse.json(
-          { success: false, error: 'url must be a valid absolute URL.' },
+          {
+            success: false,
+            error: err instanceof Error ? err.message : 'Invalid URL.',
+          },
           { status: 400 },
         );
       }
-      if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
-        return NextResponse.json(
-          { success: false, error: 'url must use http or https protocol.' },
-          { status: 400 },
-        );
-      }
-      pdfBuffer = await urlToPDF(url, options);
+
+      // Step 2 — Playwright conversion with:
+      //   • Hard timeout cap (15 s)
+      //   • Request interception that blocks redirects to private IPs
+      const safeOptions = {
+        ...options,
+        // Cap timeout regardless of what the caller requested.
+        timeout: Math.min(
+          typeof options.timeout === 'number' ? options.timeout : URL_TO_PDF_TIMEOUT_MS,
+          URL_TO_PDF_TIMEOUT_MS,
+        ),
+        // Block any request (including redirect targets) that resolve to a
+        // private/reserved address — defence-in-depth against SSRF via redirects.
+        shouldBlockRequest: (requestUrl: string): boolean => {
+          const blocked = shouldBlockPlaywrightRequest(requestUrl);
+          if (blocked) {
+            serverLogger.warn('[SSRF-BLOCKED] Playwright request intercepted', {
+              requestUrl,
+            });
+          }
+          return blocked;
+        },
+      };
+
+      pdfBuffer = await urlToPDFSafe(url, safeOptions);
     }
 
     return new Response(new Uint8Array(pdfBuffer), {
@@ -109,7 +161,9 @@ export async function POST(request: Request): Promise<Response> {
       },
     });
   } catch (error: unknown) {
-    console.error('[api/pdf/convert]', error);
+    serverLogger.error('[api/pdf/convert] Unhandled error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { success: false, error: 'Failed to convert to PDF.' },
       { status: 500 },

@@ -2,13 +2,25 @@
 Admin API module.
 
 Provides administrative endpoints for managing the GigaPDF platform.
+
+All routes registered under ``admin_router`` are automatically protected by
+the ``get_current_admin_user`` dependency, which verifies that the caller
+holds the ``admin`` role.  No individual endpoint needs to add its own auth
+check — the dependency is applied once at the router level via
+``dependencies=[...]``.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.api.v1.admin import stats, users, documents, jobs, logs, settings, tenants, infrastructure
+from app.api.dependencies.admin import get_current_admin_user
 
-admin_router = APIRouter()
+# The Depends(get_current_admin_user) applied here runs before EVERY route
+# registered on admin_router (including all sub-routers included below).
+# Individual endpoints do not need to redeclare this dependency.
+admin_router = APIRouter(
+    dependencies=[Depends(get_current_admin_user)]
+)
 
 admin_router.include_router(
     stats.router,

@@ -49,8 +49,24 @@ class APIQuotaMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Get user ID from request state (set by auth middleware)
-        user_id = getattr(request.state, "user_id", None)
+        # Get user ID from request state.
+        # Populated by JWTAuthMiddleware (JWT flow) or ApiKeyAuthMiddleware
+        # (API key flow, stored as api_key_user_id).
+        user_id: str | None = getattr(request.state, "user_id", None)
+
+        # Fallback: API key auth sets a separate attribute; unify here so quota
+        # tracking works regardless of the authentication method used.
+        if not user_id:
+            user_id = getattr(request.state, "api_key_user_id", None)
+
+        if not user_id:
+            # No authenticated user found at quota-check time.  This is expected
+            # for truly public routes (already exempted above) and unexpected for
+            # authenticated routes — log a warning to surface future bugs.
+            logger.warning(
+                "APIQuotaMiddleware: user_id absent on non-exempt path — quota not enforced",
+                extra={"path": path, "method": scope.get("method", "?")},
+            )
 
         if user_id:
             # Check API quota

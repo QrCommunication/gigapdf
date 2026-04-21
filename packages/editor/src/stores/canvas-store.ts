@@ -5,7 +5,7 @@
 
 import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import type { Tool } from "@giga-pdf/types";
+import type { Tool, ShapeType, AnnotationType } from "@giga-pdf/types";
 import type { CanvasState, ViewportDimensions } from "../types";
 
 export interface CanvasStore extends CanvasState {
@@ -29,6 +29,12 @@ export interface CanvasStore extends CanvasState {
   setCurrentPage: (pageIndex: number) => void;
   nextPage: () => void;
   previousPage: () => void;
+  // Tool options actions
+  setShapeType: (shapeType: ShapeType) => void;
+  setAnnotationType: (annotationType: AnnotationType) => void;
+  setStrokeColor: (color: string) => void;
+  setFillColor: (color: string) => void;
+  setStrokeWidth: (width: number) => void;
   reset: () => void;
 }
 
@@ -45,6 +51,12 @@ const initialState: CanvasState = {
   gridSize: 10,
   showRulers: false,
   currentPageIndex: 0,
+  // Tool options defaults
+  shapeType: "rectangle",
+  annotationType: "highlight",
+  strokeColor: "#000000",
+  fillColor: "transparent",
+  strokeWidth: 2,
 };
 
 export const useCanvasStore: UseBoundStore<StoreApi<CanvasStore>> = create<CanvasStore>()(
@@ -156,6 +168,32 @@ export const useCanvasStore: UseBoundStore<StoreApi<CanvasStore>> = create<Canva
     previousPage: () =>
       set((state) => {
         state.currentPageIndex = Math.max(0, state.currentPageIndex - 1);
+      }),
+
+    // Tool options
+    setShapeType: (shapeType) =>
+      set((state) => {
+        state.shapeType = shapeType;
+      }),
+
+    setAnnotationType: (annotationType) =>
+      set((state) => {
+        state.annotationType = annotationType;
+      }),
+
+    setStrokeColor: (color) =>
+      set((state) => {
+        state.strokeColor = color;
+      }),
+
+    setFillColor: (color) =>
+      set((state) => {
+        state.fillColor = color;
+      }),
+
+    setStrokeWidth: (width) =>
+      set((state) => {
+        state.strokeWidth = Math.max(0.5, width);
       }),
 
     reset: () => set(initialState),

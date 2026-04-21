@@ -9,12 +9,6 @@ and session management.
 import logging
 from typing import Any, Optional
 
-# DEPRECATED: import fitz  # PyMuPDF
-try:
-    import fitz  # PyMuPDF
-except ImportError:
-    fitz = None  # type: ignore[assignment]
-
 from app.config import get_settings
 from app.core.parser import PDFParser
 from app.core.pdf_engine import pdf_engine
@@ -94,8 +88,8 @@ class DocumentService:
                 include_previews=generate_previews,
             )
 
-            # Create session with PDF bytes for Redis storage
-            session = document_sessions.create_session(
+            # Create session with PDF bytes for Redis storage (awaited — durable before return)
+            session = await document_sessions.create_session(
                 document_id=document_id,
                 pdf_doc=pdf_doc,
                 scene_graph=scene_graph,
@@ -130,7 +124,7 @@ class DocumentService:
         Returns:
             DocumentObject: Document structure.
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -173,7 +167,7 @@ class DocumentService:
         Returns:
             PageObject: Page structure.
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -219,7 +213,7 @@ class DocumentService:
         Returns:
             tuple: (image_bytes, content_type)
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -258,7 +252,7 @@ class DocumentService:
         Returns:
             tuple: (image_bytes, content_type)
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -311,19 +305,19 @@ class DocumentService:
         Returns:
             tuple: (pdf_bytes, filename)
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
-        # Apply flattening if requested
+        # Flattening is handled by @giga-pdf/pdf-engine (TypeScript).
+        # The flatten_forms/flatten_annotations flags are passed through to the TS engine
+        # on save; no Python-side operation is required here.
         if flatten_forms or flatten_annotations:
-            from app.core.renderer import PDFRenderer
-            renderer = PDFRenderer(session.pdf_doc)
-
-            if flatten_forms:
-                renderer.flatten_forms()
-            if flatten_annotations:
-                renderer.flatten_annotations()
+            logger.debug(
+                "flatten_forms=%s flatten_annotations=%s: applied by TS engine on save",
+                flatten_forms,
+                flatten_annotations,
+            )
 
         # Save to bytes
         pdf_bytes = self.engine.save_document(
@@ -337,7 +331,7 @@ class DocumentService:
 
         return pdf_bytes, filename
 
-    def delete_document(self, document_id: str) -> bool:
+    async def delete_document(self, document_id: str) -> bool:
         """
         Delete a document and free memory.
 
@@ -353,8 +347,8 @@ class DocumentService:
         except KeyError:
             pass
 
-        # Delete session
-        deleted = document_sessions.delete_session(document_id)
+        # Delete session from local cache and Redis
+        deleted = await document_sessions.delete_session(document_id)
 
         if deleted:
             logger.info(f"Document deleted: {document_id}")
@@ -380,7 +374,7 @@ class DocumentService:
         Returns:
             PageObject: New page.
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -424,7 +418,7 @@ class DocumentService:
         Returns:
             int: New page count.
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -470,7 +464,7 @@ class DocumentService:
         Returns:
             PageObject: Updated page.
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 
@@ -509,7 +503,7 @@ class DocumentService:
         Returns:
             list[PageObject]: Reordered pages.
         """
-        session = document_sessions.get_session(document_id)
+        session = document_sessions.get_session_sync(document_id)
         if not session:
             raise DocumentNotFoundError(document_id)
 

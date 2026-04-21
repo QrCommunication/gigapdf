@@ -6,16 +6,18 @@ Document owners retain ownership but can grant read or edit access
 to other members of the same tenant.
 """
 
+import logging
 from datetime import datetime
 from typing import Optional
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, status, Depends, Query
+from fastapi import APIRouter, HTTPException, status, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
+from app.middleware.auth import AuthenticatedUser
 from app.middleware.request_id import get_request_id
 from app.models.database import StoredDocument, UserQuota
 from app.models.tenant import (
@@ -30,6 +32,7 @@ from app.models.tenant import (
 from app.schemas.responses.common import APIResponse, MetaInfo
 from app.utils.helpers import now_utc
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -75,17 +78,6 @@ class TenantDocumentListResponse(BaseModel):
     total: int
     page: int
     page_size: int
-
-
-# Helper function to get current user (you should replace with your actual auth)
-async def get_current_user_id() -> str:
-    """
-    Get current authenticated user ID.
-    Replace this with your actual authentication mechanism.
-    """
-    # This is a placeholder - integrate with your auth system
-    # For now, we'll expect it to be passed via header or use a test user
-    return "test-user-id"
 
 
 async def get_user_quota_by_user_id(user_id: str) -> Optional[UserQuota]:
@@ -172,9 +164,10 @@ Inactive organizations (`status != ACTIVE`) are excluded from the response.
     },
 )
 async def get_my_tenants(
-    user_id: str = Query(..., description="User ID")
+    current_user: AuthenticatedUser,
 ) -> APIResponse[list[TenantMembershipResponse]]:
     """Get all tenants the user belongs to."""
+    user_id = current_user.user_id
     user_quota = await get_user_quota_by_user_id(user_id)
     if not user_quota:
         return APIResponse(
@@ -276,11 +269,12 @@ and support **pagination** via `page` and `page_size` parameters.
 )
 async def get_tenant_documents(
     tenant_id: str,
-    user_id: str = Query(..., description="User ID"),
+    current_user: AuthenticatedUser,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> APIResponse[TenantDocumentListResponse]:
     """Get all shared documents in a tenant."""
+    user_id = current_user.user_id
     user_quota = await get_user_quota_by_user_id(user_id)
     if not user_quota:
         raise HTTPException(
@@ -414,9 +408,10 @@ Returns the shared document record with owner and sharing metadata.
 async def share_document_with_tenant(
     tenant_id: str,
     request: ShareDocumentRequest,
-    user_id: str = Query(..., description="User ID"),
+    current_user: AuthenticatedUser,
 ) -> APIResponse[SharedDocumentResponse]:
     """Share a document with tenant members."""
+    user_id = current_user.user_id
     user_quota = await get_user_quota_by_user_id(user_id)
     if not user_quota:
         raise HTTPException(
@@ -584,9 +579,10 @@ accessible to organization members.
 async def unshare_document(
     tenant_id: str,
     document_id: str,
-    user_id: str = Query(..., description="User ID"),
+    current_user: AuthenticatedUser,
 ) -> APIResponse[dict]:
     """Remove document from tenant sharing."""
+    user_id = current_user.user_id
     user_quota = await get_user_quota_by_user_id(user_id)
     if not user_quota:
         raise HTTPException(
@@ -694,8 +690,8 @@ access levels — only the person who owns the document has this right.
 async def update_document_access(
     tenant_id: str,
     document_id: str,
+    current_user: AuthenticatedUser,
     access_level: str = Query(..., description="New access level: 'read' or 'write'"),
-    user_id: str = Query(..., description="User ID"),
 ) -> APIResponse[SharedDocumentResponse]:
     """Update access level for a shared document."""
     if access_level not in ["read", "write"]:
@@ -704,6 +700,7 @@ async def update_document_access(
             detail="Invalid access level. Must be 'read' or 'write'"
         )
 
+    user_id = current_user.user_id
     user_quota = await get_user_quota_by_user_id(user_id)
     if not user_quota:
         raise HTTPException(
@@ -810,9 +807,10 @@ This endpoint always returns `200` — check `has_access` and `access_level` in 
 async def check_document_access(
     tenant_id: str,
     document_id: str,
-    user_id: str = Query(..., description="User ID"),
+    current_user: AuthenticatedUser,
 ) -> APIResponse[dict]:
     """Check what access level a user has for a document."""
+    user_id = current_user.user_id
     user_quota = await get_user_quota_by_user_id(user_id)
     if not user_quota:
         return APIResponse(

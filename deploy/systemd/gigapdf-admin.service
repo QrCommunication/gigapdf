@@ -4,8 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-Group=ubuntu
+User=gigapdf
+Group=gigapdf
 WorkingDirectory=/opt/gigapdf/apps/admin
 Environment="NODE_ENV=production"
 Environment="PORT=3001"

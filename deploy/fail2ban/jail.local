@@ -1,0 +1,67 @@
+# =============================================================================
+# GigaPDF — Fail2ban Configuration (jail.local)
+# Deploy to: /etc/fail2ban/jail.local
+# =============================================================================
+# Ce fichier surcharge /etc/fail2ban/jail.conf sans le modifier.
+# Il est idempotent : copier plusieurs fois n'a pas d'effet de bord.
+
+[DEFAULT]
+# Durée de ban par défaut : 1 heure
+bantime  = 3600
+# Fenêtre d'observation : 10 minutes
+findtime = 600
+# Nombre de tentatives avant ban
+maxretry = 5
+# Backend : systemd (Ubuntu 20.04+ sans /var/log/auth.log classique)
+backend  = systemd
+# Action de ban : bloquer les ports via iptables
+banaction = iptables-multiport
+# IPs exemptées du ban (localhost IPv4 + IPv6)
+ignoreip = 127.0.0.1/8 ::1
+
+# =============================================================================
+# SSH — Protection brute-force
+# =============================================================================
+[sshd]
+enabled  = true
+port     = ssh
+# IMPORTANT : sur Ubuntu 22.04+ sans rsyslog, le backend systemd est requis
+# Si rsyslog est installé, utiliser : logpath = /var/log/auth.log
+logpath  = %(sshd_log)s
+maxretry = 3
+# Ban SSH plus long : 24 heures (les scanners automatiques méritent un ban long)
+bantime  = 86400
+
+# =============================================================================
+# Nginx — Rate limiting (bloque les requêtes abusives)
+# =============================================================================
+[nginx-req-limit]
+enabled  = true
+filter   = nginx-req-limit
+action   = iptables-multiport[name=ReqLimit, port="http,https", protocol=tcp]
+logpath  = /var/log/nginx/error.log
+findtime = 600
+# Ban 2 heures pour abus HTTP
+bantime  = 7200
+maxretry = 10
+
+# =============================================================================
+# Nginx — Authentification HTTP (401/403 répétés)
+# =============================================================================
+[nginx-http-auth]
+enabled  = true
+port     = http,https
+logpath  = /var/log/nginx/error.log
+maxretry = 5
+bantime  = 3600
+
+# =============================================================================
+# Nginx — Mauvais bots (4xx répétés)
+# =============================================================================
+[nginx-botsearch]
+enabled  = true
+port     = http,https
+logpath  = /var/log/nginx/access.log
+maxretry = 10
+findtime = 600
+bantime  = 3600

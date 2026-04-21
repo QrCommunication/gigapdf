@@ -254,7 +254,7 @@ async def encrypt_document(
 
     from app.repositories.document_repo import document_sessions
 
-    session = document_sessions.get_session(document_id)
+    session = await document_sessions.get_session(document_id)
     if not session:
         from app.middleware.error_handler import DocumentNotFoundError
         raise DocumentNotFoundError(document_id)
@@ -272,36 +272,36 @@ async def encrypt_document(
             f"Invalid encryption algorithm. Must be one of: {', '.join(valid_algorithms)}"
         )
 
-    # Build permissions bitmask for PyMuPDF
-    # DEPRECATED: import fitz
-    try:
-        import fitz
-    except ImportError:
-        fitz = None  # type: ignore[assignment]
+    # Build permissions bitmask using PDF spec bit positions (ISO 32000-1 §7.6.3.3).
+    # These are the raw flag values previously exposed as fitz.PDF_PERM_* constants.
+    # Encryption itself is applied by the TypeScript pdf-engine on save; we only
+    # store the parameters here for later use.
+    PDF_PERM_PRINT = 4        # bit 3 — print
+    PDF_PERM_MODIFY = 8       # bit 4 — modify content
+    PDF_PERM_COPY = 16        # bit 5 — copy / extract text
+    PDF_PERM_ANNOTATE = 32    # bit 6 — add/modify annotations
+    PDF_PERM_FORM = 256       # bit 9 — fill-in form fields
+    PDF_PERM_ASSEMBLE = 1024  # bit 11 — assemble pages
 
     perm = 0
     if request.allow_printing:
-        perm |= fitz.PDF_PERM_PRINT
+        perm |= PDF_PERM_PRINT
     if request.allow_modification:
-        perm |= fitz.PDF_PERM_MODIFY
+        perm |= PDF_PERM_MODIFY
     if request.allow_copying:
-        perm |= fitz.PDF_PERM_COPY
+        perm |= PDF_PERM_COPY
     if request.allow_annotation:
-        perm |= fitz.PDF_PERM_ANNOTATE
+        perm |= PDF_PERM_ANNOTATE
     if request.allow_form_filling:
-        perm |= fitz.PDF_PERM_FORM
+        perm |= PDF_PERM_FORM
     if request.allow_assembly:
-        perm |= fitz.PDF_PERM_ASSEMBLE
+        perm |= PDF_PERM_ASSEMBLE
 
-    # Map algorithm to PyMuPDF encryption method
-    encryption_map = {
-        "RC4-128": fitz.PDF_ENCRYPT_RC4_128,
-        "AES-128": fitz.PDF_ENCRYPT_AES_128,
-        "AES-256": fitz.PDF_ENCRYPT_AES_256,
-    }
-    encryption_method = encryption_map[request.encryption_algorithm]
+    # Map algorithm to a label used by the TS engine when saving
+    encryption_method = request.encryption_algorithm  # passed through as-is to TS engine
 
-    # Set encryption on the document
+    # Set encryption on the document (LegacyDocumentProxy: permissions setter is no-op,
+    # actual encryption is applied by @giga-pdf/pdf-engine on save)
     session.pdf_doc.set_metadata({"encryption": request.encryption_algorithm})
     session.pdf_doc.permissions = perm
 
@@ -501,7 +501,7 @@ async def decrypt_document(
 
     from app.repositories.document_repo import document_sessions
 
-    session = document_sessions.get_session(document_id)
+    session = await document_sessions.get_session(document_id)
     if not session:
         from app.middleware.error_handler import DocumentNotFoundError
         raise DocumentNotFoundError(document_id)
@@ -711,16 +711,18 @@ async def get_permissions(
 
     from app.repositories.document_repo import document_sessions
 
-    session = document_sessions.get_session(document_id)
+    session = await document_sessions.get_session(document_id)
     if not session:
         from app.middleware.error_handler import DocumentNotFoundError
         raise DocumentNotFoundError(document_id)
 
-    # DEPRECATED: import fitz
-    try:
-        import fitz
-    except ImportError:
-        fitz = None  # type: ignore[assignment]
+    # PDF spec permission bit positions (ISO 32000-1 §7.6.3.3)
+    PDF_PERM_PRINT = 4
+    PDF_PERM_MODIFY = 8
+    PDF_PERM_COPY = 16
+    PDF_PERM_ANNOTATE = 32
+    PDF_PERM_FORM = 256
+    PDF_PERM_ASSEMBLE = 1024
 
     pdf_doc = session.pdf_doc
 
@@ -729,20 +731,21 @@ async def get_permissions(
     encryption_algorithm = None
 
     if is_encrypted:
-        # Try to determine encryption algorithm from metadata
+        # Try to determine encryption algorithm from stored metadata
         metadata = pdf_doc.metadata
         encryption_algorithm = metadata.get("encryption", "Unknown")
 
-    # Get permissions
+    # Permissions bitmask — LegacyDocumentProxy always returns -1 (all allowed)
+    # for unencrypted docs; for encrypted docs params are stored in session.
     perm = pdf_doc.permissions if is_encrypted else -1
 
     permissions = {
-        "printing": bool(perm & fitz.PDF_PERM_PRINT) if is_encrypted else True,
-        "copying": bool(perm & fitz.PDF_PERM_COPY) if is_encrypted else True,
-        "annotation": bool(perm & fitz.PDF_PERM_ANNOTATE) if is_encrypted else True,
-        "form_filling": bool(perm & fitz.PDF_PERM_FORM) if is_encrypted else True,
-        "modification": bool(perm & fitz.PDF_PERM_MODIFY) if is_encrypted else True,
-        "assembly": bool(perm & fitz.PDF_PERM_ASSEMBLE) if is_encrypted else True,
+        "printing": bool(perm & PDF_PERM_PRINT) if is_encrypted else True,
+        "copying": bool(perm & PDF_PERM_COPY) if is_encrypted else True,
+        "annotation": bool(perm & PDF_PERM_ANNOTATE) if is_encrypted else True,
+        "form_filling": bool(perm & PDF_PERM_FORM) if is_encrypted else True,
+        "modification": bool(perm & PDF_PERM_MODIFY) if is_encrypted else True,
+        "assembly": bool(perm & PDF_PERM_ASSEMBLE) if is_encrypted else True,
     }
 
     processing_time = int((time.time() - start_time) * 1000)

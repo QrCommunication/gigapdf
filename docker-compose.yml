@@ -9,7 +9,9 @@ services:
   # ============================================
 
   postgres:
-    image: postgres:16-alpine
+    # MIGRATION REQUIRED: si postgres_data volume contient des data files PG16,
+    # exécuter scripts/migrate-postgres-17.sh avant de démarrer ce service.
+    image: postgres:17-alpine
     container_name: gigapdf-postgres
     restart: unless-stopped
     environment:
@@ -31,7 +33,16 @@ services:
     image: redis:7-alpine
     container_name: gigapdf-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    # AOF avec fsync toutes les secondes : bon compromis durabilité/performance.
+    # maxmemory-policy = noeviction : les queues Celery ne doivent JAMAIS être
+    # évictées silencieusement (allkeys-lru perdrait des jobs en cas de pression mémoire).
+    # Surveiller l'usage mémoire et augmenter maxmemory si nécessaire.
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
     ports:

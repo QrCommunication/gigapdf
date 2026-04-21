@@ -110,6 +110,12 @@ celery_app.conf.update(
             "task": "infra.cleanup_old_metrics",
             "schedule": 86400.0,  # Every 24 hours
         },
+        # Watchdog for stuck/pending tasks (checks every 10 minutes)
+        "watchdog-pending-tasks": {
+            "task": "infra.watchdog_pending_tasks",
+            "schedule": 600.0,  # Every 10 minutes
+            "kwargs": {"timeout_hours": 1},
+        },
     },
 )
 
@@ -189,16 +195,50 @@ async def _update_job_failed(celery_task_id: str, error_message: str):
 
 
 @task_postrun.connect
-def task_postrun_handler(task_id, task, retval, state, **kwargs):
-    """Update job status in database after task completion."""
-    # Only handle export tasks
-    if task.name and task.name.startswith("app.tasks.export_tasks"):
-        logger.debug(f"Task {task_id} completed with state {state}")
+def task_postrun_handler(sender=None, task_id=None, task=None, retval=None, state=None, **kwargs):
+    """
+    Global handler for all task completions.
+
+    Covers:
+    - app.tasks.export_tasks.* (export operations)
+    - app.tasks.ocr_tasks.* (OCR processing)
+    - app.tasks.processing_tasks.* (merge, split)
+    - billing.* (billing operations)
+    - infra.* (infrastructure tasks)
+    """
+    if not task or not task_id:
+        return
+
+    task_name = task.name or ""
+
+    # Global coverage: handle all application tasks
+    tracked_prefixes = (
+        "app.tasks.export_tasks.",
+        "app.tasks.ocr_tasks.",
+        "app.tasks.processing_tasks.",
+        "billing.",
+        "infra.",
+    )
+
+    if any(task_name.startswith(prefix) for prefix in tracked_prefixes):
+        logger.debug(f"Task {task_name} ({task_id}) completed with state {state}")
         _run_async(_update_job_completed(task_id, retval or {}, state))
 
 
 @task_failure.connect
-def task_failure_handler(task_id, exception, traceback, **kwargs):
-    """Update job status when task fails."""
+def task_failure_handler(sender=None, task_id=None, exception=None, **kwargs):
+    """
+    Global handler for all task failures.
+
+    Catches failures for:
+    - app.tasks.export_tasks.* (export operations)
+    - app.tasks.ocr_tasks.* (OCR processing)
+    - app.tasks.processing_tasks.* (merge, split)
+    - billing.* (billing operations)
+    - infra.* (infrastructure tasks)
+    """
+    if not task_id or not exception:
+        return
+
     logger.error(f"Task {task_id} failed: {exception}")
     _run_async(_update_job_failed(task_id, str(exception)))
