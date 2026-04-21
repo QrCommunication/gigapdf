@@ -5,20 +5,20 @@ import { jwtClient } from "better-auth/client/plugins";
 
 const baseURL = process.env.NEXT_PUBLIC_APP_URL || "";
 
-export const authClient = createAuthClient({
+export const authClient: ReturnType<typeof createAuthClient<{ plugins: [ReturnType<typeof jwtClient>] }>> = createAuthClient({
   baseURL,
   plugins: [jwtClient()],
 });
 
-export const {
-  signIn,
-  signOut,
-  signUp,
-  useSession,
-  getSession,
-  updateUser,
-  changePassword,
-} = authClient;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const client = authClient as any;
+export const signIn = client.signIn;
+export const signOut = client.signOut;
+export const signUp = client.signUp;
+export const useSession = client.useSession;
+export const getSession = client.getSession;
+export const updateUser = client.updateUser;
+export const changePassword = client.changePassword;
 
 // Wrapper functions for email verification and password reset
 // These call the Better Auth API endpoints directly
