@@ -79,5 +79,26 @@ CREATE TABLE IF NOT EXISTS jwks (
 );
 
 -- =============================================================================
+-- Ownership & permissions
+-- =============================================================================
+-- Tables may be created by the postgres superuser on first run. The app user
+-- (gigapdf) needs ownership + full privileges to INSERT/UPDATE through Prisma.
+-- Safe to re-run.
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'gigapdf') THEN
+        EXECUTE 'ALTER TABLE users OWNER TO gigapdf';
+        EXECUTE 'ALTER TABLE accounts OWNER TO gigapdf';
+        EXECUTE 'ALTER TABLE sessions OWNER TO gigapdf';
+        EXECUTE 'ALTER TABLE verification OWNER TO gigapdf';
+        EXECUTE 'ALTER TABLE jwks OWNER TO gigapdf';
+        EXECUTE 'GRANT ALL PRIVILEGES ON TABLE users, accounts, sessions, verification, jwks TO gigapdf';
+        EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO gigapdf';
+    END IF;
+END
+$$;
+
+-- =============================================================================
 -- Done! Better Auth tables are ready.
 -- =============================================================================
