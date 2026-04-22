@@ -10,6 +10,7 @@ import type {
   AnnotationType,
 } from "@giga-pdf/types";
 import type { Canvas as FabricCanvas, FabricObject } from "fabric";
+import { getAuthToken } from "@/lib/api";
 
 // API base URL for image loading
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -987,7 +988,11 @@ export function EditorCanvas({
       if (docId) {
         try {
           const pdfUrl = `/backend-api/api/v1/documents/${docId}/download`;
-          const response = await fetch(pdfUrl, { credentials: "include" });
+          const authToken = getAuthToken();
+          const response = await fetch(pdfUrl, {
+            credentials: "include",
+            headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+          });
           if (response.ok) {
             const arrayBuffer = await response.arrayBuffer();
             // Import dynamique pour éviter les problèmes SSR
