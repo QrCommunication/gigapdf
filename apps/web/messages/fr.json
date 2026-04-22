@@ -747,7 +747,15 @@
       "strokeWidth": "Épaisseur du contour",
       "duplicate": "Dupliquer",
       "delete": "Supprimer",
-      "transparent": "Transparent"
+      "transparent": "Transparent",
+      "contentEdit": "Modifier le contenu",
+      "merge": "Fusionner",
+      "split": "Diviser",
+      "encrypt": "Chiffrer",
+      "forms": "Formulaires",
+      "metadata": "Métadonnées",
+      "convert": "Convertir",
+      "flatten": "Aplatir"
     },
     "tools": {
       "select": "Sélectionner",
@@ -767,7 +775,9 @@
       "moveUp": "Déplacer vers le haut",
       "moveDown": "Déplacer vers le bas",
       "pageNumber": "Page {number}",
-      "pageCount": "{count, plural, one {1 page} other {{count} pages}}"
+      "pageCount": "{count, plural, one {1 page} other {{count} pages}}",
+      "rotate": "Pivoter la page",
+      "extract": "Extraire la page"
     },
     "properties": {
       "title": "Propriétés",

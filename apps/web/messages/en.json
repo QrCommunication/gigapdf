@@ -747,7 +747,15 @@
       "strokeWidth": "Stroke width",
       "duplicate": "Duplicate",
       "delete": "Delete",
-      "transparent": "Transparent"
+      "transparent": "Transparent",
+      "contentEdit": "Edit content",
+      "merge": "Merge",
+      "split": "Split",
+      "encrypt": "Encrypt",
+      "forms": "Forms",
+      "metadata": "Metadata",
+      "convert": "Convert",
+      "flatten": "Flatten"
     },
     "tools": {
       "select": "Select",
@@ -767,7 +775,9 @@
       "moveUp": "Move up",
       "moveDown": "Move down",
       "pageNumber": "Page {number}",
-      "pageCount": "{count, plural, one {1 page} other {{count} pages}}"
+      "pageCount": "{count, plural, one {1 page} other {{count} pages}}",
+      "rotate": "Rotate page",
+      "extract": "Extract page"
     },
     "properties": {
       "title": "Properties",
