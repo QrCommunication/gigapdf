@@ -14,9 +14,15 @@ CREATE TABLE IF NOT EXISTS users (
     name VARCHAR(255),
     image TEXT,
     locale VARCHAR(10) NOT NULL DEFAULT 'fr',
+    is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+    role VARCHAR(50) NOT NULL DEFAULT 'user',
     "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
+
+-- Idempotent column adds (safe re-run on existing deployments)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) NOT NULL DEFAULT 'user';
 
 -- Accounts table (OAuth providers, password auth)
 CREATE TABLE IF NOT EXISTS accounts (

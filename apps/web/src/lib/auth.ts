@@ -115,6 +115,18 @@ export const auth = betterAuth({
         required: false,
         defaultValue: "fr",
       },
+      is_admin: {
+        type: "boolean",
+        required: false,
+        defaultValue: false,
+        input: false,
+      },
+      role: {
+        type: "string",
+        required: false,
+        defaultValue: "user",
+        input: false,
+      },
     },
   },
   // Social providers
