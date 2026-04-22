@@ -21,7 +21,6 @@ from app.api.v1 import (
     history,
     jobs,
     layers,
-    merge_split,
     modify,
     pages,
     plans,
@@ -102,12 +101,6 @@ api_router.include_router(
     security.router,
     prefix="/documents",
     tags=["Security"],
-)
-
-api_router.include_router(
-    merge_split.router,
-    prefix="/documents",
-    tags=["Merge & Split"],
 )
 
 api_router.include_router(

@@ -7,19 +7,17 @@ and session management.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 from app.config import get_settings
-from app.core.parser import PDFParser
 from app.core.pdf_engine import pdf_engine
 from app.core.preview import PreviewGenerator
 from app.middleware.error_handler import (
     DocumentNotFoundError,
     InvalidOperationError,
-    PDFParseError,
 )
-from app.models.document import DocumentObject
-from app.models.page import PageObject
+from app.models.document import DocumentMetadata, DocumentObject
+from app.models.page import Dimensions, MediaBox, PageObject
 from app.repositories.document_repo import DocumentSession, document_sessions
 from app.utils.helpers import generate_uuid, sanitize_filename
 
@@ -80,12 +78,32 @@ class DocumentService:
                     f"Document has too many pages. Maximum: {self.settings.max_pages_per_document}"
                 )
 
-            # Parse document to scene graph
-            parser = PDFParser(document_id)
-            scene_graph = parser.parse_document(
-                pdf_doc,
-                extract_text=extract_text,
-                include_previews=generate_previews,
+            # Build a minimal scene_graph: page dimensions only.
+            # The real scene_graph (text, images, annotations, forms) is loaded
+            # by the TypeScript pdf-engine via /api/pdf/parse-from-s3.
+            pages = [
+                PageObject(
+                    page_id=generate_uuid(),
+                    page_number=i + 1,
+                    dimensions=Dimensions(
+                        width=pdf_doc[i].rect.width,
+                        height=pdf_doc[i].rect.height,
+                        rotation=int(pdf_doc[i].rotation or 0),
+                    ),
+                    media_box=MediaBox(
+                        x=0,
+                        y=0,
+                        width=pdf_doc[i].rect.width,
+                        height=pdf_doc[i].rect.height,
+                    ),
+                    elements=[],
+                )
+                for i in range(pdf_doc.page_count)
+            ]
+            scene_graph = DocumentObject(
+                document_id=document_id,
+                metadata=DocumentMetadata(page_count=pdf_doc.page_count),
+                pages=pages,
             )
 
             # Create session with PDF bytes for Redis storage (awaited — durable before return)
@@ -381,11 +399,14 @@ class DocumentService:
         # Add page to PDF
         self.engine.add_page(document_id, position, width, height)
 
-        # Re-parse the page
-        parser = PDFParser(document_id)
-        new_page = parser.parse_page(
-            session.pdf_doc[position - 1],
-            position,
+        # Build a minimal PageObject for the new blank page.
+        # The TS engine loads the real scene_graph via parse-from-s3.
+        new_page = PageObject(
+            page_id=generate_uuid(),
+            page_number=position,
+            dimensions=Dimensions(width=width, height=height, rotation=0),
+            media_box=MediaBox(x=0, y=0, width=width, height=height),
+            elements=[],
         )
 
         # Update scene graph

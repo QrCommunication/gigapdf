@@ -44,7 +44,11 @@ import {
   getPermissions,
   setPermissions,
 } from '@giga-pdf/pdf-engine';
-import { PDFCorruptedError } from '@giga-pdf/pdf-engine';
+import {
+  PDFCorruptedError,
+  PDFInvalidPasswordError,
+  PDFEncryptedError,
+} from '@giga-pdf/pdf-engine';
 import type { EncryptionAlgorithm } from '@giga-pdf/pdf-engine';
 
 export async function POST(request: Request): Promise<Response> {
@@ -201,10 +205,16 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    // Distinguish auth-like errors by message for encrypt/decrypt
-    if (error instanceof Error && error.message.toLowerCase().includes('password')) {
+    if (error instanceof PDFInvalidPasswordError) {
       return NextResponse.json(
         { success: false, error: 'Invalid password.' },
+        { status: 401 },
+      );
+    }
+
+    if (error instanceof PDFEncryptedError) {
+      return NextResponse.json(
+        { success: false, error: 'PDF is encrypted — password required.' },
         { status: 401 },
       );
     }

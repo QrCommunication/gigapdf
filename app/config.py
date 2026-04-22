@@ -110,6 +110,13 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
 
     # -------------------------------------------------------------------------
+    # Next.js internal URL (for server-to-server calls, e.g. Celery → TS engine)
+    # In production this may differ from frontend_url when containers communicate
+    # on an internal network (e.g. http://nextjs:3000 in Docker Compose).
+    # -------------------------------------------------------------------------
+    nextjs_internal_url: str = "http://localhost:3000"
+
+    # -------------------------------------------------------------------------
     # Stripe Configuration
     # -------------------------------------------------------------------------
     stripe_secret_key: str = ""

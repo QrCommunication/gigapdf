@@ -2,7 +2,7 @@
 Celery application configuration.
 
 Configures Celery for async task processing including
-OCR, export, merge, and split operations.
+OCR, export, billing, and infrastructure operations.
 """
 
 import asyncio
@@ -25,7 +25,6 @@ celery_app = Celery(
     include=[
         "app.tasks.ocr_tasks",
         "app.tasks.export_tasks",
-        "app.tasks.processing_tasks",
         "app.tasks.billing_tasks",
         "app.tasks.infra_tasks",
     ],
@@ -63,7 +62,6 @@ celery_app.conf.update(
     task_routes={
         "app.tasks.ocr_tasks.*": {"queue": "ocr"},
         "app.tasks.export_tasks.*": {"queue": "export"},
-        "app.tasks.processing_tasks.*": {"queue": "processing"},
         "app.tasks.billing_tasks.*": {"queue": "billing"},
         "app.tasks.infra_tasks.*": {"queue": "infra"},
         "billing.*": {"queue": "billing"},
@@ -202,7 +200,6 @@ def task_postrun_handler(sender=None, task_id=None, task=None, retval=None, stat
     Covers:
     - app.tasks.export_tasks.* (export operations)
     - app.tasks.ocr_tasks.* (OCR processing)
-    - app.tasks.processing_tasks.* (merge, split)
     - billing.* (billing operations)
     - infra.* (infrastructure tasks)
     """
@@ -215,7 +212,6 @@ def task_postrun_handler(sender=None, task_id=None, task=None, retval=None, stat
     tracked_prefixes = (
         "app.tasks.export_tasks.",
         "app.tasks.ocr_tasks.",
-        "app.tasks.processing_tasks.",
         "billing.",
         "infra.",
     )
@@ -233,7 +229,6 @@ def task_failure_handler(sender=None, task_id=None, exception=None, **kwargs):
     Catches failures for:
     - app.tasks.export_tasks.* (export operations)
     - app.tasks.ocr_tasks.* (OCR processing)
-    - app.tasks.processing_tasks.* (merge, split)
     - billing.* (billing operations)
     - infra.* (infrastructure tasks)
     """

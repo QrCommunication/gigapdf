@@ -5,7 +5,6 @@ Tests that task_postrun and task_failure handlers correctly update AsyncJob stat
 for all tracked task families:
 - app.tasks.export_tasks.*
 - app.tasks.ocr_tasks.*
-- app.tasks.processing_tasks.*
 - billing.*
 - infra.*
 """
@@ -36,8 +35,6 @@ class TestTaskPostrunSignal:
     @pytest.mark.parametrize("task_name,should_handle", [
         ("app.tasks.export_tasks.export_document", True),
         ("app.tasks.ocr_tasks.process_ocr", True),
-        ("app.tasks.processing_tasks.merge_documents", True),
-        ("app.tasks.processing_tasks.split_document", True),
         ("billing.sync_plans_to_stripe", True),
         ("billing.process_overdue_payments", True),
         ("infra.collect_metrics", True),
@@ -177,7 +174,6 @@ class TestSignalCoverage:
         required_prefixes = [
             "app.tasks.export_tasks.",
             "app.tasks.ocr_tasks.",
-            "app.tasks.processing_tasks.",
             "billing.",
             "infra.",
         ]

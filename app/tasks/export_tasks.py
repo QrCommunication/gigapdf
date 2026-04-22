@@ -1,8 +1,11 @@
-# DEPRECATED: Use @giga-pdf/pdf-engine via Next.js API routes instead
 """
 Export Celery tasks.
 
 Async tasks for document export to various formats.
+
+Image formats (png, jpeg, webp) are rendered by the Next.js TypeScript engine
+via POST /api/pdf/preview.  Non-image formats (docx, xlsx, txt, html) continue
+to use their respective Python libraries.
 """
 
 import asyncio
@@ -14,16 +17,91 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 from uuid import uuid4
 
+import httpx
 import pikepdf
 import pdfplumber
-
-from celery import shared_task
 
 from app.tasks.celery_app import celery_app
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# ---------------------------------------------------------------------------
+# Next.js engine integration
+# ---------------------------------------------------------------------------
+_NEXTJS_PREVIEW_PATH = "/api/pdf/preview"
+_TS_ENGINE_TIMEOUT = 30.0  # seconds per page render request
+
+
+async def _render_page_via_ts(
+    pdf_bytes: bytes,
+    page_num: int,
+    fmt: str,
+    dpi: int,
+    quality: int,
+) -> bytes:
+    """
+    Render a single PDF page to an image via the Next.js @giga-pdf/pdf-engine.
+
+    Args:
+        pdf_bytes: Raw PDF file bytes.
+        page_num: 1-based page number to render.
+        fmt: Output image format — "png", "jpeg", or "webp".
+        dpi: Render resolution (passed as the dpi field).
+        quality: Compression quality for jpeg/webp (1-100).
+
+    Returns:
+        Raw image bytes in the requested format.
+
+    Raises:
+        httpx.HTTPStatusError: If the TS engine returns a non-2xx response.
+        httpx.TimeoutException: If the request exceeds _TS_ENGINE_TIMEOUT seconds.
+        RuntimeError: If the response body is unexpectedly empty.
+    """
+    base_url = settings.nextjs_internal_url.rstrip("/")
+    url = f"{base_url}{_NEXTJS_PREVIEW_PATH}"
+
+    async with httpx.AsyncClient(timeout=_TS_ENGINE_TIMEOUT) as client:
+        response = await client.post(
+            url,
+            files={"file": ("document.pdf", pdf_bytes, "application/pdf")},
+            data={
+                "mode": "page",
+                "pageNumber": str(page_num),
+                "format": fmt,
+                "dpi": str(dpi),
+                "quality": str(quality),
+            },
+        )
+        response.raise_for_status()
+
+    image_bytes = response.content
+    if not image_bytes:
+        raise RuntimeError(
+            f"TS engine returned empty body for page {page_num} "
+            f"(format={fmt}, status={response.status_code})"
+        )
+    return image_bytes
+
+
+def _render_page_via_ts_sync(
+    pdf_bytes: bytes,
+    page_num: int,
+    fmt: str,
+    dpi: int,
+    quality: int,
+) -> bytes:
+    """Synchronous wrapper around _render_page_via_ts for use in Celery tasks."""
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(
+            _render_page_via_ts(pdf_bytes, page_num, fmt, dpi, quality)
+        )
+    finally:
+        loop.close()
+
 
 # Export files directory
 EXPORT_DIR = os.path.join(settings.storage_path, "exports")
@@ -159,7 +237,6 @@ def export_document(
     Returns:
         dict: Export result with file_path (not binary data).
     """
-    from app.core.preview import PreviewGenerator
     from app.repositories.document_repo import document_sessions
     from app.utils.helpers import parse_page_range
 
@@ -193,10 +270,8 @@ def export_document(
     total_pages = len(pages)
     exported_files = []
 
-    # Image formats
-    if format in ("png", "jpeg", "webp", "svg"):
-        generator = PreviewGenerator(pdf_bytes)
-
+    # Image formats — rendered by the Next.js TypeScript engine
+    if format in ("png", "jpeg", "webp"):
         for idx, page_num in enumerate(pages):
             # Update progress
             progress = ((idx + 1) / total_pages) * 100
@@ -205,13 +280,42 @@ def export_document(
                 meta={"progress": progress, "message": f"Exporting page {page_num}"},
             )
 
-            # Render page
-            image_data = generator.render_page(
-                page_number=page_num,
-                dpi=dpi,
-                format=format,
-                quality=quality,
-            )
+            # Render page via TS engine
+            try:
+                image_data = _render_page_via_ts_sync(
+                    pdf_bytes=pdf_bytes,
+                    page_num=page_num,
+                    fmt=format,
+                    dpi=dpi,
+                    quality=quality,
+                )
+            except httpx.TimeoutException as exc:
+                logger.error(
+                    "TS engine timeout rendering page %d (document=%s, format=%s): %s",
+                    page_num, document_id, format, exc,
+                )
+                raise RuntimeError(
+                    f"Image rendering timed out for page {page_num}. "
+                    "The Next.js engine did not respond within 30 seconds."
+                ) from exc
+            except httpx.HTTPStatusError as exc:
+                logger.error(
+                    "TS engine HTTP error rendering page %d (document=%s, format=%s): "
+                    "status=%d body=%s",
+                    page_num, document_id, format, exc.response.status_code,
+                    exc.response.text[:500],
+                )
+                raise RuntimeError(
+                    f"Image rendering failed for page {page_num}: "
+                    f"TS engine returned HTTP {exc.response.status_code}."
+                ) from exc
+            except Exception as exc:
+                logger.error(
+                    "Unexpected error rendering page %d via TS engine "
+                    "(document=%s, format=%s): %s",
+                    page_num, document_id, format, exc,
+                )
+                raise
 
             exported_files.append({
                 "page": page_num,
@@ -254,6 +358,14 @@ def export_document(
                 "pages": len(exported_files),
                 "file_path": file_path,
             }
+
+    # SVG format is not supported by the TS engine nor the legacy Python path
+    elif format == "svg":
+        raise ValueError(
+            "SVG export is not supported. "
+            "The @giga-pdf/pdf-engine does not produce SVG output. "
+            "Use png, jpeg, or webp for image exports."
+        )
 
     # Text format — pdfplumber replaces fitz page.get_text()
     elif format == "txt":

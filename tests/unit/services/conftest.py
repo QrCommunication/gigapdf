@@ -67,7 +67,6 @@ sys.modules.setdefault("app.services", _services_stub)
 # Also stub app.core and its submodules to prevent cascade failures
 for _core_mod in (
     "app.core",
-    "app.core.parser",
     "app.core.pdf_engine",
     "app.core.database",
     "app.core.cache",
