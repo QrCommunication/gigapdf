@@ -1,9 +1,46 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { api } from "@/lib/api";
+import { api, getAuthToken } from "@/lib/api";
 import { offlineQueue, type PendingOperation } from "@/lib/offline-queue";
 import { useLogger } from "@giga-pdf/logger";
+
+// ---------------------------------------------------------------------------
+// PDF Blob retrieval — downloads the current PDF bytes from the session
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches the raw PDF bytes for a session document as a Blob.
+ *
+ * Error handling:
+ * - 401 → throws, triggering re-authentication in the calling hook
+ * - 404 → throws with a descriptive message ("document not found")
+ * - Other non-OK status → throws with the HTTP status code
+ */
+async function fetchPdfBlobForSave(documentId: string): Promise<Blob> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`/api/v1/documents/${documentId}/download`, {
+    credentials: "include",
+    headers,
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error("Unauthorized: session expired, please sign in again");
+    }
+    if (response.status === 404) {
+      throw new Error(`Document not found: ${documentId}`);
+    }
+    throw new Error(`Download failed: HTTP ${response.status}`);
+  }
+
+  return response.blob();
+}
 
 export type SavePriority = "immediate" | "debounced" | "auto";
 
@@ -165,19 +202,22 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
       try {
         logger.info('Saving document to S3', { documentId, name: saveName });
 
+        // Fetch PDF bytes before calling the multipart API
+        const pdfBlob = await fetchPdfBlobForSave(documentId);
+
         let storedId: string;
 
         if (storedDocumentId && !forceNewDocument) {
           const result = await api.createDocumentVersion(storedDocumentId, {
-            document_id: documentId,
+            file: pdfBlob,
             comment: "Mise à jour automatique",
           });
           storedId = result.stored_document_id;
         } else {
           const result = await api.saveDocument({
-            document_id: documentId,
+            file: pdfBlob,
             name: saveName,
-            folder_id: saveFolderId ?? folderId,
+            folderId: (saveFolderId ?? folderId) ?? undefined,
             tags,
           });
           storedId = result.stored_document_id;
@@ -247,16 +287,19 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
         forceNewDocument: boolean;
       };
 
+      // Re-fetch PDF bytes at replay time — Blobs cannot be persisted in IndexedDB
+      const pdfBlob = await fetchPdfBlobForSave(opDocId);
+
       if (opStoredId && !forceNewDocument) {
         await api.createDocumentVersion(opStoredId, {
-          document_id: opDocId,
+          file: pdfBlob,
           comment: "Synchronisation offline",
         });
       } else {
         const result = await api.saveDocument({
-          document_id: opDocId,
+          file: pdfBlob,
           name: opName,
-          folder_id: opFolderId,
+          folderId: opFolderId ?? undefined,
           tags: opTags,
         });
         onSaved?.(result.stored_document_id);

@@ -5,12 +5,14 @@ Handles saving, loading, versioning, and organizing documents in persistent stor
 """
 
 import hashlib
+import io
+import json
 import logging
 import time
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,13 +20,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db, get_db_session
 from app.middleware.auth import AuthenticatedUser
 from app.middleware.error_handler import (
-    DocumentNotFoundError,
     InvalidOperationError,
     NotFoundError,
 )
 from app.middleware.request_id import get_request_id
 from app.models.database import DocumentVersion, Folder, StoredDocument
-from app.repositories.document_repo import document_sessions
 from app.schemas.responses.common import APIResponse, MetaInfo, PaginationInfo
 from app.services.activity_service import ActivityAction, activity_service
 from app.services.document_service import document_service
@@ -35,31 +35,6 @@ from app.utils.helpers import generate_uuid, now_utc
 _logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-class SaveDocumentRequest(BaseModel):
-    """Request to save a document to storage."""
-
-    document_id: str = Field(
-        description="Document ID from active session to save",
-    )
-    name: str = Field(
-        description="Display name for the document",
-        min_length=1,
-        max_length=255,
-    )
-    folder_id: Optional[str] = Field(
-        default=None,
-        description="Folder ID to save into (null for root)",
-    )
-    tags: list[str] = Field(
-        default_factory=list,
-        description="Tags for organizing documents",
-    )
-    version_comment: Optional[str] = Field(
-        default=None,
-        description="Comment describing this version",
-    )
 
 
 class CreateFolderRequest(BaseModel):
@@ -76,41 +51,32 @@ class CreateFolderRequest(BaseModel):
     )
 
 
-class CreateVersionRequest(BaseModel):
-    """Request to create a new version."""
-
-    document_id: str = Field(
-        description="Document ID from active session",
-    )
-    comment: Optional[str] = Field(
-        default=None,
-        description="Version comment",
-    )
-
-
 @router.post(
     "/documents",
     response_model=APIResponse[dict],
     status_code=201,
     summary="Save document to storage",
     description="""
-Save a document from an active editing session to persistent storage.
+Save a PDF document directly to persistent storage via multipart upload.
 
-This endpoint creates a permanent copy of a document that persists beyond the session lifetime. Documents can be organized into folders and tagged for easier retrieval and categorization.
+The frontend sends the rendered PDF bytes (produced by the TypeScript pdf-engine) along
+with document metadata as form fields. No active editing session is required.
 
 ## Features
 - Automatic version tracking (initial version = 1)
 - Tag-based organization for searchability
 - Folder hierarchy support
 - Storage quota enforcement (personal or organization-based)
+- PDF magic-bytes validation (`%PDF-`)
+- File size limit: 100 MB
 
-## Request Body
+## Multipart Form Fields
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| document_id | string | Yes | UUID of the document from an active session |
+| file | file | Yes | PDF file bytes |
 | name | string | Yes | Display name (1-255 characters) |
 | folder_id | string | No | Target folder UUID (null for root) |
-| tags | array | No | List of tags for organization |
+| tags | string | No | JSON array of tag strings, e.g. `["contract","legal"]` |
 | version_comment | string | No | Comment describing this version |
 """,
     responses={
@@ -143,31 +109,29 @@ This endpoint creates a permanent copy of a document that persists beyond the se
                 "label": "cURL",
                 "source": '''curl -X POST "https://api.giga-pdf.com/api/v1/storage/documents" \\
   -H "Authorization: Bearer $TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "document_id": "550e8400-e29b-41d4-a716-446655440000",
-    "name": "Contract Agreement 2024",
-    "folder_id": "660e8400-e29b-41d4-a716-446655440001",
-    "tags": ["contract", "legal", "2024"],
-    "version_comment": "Initial version"
-  }' '''
+  -F "file=@document.pdf;type=application/pdf" \\
+  -F "name=Contract Agreement 2024" \\
+  -F "folder_id=660e8400-e29b-41d4-a716-446655440001" \\
+  -F 'tags=["contract","legal","2024"]' \\
+  -F "version_comment=Initial version" '''
             },
             {
                 "lang": "python",
                 "label": "Python",
-                "source": '''import requests
+                "source": '''import requests, json
 
-response = requests.post(
-    "https://api.giga-pdf.com/api/v1/storage/documents",
-    headers={"Authorization": f"Bearer {token}"},
-    json={
-        "document_id": document_id,
-        "name": "Contract Agreement 2024",
-        "folder_id": folder_id,
-        "tags": ["contract", "legal", "2024"],
-        "version_comment": "Initial version"
-    }
-)
+with open("document.pdf", "rb") as f:
+    response = requests.post(
+        "https://api.giga-pdf.com/api/v1/storage/documents",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"file": ("document.pdf", f, "application/pdf")},
+        data={
+            "name": "Contract Agreement 2024",
+            "folder_id": folder_id,
+            "tags": json.dumps(["contract", "legal", "2024"]),
+            "version_comment": "Initial version",
+        },
+    )
 
 stored_doc = response.json()["data"]
 print(f"Saved as: {stored_doc['stored_document_id']}")
@@ -176,19 +140,17 @@ print(f"Version: {stored_doc['version']}")'''
             {
                 "lang": "javascript",
                 "label": "JavaScript",
-                "source": '''const response = await fetch("https://api.giga-pdf.com/api/v1/storage/documents", {
+                "source": '''const formData = new FormData();
+formData.append("file", pdfBlob, "document.pdf");
+formData.append("name", "Contract Agreement 2024");
+formData.append("folder_id", folderId);
+formData.append("tags", JSON.stringify(["contract", "legal", "2024"]));
+formData.append("version_comment", "Initial version");
+
+const response = await fetch("https://api.giga-pdf.com/api/v1/storage/documents", {
   method: "POST",
-  headers: {
-    "Authorization": `Bearer ${token}`,
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    document_id: documentId,
-    name: "Contract Agreement 2024",
-    folder_id: folderId,
-    tags: ["contract", "legal", "2024"],
-    version_comment: "Initial version"
-  })
+  headers: { "Authorization": `Bearer ${token}` },
+  body: formData,
 });
 
 const { data: storedDoc } = await response.json();
@@ -201,17 +163,14 @@ console.log(`Version: ${storedDoc.version}`);'''
                 "source": '''<?php
 $client = new GuzzleHttp\\Client();
 $response = $client->post("https://api.giga-pdf.com/api/v1/storage/documents", [
-    "headers" => [
-        "Authorization" => "Bearer " . $token,
-        "Content-Type" => "application/json"
+    "headers" => ["Authorization" => "Bearer " . $token],
+    "multipart" => [
+        ["name" => "file", "contents" => fopen("document.pdf", "r"), "filename" => "document.pdf"],
+        ["name" => "name", "contents" => "Contract Agreement 2024"],
+        ["name" => "folder_id", "contents" => $folderId],
+        ["name" => "tags", "contents" => json_encode(["contract", "legal", "2024"])],
+        ["name" => "version_comment", "contents" => "Initial version"],
     ],
-    "json" => [
-        "document_id" => $documentId,
-        "name" => "Contract Agreement 2024",
-        "folder_id" => $folderId,
-        "tags" => ["contract", "legal", "2024"],
-        "version_comment" => "Initial version"
-    ]
 ]);
 
 $storedDoc = json_decode($response->getBody(), true)["data"];
@@ -222,13 +181,20 @@ echo "Version: " . $storedDoc["version"] . "\\n";'''
     },
 )
 async def save_document(
-    request: SaveDocumentRequest,
     user: AuthenticatedUser,
+    file: UploadFile = File(..., description="PDF file bytes"),
+    name: str = Form(..., min_length=1, max_length=255, description="Display name for the document"),
+    folder_id: Optional[str] = Form(default=None, description="Folder UUID (null for root)"),
+    tags: Optional[str] = Form(default=None, description='JSON array of tags, e.g. ["contract","legal"]'),
+    version_comment: Optional[str] = Form(default=None, description="Comment describing this version"),
 ) -> APIResponse[dict]:
-    """Save document to persistent storage.
+    """Save a PDF document to persistent storage.
+
+    The frontend sends the rendered PDF bytes (produced by the TypeScript pdf-engine)
+    directly as a multipart upload — no active editing session is required.
 
     Atomicity guarantee (Saga pattern):
-      1. Validate session + quota.
+      1. Validate PDF bytes (magic bytes + size) + quota.
       2. Commit DB records (StoredDocument + DocumentVersion) first.
       3. Upload to S3 after successful commit.
       4. If S3 upload fails after commit → delete the orphan S3 key (compensation)
@@ -236,27 +202,50 @@ async def save_document(
          The DB records remain; a reconciliation job can clean them up or
          the next save attempt will reuse/overwrite the same s3_key.
     """
-    start_time = time.time()
+    import pikepdf  # pikepdf is lightweight for page counting only
 
-    # ── 1. Resolve session (load from Redis if not in local cache) ──────
-    doc_session = await document_sessions.get_session(request.document_id)
-    if not doc_session:
-        raise DocumentNotFoundError(request.document_id)
+    start_time = time.time()
 
     _logger.info(
         "save_document: starting save",
-        extra={"document_id": request.document_id, "user_id": user.user_id},
+        extra={"name": name, "user_id": user.user_id},
     )
 
-    # ── 2. Render PDF bytes & check size ────────────────────────────────
-    from app.core.pdf_engine import pdf_engine  # circular-safe: imported at call time
-    doc_bytes = pdf_engine.save_document(request.document_id)
-    file_size = len(doc_bytes)
-    file_hash = hashlib.sha256(doc_bytes).hexdigest()
+    # ── 1. Read + validate PDF bytes ────────────────────────────────────
+    pdf_bytes = await file.read()
+    file_size = len(pdf_bytes)
 
-    _logger.debug("save_document: rendered %d bytes (sha256=%s)", file_size, file_hash[:16])
+    _FILE_SIZE_LIMIT = 100 * 1024 * 1024  # 100 MB
+    if file_size > _FILE_SIZE_LIMIT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large: {file_size} bytes (limit: {_FILE_SIZE_LIMIT} bytes)",
+        )
 
-    # ── 3. Quota check ──────────────────────────────────────────────────
+    if not pdf_bytes.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="Invalid PDF format: missing %PDF- header")
+
+    file_hash = hashlib.sha256(pdf_bytes).hexdigest()
+    _logger.debug("save_document: received %d bytes (sha256=%s)", file_size, file_hash[:16])
+
+    # ── 2. Count pages via pikepdf ───────────────────────────────────────
+    try:
+        with pikepdf.open(io.BytesIO(pdf_bytes)) as _pdf:
+            page_count = len(_pdf.pages)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Cannot read PDF structure: {exc}") from exc
+
+    # ── 3. Parse tags (JSON array string → list[str]) ────────────────────
+    parsed_tags: list[str] = []
+    if tags:
+        try:
+            parsed_tags = json.loads(tags)
+            if not isinstance(parsed_tags, list):
+                raise ValueError("tags must be a JSON array")
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid tags format: {exc}") from exc
+
+    # ── 4. Quota check ──────────────────────────────────────────────────
     effective_limits = await quota_service.get_effective_limits(user.user_id)
 
     if effective_limits.storage_used_bytes + file_size > effective_limits.storage_limit_bytes:
@@ -270,23 +259,23 @@ async def save_document(
             f"Document limit exceeded. Limit: {effective_limits.document_limit}"
         )
 
-    # ── 4. Derive IDs before DB commit so S3 key is deterministic ───────
+    # ── 5. Derive IDs before DB commit so S3 key is deterministic ───────
     stored_doc_id = generate_uuid()
     s3_key = s3_service.get_document_key(user.user_id, stored_doc_id, 1)
 
-    # ── 5. Commit DB records first (rollback-safe) ───────────────────────
+    # ── 6. Commit DB records first (rollback-safe) ───────────────────────
     # If anything inside the `async with` block raises, SQLAlchemy rolls
     # back automatically — no S3 side-effect has happened yet.
     async with get_db_session() as session:
         stored_doc = StoredDocument(
             id=stored_doc_id,
-            name=request.name,
+            name=name,
             owner_id=user.user_id,
-            folder_id=request.folder_id,
-            page_count=doc_session.scene_graph.metadata.page_count,
+            folder_id=folder_id,
+            page_count=page_count,
             current_version=1,
             file_size_bytes=file_size,
-            tags=request.tags,
+            tags=parsed_tags,
         )
         session.add(stored_doc)
 
@@ -296,7 +285,7 @@ async def save_document(
             file_path=s3_key,
             file_size_bytes=file_size,
             file_hash=file_hash,
-            comment=request.version_comment,
+            comment=version_comment,
             created_by=user.user_id,
         )
         session.add(version)
@@ -304,17 +293,17 @@ async def save_document(
 
     _logger.info("save_document: DB committed (stored_doc_id=%s)", stored_doc_id)
 
-    # ── 6. Upload to S3 after DB commit (compensation on failure) ────────
+    # ── 7. Upload to S3 after DB commit (compensation on failure) ────────
     try:
         s3_service.upload_file(
-            file_data=doc_bytes,
+            file_data=pdf_bytes,
             key=s3_key,
             content_type="application/pdf",
             metadata={
                 "document_id": stored_doc_id,
                 "user_id": user.user_id,
                 "version": "1",
-                "name": request.name,
+                "name": name,
             },
         )
         _logger.info("save_document: S3 upload OK (key=%s)", s3_key)
@@ -336,7 +325,7 @@ async def save_document(
             f"Document saved to database but file upload failed: {exc}"
         ) from exc
 
-    # ── 7. Update quota counters ─────────────────────────────────────────
+    # ── 8. Update quota counters ─────────────────────────────────────────
     if effective_limits.is_tenant_based and effective_limits.tenant_id:
         await quota_service.update_tenant_storage(
             effective_limits.tenant_id, file_size, delta_documents=1
@@ -352,8 +341,8 @@ async def save_document(
         success=True,
         data={
             "stored_document_id": stored_doc_id,
-            "name": request.name,
-            "page_count": stored_doc.page_count,
+            "name": name,
+            "page_count": page_count,
             "version": 1,
             "created_at": stored_doc.created_at.isoformat(),
             "quota_source": "tenant" if effective_limits.is_tenant_based else "personal",
@@ -949,25 +938,31 @@ async def list_versions(
     response_model=APIResponse[dict],
     summary="Create new version",
     description="""
-Create a new version of a stored document from an active editing session.
+Create a new version of a stored document via multipart PDF upload.
 
-This endpoint saves the current state of a document in an active session as a new version of an existing stored document. Previous versions are preserved, allowing for version history tracking and rollback capabilities.
+The frontend sends the rendered PDF bytes (produced by the TypeScript pdf-engine) directly,
+without requiring an active editing session. Previous versions are preserved, allowing for
+version history tracking and rollback capabilities.
 
 ## Path Parameters
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | stored_document_id | string | UUID of the stored document to update |
 
-## Request Body
+## Multipart Form Fields
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| document_id | string | Yes | UUID of the active session document |
+| file | file | Yes | PDF file bytes |
 | comment | string | No | Description of changes in this version |
 
 ## Use Cases
 - Save incremental changes while editing
 - Create checkpoints before major modifications
 - Track document evolution with descriptive comments
+
+## File Constraints
+- Maximum size: 100 MB
+- Must be a valid PDF (starts with `%PDF-`)
 """,
     responses={
         201: {
@@ -995,11 +990,8 @@ This endpoint saves the current state of a document in an active session as a ne
                 "label": "cURL",
                 "source": '''curl -X POST "https://api.giga-pdf.com/api/v1/storage/documents/770e8400-e29b-41d4-a716-446655440002/versions" \\
   -H "Authorization: Bearer $TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "document_id": "880e8400-e29b-41d4-a716-446655440003",
-    "comment": "Updated legal terms on page 5"
-  }' '''
+  -F "file=@document.pdf;type=application/pdf" \\
+  -F "comment=Updated legal terms on page 5" '''
             },
             {
                 "lang": "python",
@@ -1007,14 +999,13 @@ This endpoint saves the current state of a document in an active session as a ne
                 "source": '''import requests
 
 stored_doc_id = "770e8400-e29b-41d4-a716-446655440002"
-response = requests.post(
-    f"https://api.giga-pdf.com/api/v1/storage/documents/{stored_doc_id}/versions",
-    headers={"Authorization": f"Bearer {token}"},
-    json={
-        "document_id": document_id,  # From active session
-        "comment": "Updated legal terms on page 5"
-    }
-)
+with open("document.pdf", "rb") as f:
+    response = requests.post(
+        f"https://api.giga-pdf.com/api/v1/storage/documents/{stored_doc_id}/versions",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"file": ("document.pdf", f, "application/pdf")},
+        data={"comment": "Updated legal terms on page 5"},
+    )
 
 new_version = response.json()["data"]
 print(f"Created version {new_version['version']}")
@@ -1024,18 +1015,17 @@ print(f"Saved at: {new_version['created_at']}")'''
                 "lang": "javascript",
                 "label": "JavaScript",
                 "source": '''const storedDocId = "770e8400-e29b-41d4-a716-446655440002";
+
+const formData = new FormData();
+formData.append("file", pdfBlob, "document.pdf");
+formData.append("comment", "Updated legal terms on page 5");
+
 const response = await fetch(
   `https://api.giga-pdf.com/api/v1/storage/documents/${storedDocId}/versions`,
   {
     method: "POST",
-    headers: {
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      document_id: documentId,  // From active session
-      comment: "Updated legal terms on page 5"
-    })
+    headers: { "Authorization": `Bearer ${token}` },
+    body: formData,
   }
 );
 
@@ -1052,14 +1042,11 @@ $client = new GuzzleHttp\\Client();
 $response = $client->post(
     "https://api.giga-pdf.com/api/v1/storage/documents/{$storedDocId}/versions",
     [
-        "headers" => [
-            "Authorization" => "Bearer " . $token,
-            "Content-Type" => "application/json"
+        "headers" => ["Authorization" => "Bearer " . $token],
+        "multipart" => [
+            ["name" => "file", "contents" => fopen("document.pdf", "r"), "filename" => "document.pdf"],
+            ["name" => "comment", "contents" => "Updated legal terms on page 5"],
         ],
-        "json" => [
-            "document_id" => $documentId,  // From active session
-            "comment" => "Updated legal terms on page 5"
-        ]
     ]
 );
 
@@ -1072,36 +1059,53 @@ echo "Saved at: " . $newVersion["created_at"] . "\\n";'''
 )
 async def create_version(
     stored_document_id: str,
-    request: CreateVersionRequest,
     user: AuthenticatedUser,
+    file: UploadFile = File(..., description="PDF file bytes"),
+    comment: Optional[str] = Form(default=None, description="Description of changes in this version"),
 ) -> APIResponse[dict]:
-    """Create new version from session document.
+    """Create a new version of a stored document via multipart PDF upload.
+
+    The frontend sends the rendered PDF bytes directly — no active editing session required.
 
     Atomicity guarantee (Saga pattern):
-      1. Resolve session + verify DB ownership.
+      1. Validate PDF bytes (magic bytes + size) + verify DB ownership.
       2. Commit new DocumentVersion + updated StoredDocument to DB first.
       3. Upload new version to S3 after successful commit.
       4. If S3 upload fails → compensate by deleting the partial upload
          and rolling back current_version in a separate DB transaction,
          then re-raise so the caller gets a clean error.
     """
+    import pikepdf  # pikepdf is lightweight for page counting only
+
     start_time = time.time()
 
-    # ── 1. Resolve session (load from Redis if not in local cache) ──────
-    doc_session = await document_sessions.get_session(request.document_id)
-    if not doc_session:
-        raise DocumentNotFoundError(request.document_id)
-
-    # ── 2. Render PDF bytes outside the transaction ──────────────────────
-    from app.core.pdf_engine import pdf_engine  # circular-safe: imported at call time
-    doc_bytes = pdf_engine.save_document(request.document_id)
+    # ── 1. Read + validate PDF bytes ────────────────────────────────────
+    doc_bytes = await file.read()
     file_size = len(doc_bytes)
+
+    _FILE_SIZE_LIMIT = 100 * 1024 * 1024  # 100 MB
+    if file_size > _FILE_SIZE_LIMIT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large: {file_size} bytes (limit: {_FILE_SIZE_LIMIT} bytes)",
+        )
+
+    if not doc_bytes.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="Invalid PDF format: missing %PDF- header")
+
     file_hash = hashlib.sha256(doc_bytes).hexdigest()
+    _logger.debug("create_version: received %d bytes (sha256=%s)", file_size, file_hash[:16])
+
+    # ── 2. Count pages via pikepdf ───────────────────────────────────────
+    try:
+        with pikepdf.open(io.BytesIO(doc_bytes)) as _pdf:
+            page_count = len(_pdf.pages)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Cannot read PDF structure: {exc}") from exc
 
     # ── 3. Commit DB records first ───────────────────────────────────────
     new_version_number: int
     s3_key: str
-    version_created_at = None
 
     async with get_db_session() as session:
         result = await session.execute(
@@ -1124,13 +1128,13 @@ async def create_version(
             file_path=s3_key,
             file_size_bytes=file_size,
             file_hash=file_hash,
-            comment=request.comment,
+            comment=comment,
             created_by=user.user_id,
         )
         session.add(version)
 
         stored_doc.current_version = new_version_number
-        stored_doc.page_count = doc_session.scene_graph.metadata.page_count
+        stored_doc.page_count = page_count
         stored_doc.file_size_bytes = file_size
         # session commits on __aexit__ — version row + updated StoredDocument are durable
 

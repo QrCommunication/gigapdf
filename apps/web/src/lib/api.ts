@@ -6,6 +6,10 @@
  * when running HTTPS frontend with HTTP backend in development.
  */
 
+import type { DocumentObject } from "@giga-pdf/types";
+
+export type { DocumentObject };
+
 // API base URL - use relative path for same-origin requests
 // nginx proxies /api/ to FastAPI backend
 const API_BASE_URL = "";
@@ -189,21 +193,35 @@ class APIClient {
   }
 
   async saveDocument(params: {
-    document_id: string;
+    file: Blob;
     name: string;
-    folder_id?: string | null;
+    folderId?: string;
     tags?: string[];
-    version_comment?: string;
-  }): Promise<{ stored_document_id: string; name: string; page_count: number; version: number; created_at: string }> {
+    versionComment?: string;
+  }): Promise<{
+    stored_document_id: string;
+    name: string;
+    page_count: number;
+    version_number: number;
+    created_at: string;
+  }> {
+    const fd = new FormData();
+    fd.append("file", params.file);
+    fd.append("name", params.name);
+    if (params.folderId) fd.append("folder_id", params.folderId);
+    if (params.tags) fd.append("tags", JSON.stringify(params.tags));
+    if (params.versionComment) fd.append("version_comment", params.versionComment);
+
+    // NOTE: no Content-Type header — the browser sets multipart/form-data with boundary automatically
     const response = await this.request<APIResponse<{
       stored_document_id: string;
       name: string;
       page_count: number;
-      version: number;
+      version_number: number;
       created_at: string;
     }>>("/api/v1/storage/documents", {
       method: "POST",
-      body: JSON.stringify(params),
+      body: fd,
     });
     return response.data;
   }
@@ -211,17 +229,36 @@ class APIClient {
   async createDocumentVersion(
     storedDocumentId: string,
     params: {
-      document_id: string;
+      file: Blob;
       comment?: string;
     }
   ): Promise<{ stored_document_id: string; version: number; created_at: string }> {
+    const fd = new FormData();
+    fd.append("file", params.file);
+    if (params.comment) fd.append("comment", params.comment);
+
+    // NOTE: no Content-Type header — the browser sets multipart/form-data with boundary automatically
     const response = await this.request<APIResponse<{
       stored_document_id: string;
       version: number;
       created_at: string;
     }>>(`/api/v1/storage/documents/${storedDocumentId}/versions`, {
       method: "POST",
-      body: JSON.stringify(params),
+      body: fd,
+    });
+    return response.data;
+  }
+
+  /**
+   * Parse a stored document from S3 via the Next.js BFF route.
+   * Returns the full DocumentObject scene graph.
+   * Prefer this over calling /api/pdf/parse-from-s3 directly.
+   */
+  async parseDocumentFromStorage(documentId: string): Promise<DocumentObject> {
+    const response = await this.request<{ data: DocumentObject }>("/api/pdf/parse-from-s3", {
+      method: "POST",
+      body: JSON.stringify({ documentId }),
+      headers: { "Content-Type": "application/json" },
     });
     return response.data;
   }

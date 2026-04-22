@@ -18,7 +18,7 @@ import {
   Home,
   RefreshCw,
 } from "lucide-react";
-import { api, StoredDocument } from "@/lib/api";
+import { api, StoredDocument, getAuthToken } from "@/lib/api";
 
 interface Document {
   id: string;
@@ -205,11 +205,25 @@ export default function DocumentsPage() {
 
       const uploadResult = await api.uploadDocument(file);
 
+      // Fetch the PDF Blob from the server before saving
+      const token = getAuthToken();
+      const downloadRes = await fetch(
+        `/api/v1/documents/${uploadResult.document_id}/download`,
+        {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }
+      );
+      if (!downloadRes.ok) {
+        throw new Error(`Failed to download PDF: ${downloadRes.status}`);
+      }
+      const pdfBlob = await downloadRes.blob();
+
       await api.saveDocument({
-        document_id: uploadResult.document_id,
+        file: pdfBlob,
         name: file.name.replace(".pdf", ""),
         tags: [],
-        folder_id: currentFolderId || undefined,
+        folderId: currentFolderId || undefined,
       });
 
       await loadDocuments();

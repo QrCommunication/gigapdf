@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { api } from "@/lib/api";
+import { api, getAuthToken } from "@/lib/api";
 import type { DocumentObject, PageObject, BookmarkObject, LayerObject, EmbeddedFileObject } from "@giga-pdf/types";
 
 export interface UseDocumentOptions {
@@ -111,8 +111,27 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
 
       setDocumentId(docId);
 
-      // Récupérer le document complet avec pages et éléments
-      const docData = await api.getDocument(docId);
+      // Récupérer le document complet avec pages et éléments (TS parser via S3)
+      const token = getAuthToken();
+      console.log("[useDocument] Calling /api/pdf/parse-from-s3 for docId:", docId);
+      const parseResp = await fetch("/api/pdf/parse-from-s3", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ documentId: docId }),
+        credentials: "include",
+      });
+      if (!parseResp.ok) {
+        throw new Error(`Parse failed: ${parseResp.status}`);
+      }
+      const parsePayload = await parseResp.json() as Record<string, unknown>;
+      const docData = (parsePayload.data ?? parsePayload) as typeof parsePayload & {
+        pages: Array<Record<string, unknown>>;
+        document_id?: string;
+        metadata?: Record<string, unknown>;
+      };
 
       // Debug: log raw API response
       console.log("[useDocument] Raw API response:", docData);
@@ -147,7 +166,7 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       const titleFromMetadata = isPlaceholderMetadata(rawTitle) ? "" : rawTitle;
 
       const doc: DocumentObject = {
-        documentId: (docData as Record<string, unknown>).documentId as string || docData.document_id,
+        documentId: (((docData as Record<string, unknown>).documentId as string | undefined) || docData.document_id || ""),
         metadata: {
           title: titleFromMetadata || docName || "Sans titre",
           author: (metadata.author as string) || null,
