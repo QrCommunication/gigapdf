@@ -347,8 +347,10 @@ class RedisDocumentSessionManager:
                 _is_encrypted = _pdf.is_encrypted
 
             pdf_doc = LegacyDocumentProxy(document_id, pdf_bytes, _page_count, _is_encrypted)
-            # Register with pdf_engine so save operations can find the document
-            pdf_engine._documents[document_id] = pdf_doc
+            # Register raw bytes with pdf_engine (NOT the proxy).
+            # save_document() returns self._documents[document_id] directly and expects
+            # it to be bytes — storing the proxy breaks download with 'no len()'.
+            pdf_engine._documents[document_id] = pdf_bytes
 
             scene_graph = DocumentObject.model_validate_json(graph_json)
             meta = json.loads(meta_json) if meta_json else {}

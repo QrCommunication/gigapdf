@@ -442,9 +442,9 @@ class DocumentSessionManager:
             pdf_doc = LegacyDocumentProxy(document_id, pdf_bytes, _page_count, _is_encrypted)
             scene_graph = DocumentObject.model_validate_json(graph_json)
 
-            # Register document with pdf_engine for save operations
+            # Register raw bytes with pdf_engine (save_document returns this directly)
             from app.core.pdf_engine import pdf_engine
-            pdf_engine._documents[document_id] = pdf_doc
+            pdf_engine._documents[document_id] = pdf_bytes
             meta = json.loads(meta_json) if meta_json else {}
 
             session = DocumentSession(
