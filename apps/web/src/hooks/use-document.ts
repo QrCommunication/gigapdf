@@ -135,10 +135,21 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       // Extract embedded files
       const embeddedFiles = (rawData.embeddedFiles || rawData.embedded_files || []) as EmbeddedFileObject[];
 
+      // Filter out placeholder values that some PDF libraries (e.g., ReportLab)
+      // inject when no metadata was provided: "(anonymous)", "(unspecified)", etc.
+      const isPlaceholderMetadata = (v: unknown): boolean => {
+        if (typeof v !== "string") return true;
+        const trimmed = v.trim();
+        if (!trimmed) return true;
+        return /^\(anonymous\)$|^\(unspecified\)$|^untitled$/i.test(trimmed);
+      };
+      const rawTitle = metadata.title as string | undefined;
+      const titleFromMetadata = isPlaceholderMetadata(rawTitle) ? "" : rawTitle;
+
       const doc: DocumentObject = {
         documentId: (docData as Record<string, unknown>).documentId as string || docData.document_id,
         metadata: {
-          title: (metadata.title as string) || docName || "Sans titre",
+          title: titleFromMetadata || docName || "Sans titre",
           author: (metadata.author as string) || null,
           subject: (metadata.subject as string) || null,
           keywords: (metadata.keywords as string[]) || [],
@@ -168,7 +179,9 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       };
 
       setDocument(doc);
-      setName(doc.metadata.title || docName);
+      // Prefer filename (docName) over PDF title metadata when possible;
+      // the PDF title may be a placeholder like "(anonymous)".
+      setName(docName || doc.metadata.title || "");
       setCurrentPageIndex(0);
     } catch (err) {
       const message =
