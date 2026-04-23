@@ -66,9 +66,10 @@ export async function renderPage(
   try {
     const renderContext = {
       canvasContext: ctx,
+      canvas,
       viewport,
     };
-    await page.render(renderContext).promise;
+    await page.render(renderContext as Parameters<typeof page.render>[0]).promise;
 
     const rawBuffer = canvas.toBuffer('image/png');
     const format = options?.format ?? 'png';
