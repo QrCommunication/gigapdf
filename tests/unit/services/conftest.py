@@ -8,6 +8,29 @@ the lightweight unit-test environment.
 
 We stub out the package-level __init__ imports so that importing
 app.services.font_extraction_service works without the full stack.
+
+WARNING — MagicMock stubs masquent certains bugs (post-mortem 04)
+--------------------------------------------------------------------
+Ce conftest installe des MagicMock pour app.core.pdf_engine et plusieurs
+dépendances lourdes. Cela a deux effets secondaires importants à connaître :
+
+1. MagicMock implémente __getitem__ par défaut : tout accès pdf_doc[i]
+   réussit silencieusement et retourne un autre MagicMock au lieu de lever
+   TypeError. Le bug LegacyDocumentProxy subscript (pdfDoc[i]) aurait été
+   INVISIBLE ici — les tests unitaires auraient été verts.
+
+2. Les appels au vrai PDFEngine (pikepdf) ne sont jamais exercés depuis
+   cette couche : les bugs d'AttributeError/TypeError liés à l'API pikepdf
+   ne peuvent pas être détectés ici.
+
+Pour attraper ces régressions, utiliser les tests d'intégration :
+  tests/integration/test_storage_integration.py
+    → Exercent le vrai PDFEngine + la vraie LegacyDocumentProxy
+    → Capturent les erreurs que les mocks rendent invisibles
+    → N'utilisent PAS MagicMock pour pdf_engine
+
+Règle : chaque nouveau comportement de pdf_engine DOIT avoir un test dans
+tests/integration/test_storage_integration.py, pas seulement ici.
 """
 
 import sys
