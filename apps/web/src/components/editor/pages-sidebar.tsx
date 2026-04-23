@@ -26,6 +26,8 @@ export interface PagesSidebarProps {
   onPageExtract?: (pageIndex: number) => void;
   /** URL de base pour les previews */
   previewBaseUrl?: string;
+  /** Map page_number (1-indexed) → dataUrl PNG pour thumbnails client-side */
+  thumbnails?: Map<number, string>;
 }
 
 /**
@@ -42,6 +44,7 @@ export function PagesSidebar({
   onPageRotate,
   onPageExtract,
   previewBaseUrl = "",
+  thumbnails,
 }: PagesSidebarProps) {
   const t = useTranslations("editor.pages");
 
@@ -91,7 +94,14 @@ export function PagesSidebar({
           >
             {/* Preview image */}
             <div className="aspect-[8.5/11] bg-white flex items-center justify-center">
-              {page.preview?.thumbnailUrl ? (
+              {thumbnails?.get(page.pageNumber) ? (
+                <img
+                  src={thumbnails.get(page.pageNumber)}
+                  alt={`Page ${page.pageNumber}`}
+                  className="w-full h-full object-contain"
+                  loading="lazy"
+                />
+              ) : page.preview?.thumbnailUrl ? (
                 <img
                   src={`${previewBaseUrl}${page.preview.thumbnailUrl}`}
                   alt={`Page ${index + 1}`}

@@ -496,12 +496,18 @@ export async function extractTextBlocks(
       const rotation = rotationFromTransform(transform);
 
       // PDF coordinates (bottom-left origin)
+      // In pdfjs, transform[5] (ty) positions the text BASELINE in PDF coords,
+      // not the bottom of the bounding box. The ascender (~80% of font size) sits
+      // ABOVE the baseline.
       const pdfX = safeTx;
       const pdfY = safeTy;
 
-      // Web coordinates (top-left origin): flip Y
+      // Web coordinates (top-left origin): flip Y to top-of-bounding-box.
+      // Top of text box (in PDF) = baseline + ascender ≈ ty + fontSize * 0.8
+      // Web Y = pageHeight - (ty + ascender) = pageHeight - ty - 0.8 * fontSize
+      const ascender = fontSize * 0.8;
       const webX = pdfX;
-      const webY = pageHeight - pdfY - itemHeight;
+      const webY = pageHeight - pdfY - ascender;
 
       // Look up colour from the operator list map
       const colorKey = pdfY.toFixed(1);

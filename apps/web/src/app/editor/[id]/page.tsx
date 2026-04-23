@@ -29,6 +29,7 @@ import {
 import { useDocument } from "@/hooks/use-document";
 import { useDocumentSave } from "@/hooks/use-document-save";
 import { useCollaboration } from "@/hooks/use-collaboration";
+import { usePageThumbnails } from "@/hooks/use-page-thumbnails";
 import { api, type ElementCreateRequest } from "@/lib/api";
 import {
   EditorCanvas,
@@ -218,6 +219,9 @@ export default function EditorPage() {
     layers,
     embeddedFiles,
   } = useDocument({ storedDocumentId });
+
+  // Client-side thumbnails generated via pdfjs (durable solution — no server roundtrip)
+  const thumbnails = usePageThumbnails(currentPdfFile, pages.length, { scale: 0.18 });
 
   // Fetch the actual PDF binary when document loads
   useEffect(() => {
@@ -1060,6 +1064,7 @@ export default function EditorPage() {
           previewBaseUrl={process.env.NEXT_PUBLIC_API_URL}
           onPageRotate={handlePageRotate}
           onPageExtract={handlePageExtract}
+          thumbnails={thumbnails}
         />
 
         {/* Canvas */}
