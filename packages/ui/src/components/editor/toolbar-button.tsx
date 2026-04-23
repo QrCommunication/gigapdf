@@ -31,44 +31,42 @@ export interface ToolbarButtonProps
   active?: boolean;
   tooltip?: string;
   icon?: React.ReactNode;
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
-const ToolbarButton = React.forwardRef<HTMLButtonElement, ToolbarButtonProps>(
-  ({ className, variant, size, active, tooltip, icon, children, ...props }, ref) => {
-    const button = (
-      <button
-        className={cn(
-          toolbarButtonVariants({
-            variant: active ? "active" : variant,
-            size,
-            className,
-          })
-        )}
-        ref={ref}
-        aria-pressed={active}
-        {...props}
-      >
-        {icon && <span className={cn(children && "mr-2")}>{icon}</span>}
-        {children}
-      </button>
+function ToolbarButton({ className, variant, size, active, tooltip, icon, children, ref, ...props }: ToolbarButtonProps) {
+  const button = (
+    <button
+      className={cn(
+        toolbarButtonVariants({
+          variant: active ? "active" : variant,
+          size,
+          className,
+        })
+      )}
+      ref={ref}
+      aria-pressed={active}
+      {...props}
+    >
+      {icon && <span className={cn(children && "mr-2")}>{icon}</span>}
+      {children}
+    </button>
+  );
+
+  if (tooltip) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>{button}</TooltipTrigger>
+          <TooltipContent>
+            <p>{tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
-
-    if (tooltip) {
-      return (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>{button}</TooltipTrigger>
-            <TooltipContent>
-              <p>{tooltip}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      );
-    }
-
-    return button;
   }
-);
-ToolbarButton.displayName = "ToolbarButton";
+
+  return button;
+}
 
 export { ToolbarButton, toolbarButtonVariants };

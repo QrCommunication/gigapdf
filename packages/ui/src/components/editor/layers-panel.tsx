@@ -20,23 +20,21 @@ export interface LayersPanelProps extends React.HTMLAttributes<HTMLDivElement> {
   onLayerLockToggle?: (layerId: string) => void;
   onLayerDelete?: (layerId: string) => void;
   onLayerReorder?: (layerId: string, newIndex: number) => void;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
-const LayersPanel = React.forwardRef<HTMLDivElement, LayersPanelProps>(
-  (
-    {
-      className,
-      layers,
-      selectedLayerId,
-      onLayerSelect,
-      onLayerVisibilityToggle,
-      onLayerLockToggle,
-      onLayerDelete,
-      onLayerReorder,
-      ...props
-    },
-    ref
-  ) => {
+function LayersPanel({
+  className,
+  layers,
+  selectedLayerId,
+  onLayerSelect,
+  onLayerVisibilityToggle,
+  onLayerLockToggle,
+  onLayerDelete,
+  onLayerReorder,
+  ref,
+  ...props
+}: LayersPanelProps) {
     const [draggedLayer, setDraggedLayer] = React.useState<string | null>(null);
 
     const handleDragStart = (e: React.DragEvent, layerId: string) => {
@@ -149,8 +147,6 @@ const LayersPanel = React.forwardRef<HTMLDivElement, LayersPanelProps>(
         </ScrollArea>
       </div>
     );
-  }
-);
-LayersPanel.displayName = "LayersPanel";
+}
 
 export { LayersPanel };

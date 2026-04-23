@@ -49,10 +49,10 @@ export interface FontPickerProps {
   fonts?: FontOption[];
   className?: string;
   placeholder?: string;
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
-const FontPicker = React.forwardRef<HTMLButtonElement, FontPickerProps>(
-  ({ value, onChange, fonts = DEFAULT_FONTS, className, placeholder = "Select font..." }, ref) => {
+function FontPicker({ value, onChange, fonts = DEFAULT_FONTS, className, placeholder = "Select font...", ref }: FontPickerProps) {
     const [open, setOpen] = React.useState(false);
     const [searchQuery, setSearchQuery] = React.useState("");
 
@@ -128,8 +128,6 @@ const FontPicker = React.forwardRef<HTMLButtonElement, FontPickerProps>(
         </PopoverContent>
       </Popover>
     );
-  }
-);
-FontPicker.displayName = "FontPicker";
+}
 
 export { FontPicker, DEFAULT_FONTS };

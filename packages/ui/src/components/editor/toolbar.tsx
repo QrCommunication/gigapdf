@@ -4,32 +4,32 @@ import { Separator } from "../ui/separator";
 
 export interface ToolbarProps extends React.HTMLAttributes<HTMLDivElement> {
   orientation?: "horizontal" | "vertical";
+  ref?: React.Ref<HTMLDivElement>;
 }
 
-const Toolbar = React.forwardRef<HTMLDivElement, ToolbarProps>(
-  ({ className, orientation = "horizontal", children, ...props }, ref) => {
-    return (
-      <div
-        ref={ref}
-        className={cn(
-          "flex gap-1 bg-background p-2",
-          orientation === "horizontal" ? "flex-row items-center" : "flex-col items-start",
-          className
-        )}
-        role="toolbar"
-        {...props}
-      >
-        {children}
-      </div>
-    );
-  }
-);
-Toolbar.displayName = "Toolbar";
+function Toolbar({ className, orientation = "horizontal", children, ref, ...props }: ToolbarProps) {
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "flex gap-1 bg-background p-2",
+        orientation === "horizontal" ? "flex-row items-center" : "flex-col items-start",
+        className
+      )}
+      role="toolbar"
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
 
-const ToolbarGroup = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & { orientation?: "horizontal" | "vertical" }
->(({ className, orientation = "horizontal", children, ...props }, ref) => {
+interface ToolbarGroupProps extends React.HTMLAttributes<HTMLDivElement> {
+  orientation?: "horizontal" | "vertical";
+  ref?: React.Ref<HTMLDivElement>;
+}
+
+function ToolbarGroup({ className, orientation = "horizontal", children, ref, ...props }: ToolbarGroupProps) {
   return (
     <div
       ref={ref}
@@ -43,13 +43,13 @@ const ToolbarGroup = React.forwardRef<
       {children}
     </div>
   );
-});
-ToolbarGroup.displayName = "ToolbarGroup";
+}
 
-const ToolbarSeparator = React.forwardRef<
-  React.ElementRef<typeof Separator>,
-  React.ComponentPropsWithoutRef<typeof Separator>
->(({ className, orientation = "vertical", ...props }, ref) => {
+interface ToolbarSeparatorProps extends React.ComponentPropsWithoutRef<typeof Separator> {
+  ref?: React.Ref<React.ElementRef<typeof Separator>>;
+}
+
+function ToolbarSeparator({ className, orientation = "vertical", ref, ...props }: ToolbarSeparatorProps) {
   return (
     <Separator
       ref={ref}
@@ -61,7 +61,6 @@ const ToolbarSeparator = React.forwardRef<
       {...props}
     />
   );
-});
-ToolbarSeparator.displayName = "ToolbarSeparator";
+}
 
 export { Toolbar, ToolbarGroup, ToolbarSeparator };

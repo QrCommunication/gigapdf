@@ -9,20 +9,18 @@ export interface PageNavigatorProps extends React.HTMLAttributes<HTMLDivElement>
   totalPages: number;
   onPageChange: (page: number) => void;
   showInput?: boolean;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
-const PageNavigator = React.forwardRef<HTMLDivElement, PageNavigatorProps>(
-  (
-    {
-      className,
-      currentPage,
-      totalPages,
-      onPageChange,
-      showInput = true,
-      ...props
-    },
-    ref
-  ) => {
+function PageNavigator({
+  className,
+  currentPage,
+  totalPages,
+  onPageChange,
+  showInput = true,
+  ref,
+  ...props
+}: PageNavigatorProps) {
     const [inputValue, setInputValue] = React.useState(currentPage.toString());
 
     React.useEffect(() => {
@@ -106,8 +104,6 @@ const PageNavigator = React.forwardRef<HTMLDivElement, PageNavigatorProps>(
         </Button>
       </div>
     );
-  }
-);
-PageNavigator.displayName = "PageNavigator";
+}
 
 export { PageNavigator };

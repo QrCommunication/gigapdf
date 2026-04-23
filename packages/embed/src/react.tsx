@@ -1,9 +1,9 @@
 import {
-  forwardRef,
   useEffect,
   useImperativeHandle,
   useRef,
   type CSSProperties,
+  type Ref,
 } from 'react';
 import { GigaPdfEditor } from './index';
 import type { GigaPdfOptions, GigaPdfEvents } from './types';
@@ -28,6 +28,8 @@ export interface GigaPdfEditorProps extends Omit<GigaPdfOptions, 'container' | '
   style?: CSSProperties;
   /** Additional className for the wrapper div */
   className?: string;
+  /** Ref to expose imperative editor methods */
+  ref?: Ref<GigaPdfEditorRef>;
 }
 
 /** Methods exposed via ref */
@@ -38,19 +40,59 @@ export interface GigaPdfEditorRef {
   getFile(): Promise<Blob>;
 }
 
-export const GigaPdfEditorComponent = forwardRef<GigaPdfEditorRef, GigaPdfEditorProps>(
-  function GigaPdfEditorComponent(props, ref) {
-    const {
-      onReady,
-      onSave,
-      onExport,
-      onError,
-      onPageChange,
-      onComplete,
-      style,
-      className,
-      // All remaining props are GigaPdfOptions (minus container)
+export function GigaPdfEditorComponent({
+  onReady,
+  onSave,
+  onExport,
+  onError,
+  onPageChange,
+  onComplete,
+  style,
+  className,
+  // All remaining props are GigaPdfOptions (minus container)
+  publicKey,
+  documentId,
+  file,
+  baseUrl,
+  width,
+  height,
+  locale,
+  theme,
+  hideToolbar,
+  tools,
+  showDoneButton,
+  ref,
+}: GigaPdfEditorProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<GigaPdfEditor | null>(null);
+
+  // Expose imperative methods via ref (React 19: ref is a plain prop)
+  useImperativeHandle(ref, () => ({
+    exportPdf(format?: string) {
+      editorRef.current?.exportPdf(format);
+    },
+    savePdf() {
+      editorRef.current?.savePdf();
+    },
+    loadDocument(documentId: string) {
+      editorRef.current?.loadDocument(documentId);
+    },
+    getFile() {
+      if (!editorRef.current) return Promise.reject(new Error('[GigaPdf] Editor not ready'));
+      return editorRef.current.getFile();
+    },
+  }));
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const handleComplete = onComplete
+      ? (blob: Blob) => onComplete({ blob })
+      : undefined;
+
+    const options: GigaPdfOptions = {
       publicKey,
+      container: containerRef.current,
       documentId,
       file,
       baseUrl,
@@ -61,127 +103,84 @@ export const GigaPdfEditorComponent = forwardRef<GigaPdfEditorRef, GigaPdfEditor
       hideToolbar,
       tools,
       showDoneButton,
-    } = props;
+      onComplete: handleComplete,
+    };
 
-    const containerRef = useRef<HTMLDivElement>(null);
-    const editorRef = useRef<GigaPdfEditor | null>(null);
+    const editor = new GigaPdfEditor(options);
+    editorRef.current = editor;
 
-    // Expose imperative methods via ref
-    useImperativeHandle(ref, () => ({
-      exportPdf(format?: string) {
-        editorRef.current?.exportPdf(format);
-      },
-      savePdf() {
-        editorRef.current?.savePdf();
-      },
-      loadDocument(documentId: string) {
-        editorRef.current?.loadDocument(documentId);
-      },
-      getFile() {
-        if (!editorRef.current) return Promise.reject(new Error('[GigaPdf] Editor not ready'));
-        return editorRef.current.getFile();
-      },
-    }));
+    if (onReady) editor.on('ready', onReady);
+    if (onSave) editor.on('save', onSave);
+    if (onExport) editor.on('export', onExport);
+    if (onError) editor.on('error', onError);
+    if (onPageChange) editor.on('pageChange', onPageChange);
 
-    useEffect(() => {
-      if (!containerRef.current) return;
+    return () => {
+      editor.destroy();
+      editorRef.current = null;
+    };
+    // Re-create the editor only when identity-stable options change.
+    // Callbacks are intentionally excluded to avoid needless re-mounts;
+    // callers should memoize them if they care about identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicKey, documentId, file, baseUrl, width, height, locale, theme, hideToolbar, tools, showDoneButton]);
 
-      const handleComplete = onComplete
-        ? (blob: Blob) => onComplete({ blob })
-        : undefined;
+  // Sync event handlers without re-creating the editor
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (onReady) editor.on('ready', onReady);
+    return () => {
+      if (onReady) editor.off('ready', onReady);
+    };
+  }, [onReady]);
 
-      const options: GigaPdfOptions = {
-        publicKey,
-        container: containerRef.current,
-        documentId,
-        file,
-        baseUrl,
-        width,
-        height,
-        locale,
-        theme,
-        hideToolbar,
-        tools,
-        showDoneButton,
-        onComplete: handleComplete,
-      };
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (onSave) editor.on('save', onSave);
+    return () => {
+      if (onSave) editor.off('save', onSave);
+    };
+  }, [onSave]);
 
-      const editor = new GigaPdfEditor(options);
-      editorRef.current = editor;
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (onExport) editor.on('export', onExport);
+    return () => {
+      if (onExport) editor.off('export', onExport);
+    };
+  }, [onExport]);
 
-      if (onReady) editor.on('ready', onReady);
-      if (onSave) editor.on('save', onSave);
-      if (onExport) editor.on('export', onExport);
-      if (onError) editor.on('error', onError);
-      if (onPageChange) editor.on('pageChange', onPageChange);
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (onError) editor.on('error', onError);
+    return () => {
+      if (onError) editor.off('error', onError);
+    };
+  }, [onError]);
 
-      return () => {
-        editor.destroy();
-        editorRef.current = null;
-      };
-      // Re-create the editor only when identity-stable options change.
-      // Callbacks are intentionally excluded to avoid needless re-mounts;
-      // callers should memoize them if they care about identity.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [publicKey, documentId, file, baseUrl, width, height, locale, theme, hideToolbar, tools, showDoneButton]);
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (onPageChange) editor.on('pageChange', onPageChange);
+    return () => {
+      if (onPageChange) editor.off('pageChange', onPageChange);
+    };
+  }, [onPageChange]);
 
-    // Sync event handlers without re-creating the editor
-    useEffect(() => {
-      const editor = editorRef.current;
-      if (!editor) return;
-      if (onReady) editor.on('ready', onReady);
-      return () => {
-        if (onReady) editor.off('ready', onReady);
-      };
-    }, [onReady]);
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !onComplete) return;
+    const handler = (data: { blob: Blob }) => onComplete(data);
+    editor.on('complete', handler);
+    return () => { editor.off('complete', handler); };
+  }, [onComplete]);
 
-    useEffect(() => {
-      const editor = editorRef.current;
-      if (!editor) return;
-      if (onSave) editor.on('save', onSave);
-      return () => {
-        if (onSave) editor.off('save', onSave);
-      };
-    }, [onSave]);
-
-    useEffect(() => {
-      const editor = editorRef.current;
-      if (!editor) return;
-      if (onExport) editor.on('export', onExport);
-      return () => {
-        if (onExport) editor.off('export', onExport);
-      };
-    }, [onExport]);
-
-    useEffect(() => {
-      const editor = editorRef.current;
-      if (!editor) return;
-      if (onError) editor.on('error', onError);
-      return () => {
-        if (onError) editor.off('error', onError);
-      };
-    }, [onError]);
-
-    useEffect(() => {
-      const editor = editorRef.current;
-      if (!editor) return;
-      if (onPageChange) editor.on('pageChange', onPageChange);
-      return () => {
-        if (onPageChange) editor.off('pageChange', onPageChange);
-      };
-    }, [onPageChange]);
-
-    useEffect(() => {
-      const editor = editorRef.current;
-      if (!editor || !onComplete) return;
-      const handler = (data: { blob: Blob }) => onComplete(data);
-      editor.on('complete', handler);
-      return () => { editor.off('complete', handler); };
-    }, [onComplete]);
-
-    return <div ref={containerRef} style={style} className={className} />;
-  },
-);
+  return <div ref={containerRef} style={style} className={className} />;
+}
 
 GigaPdfEditorComponent.displayName = 'GigaPdfEditor';
 

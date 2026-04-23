@@ -31,23 +31,21 @@ export interface ZoomControlsProps extends React.HTMLAttributes<HTMLDivElement> 
   minZoom?: number;
   maxZoom?: number;
   zoomStep?: number;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
-const ZoomControls = React.forwardRef<HTMLDivElement, ZoomControlsProps>(
-  (
-    {
-      className,
-      zoom,
-      onZoomChange,
-      onFitWidth,
-      onFitPage,
-      minZoom = 25,
-      maxZoom = 300,
-      zoomStep = 25,
-      ...props
-    },
-    ref
-  ) => {
+function ZoomControls({
+  className,
+  zoom,
+  onZoomChange,
+  onFitWidth,
+  onFitPage,
+  minZoom = 25,
+  maxZoom = 300,
+  zoomStep = 25,
+  ref,
+  ...props
+}: ZoomControlsProps) {
     const handleZoomIn = () => {
       const newZoom = Math.min(zoom + zoomStep, maxZoom);
       onZoomChange(newZoom);
@@ -128,8 +126,6 @@ const ZoomControls = React.forwardRef<HTMLDivElement, ZoomControlsProps>(
         )}
       </div>
     );
-  }
-);
-ZoomControls.displayName = "ZoomControls";
+}
 
 export { ZoomControls };

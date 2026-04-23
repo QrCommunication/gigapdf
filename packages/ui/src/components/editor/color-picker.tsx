@@ -29,19 +29,17 @@ export interface ColorPickerProps {
   colors?: string[];
   showInput?: boolean;
   className?: string;
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
-const ColorPicker = React.forwardRef<HTMLButtonElement, ColorPickerProps>(
-  (
-    {
-      value = "#000000",
-      onChange,
-      colors = DEFAULT_COLORS,
-      showInput = true,
-      className,
-    },
-    ref
-  ) => {
+function ColorPicker({
+  value = "#000000",
+  onChange,
+  colors = DEFAULT_COLORS,
+  showInput = true,
+  className,
+  ref,
+}: ColorPickerProps) {
     const [selectedColor, setSelectedColor] = React.useState(value);
     const [customColor, setCustomColor] = React.useState(value);
 
@@ -120,8 +118,6 @@ const ColorPicker = React.forwardRef<HTMLButtonElement, ColorPickerProps>(
         </PopoverContent>
       </Popover>
     );
-  }
-);
-ColorPicker.displayName = "ColorPicker";
+}
 
 export { ColorPicker };
