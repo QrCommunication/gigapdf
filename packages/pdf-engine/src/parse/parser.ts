@@ -168,16 +168,38 @@ function toUint8Array(input: Buffer | ArrayBuffer | Uint8Array): Uint8Array {
   return new Uint8Array(input as ArrayBuffer);
 }
 
+/**
+ * Ensure pdfjs workerSrc points to a resolvable file path.
+ * Called lazily before each getDocument() to survive bundler code transformations
+ * (Turbopack replaces require.resolve() with module IDs at static top-level,
+ * breaking the top-level IIFE approach).
+ */
+function ensureWorkerSrc(): void {
+  const current = pdfjsLib.GlobalWorkerOptions.workerSrc;
+  // Already set to an absolute file:// URL — nothing to do
+  if (typeof current === 'string' && current.startsWith('file://')) return;
+
+  try {
+    // Runtime strategy: createRequire from process.cwd() — the only strategy that
+    // survives Turbopack/webpack bundling because the resolve() call uses a
+    // runtime-dynamic string (not a literal that bundlers can statically rewrite).
+    const requireFn = createRequire(`${process.cwd()}/package.json`);
+    const spec = 'pdfjs-dist/legacy/build/pdf.worker.mjs';
+    const absPath = requireFn.resolve(spec);
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `file://${absPath}`;
+  } catch {
+    // If resolution fails, leave as-is — pdfjs fakeWorker fallback may work
+  }
+}
+
 async function loadPdfjsDocument(
   input: Buffer | ArrayBuffer | Uint8Array,
 ): Promise<PDFDocumentProxy> {
+  ensureWorkerSrc();
   const data = toUint8Array(input);
   const loadingTask = pdfjsLib.getDocument({
     data,
     useSystemFonts: true,
-    // Force main-thread parsing (no worker) — required for Node.js server runtime
-    // where Web Workers aren't available. Pair with isEvalSupported:false to avoid
-    // eval-based font loading which fails in strict Node environments.
     disableWorker: true,
     isEvalSupported: false,
     verbosity: 0,
