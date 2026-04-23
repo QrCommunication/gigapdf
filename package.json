@@ -77,7 +77,8 @@
       "next-intl@<4.9.1": ">=4.9.1",
       "hono@<4.12.14": ">=4.12.14",
       "axios@>=1.0.0 <1.15.0": ">=1.15.0",
-      "uuid": ">=14.0.0"
+      "uuid": ">=14.0.0",
+      "pdfjs-dist": "5.6.205"
     },
     "onlyBuiltDependencies": [
       "@parcel/watcher",
