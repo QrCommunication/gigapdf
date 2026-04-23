@@ -31,6 +31,7 @@ import {
   rotatePage,
   copyPage,
   resizePage,
+  extractPages,
 } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError, PDFPageOutOfRangeError } from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
@@ -38,7 +39,7 @@ import { sanitizeContentDisposition } from '@/lib/content-disposition';
 import { serverLogger } from '@/lib/server-logger';
 import { validatePdfFile } from '@/lib/request-validation';
 
-type Operation = 'add' | 'delete' | 'move' | 'rotate' | 'copy' | 'resize';
+type Operation = 'add' | 'delete' | 'move' | 'rotate' | 'copy' | 'resize' | 'extract';
 
 export async function POST(request: Request): Promise<Response> {
   const authResult = await requireSession();
@@ -52,7 +53,15 @@ export async function POST(request: Request): Promise<Response> {
     const file = fileValidation.file;
 
     const operation = formData.get('operation') as Operation | null;
-    const validOperations: Operation[] = ['add', 'delete', 'move', 'rotate', 'copy', 'resize'];
+    const validOperations: Operation[] = [
+      'add',
+      'delete',
+      'move',
+      'rotate',
+      'copy',
+      'resize',
+      'extract',
+    ];
     if (!operation || !validOperations.includes(operation)) {
       return NextResponse.json(
         {
@@ -84,6 +93,10 @@ export async function POST(request: Request): Promise<Response> {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const handle = await openDocument(buffer);
+
+    // Operations mutate `handle` in place except `extract`, which produces a
+    // fresh document. `resultHandle` tracks which one we save at the end.
+    let resultHandle = handle;
 
     switch (operation) {
       case 'add': {
@@ -168,9 +181,27 @@ export async function POST(request: Request): Promise<Response> {
         );
         break;
       }
+      case 'extract': {
+        const pageNumbers = params.pageNumbers;
+        if (
+          !Array.isArray(pageNumbers) ||
+          pageNumbers.length === 0 ||
+          pageNumbers.some((n) => typeof n !== 'number' || !Number.isInteger(n))
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'extract requires params.pageNumbers (non-empty integer array).',
+            },
+            { status: 400 },
+          );
+        }
+        resultHandle = await extractPages(handle, pageNumbers as number[]);
+        break;
+      }
     }
 
-    const savedBytes = await saveDocument(handle);
+    const savedBytes = await saveDocument(resultHandle);
 
     return new Response(new Uint8Array(savedBytes), {
       status: 200,

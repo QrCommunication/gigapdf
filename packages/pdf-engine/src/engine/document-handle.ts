@@ -113,6 +113,53 @@ export function closeDocument(handle: PDFDocumentHandle): void {
   dirtyMap.delete(handle._pdfDoc);
 }
 
+/**
+ * Extract selected pages into a brand-new document.
+ *
+ * Unlike other page operations that mutate the source, this returns a fresh
+ * handle so the caller can save it independently (e.g., download a subset).
+ */
+export async function extractPages(
+  handle: PDFDocumentHandle,
+  pageNumbers: number[],
+): Promise<PDFDocumentHandle> {
+  if (!Array.isArray(pageNumbers) || pageNumbers.length === 0) {
+    throw new Error('extractPages requires a non-empty array of page numbers.');
+  }
+
+  const source = handle._pdfDoc;
+  const pageCount = source.getPageCount();
+
+  for (const pn of pageNumbers) {
+    if (!Number.isInteger(pn) || pn < 1 || pn > pageCount) {
+      throw new PDFPageOutOfRangeError(pn, pageCount);
+    }
+  }
+
+  const newDoc = await PDFDocument.create();
+  const copied = await newDoc.copyPages(
+    source,
+    pageNumbers.map((n) => n - 1),
+  );
+  for (const page of copied) {
+    newDoc.addPage(page);
+  }
+
+  dirtyMap.set(newDoc, true);
+
+  return {
+    id: randomUUID(),
+    get pageCount() {
+      return newDoc.getPageCount();
+    },
+    get isDirty() {
+      return dirtyMap.get(newDoc) ?? true;
+    },
+    wasEncrypted: false,
+    _pdfDoc: newDoc,
+  };
+}
+
 export function getMetadata(handle: PDFDocumentHandle): DocumentMetadata {
   const doc = handle._pdfDoc;
 

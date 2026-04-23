@@ -10,6 +10,7 @@ export {
   rotatePage,
   copyPage,
   resizePage,
+  extractPages,
 } from './engine';
 export type {
   PDFDocumentHandle,

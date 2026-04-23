@@ -6,6 +6,7 @@ export {
   setMetadata,
   getPageDimensions,
   markDirty,
+  extractPages,
 } from './document-handle';
 export type {
   PDFDocumentHandle,
