@@ -11,10 +11,16 @@ Environment="PATH=/opt/gigapdf/.venv/bin"
 EnvironmentFile=/opt/gigapdf/.env
 ExecStart=/opt/gigapdf/.venv/bin/celery -A app.tasks.celery_app worker --loglevel=info --queues=billing --concurrency=2
 ExecReload=/bin/kill -HUP $MAINPID
-Restart=always
+Restart=on-failure
 RestartSec=10
+StartLimitBurst=5
+StartLimitIntervalSec=300
 StandardOutput=append:/var/log/gigapdf/celery-billing.log
 StandardError=append:/var/log/gigapdf/celery-billing-error.log
+
+# Memory limits to prevent VPS OOM (async workers need less than web/api)
+MemoryHigh=768M
+MemoryMax=1G
 
 # Security
 NoNewPrivileges=true

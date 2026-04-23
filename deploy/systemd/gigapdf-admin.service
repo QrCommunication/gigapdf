@@ -11,14 +11,23 @@ Environment="NODE_ENV=production"
 Environment="PORT=3001"
 EnvironmentFile=/opt/gigapdf/.env
 ExecStart=/usr/bin/node /opt/gigapdf/apps/admin/.next/standalone/apps/admin/server.js
-Restart=always
+Restart=on-failure
 RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=300
 StandardOutput=append:/var/log/gigapdf/admin.log
 StandardError=append:/var/log/gigapdf/admin-error.log
+
+# Memory limits to prevent VPS OOM
+MemoryHigh=1536M
+MemoryMax=2G
 
 # Security
 NoNewPrivileges=true
 PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/gigapdf /var/log/gigapdf
 
 [Install]
 WantedBy=multi-user.target

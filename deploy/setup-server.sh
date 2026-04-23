@@ -202,21 +202,9 @@ log_info "Systemd services will be installed during first deployment..."
 # 11. Setup Log Rotation
 # =============================================================================
 log_info "Setting up log rotation..."
-cat > /etc/logrotate.d/gigapdf << 'LOGROTATE'
-/var/log/gigapdf/*.log {
-    daily
-    missingok
-    rotate 14
-    compress
-    delaycompress
-    notifempty
-    create 0640 gigapdf gigapdf
-    sharedscripts
-    postrotate
-        systemctl reload gigapdf-api gigapdf-celery 2>/dev/null || true
-    endscript
-}
-LOGROTATE
+# Use copytruncate so running services keep writing to the same fd after rotation
+# (avoids the need to reload/restart services after each rotation)
+cp /opt/gigapdf/deploy/logrotate.conf /etc/logrotate.d/gigapdf
 
 # =============================================================================
 # 12. ImageMagick Policy (allow PDF processing)

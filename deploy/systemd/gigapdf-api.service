@@ -11,10 +11,16 @@ Environment="PATH=/opt/gigapdf/.venv/bin"
 EnvironmentFile=/opt/gigapdf/.env
 ExecStart=/opt/gigapdf/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ExecReload=/bin/kill -HUP $MAINPID
-Restart=always
+Restart=on-failure
 RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=300
 StandardOutput=append:/var/log/gigapdf/api.log
 StandardError=append:/var/log/gigapdf/api-error.log
+
+# Memory limits to prevent VPS OOM
+MemoryHigh=1536M
+MemoryMax=2G
 
 # Security
 NoNewPrivileges=true
