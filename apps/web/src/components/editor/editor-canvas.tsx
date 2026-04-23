@@ -798,6 +798,11 @@ export function EditorCanvas({
       const baseOptions = {
         left: element.bounds.x,
         top: element.bounds.y,
+        // Fabric 6.x defaults to originX/Y: 'center' which treats left/top as
+        // the OBJECT CENTER. Parser produces top-left coords, so force origin
+        // to 'left'/'top' to avoid visual offset of width/2, height/2.
+        originX: "left" as const,
+        originY: "top" as const,
         angle: element.transform?.rotation || 0,
         selectable: !element.locked,
         evented: !element.locked,
