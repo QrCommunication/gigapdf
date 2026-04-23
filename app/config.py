@@ -80,7 +80,11 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # Limits
     # -------------------------------------------------------------------------
-    max_upload_size_mb: int = 100  # Hard cap lowered to 100 MB (PDF-bomb mitigation)
+    # Upload size unified at 100 MB across Python, nginx, and .env examples.
+    # nginx client_max_body_size, MAX_UPLOAD_SIZE_MB in env files, and Next.js
+    # server action body limit must all stay aligned with this value.
+    # See SESSION_20260423_023327 (security audit — SSRF/upload-size hardening).
+    max_upload_size_mb: int = 100
     max_pages_per_document: int = 5000
     preview_max_dpi: int = 600
     history_max_states: int = 100

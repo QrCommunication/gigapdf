@@ -68,6 +68,12 @@ const nextConfig: NextConfig = {
   experimental: {
     // Use PPR for better static/dynamic mix
     ppr: false,
+    // Align Server Action body size limit with the rest of the stack (100 MB).
+    // Python config.py, nginx client_max_body_size, and env MAX_UPLOAD_SIZE_MB
+    // are all set to 100 MB.  SESSION_20260423_023327.
+    serverActions: {
+      bodySizeLimit: "100mb",
+    },
     // Optimize bundle size for large component libraries
     optimizePackageImports: [
       'lucide-react',
@@ -95,11 +101,16 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
   images: {
+    // Explicit whitelist — wildcard "**" is a SSRF vector (OWASP-A10).
+    // Only allow domains that legitimately serve images for this app.
+    // To add a new domain, list it explicitly here rather than widening the
+    // pattern.  Reviewed: SESSION_20260423_023327.
     remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "**",
-      },
+      // Main application domain and all subdomains (avatars, thumbnails…)
+      { protocol: "https", hostname: "giga-pdf.com" },
+      { protocol: "https", hostname: "**.giga-pdf.com" },
+      // Scaleway S3 object storage (PDF thumbnails / previews)
+      { protocol: "https", hostname: "s3.fr-par.scw.cloud" },
     ],
   },
   // Security headers applied at the edge before any page renders.
