@@ -84,9 +84,14 @@ export default function DashboardPage() {
       const uploadResult = await api.uploadDocument(file);
 
       // Fetch the PDF Blob from the server before saving
+      const { getAuthToken } = await import("@/lib/api");
+      const token = await getAuthToken();
       const downloadRes = await fetch(
         `/api/v1/documents/${uploadResult.document_id}/download`,
-        { credentials: "include" }
+        {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }
       );
       if (!downloadRes.ok) {
         throw new Error(`Failed to download PDF: ${downloadRes.status}`);

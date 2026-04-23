@@ -1082,8 +1082,11 @@ export function EditorCanvas({
       if (docId) {
         try {
           const pdfUrl = `/backend-api/api/v1/documents/${docId}/download`;
+          const { getAuthToken } = await import("@/lib/api");
+          const token = await getAuthToken();
           const response = await fetch(pdfUrl, {
             credentials: "include",
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           });
           if (response.ok) {
             const arrayBuffer = await response.arrayBuffer();

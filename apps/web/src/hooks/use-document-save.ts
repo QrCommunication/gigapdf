@@ -18,8 +18,11 @@ import { useLogger } from "@giga-pdf/logger";
  * - Other non-OK status → throws with the HTTP status code
  */
 async function fetchPdfBlobForSave(documentId: string): Promise<Blob> {
+  const { getAuthToken } = await import("@/lib/api");
+  const token = await getAuthToken();
   const response = await fetch(`/api/v1/documents/${documentId}/download`, {
     credentials: "include",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
 
   if (!response.ok) {

@@ -7,8 +7,10 @@
  */
 
 import type { DocumentObject } from "@giga-pdf/types";
+import { getAuthToken, invalidateAuthToken } from "./auth-token";
 
 export type { DocumentObject };
+export { getAuthToken, invalidateAuthToken };
 
 // API base URL - use relative path for same-origin requests
 // nginx proxies /api/ to FastAPI backend
@@ -122,11 +124,32 @@ class APIClient {
       (headers as Record<string, string>)["Content-Type"] = "application/json";
     }
 
-    const response = await fetch(url, {
+    // Fetch JWT from Better Auth (in-memory cache, no sessionStorage)
+    // Python FastAPI backend requires Authorization: Bearer <jwt>
+    const token = await getAuthToken();
+    if (token) {
+      (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+    }
+
+    let response = await fetch(url, {
       ...options,
       headers,
-      credentials: "include", // Include cookies for auth
+      credentials: "include",
     });
+
+    // On 401, invalidate token and retry once (token may have expired)
+    if (response.status === 401 && token) {
+      invalidateAuthToken();
+      const freshToken = await getAuthToken();
+      if (freshToken && freshToken !== token) {
+        (headers as Record<string, string>)["Authorization"] = `Bearer ${freshToken}`;
+        response = await fetch(url, {
+          ...options,
+          headers,
+          credentials: "include",
+        });
+      }
+    }
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));

@@ -227,8 +227,11 @@ export default function EditorPage() {
     async function loadPdfBinary() {
       try {
         const downloadUrl = api.getDocumentDownloadUrl(documentId!);
+        const { getAuthToken } = await import('@/lib/api');
+        const token = await getAuthToken();
         const response = await fetch(downloadUrl, {
           credentials: 'include',
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
         if (!response.ok || cancelled) return;
         const blob = await response.blob();
