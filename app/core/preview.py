@@ -192,51 +192,6 @@ class PreviewGenerator:
 
         return thumbnails
 
-    def extract_page_image(
-        self,
-        page_number: int,
-        xref: int,
-        format: Optional[Literal["png", "jpeg", "webp"]] = None,
-    ) -> tuple[bytes, str]:
-        """
-        Extract an embedded image from a page via pdfplumber.
-
-        DEPRECATED: Image extraction is now handled by @giga-pdf/pdf-engine (TypeScript).
-
-        NOTE: pdfplumber does not support extracting images by xref. This method
-        renders the full page at high DPI and returns it as a PNG fallback.
-        TODO: Use the TS engine image endpoint instead.
-        """
-        logger.warning(
-            "PreviewGenerator.extract_page_image() is deprecated. "
-            "Use @giga-pdf/pdf-engine via Next.js API routes for embedded image extraction."
-        )
-
-        pdf_bytes = self._get_pdf_bytes()
-        if not pdf_bytes:
-            raise ValueError(f"Image not found: xref {xref} (no PDF bytes)")
-
-        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-            if page_number < 1 or page_number > len(pdf.pages):
-                raise ValueError(f"Image not found: page {page_number} out of range")
-            page = pdf.pages[page_number - 1]
-            img = page.to_image(resolution=150).original
-            if img.mode != "RGB":
-                img = img.convert("RGB")
-
-        target_format = format or "png"
-        output = io.BytesIO()
-        mime_map = {"png": "image/png", "jpeg": "image/jpeg", "webp": "image/webp"}
-
-        if target_format == "jpeg":
-            img.save(output, format="JPEG", quality=85)
-        elif target_format == "webp":
-            img.save(output, format="WEBP", quality=85)
-        else:
-            img.save(output, format="PNG")
-
-        return output.getvalue(), mime_map.get(target_format, "image/png")
-
     def get_page_text_image(
         self,
         page_number: int,

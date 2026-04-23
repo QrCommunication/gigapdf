@@ -255,57 +255,6 @@ class DocumentService:
 
         return image_data, content_type_map.get(format, "image/png")
 
-    def get_page_image(
-        self,
-        document_id: str,
-        page_number: int,
-        image_xref: int,
-    ) -> tuple[bytes, str]:
-        """
-        Get an embedded image from a page.
-
-        Args:
-            document_id: Document identifier.
-            page_number: Page number (1-indexed).
-            image_xref: Image cross-reference number.
-
-        Returns:
-            tuple: (image_bytes, content_type)
-        """
-        session = document_sessions.get_session_sync(document_id)
-        if not session:
-            raise DocumentNotFoundError(document_id)
-
-        try:
-            # Extract image using xref
-            img_info = session.pdf_doc.extract_image(image_xref)
-            if not img_info:
-                from app.middleware.error_handler import NotFoundError
-                raise NotFoundError(f"Image {image_xref} not found")
-
-            image_data = img_info.get("image")
-            if not image_data:
-                from app.middleware.error_handler import NotFoundError
-                raise NotFoundError(f"Image {image_xref} has no data")
-
-            # Determine content type
-            ext = img_info.get("ext", "png")
-            content_type_map = {
-                "png": "image/png",
-                "jpeg": "image/jpeg",
-                "jpg": "image/jpeg",
-                "jbig2": "image/png",
-                "jpx": "image/jpeg",
-            }
-            content_type = content_type_map.get(ext, "image/png")
-
-            return image_data, content_type
-
-        except Exception as e:
-            logger.warning(f"Failed to extract image {image_xref}: {e}")
-            from app.middleware.error_handler import NotFoundError
-            raise NotFoundError(f"Image {image_xref} not found")
-
     def download_document(
         self,
         document_id: str,
