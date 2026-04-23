@@ -5,12 +5,13 @@ import { useParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useShallow } from "zustand/react/shallow";
 import Link from "next/link";
-import type { Element } from "@giga-pdf/types";
+import type { Element, UUID } from "@giga-pdf/types";
 import { Button } from "@giga-pdf/ui";
 import {
   useCanvasStore,
   useSelectionStore,
   useUIStore,
+  useOperationsStore,
 } from "@giga-pdf/editor";
 import {
   ArrowLeft,
@@ -267,6 +268,46 @@ export default function EditorPage() {
   const [editedName, setEditedName] = useState(name);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
+  // PDF mutations — hoisted above useDocumentSave so getPreparedBlob can use them
+  const flattenPdf = useFlattenPdf();
+  const pageOperation = usePdfPageOperation();
+  const applyElements = useApplyElements();
+
+  // Drains the operations queue and bakes the ops into the current PDF so
+  // the save flow uploads an up-to-date binary. Returns null when there's
+  // nothing pending so useDocumentSave falls back to the S3 download path.
+  const drainOperations = useOperationsStore((s) => s.drain);
+  const prependOperations = useOperationsStore((s) => s.prepend);
+  const getPreparedBlob = useCallback(async (): Promise<Blob | null> => {
+    if (!currentPdfFile) return null;
+    const ops = drainOperations();
+    if (ops.length === 0) return null;
+
+    try {
+      const modified = await applyElements.mutateAsync({
+        file: currentPdfFile,
+        operations: ops.map((op) => ({
+          action: op.action,
+          pageNumber: op.pageNumber,
+          element: op.element as Record<string, unknown>,
+          ...(op.oldBounds ? { oldBounds: op.oldBounds } : {}),
+        })),
+      });
+      const blob =
+        modified instanceof Blob ? modified : new Blob([modified as BlobPart]);
+      // Update local cache so subsequent ops apply on top of the new binary.
+      setCurrentPdfFile(
+        new File([blob], currentPdfFile.name, { type: "application/pdf" }),
+      );
+      return blob;
+    } catch (err) {
+      clientLogger.error("[editor] apply-elements failed during save:", err);
+      // Requeue so we don't lose the user's work on transient errors.
+      prependOperations(ops);
+      return null;
+    }
+  }, [currentPdfFile, drainOperations, prependOperations, applyElements]);
+
   // Sauvegarde hybride (immédiate pour actions critiques, debounced pour modifications mineures)
   const {
     saving,
@@ -283,6 +324,7 @@ export default function EditorPage() {
     autoSaveInterval: 30000, // Auto-save toutes les 30s comme filet de sécurité
     debounceDelay: 2000, // 2s de debounce pour modifications mineures
     setDirty,
+    getPreparedBlob,
     onSaved: (id) => {
       clientLogger.debug("[editor] Document sauvegardé:", id);
     },
@@ -393,16 +435,32 @@ export default function EditorPage() {
     saveWithPriority("debounced");
   }, [canvasHandle, setDirty, saveWithPriority]);
 
+  // Operations queue: records user-added/modified/deleted elements so the
+  // save flow can apply them to the PDF binary before uploading. Without
+  // this, edits only exist in the scene_graph (Redis) and vanish from the
+  // PDF on reload.
+  const { queueAdd, queueUpdate, queueDelete } = useOperationsStore(
+    useShallow((s) => ({
+      queueAdd: s.queueAdd,
+      queueUpdate: s.queueUpdate,
+      queueDelete: s.queueDelete,
+    }))
+  );
+
   const handleElementAdded = useCallback(
     async (element: Element) => {
       clientLogger.debug("[editor] Element added:", element);
       setDirty(true);
+      const pageNumber = currentPageIndex + 1;
+
+      // Record the op so the save flow can bake it into the PDF.
+      queueAdd(pageNumber, element);
+
       // Émettre via WebSocket pour la collaboration
       emitElementCreate(element);
 
-      // Persister l'élément dans le backend
+      // Persister l'élément dans le backend (scene graph Redis)
       if (documentId) {
-        const pageNumber = currentPageIndex + 1;
         try {
           const apiElement = convertToApiElement(element);
           await api.createElement(documentId, pageNumber, apiElement);
@@ -412,16 +470,22 @@ export default function EditorPage() {
         }
       }
 
-      // Sauvegarder le PDF vers S3
-      saveWithPriority("immediate");
+      // Sauvegarder le PDF vers S3 (debounced: batch ajouts rapprochés)
+      saveWithPriority("debounced");
     },
-    [setDirty, emitElementCreate, saveWithPriority, documentId, currentPageIndex]
+    [setDirty, emitElementCreate, saveWithPriority, documentId, currentPageIndex, queueAdd]
   );
 
   const handleElementModified = useCallback(
     async (element: Element) => {
       clientLogger.debug("[editor] Element modified:", element);
       setDirty(true);
+      const pageNumber = currentPageIndex + 1;
+
+      // Queue update — use the current bounds as oldBounds (best-effort
+      // fallback; apply-elements needs them to clear the previous region).
+      queueUpdate(pageNumber, element, element.bounds);
+
       // Émettre via WebSocket pour la collaboration
       emitElementUpdate(element.elementId, element);
 
@@ -439,7 +503,7 @@ export default function EditorPage() {
       // Sauvegarde debounced vers S3
       saveWithPriority("debounced");
     },
-    [setDirty, emitElementUpdate, saveWithPriority, documentId]
+    [setDirty, emitElementUpdate, saveWithPriority, documentId, currentPageIndex, queueUpdate]
   );
 
   const handleElementRemoved = useCallback(
@@ -447,6 +511,14 @@ export default function EditorPage() {
       clientLogger.debug("[editor] Element removed:", elementId);
       setDirty(true);
       deselectElement(elementId);
+      const pageNumber = currentPageIndex + 1;
+
+      // Best-effort bounds lookup before the element is gone.
+      const removed = currentPage?.elements.find((e) => e.elementId === elementId);
+      if (removed) {
+        queueDelete(pageNumber, elementId as UUID, removed.bounds);
+      }
+
       // Émettre via WebSocket pour la collaboration
       emitElementDelete(elementId);
 
@@ -461,9 +533,9 @@ export default function EditorPage() {
       }
 
       // Sauvegarder le PDF vers S3
-      saveWithPriority("immediate");
+      saveWithPriority("debounced");
     },
-    [setDirty, emitElementDelete, saveWithPriority, documentId, deselectElement]
+    [setDirty, emitElementDelete, saveWithPriority, documentId, deselectElement, currentPageIndex, currentPage, queueDelete]
   );
 
   // Gérer le mouvement du curseur pour la collaboration
@@ -543,11 +615,6 @@ export default function EditorPage() {
     },
     [setDirty, saveWithPriority]
   );
-
-  // Flatten PDF handler
-  const flattenPdf = useFlattenPdf();
-  const pageOperation = usePdfPageOperation();
-  const applyElements = useApplyElements();
 
   const handleExport = useCallback(async () => {
     if (!currentPdfFile) {

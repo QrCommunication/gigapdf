@@ -61,6 +61,16 @@ export interface UseDocumentSaveOptions {
   debounceDelay?: number;
   /** Callback pour marquer comme non modifié */
   setDirty?: (dirty: boolean) => void;
+  /**
+   * Optional hook called before uploading to S3.
+   *
+   * Lets the caller apply pending canvas edits (via /api/pdf/apply-elements)
+   * and return the modified PDF blob. Return null/undefined to fall back to
+   * the S3-download path (no pending operations).
+   *
+   * Must be stable or wrapped in useCallback to avoid reconstruction loops.
+   */
+  getPreparedBlob?: () => Promise<Blob | null | undefined>;
 }
 
 export interface UseDocumentSaveReturn {
@@ -124,9 +134,16 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
     autoSaveInterval = 30000, // 30 secondes par défaut
     debounceDelay = 2000, // 2 secondes par défaut pour debounce
     setDirty,
+    getPreparedBlob,
   } = options;
 
   const logger = useLogger({ component: 'useDocumentSave' });
+
+  // Keep the latest getPreparedBlob in a ref so performSave stays stable.
+  const getPreparedBlobRef = useRef(getPreparedBlob);
+  useEffect(() => {
+    getPreparedBlobRef.current = getPreparedBlob;
+  }, [getPreparedBlob]);
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -198,8 +215,28 @@ export function useDocumentSave(options: UseDocumentSaveOptions): UseDocumentSav
       try {
         logger.info('Saving document to S3', { documentId, name: saveName });
 
-        // Fetch PDF bytes before calling the multipart API
-        const pdfBlob = await fetchPdfBlobForSave(documentId);
+        // Let the caller inject a PDF that already has local edits applied
+        // (via /api/pdf/apply-elements). Falls back to the S3 download path
+        // when there's nothing to apply or the caller opts out.
+        let pdfBlob: Blob | null = null;
+        const prepare = getPreparedBlobRef.current;
+        if (prepare) {
+          try {
+            const prepared = await prepare();
+            if (prepared) {
+              pdfBlob = prepared;
+              logger.debug('Using prepared blob with applied elements');
+            }
+          } catch (prepareErr) {
+            logger.warn('getPreparedBlob failed, falling back to S3 download', {
+              errorMessage:
+                prepareErr instanceof Error ? prepareErr.message : String(prepareErr),
+            });
+          }
+        }
+        if (!pdfBlob) {
+          pdfBlob = await fetchPdfBlobForSave(documentId);
+        }
 
         let storedId: string;
 

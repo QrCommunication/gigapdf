@@ -8,3 +8,4 @@ export * from "./selection-store";
 export * from "./history-store";
 export * from "./collaboration-store";
 export * from "./ui-store";
+export * from "./operations-store";
