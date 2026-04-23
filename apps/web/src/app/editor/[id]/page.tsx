@@ -213,10 +213,10 @@ export default function EditorPage() {
     goToPage,
     isDirty,
     setDirty,
-    addPage,
-    deletePage,
-    reorderPages,
-    duplicatePage,
+    addPage: addPageLocal,
+    deletePage: deletePageLocal,
+    reorderPages: reorderPagesLocal,
+    duplicatePage: duplicatePageLocal,
     setName,
     outlines,
     layers,
@@ -712,24 +712,82 @@ export default function EditorPage() {
     }
   };
 
-  const handlePageRotate = useCallback(async (pageIndex: number) => {
-    if (!currentPdfFile) return;
-    try {
-      const result = await pageOperation.mutateAsync({
-        file: currentPdfFile,
-        operation: 'rotate',
-        params: { pageNumber: pageIndex + 1, degrees: 90 },
+  // Shared helper: run a page-level op through /api/pdf/pages, swap the
+  // binary in memory, and trigger an immediate save. Returns the new file
+  // so callers can run extra local-state updates (duplicate/add/delete need
+  // to mirror the scene graph) in the same tick.
+  const runPageOperation = useCallback(
+    async (
+      operation: 'add' | 'copy' | 'rotate' | 'delete' | 'move',
+      params: Record<string, unknown>,
+    ): Promise<File | null> => {
+      const file = currentPdfFileRef.current;
+      if (!file) return null;
+      try {
+        const result = await pageOperation.mutateAsync({
+          file,
+          operation,
+          params,
+        });
+        const newFile = new File([result as Blob], file.name, {
+          type: 'application/pdf',
+        });
+        updateCurrentPdfFile(newFile);
+        setDirty(true);
+        saveWithPriority('immediate');
+        return newFile;
+      } catch (err) {
+        clientLogger.error(`[editor] ${operation} page failed:`, err);
+        return null;
+      }
+    },
+    [pageOperation, setDirty, saveWithPriority, updateCurrentPdfFile],
+  );
+
+  const handlePageRotate = useCallback(
+    (pageIndex: number) =>
+      runPageOperation('rotate', { pageNumber: pageIndex + 1, degrees: 90 }),
+    [runPageOperation],
+  );
+
+  const handleAddPage = useCallback(async () => {
+    // afterPage=pages.length inserts at the end. pdf-engine treats it as
+    // 1-indexed insertion point, so we pass the current page count as-is.
+    const ok = await runPageOperation('add', { afterPage: pages.length });
+    if (ok) addPageLocal();
+  }, [runPageOperation, pages.length, addPageLocal]);
+
+  const handleDuplicatePage = useCallback(
+    async (pageIndex: number) => {
+      const ok = await runPageOperation('copy', {
+        pageNumber: pageIndex + 1,
+        insertAfter: pageIndex + 1,
       });
-      const file = new File([result as Blob], currentPdfFile.name, { type: 'application/pdf' });
-      // updateCurrentPdfFile sets the ref synchronously, so the save below
-      // reads the rotated binary (not the stale state closure).
-      updateCurrentPdfFile(file);
-      setDirty(true);
-      saveWithPriority("immediate");
-    } catch (err) {
-      clientLogger.error('[editor] Rotate failed:', err);
-    }
-  }, [currentPdfFile, pageOperation, setDirty, saveWithPriority]);
+      if (ok) duplicatePageLocal(pageIndex);
+    },
+    [runPageOperation, duplicatePageLocal],
+  );
+
+  const handleDeletePage = useCallback(
+    async (pageIndex: number) => {
+      // pdf-engine refuses to delete the last remaining page; guard locally.
+      if (pages.length <= 1) return;
+      const ok = await runPageOperation('delete', { pageNumber: pageIndex + 1 });
+      if (ok) deletePageLocal(pageIndex);
+    },
+    [runPageOperation, pages.length, deletePageLocal],
+  );
+
+  const handleReorderPages = useCallback(
+    async (fromIndex: number, toIndex: number) => {
+      const ok = await runPageOperation('move', {
+        fromPage: fromIndex + 1,
+        toPage: toIndex + 1,
+      });
+      if (ok) reorderPagesLocal(fromIndex, toIndex);
+    },
+    [runPageOperation, reorderPagesLocal],
+  );
 
   const handlePageExtract = useCallback(async (pageIndex: number) => {
     if (!currentPdfFile) return;
@@ -1180,10 +1238,10 @@ export default function EditorPage() {
           pages={pages}
           currentPageIndex={currentPageIndex}
           onPageSelect={goToPage}
-          onPageAdd={addPage}
-          onPageDelete={deletePage}
-          onPageReorder={reorderPages}
-          onPageDuplicate={duplicatePage}
+          onPageAdd={handleAddPage}
+          onPageDelete={handleDeletePage}
+          onPageReorder={handleReorderPages}
+          onPageDuplicate={handleDuplicatePage}
           previewBaseUrl={process.env.NEXT_PUBLIC_API_URL}
           onPageRotate={handlePageRotate}
           onPageExtract={handlePageExtract}
