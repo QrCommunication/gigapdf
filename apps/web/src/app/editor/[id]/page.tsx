@@ -273,25 +273,43 @@ export default function EditorPage() {
   const pageOperation = usePdfPageOperation();
   const applyElements = useApplyElements();
 
-  // Drains the operations queue and bakes the ops into the current PDF so
-  // the save flow uploads an up-to-date binary. Returns null when there's
-  // nothing pending so useDocumentSave falls back to the S3 download path.
+  // currentPdfFile is the single source of truth for the PDF binary. It
+  // receives every local mutation (rotate/extract/element add/modify/delete
+  // via apply-elements). The save flow uploads this blob directly, so any
+  // op that already updated currentPdfFile is persisted, even if the op
+  // queue is empty at save time.
   const drainOperations = useOperationsStore((s) => s.drain);
   const prependOperations = useOperationsStore((s) => s.prepend);
+  const contentModificationsRef = useRef<ElementModification[]>([]);
   const getPreparedBlob = useCallback(async (): Promise<Blob | null> => {
     if (!currentPdfFile) return null;
     const ops = drainOperations();
-    if (ops.length === 0) return null;
+    const contentMods = contentModificationsRef.current;
+
+    // Nothing to bake — upload the current in-memory PDF as-is. This covers
+    // page-level ops (rotate/extract) that already mutated currentPdfFile.
+    if (ops.length === 0 && contentMods.length === 0) {
+      return currentPdfFile;
+    }
+
+    // Merge element ops + content-edit-layer mods into a single apply call.
+    const allOps = [
+      ...ops.map((op) => ({
+        action: op.action,
+        pageNumber: op.pageNumber,
+        element: op.element as Record<string, unknown>,
+        ...(op.oldBounds ? { oldBounds: op.oldBounds } : {}),
+      })),
+      ...contentMods.map((mod) => ({
+        ...mod,
+        pageNumber: mod.pageNumber + 1, // content-edit-layer is 0-indexed
+      })),
+    ];
 
     try {
       const modified = await applyElements.mutateAsync({
         file: currentPdfFile,
-        operations: ops.map((op) => ({
-          action: op.action,
-          pageNumber: op.pageNumber,
-          element: op.element as Record<string, unknown>,
-          ...(op.oldBounds ? { oldBounds: op.oldBounds } : {}),
-        })),
+        operations: allOps,
       });
       const blob =
         modified instanceof Blob ? modified : new Blob([modified as BlobPart]);
@@ -299,14 +317,24 @@ export default function EditorPage() {
       setCurrentPdfFile(
         new File([blob], currentPdfFile.name, { type: "application/pdf" }),
       );
+      // Clear content modifications now that they're baked in.
+      setContentModifications([]);
       return blob;
     } catch (err) {
       clientLogger.error("[editor] apply-elements failed during save:", err);
-      // Requeue so we don't lose the user's work on transient errors.
+      // Requeue ops so we don't lose the user's work on transient errors.
       prependOperations(ops);
-      return null;
+      // Fall back to uploading the last known good binary — never upload
+      // the S3 original, which would wipe prior successful edits.
+      return currentPdfFile;
     }
   }, [currentPdfFile, drainOperations, prependOperations, applyElements]);
+
+  // Keep the ref in sync so getPreparedBlob can read the latest mods without
+  // being reconstructed on every keystroke.
+  useEffect(() => {
+    contentModificationsRef.current = contentModifications;
+  }, [contentModifications]);
 
   // Sauvegarde hybride (immédiate pour actions critiques, debounced pour modifications mineures)
   const {
@@ -681,10 +709,14 @@ export default function EditorPage() {
       });
       const file = new File([result as Blob], currentPdfFile.name, { type: 'application/pdf' });
       setCurrentPdfFile(file);
+      // Persist the rotated binary so it survives reload. save reads
+      // currentPdfFile via getPreparedBlob, so no separate upload call needed.
+      setDirty(true);
+      saveWithPriority("immediate");
     } catch (err) {
       clientLogger.error('[editor] Rotate failed:', err);
     }
-  }, [currentPdfFile, pageOperation]);
+  }, [currentPdfFile, pageOperation, setDirty, saveWithPriority]);
 
   const handlePageExtract = useCallback(async (pageIndex: number) => {
     if (!currentPdfFile) return;
