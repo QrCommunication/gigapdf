@@ -380,8 +380,11 @@ export async function extractTextElements(
     const fontSize = Math.sqrt((a ?? 1) * (a ?? 1) + (b ?? 0) * (b ?? 0));
     const width = item.width;
     const height = item.height > 0 ? item.height : fontSize;
+    // pdfjs transform[5] (ty) = text BASELINE in PDF coords (bottom-up origin).
+    // Fabric Textbox expects top-of-box. Top = baseline + ascender ≈ ty + fontSize*0.8.
+    // Flip Y to web coords: webY = pageHeight - (ty + ascender)
     const x = tx ?? 0;
-    const y = pageHeight - (ty ?? 0) - height;
+    const y = pageHeight - (ty ?? 0) - fontSize * 0.8;
 
     const { fontFamily, fontWeight, fontStyle } = mapPdfFontToStandard(item.fontName ?? '');
 
