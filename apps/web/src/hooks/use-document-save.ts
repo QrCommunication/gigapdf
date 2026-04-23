@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { api, getAuthToken } from "@/lib/api";
+import { api } from "@/lib/api";
 import { offlineQueue, type PendingOperation } from "@/lib/offline-queue";
 import { useLogger } from "@giga-pdf/logger";
 
@@ -18,15 +18,8 @@ import { useLogger } from "@giga-pdf/logger";
  * - Other non-OK status → throws with the HTTP status code
  */
 async function fetchPdfBlobForSave(documentId: string): Promise<Blob> {
-  const token = getAuthToken();
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
   const response = await fetch(`/api/v1/documents/${documentId}/download`, {
     credentials: "include",
-    headers,
   });
 
   if (!response.ok) {

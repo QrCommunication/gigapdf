@@ -29,7 +29,7 @@ import {
 import { useDocument } from "@/hooks/use-document";
 import { useDocumentSave } from "@/hooks/use-document-save";
 import { useCollaboration } from "@/hooks/use-collaboration";
-import { api, getAuthToken, type ElementCreateRequest } from "@/lib/api";
+import { api, type ElementCreateRequest } from "@/lib/api";
 import {
   EditorCanvas,
   EditorToolbar,
@@ -226,10 +226,8 @@ export default function EditorPage() {
     async function loadPdfBinary() {
       try {
         const downloadUrl = api.getDocumentDownloadUrl(documentId!);
-        const authToken = getAuthToken();
         const response = await fetch(downloadUrl, {
           credentials: 'include',
-          headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
         });
         if (!response.ok || cancelled) return;
         const blob = await response.blob();

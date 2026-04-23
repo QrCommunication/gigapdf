@@ -14,29 +14,6 @@ export type { DocumentObject };
 // nginx proxies /api/ to FastAPI backend
 const API_BASE_URL = "";
 
-// Token storage for auth — sessionStorage (tab-scoped, survives reload, zero SSR leak)
-const AUTH_TOKEN_KEY = "giga_pdf_auth_token";
-
-/**
- * Set the auth token to be used for API requests.
- * Call this after user signs in.
- */
-export function setAuthToken(token: string | null) {
-  if (typeof window === "undefined") return;
-  if (token === null) {
-    sessionStorage.removeItem(AUTH_TOKEN_KEY);
-  } else {
-    sessionStorage.setItem(AUTH_TOKEN_KEY, token);
-  }
-}
-
-/**
- * Get the current auth token.
- */
-export function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return sessionStorage.getItem(AUTH_TOKEN_KEY);
-}
 
 interface APIResponse<T> {
   success: boolean;
@@ -139,12 +116,6 @@ class APIClient {
     const headers: HeadersInit = {
       ...options.headers,
     };
-
-    // Add Authorization header if token is available
-    const token = getAuthToken();
-    if (token) {
-      (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
-    }
 
     // Don't set Content-Type for FormData (browser will set it with boundary)
     if (!(options.body instanceof FormData)) {
@@ -330,12 +301,7 @@ class APIClient {
 
   async getExportResult(documentId: string, jobId: string): Promise<Blob> {
     const url = `${this.baseUrl}/api/v1/documents/${documentId}/export/${jobId}`;
-    const headers: HeadersInit = {};
-    const token = getAuthToken();
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-    const response = await fetch(url, { headers, credentials: "include" });
+    const response = await fetch(url, { credentials: "include" });
     if (!response.ok) {
       throw new Error(`Export failed: ${response.status}`);
     }

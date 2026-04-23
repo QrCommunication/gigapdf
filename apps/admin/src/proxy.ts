@@ -42,7 +42,13 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL("/login", request.url));
     }
 
-    // Session is valid, allow access
+    // Verify the user has admin or super_admin role
+    const userRole = session.user.role as string | undefined;
+    if (userRole !== "admin" && userRole !== "super_admin") {
+      return NextResponse.redirect(new URL("/login?error=forbidden", request.url));
+    }
+
+    // Session is valid and user has admin role, allow access
     return NextResponse.next();
   } catch (error) {
     console.error("Proxy auth error:", error);

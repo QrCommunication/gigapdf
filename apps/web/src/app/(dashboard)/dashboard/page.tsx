@@ -7,7 +7,7 @@ import { StatsCards } from "@/components/dashboard/stats-cards";
 import { DocumentGrid } from "@/components/dashboard/document-grid";
 import { Button, Skeleton } from "@giga-pdf/ui";
 import { Plus, Upload } from "lucide-react";
-import { api, StoredDocument, QuotaSummary, getAuthToken } from "@/lib/api";
+import { api, StoredDocument, QuotaSummary } from "@/lib/api";
 
 interface DashboardDocument {
   id: string;
@@ -83,13 +83,9 @@ export default function DashboardPage() {
       const uploadResult = await api.uploadDocument(file);
 
       // Fetch the PDF Blob from the server before saving
-      const token = getAuthToken();
       const downloadRes = await fetch(
         `/api/v1/documents/${uploadResult.document_id}/download`,
-        {
-          credentials: "include",
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        }
+        { credentials: "include" }
       );
       if (!downloadRes.ok) {
         throw new Error(`Failed to download PDF: ${downloadRes.status}`);

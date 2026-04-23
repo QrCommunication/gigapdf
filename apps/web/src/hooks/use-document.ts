@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { api, getAuthToken } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { DocumentObject, PageObject, BookmarkObject, LayerObject, EmbeddedFileObject } from "@giga-pdf/types";
 
 export interface UseDocumentOptions {
@@ -112,13 +112,11 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       setDocumentId(docId);
 
       // Récupérer le document complet avec pages et éléments (TS parser via S3)
-      const token = getAuthToken();
       console.log("[useDocument] Calling /api/pdf/parse-from-s3 for docId:", docId);
       const parseResp = await fetch("/api/pdf/parse-from-s3", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ documentId: docId }),
         credentials: "include",

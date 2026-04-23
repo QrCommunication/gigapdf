@@ -37,7 +37,7 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: false, // Set to true in production
+    requireEmailVerification: true,
     sendResetPassword: async ({ user, url }) => {
       try {
         // Get user locale preference (default to French)
