@@ -81,25 +81,27 @@ class DocumentService:
             # Build a minimal scene_graph: page dimensions only.
             # The real scene_graph (text, images, annotations, forms) is loaded
             # by the TypeScript pdf-engine via /api/pdf/parse-from-s3.
-            pages = [
-                PageObject(
-                    page_id=generate_uuid(),
-                    page_number=i + 1,
-                    dimensions=Dimensions(
-                        width=pdf_doc[i].rect.width,
-                        height=pdf_doc[i].rect.height,
-                        rotation=int(pdf_doc[i].rotation or 0),
-                    ),
-                    media_box=MediaBox(
-                        x=0,
-                        y=0,
-                        width=pdf_doc[i].rect.width,
-                        height=pdf_doc[i].rect.height,
-                    ),
-                    elements=[],
+            pages = []
+            for i in range(pdf_doc.page_count):
+                page_proxy = self.engine.get_page(document_id, i + 1)
+                pages.append(
+                    PageObject(
+                        page_id=generate_uuid(),
+                        page_number=i + 1,
+                        dimensions=Dimensions(
+                            width=page_proxy.rect.width,
+                            height=page_proxy.rect.height,
+                            rotation=int(page_proxy.rotation or 0),
+                        ),
+                        media_box=MediaBox(
+                            x=0,
+                            y=0,
+                            width=page_proxy.rect.width,
+                            height=page_proxy.rect.height,
+                        ),
+                        elements=[],
+                    )
                 )
-                for i in range(pdf_doc.page_count)
-            ]
             scene_graph = DocumentObject(
                 document_id=document_id,
                 metadata=DocumentMetadata(page_count=pdf_doc.page_count),
