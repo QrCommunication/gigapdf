@@ -385,20 +385,16 @@ export async function extractTextElements(
       viewport.transform,
       item.transform as number[],
     ) as number[];
-    const [vpA, vpB, , vpD, vpE, vpF] = combined;
+    const [vpA, vpB, , , vpE, vpF] = combined;
 
     // Font size in viewport space = scale factor magnitude
     const fontSize = Math.sqrt((vpA ?? 1) * (vpA ?? 1) + (vpB ?? 0) * (vpB ?? 0));
     if (fontSize < 0.1) continue;
 
-    // Width in viewport space: item.width is in text space, scale by vpA
-    const widthScale = Math.abs(vpA ?? 1);
-    const width = item.width > 0
-      ? item.width * widthScale
-      : fontSize * item.str.length * 0.5;
-    // Height: use item.height scaled, or fontSize as fallback
-    const heightScale = Math.abs(vpD ?? 1);
-    const height = item.height > 0 ? item.height * heightScale : fontSize;
+    // item.width and item.height are already in VIEWPORT units (PDF points at scale 1).
+    // Do NOT re-scale by fontSize — that would inflate boxes and cause text overlap.
+    const width = item.width > 0 ? item.width : fontSize * item.str.length * 0.5;
+    const height = item.height > 0 ? item.height : fontSize;
 
     // vpE, vpF = BASELINE position in viewport (Y-down, top-left origin).
     // Top of text box = baseline - ascender (≈ 0.8 * fontSize in viewport-space units).
