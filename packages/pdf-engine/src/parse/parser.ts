@@ -138,7 +138,16 @@ async function loadPdfjsDocument(
   input: Buffer | ArrayBuffer | Uint8Array,
 ): Promise<PDFDocumentProxy> {
   const data = toUint8Array(input);
-  const loadingTask = pdfjsLib.getDocument({ data, useSystemFonts: true });
+  const loadingTask = pdfjsLib.getDocument({
+    data,
+    useSystemFonts: true,
+    // Force main-thread parsing (no worker) — required for Node.js server runtime
+    // where Web Workers aren't available. Pair with isEvalSupported:false to avoid
+    // eval-based font loading which fails in strict Node environments.
+    disableWorker: true,
+    isEvalSupported: false,
+    verbosity: 0,
+  } as Parameters<typeof pdfjsLib.getDocument>[0]);
   try {
     return await loadingTask.promise;
   } catch (error) {
