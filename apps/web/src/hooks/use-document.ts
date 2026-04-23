@@ -114,10 +114,13 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
 
       // Récupérer le document complet avec pages et éléments (TS parser via S3)
       clientLogger.debug("[useDocument] Calling /api/pdf/parse-from-s3 for docId:", docId);
+      const { getAuthToken } = await import("@/lib/api");
+      const authToken = await getAuthToken();
       const parseResp = await fetch("/api/pdf/parse-from-s3", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         },
         body: JSON.stringify({ documentId: docId }),
         credentials: "include",
