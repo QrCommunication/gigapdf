@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { clientLogger } from "@/lib/client-logger";
-import type { DocumentObject, PageObject, BookmarkObject, LayerObject, EmbeddedFileObject } from "@giga-pdf/types";
+import type { DocumentObject, PageObject, BookmarkObject, LayerObject, EmbeddedFileObject, Element } from "@giga-pdf/types";
 
 export interface UseDocumentOptions {
   /** ID du document stocké (S3) - si fourni, charge depuis le stockage */
@@ -47,6 +47,12 @@ export interface UseDocumentReturn {
   reorderPages: (fromIndex: number, toIndex: number) => void;
   /** Dupliquer une page */
   duplicatePage: (pageIndex: number) => void;
+  /** Ajouter un élément au scene graph d'une page (miroir du canvas Fabric) */
+  addElementToPage: (pageIndex: number, element: Element) => void;
+  /** Mettre à jour un élément du scene graph */
+  updateElementInPage: (elementId: string, updates: Partial<Element>) => void;
+  /** Retirer un élément du scene graph */
+  removeElementFromPage: (elementId: string) => void;
   /** Mettre à jour le nom du document */
   setName: (name: string) => void;
   /** Table des matières (signets) */
@@ -399,6 +405,58 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     [document]
   );
 
+  // Ajouter un élément au scene graph d'une page (miroir du canvas Fabric)
+  const addElementToPage = useCallback(
+    (pageIndex: number, element: Element) => {
+      setDocument((prev) => {
+        if (!prev || pageIndex < 0 || pageIndex >= prev.pages.length) return prev;
+        const pages = prev.pages.map((p, i) =>
+          i === pageIndex
+            ? { ...p, elements: [...p.elements, element] }
+            : p,
+        );
+        return { ...prev, pages };
+      });
+    },
+    [],
+  );
+
+  // Mettre à jour un élément (cherche dans toutes les pages)
+  const updateElementInPage = useCallback(
+    (elementId: string, updates: Partial<Element>) => {
+      setDocument((prev) => {
+        if (!prev) return prev;
+        let touched = false;
+        const pages = prev.pages.map((p) => {
+          const idx = p.elements.findIndex((e) => e.elementId === elementId);
+          if (idx === -1) return p;
+          touched = true;
+          const nextEl = { ...p.elements[idx], ...updates } as Element;
+          const elements = [...p.elements];
+          elements[idx] = nextEl;
+          return { ...p, elements };
+        });
+        return touched ? { ...prev, pages } : prev;
+      });
+    },
+    [],
+  );
+
+  // Retirer un élément (cherche dans toutes les pages)
+  const removeElementFromPage = useCallback((elementId: string) => {
+    setDocument((prev) => {
+      if (!prev) return prev;
+      let touched = false;
+      const pages = prev.pages.map((p) => {
+        const filtered = p.elements.filter((e) => e.elementId !== elementId);
+        if (filtered.length === p.elements.length) return p;
+        touched = true;
+        return { ...p, elements: filtered };
+      });
+      return touched ? { ...prev, pages } : prev;
+    });
+  }, []);
+
   // Pages du document
   const pages = document?.pages || [];
   const currentPage = pages[currentPageIndex] || null;
@@ -426,6 +484,9 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     deletePage,
     reorderPages,
     duplicatePage,
+    addElementToPage,
+    updateElementInPage,
+    removeElementFromPage,
     setName,
     outlines,
     layers,

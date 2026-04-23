@@ -2,7 +2,14 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import type { Element, TextElement, ShapeElement, ImageElement } from "@giga-pdf/types";
+import type {
+  Element,
+  TextElement,
+  ShapeElement,
+  ImageElement,
+  AnnotationElement,
+  FormFieldElement,
+} from "@giga-pdf/types";
 
 export interface PropertiesPanelProps {
   /** Élément(s) sélectionné(s) */
@@ -176,6 +183,113 @@ export function PropertiesPanel({
     </div>
   );
 
+  // Render pour élément annotation (highlight, underline, note, comment, …)
+  const renderAnnotationProperties = (element: AnnotationElement) => (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">Type</label>
+        <div className="text-sm capitalize">{element.annotationType}</div>
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">Contenu</label>
+        <textarea
+          value={element.content ?? ""}
+          onChange={(e) =>
+            onElementUpdate?.(element.elementId, {
+              content: e.target.value,
+            } as Partial<AnnotationElement>)
+          }
+          rows={3}
+          className="w-full px-2 py-1 rounded border bg-background text-sm resize-y"
+        />
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">Couleur</label>
+        <input
+          type="color"
+          value={element.style?.color ?? "#ffff00"}
+          onChange={(e) =>
+            onElementUpdate?.(element.elementId, {
+              style: { ...element.style, color: e.target.value },
+            } as Partial<AnnotationElement>)
+          }
+          className="w-full h-8 rounded border bg-background"
+        />
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">Opacité</label>
+        <input
+          type="range"
+          value={(element.style?.opacity ?? 1) * 100}
+          onChange={(e) =>
+            onElementUpdate?.(element.elementId, {
+              style: { ...element.style, opacity: parseInt(e.target.value) / 100 },
+            } as Partial<AnnotationElement>)
+          }
+          min={0}
+          max={100}
+          className="w-full"
+        />
+      </div>
+    </div>
+  );
+
+  // Render pour champ de formulaire (text, checkbox, radio, dropdown, signature)
+  const renderFormFieldProperties = (element: FormFieldElement) => (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">Type de champ</label>
+        <div className="text-sm capitalize">{element.fieldType}</div>
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">Nom du champ</label>
+        <input
+          type="text"
+          value={element.fieldName ?? ""}
+          onChange={(e) =>
+            onElementUpdate?.(element.elementId, {
+              fieldName: e.target.value,
+            } as Partial<FormFieldElement>)
+          }
+          className="w-full h-8 px-2 rounded border bg-background text-sm"
+          placeholder="champ_1"
+        />
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">Placeholder</label>
+        <input
+          type="text"
+          value={(element as { placeholder?: string }).placeholder ?? ""}
+          onChange={(e) =>
+            onElementUpdate?.(element.elementId, {
+              placeholder: e.target.value,
+            } as unknown as Partial<FormFieldElement>)
+          }
+          className="w-full h-8 px-2 rounded border bg-background text-sm"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          id={`required-${element.elementId}`}
+          type="checkbox"
+          checked={Boolean((element as { required?: boolean }).required)}
+          onChange={(e) =>
+            onElementUpdate?.(element.elementId, {
+              required: e.target.checked,
+            } as unknown as Partial<FormFieldElement>)
+          }
+          className="w-4 h-4"
+        />
+        <label
+          htmlFor={`required-${element.elementId}`}
+          className="text-xs text-muted-foreground"
+        >
+          Champ obligatoire
+        </label>
+      </div>
+    </div>
+  );
+
   // Render pour élément image
   const renderImageProperties = (element: ImageElement) => (
     <div className="space-y-3">
@@ -307,6 +421,8 @@ export function PropertiesPanel({
               {selectedElement.type === "text" && renderTextProperties(selectedElement as TextElement)}
               {selectedElement.type === "shape" && renderShapeProperties(selectedElement as ShapeElement)}
               {selectedElement.type === "image" && renderImageProperties(selectedElement as ImageElement)}
+              {selectedElement.type === "annotation" && renderAnnotationProperties(selectedElement as AnnotationElement)}
+              {selectedElement.type === "form_field" && renderFormFieldProperties(selectedElement as FormFieldElement)}
             </div>
           </div>
         ) : null}

@@ -217,6 +217,9 @@ export default function EditorPage() {
     deletePage: deletePageLocal,
     reorderPages: reorderPagesLocal,
     duplicatePage: duplicatePageLocal,
+    addElementToPage,
+    updateElementInPage,
+    removeElementFromPage,
     setName,
     outlines,
     layers,
@@ -494,6 +497,18 @@ export default function EditorPage() {
       setDirty(true);
       const pageNumber = currentPageIndex + 1;
 
+      // Mirror the new element into the local scene graph so properties
+      // panel and selection lookups find it. Without this, Fabric objects
+      // are selectable but the panel stays empty because selectedElements
+      // is computed via currentPage.elements.filter().
+      addElementToPage(currentPageIndex, element);
+
+      // Auto-select the new element so its properties are immediately
+      // visible — matches the UX of every real PDF editor.
+      if (currentPage) {
+        selectElements([element.elementId], currentPage.pageId);
+      }
+
       // Record the op so the save flow can bake it into the PDF.
       queueAdd(pageNumber, element);
 
@@ -514,7 +529,7 @@ export default function EditorPage() {
       // Sauvegarder le PDF vers S3 (debounced: batch ajouts rapprochés)
       saveWithPriority("debounced");
     },
-    [setDirty, emitElementCreate, saveWithPriority, documentId, currentPageIndex, queueAdd]
+    [setDirty, emitElementCreate, saveWithPriority, documentId, currentPageIndex, queueAdd, addElementToPage, currentPage, selectElements]
   );
 
   const handleElementModified = useCallback(
@@ -522,6 +537,10 @@ export default function EditorPage() {
       clientLogger.debug("[editor] Element modified:", element);
       setDirty(true);
       const pageNumber = currentPageIndex + 1;
+
+      // Mirror the update into the local scene graph (properties panel
+      // reads from there, not from Fabric).
+      updateElementInPage(element.elementId, element);
 
       // Queue update — use the current bounds as oldBounds (best-effort
       // fallback; apply-elements needs them to clear the previous region).
@@ -544,7 +563,7 @@ export default function EditorPage() {
       // Sauvegarde debounced vers S3
       saveWithPriority("debounced");
     },
-    [setDirty, emitElementUpdate, saveWithPriority, documentId, currentPageIndex, queueUpdate]
+    [setDirty, emitElementUpdate, saveWithPriority, documentId, currentPageIndex, queueUpdate, updateElementInPage]
   );
 
   const handleElementRemoved = useCallback(
@@ -559,6 +578,10 @@ export default function EditorPage() {
       if (removed) {
         queueDelete(pageNumber, elementId as UUID, removed.bounds);
       }
+
+      // Mirror the removal in the local scene graph so the Properties
+      // panel + selection shrink accordingly.
+      removeElementFromPage(elementId);
 
       // Émettre via WebSocket pour la collaboration
       emitElementDelete(elementId);
@@ -576,7 +599,7 @@ export default function EditorPage() {
       // Sauvegarder le PDF vers S3
       saveWithPriority("debounced");
     },
-    [setDirty, emitElementDelete, saveWithPriority, documentId, deselectElement, currentPageIndex, currentPage, queueDelete]
+    [setDirty, emitElementDelete, saveWithPriority, documentId, deselectElement, currentPageIndex, currentPage, queueDelete, removeElementFromPage]
   );
 
   // Gérer le mouvement du curseur pour la collaboration
