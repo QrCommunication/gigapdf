@@ -25,6 +25,59 @@
 import * as pdfjsLib from "pdfjs-dist";
 import type { PageObject } from "@giga-pdf/types";
 
+type PdfPageForMask = {
+  getViewport: (opts: { scale: number }) => { transform: number[]; height: number };
+  getTextContent: (opts?: unknown) => Promise<{
+    items: Array<{
+      str?: string;
+      transform?: number[];
+      width?: number;
+      height?: number;
+    }>;
+  }>;
+};
+
+/**
+ * Overlay opaque white rectangles on all text regions of a rendered PDF page,
+ * so that the Fabric editable text overlay is the only visible text on the canvas.
+ *
+ * Uses viewport.transform composition to compute each text item's absolute
+ * bounding box in canvas pixel space, accounting for page rotation, MediaBox,
+ * and render scale automatically.
+ */
+async function maskTextLayer(
+  page: PdfPageForMask,
+  context: CanvasRenderingContext2D,
+  viewport: { transform: number[]; height: number },
+): Promise<void> {
+  try {
+    const textContent = await page.getTextContent();
+    context.save();
+    context.fillStyle = "#ffffff";
+    for (const item of textContent.items) {
+      if (!item.str || !item.transform) continue;
+      const t = item.transform;
+      // Compose item.transform with viewport.transform to get absolute canvas-space coords.
+      const combined = pdfjsLib.Util.transform(viewport.transform, t as number[]) as number[];
+      const fontSize = Math.sqrt(
+        (combined[0] ?? 1) * (combined[0] ?? 1) + (combined[1] ?? 0) * (combined[1] ?? 0),
+      );
+      const widthScale = Math.abs(combined[0] ?? 1) || 1;
+      const width = (item.width ?? 0) > 0 ? (item.width as number) * widthScale : fontSize * (item.str.length || 1) * 0.5;
+      const baselineX = combined[4] ?? 0;
+      const baselineY = combined[5] ?? 0;
+      // In viewport (Y-down), text extends: ABOVE baseline by ascender (~0.8·fontSize)
+      // and BELOW by descender (~0.2·fontSize). Add 1px padding to catch anti-aliasing edges.
+      const topY = baselineY - fontSize * 0.85 - 1;
+      const boxHeight = fontSize * 1.15 + 2;
+      context.fillRect(baselineX - 1, topY, width + 2, boxHeight);
+    }
+    context.restore();
+  } catch {
+    // If text extraction fails, leave the canvas as-is (won't break rendering).
+  }
+}
+
 // ─── pdfjs worker for the main-thread fallback path ──────────────────────────
 
 // Configure PDF.js worker — use local copy served from /pdf-worker/
@@ -513,6 +566,11 @@ export class PDFRenderer {
       renderInteractiveForms: renderAnnotations,
     } as Parameters<typeof page.render>[0]);
     await renderTask.promise;
+
+    // Mask text from the rendered image so the Fabric overlay is the only visible text.
+    // Without this, PDF background text and Fabric overlay text stack with different
+    // font metrics (browser Helvetica vs PDF embedded font), creating visual duplicates.
+    await maskTextLayer(page, context, viewport);
   }
 
   // ── renderPageToDataURL ──────────────────────────────────────────────────────
