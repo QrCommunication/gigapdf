@@ -64,6 +64,18 @@ const nextConfig: NextConfig = {
   // Force dynamic rendering to avoid SSG issues with client components
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
+  // Force pdfjs-dist worker file to be included in standalone bundle
+  // (needed for server-side PDF parsing in /api/pdf/parse-from-s3)
+  outputFileTracingIncludes: {
+    "/api/pdf/parse-from-s3": [
+      "../../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+      "../../node_modules/pdfjs-dist/legacy/build/pdf.mjs",
+    ],
+    "/api/pdf/parse": [
+      "../../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+      "../../node_modules/pdfjs-dist/legacy/build/pdf.mjs",
+    ],
+  },
   // Disable static generation for error pages
   experimental: {
     // Use PPR for better static/dynamic mix

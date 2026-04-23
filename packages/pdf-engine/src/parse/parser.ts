@@ -1,4 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { createRequire } from 'node:module';
 import type { PDFDocumentProxy } from 'pdfjs-dist/types/src/display/api';
 import { randomUUID } from 'node:crypto';
 import type { DocumentObject, DocumentMetadata, BookmarkObject, PageObject } from '@giga-pdf/types';
@@ -17,8 +18,19 @@ import { extractAnnotationElements } from './annotation-extractor';
 import { extractFormFieldElements } from './form-extractor';
 import { extractBookmarks } from './bookmark-extractor';
 
+// Configure pdfjs worker source for Node.js runtime. pdfjs-dist 5.x dynamic-imports
+// the worker module; in Next.js standalone we must resolve the absolute path
+// so the dynamic import can find the file.
 if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+  try {
+    const requireFn = createRequire(import.meta.url);
+    pdfjsLib.GlobalWorkerOptions.workerSrc = requireFn.resolve(
+      'pdfjs-dist/legacy/build/pdf.worker.mjs',
+    );
+  } catch {
+    // Fallback: empty string triggers fakeWorker fallback (may fail in strict Node)
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+  }
 }
 
 /** Timeout in milliseconds applied to each individual extractor. */
