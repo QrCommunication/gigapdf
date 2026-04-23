@@ -68,7 +68,6 @@ const nextConfig: NextConfig = {
     // Keep pdfjs-dist external so Node resolves pdf.worker.mjs correctly
     // (Turbopack bundling breaks import.meta.url → createRequire resolution)
     "pdfjs-dist",
-    "@giga-pdf/pdf-engine",
   ],
   // Force dynamic rendering to avoid SSG issues with client components
   output: "standalone",

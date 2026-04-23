@@ -19,23 +19,41 @@ import { extractFormFieldElements } from './form-extractor';
 import { extractBookmarks } from './bookmark-extractor';
 
 // Configure pdfjs worker source for Node.js runtime. pdfjs-dist 5.x dynamic-imports
-// the worker module; in Next.js standalone we must resolve the absolute path
-// with file:// prefix so Node's import() accepts it.
+// the worker module via `await import(workerSrc)`. We try multiple resolution
+// strategies since bundlers (Turbopack/webpack) may make import.meta.url
+// virtual and break createRequire.
+//
 // We force-set (not conditional) to override any earlier `workerSrc = ''`
 // initialization from other extractor modules imported before parser.ts.
-try {
-  const requireFn = createRequire(import.meta.url);
-  const workerPath = requireFn.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
-  // Node's dynamic import() requires file:// URL for absolute paths
-  pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath.startsWith('file://')
-    ? workerPath
-    : `file://${workerPath}`;
-} catch {
-  // Fallback: empty string triggers fakeWorker fallback
-  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+(() => {
+  // Strategy 1: bare specifier — works when pdfjs-dist is external (Node resolves)
+  const bareSpec = 'pdfjs-dist/legacy/build/pdf.worker.mjs';
+
+  // Strategy 2: createRequire from import.meta.url — works in pure ESM Node runtime
+  try {
+    const requireFn = createRequire(import.meta.url);
+    const absPath = requireFn.resolve(bareSpec);
+    pdfjsLib.GlobalWorkerOptions.workerSrc = absPath.startsWith('file://')
+      ? absPath
+      : `file://${absPath}`;
+    return;
+  } catch {
+    // fall through
   }
-}
+
+  // Strategy 3: createRequire from process.cwd() — works when import.meta.url is bundler-virtual
+  try {
+    const requireFn = createRequire(`${process.cwd()}/package.json`);
+    const absPath = requireFn.resolve(bareSpec);
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `file://${absPath}`;
+    return;
+  } catch {
+    // fall through
+  }
+
+  // Strategy 4: bare specifier — Node.js ESM import() resolves via node_modules
+  pdfjsLib.GlobalWorkerOptions.workerSrc = bareSpec;
+})();
 
 /** Timeout in milliseconds applied to each individual extractor. */
 const EXTRACTOR_TIMEOUT_MS = 5_000;
