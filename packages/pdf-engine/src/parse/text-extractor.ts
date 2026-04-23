@@ -371,20 +371,41 @@ export async function extractTextElements(
 ): Promise<TextElement[]> {
   const textContent = await page.getTextContent();
   const elements: TextElement[] = [];
+  // Get viewport at scale 1 to use its transform matrix for precise coord conversion.
+  // viewport.transform composes: PDF→viewport (Y flip + MediaBox offset + rotation).
+  const viewport = page.getViewport({ scale: 1 });
 
   for (const item of textContent.items) {
     if (!isTextItem(item)) continue;
     if (!item.str || item.str.trim() === '') continue;
 
-    const [a, b, , , tx, ty] = item.transform as number[];
-    const fontSize = Math.sqrt((a ?? 1) * (a ?? 1) + (b ?? 0) * (b ?? 0));
-    const width = item.width;
-    const height = item.height > 0 ? item.height : fontSize;
-    // pdfjs transform[5] (ty) = text BASELINE in PDF coords (bottom-up origin).
-    // Fabric Textbox expects top-of-box. Top = baseline + ascender ≈ ty + fontSize*0.8.
-    // Flip Y to web coords: webY = pageHeight - (ty + ascender)
-    const x = tx ?? 0;
-    const y = pageHeight - (ty ?? 0) - fontSize * 0.8;
+    // Compose item.transform with viewport.transform to get absolute viewport coords.
+    // Handles MediaBox offset, rotation, Y-flip in one matrix multiplication.
+    const combined = pdfjsLib.Util.transform(
+      viewport.transform,
+      item.transform as number[],
+    ) as number[];
+    const [vpA, vpB, , vpD, vpE, vpF] = combined;
+
+    // Font size in viewport space = scale factor magnitude
+    const fontSize = Math.sqrt((vpA ?? 1) * (vpA ?? 1) + (vpB ?? 0) * (vpB ?? 0));
+    if (fontSize < 0.1) continue;
+
+    // Width in viewport space: item.width is in text space, scale by vpA
+    const widthScale = Math.abs(vpA ?? 1);
+    const width = item.width > 0
+      ? item.width * widthScale
+      : fontSize * item.str.length * 0.5;
+    // Height: use item.height scaled, or fontSize as fallback
+    const heightScale = Math.abs(vpD ?? 1);
+    const height = item.height > 0 ? item.height * heightScale : fontSize;
+
+    // vpE, vpF = BASELINE position in viewport (Y-down, top-left origin).
+    // Top of text box = baseline - ascender (≈ 0.8 * fontSize in viewport-space units).
+    const x = vpE ?? 0;
+    const y = (vpF ?? 0) - fontSize * 0.8;
+    // Unused but suppress warning
+    void pageHeight;
 
     const { fontFamily, fontWeight, fontStyle } = mapPdfFontToStandard(item.fontName ?? '');
 
