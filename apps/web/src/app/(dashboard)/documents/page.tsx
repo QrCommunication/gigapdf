@@ -19,6 +19,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { api, StoredDocument } from "@/lib/api";
+import { clientLogger } from "@/lib/client-logger";
 
 interface Document {
   id: string;
@@ -169,11 +170,11 @@ export default function DocumentsPage() {
         );
         setFolders(transformedFolders);
       } catch (folderErr) {
-        console.warn("Failed to load folders:", folderErr);
+        clientLogger.warn("documents.load-folders-failed", folderErr);
         setFolders([]);
       }
     } catch (err) {
-      console.error("Failed to load documents:", err);
+      clientLogger.error("documents.load-failed", err);
       setError(t("errors.loadFailed"));
     } finally {
       setLoading(false);
@@ -224,7 +225,7 @@ export default function DocumentsPage() {
 
       await loadDocuments();
     } catch (err) {
-      console.error("Upload failed:", err);
+      clientLogger.error("documents.upload-failed", err);
       setError(err instanceof Error ? err.message : t("errors.uploadFailed"));
     } finally {
       setUploading(false);

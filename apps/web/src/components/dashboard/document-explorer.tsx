@@ -20,6 +20,7 @@ import { DocumentGrid } from "./document-grid";
 import { DocumentTable, SortField, SortDirection } from "./document-table";
 import { FolderBreadcrumb, BreadcrumbFolder } from "./folder-breadcrumb";
 import { api } from "@/lib/api";
+import { clientLogger } from "@/lib/client-logger";
 
 export type ViewMode = "grid" | "list";
 
@@ -124,7 +125,7 @@ export function DocumentExplorer({
           const stats = await api.getFolderStats(folder.id);
           return { id: folder.id, stats };
         } catch (error) {
-          console.warn(`Failed to load stats for folder ${folder.id}:`, error);
+          clientLogger.warn(`document-explorer.folder-stats-failed (${folder.id}):`, error);
           return { id: folder.id, stats: null };
         }
       });
@@ -203,7 +204,7 @@ export function DocumentExplorer({
       setNewFolderName("");
       onRefresh();
     } catch (err) {
-      console.error("Failed to create folder:", err);
+      clientLogger.error("document-explorer.create-folder-failed", err);
     } finally {
       setCreatingFolder(false);
     }
@@ -263,7 +264,7 @@ export function DocumentExplorer({
       clearSelection();
       onRefresh();
     } catch (error) {
-      console.error("Failed to move items:", error);
+      clientLogger.error("document-explorer.move-items-failed", error);
       alert(t("errors.moveItemsFailed"));
     } finally {
       setMoving(false);
@@ -289,7 +290,7 @@ export function DocumentExplorer({
       clearSelection();
       onRefresh();
     } catch (error) {
-      console.error("Failed to delete items:", error);
+      clientLogger.error("document-explorer.delete-items-failed", error);
       alert(t("errors.deleteItemsFailed"));
     } finally {
       setDeleting(false);
@@ -299,12 +300,12 @@ export function DocumentExplorer({
 
   // Drag and Drop handlers
   const handleDragStart = useCallback((item: DragItem) => {
-    console.log("Drag started:", item);
+    clientLogger.debug("document-explorer.drag-started", item);
     setDraggedItem(item);
   }, []);
 
   const handleDragEnd = useCallback(() => {
-    console.log("Drag ended");
+    clientLogger.debug("document-explorer.drag-ended");
     setDraggedItem(null);
     setDragOverFolderId(null);
   }, []);
@@ -346,7 +347,7 @@ export function DocumentExplorer({
     e.preventDefault();
     e.stopPropagation();
 
-    console.log("Drop on folder:", targetFolderId, "draggedItem:", draggedItem);
+    clientLogger.debug("document-explorer.drop-on-folder", targetFolderId, "draggedItem:", draggedItem);
     setDragOverFolderId(null);
 
     if (!draggedItem || moving) {
@@ -373,7 +374,7 @@ export function DocumentExplorer({
 
     try {
       setMoving(true);
-      console.log("Moving", draggedItem.type, draggedItem.id, "to folder", targetFolderId);
+      clientLogger.debug("document-explorer.moving", draggedItem.type, draggedItem.id, "to folder", targetFolderId);
 
       if (draggedItem.type === "document") {
         await api.moveDocument(draggedItem.id, targetFolderId);
@@ -381,10 +382,10 @@ export function DocumentExplorer({
         await api.moveFolder(draggedItem.id, targetFolderId);
       }
 
-      console.log("Move successful");
+      clientLogger.debug("document-explorer.move-successful");
       onRefresh();
     } catch (error) {
-      console.error("Failed to move item:", error);
+      clientLogger.error("document-explorer.move-item-failed", error);
       alert(t("errors.moveItemFailed"));
     } finally {
       setMoving(false);

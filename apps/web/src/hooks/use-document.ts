@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
+import { clientLogger } from "@/lib/client-logger";
 import type { DocumentObject, PageObject, BookmarkObject, LayerObject, EmbeddedFileObject } from "@giga-pdf/types";
 
 export interface UseDocumentOptions {
@@ -112,7 +113,7 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       setDocumentId(docId);
 
       // Récupérer le document complet avec pages et éléments (TS parser via S3)
-      console.log("[useDocument] Calling /api/pdf/parse-from-s3 for docId:", docId);
+      clientLogger.debug("[useDocument] Calling /api/pdf/parse-from-s3 for docId:", docId);
       const parseResp = await fetch("/api/pdf/parse-from-s3", {
         method: "POST",
         headers: {
@@ -132,11 +133,11 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       };
 
       // Debug: log raw API response
-      console.log("[useDocument] Raw API response:", docData);
+      clientLogger.debug("[useDocument] Raw API response:", docData);
       const pagesArray = docData.pages as Array<Record<string, unknown>>;
-      console.log("[useDocument] First page:", pagesArray?.[0]);
-      console.log("[useDocument] First page elements:", pagesArray?.[0]?.elements);
-      console.log("[useDocument] First element:", (pagesArray?.[0]?.elements as unknown[])?.[0]);
+      clientLogger.debug("[useDocument] First page:", pagesArray?.[0]);
+      clientLogger.debug("[useDocument] First page elements:", pagesArray?.[0]?.elements);
+      clientLogger.debug("[useDocument] First element:", (pagesArray?.[0]?.elements as unknown[])?.[0]);
 
       // Convertir les données en types stricts
       // Note: API returns camelCase (by_alias=True)
@@ -204,7 +205,7 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       const message =
         err instanceof Error ? err.message : "Erreur de chargement";
       setError(message);
-      console.error("Erreur chargement document:", err);
+      clientLogger.error("use-document.load-failed", err);
     } finally {
       setLoading(false);
     }

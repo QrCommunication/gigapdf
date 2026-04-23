@@ -14,6 +14,7 @@ import {
 } from "@giga-pdf/ui";
 import { Loader2, Trash2, FilePlus } from "lucide-react";
 import { useMergePdfs, downloadBlob } from "@giga-pdf/api";
+import { clientLogger } from "@/lib/client-logger";
 
 interface MergeDialogProps {
   open: boolean;
@@ -87,7 +88,7 @@ export function MergeDialog({ open, onClose }: MergeDialogProps) {
       downloadBlob(blob, outputName.trim() || "merged.pdf");
       handleClose();
     } catch (err) {
-      console.error("[MergeDialog] merge failed:", err);
+      clientLogger.error("[MergeDialog] merge failed:", err);
       setError(
         err instanceof Error
           ? err.message

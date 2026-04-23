@@ -34,6 +34,7 @@ import { PDFCorruptedError, PDFPageOutOfRangeError } from '@giga-pdf/pdf-engine'
 import type { AnnotationElement } from '@giga-pdf/types';
 import { requireSession } from '@/lib/auth-helpers';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
+import { serverLogger } from '@/lib/server-logger';
 
 export async function POST(request: Request): Promise<Response> {
   const authResult = await requireSession();
@@ -126,7 +127,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    console.error('[api/pdf/annotations]', error);
+    serverLogger.error('api.pdf.annotations', { error });
     return NextResponse.json(
       { success: false, error: 'Failed to add annotation.' },
       { status: 500 },

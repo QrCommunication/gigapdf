@@ -34,6 +34,7 @@ import {
   X,
 } from "lucide-react";
 import { api, DocumentShareInfo } from "@/lib/api";
+import { clientLogger } from "@/lib/client-logger";
 
 interface ShareDialogProps {
   open: boolean;
@@ -99,7 +100,7 @@ export function ShareDialog({
         setPublicLinkUrl(`${window.location.origin}/public/${publicShare.share_token}`);
       }
     } catch (err) {
-      console.error("Failed to load shares:", err);
+      clientLogger.error("share-dialog.load-shares-failed", err);
     } finally {
       setLoadingShares(false);
     }
@@ -131,7 +132,7 @@ export function ShareDialog({
       // Reset success message after 3 seconds
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
-      console.error("Failed to share:", err);
+      clientLogger.error("share-dialog.share-failed", err);
       setError(t("dialog.error"));
     } finally {
       setSharing(false);
@@ -144,7 +145,7 @@ export function ShareDialog({
       await api.revokeShare(shareId);
       await loadShares();
     } catch (err) {
-      console.error("Failed to revoke share:", err);
+      clientLogger.error("share-dialog.revoke-share-failed", err);
     } finally {
       setRevokingId(null);
     }
@@ -155,7 +156,7 @@ export function ShareDialog({
       await api.updateSharePermission(shareId, newPermission);
       await loadShares();
     } catch (err) {
-      console.error("Failed to update permission:", err);
+      clientLogger.error("share-dialog.update-permission-failed", err);
     }
   };
 
@@ -165,7 +166,7 @@ export function ShareDialog({
       const response = await api.createPublicLink(documentId);
       setPublicLinkUrl(`${window.location.origin}/public/${response.token}`);
     } catch (err) {
-      console.error("Failed to create public link:", err);
+      clientLogger.error("share-dialog.create-public-link-failed", err);
     } finally {
       setCreatingPublicLink(false);
     }
@@ -177,7 +178,7 @@ export function ShareDialog({
       await api.revokePublicLink(documentId);
       setPublicLinkUrl(null);
     } catch (err) {
-      console.error("Failed to revoke public link:", err);
+      clientLogger.error("share-dialog.revoke-public-link-failed", err);
     } finally {
       setRevokingPublicLink(false);
     }
@@ -190,7 +191,7 @@ export function ShareDialog({
         setPublicLinkCopied(true);
         setTimeout(() => setPublicLinkCopied(false), 2000);
       } catch (err) {
-        console.error("Failed to copy:", err);
+        clientLogger.error("share-dialog.copy-failed", err);
       }
     }
   };

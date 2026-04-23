@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { X, FileCode, Globe, Download, Loader2, AlertCircle } from "lucide-react";
 import { useConvertToPdf, downloadBlob } from "@giga-pdf/api";
+import { clientLogger } from "@/lib/client-logger";
 
 type ConvertMode = "html" | "url";
 
@@ -136,7 +137,7 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
       downloadBlob(blob, outputName.trim() || "converted.pdf");
       handleClose();
     } catch (err) {
-      console.error("[ConvertDialog] conversion failed:", err);
+      clientLogger.error("[ConvertDialog] conversion failed:", err);
       setError(
         err instanceof Error
           ? err.message

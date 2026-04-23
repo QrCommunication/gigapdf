@@ -47,6 +47,7 @@ import { api } from "@/lib/api";
 import { DragItem } from "./document-explorer";
 import { cn } from "@/lib/utils";
 import { ShareDialog } from "@/components/sharing";
+import { clientLogger } from "@/lib/client-logger";
 
 interface DocumentCardProps {
   id: string;
@@ -114,7 +115,7 @@ export function DocumentCard({
       const downloadUrl = api.getDocumentDownloadUrl(result.document_id);
       window.open(downloadUrl, "_blank");
     } catch (err) {
-      console.error("Failed to download:", err);
+      clientLogger.error("document-card.download-failed", err);
       alert(t("errors.downloadFailed"));
     } finally {
       setLoading(false);
@@ -128,7 +129,7 @@ export function DocumentCard({
       setDeleteDialogOpen(false);
       onDelete?.();
     } catch (err) {
-      console.error("Failed to delete:", err);
+      clientLogger.error("document-card.delete-failed", err);
       alert(t("errors.deleteFailed"));
     } finally {
       setDeleting(false);
@@ -148,7 +149,7 @@ export function DocumentCard({
       setRenameDialogOpen(false);
       onRename?.(newName.trim());
     } catch (err) {
-      console.error("Failed to rename:", err);
+      clientLogger.error("document-card.rename-failed", err);
       alert(t("errors.renameFailed"));
     } finally {
       setRenaming(false);
@@ -164,7 +165,7 @@ export function DocumentCard({
       const downloadUrl = api.getDocumentDownloadUrl(result.document_id);
       setPreviewUrl(downloadUrl);
     } catch (err) {
-      console.error("Failed to load preview:", err);
+      clientLogger.error("document-card.preview-failed", err);
       alert(t("errors.previewFailed"));
       setPreviewOpen(false);
     } finally {
@@ -229,7 +230,7 @@ export function DocumentCard({
 
       setExportDialogOpen(false);
     } catch (err) {
-      console.error("Failed to export:", err);
+      clientLogger.error("document-card.export-failed", err);
       alert(t("errors.exportFailed"));
       setExportDialogOpen(false);
     } finally {

@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@giga-pdf/ui";
 import { Loader2 } from "lucide-react";
+import { clientLogger } from "@/lib/client-logger";
 
 export default function SettingsPage() {
   const t = useTranslations("settings");
@@ -74,7 +75,7 @@ export default function SettingsPage() {
       setProfileSuccess(true);
       setTimeout(() => setProfileSuccess(false), 3000);
     } catch (err) {
-      console.error("Profile update failed:", err);
+      clientLogger.error("settings.profile-update-failed", err);
       setProfileError(err instanceof Error ? err.message : tCommon("error"));
     } finally {
       setProfileLoading(false);
@@ -122,7 +123,7 @@ export default function SettingsPage() {
       setConfirmPassword("");
       setTimeout(() => setPasswordSuccess(false), 3000);
     } catch (err) {
-      console.error("Password change failed:", err);
+      clientLogger.error("settings.password-change-failed", err);
       setPasswordError(err instanceof Error ? err.message : tCommon("error"));
     } finally {
       setPasswordLoading(false);
@@ -139,7 +140,7 @@ export default function SettingsPage() {
       alert(t("danger.deleteAccountConfirm"));
       setDeleteDialogOpen(false);
     } catch (err) {
-      console.error("Delete account failed:", err);
+      clientLogger.error("settings.delete-account-failed", err);
     } finally {
       setDeleteLoading(false);
       setDeleteConfirmation("");

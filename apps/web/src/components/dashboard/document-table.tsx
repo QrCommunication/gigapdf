@@ -52,6 +52,7 @@ import { api } from "@/lib/api";
 import { DragItem, FolderStats, SelectionItem } from "./document-explorer";
 import { cn } from "@/lib/utils";
 import { ShareDialog } from "@/components/sharing";
+import { clientLogger } from "@/lib/client-logger";
 
 export type SortField = "name" | "size" | "createdAt" | "updatedAt";
 export type SortDirection = "asc" | "desc";
@@ -154,7 +155,7 @@ export function DocumentTable({
       const downloadUrl = api.getDocumentDownloadUrl(result.document_id);
       window.open(downloadUrl, "_blank");
     } catch (err) {
-      console.error("Failed to download:", err);
+      clientLogger.error("document-table.download-failed", err);
       alert(tCard("errors.downloadFailed"));
     } finally {
       setLoadingId(null);
@@ -170,7 +171,7 @@ export function DocumentTable({
       setSelectedDoc(null);
       onDelete?.();
     } catch (err) {
-      console.error("Failed to delete:", err);
+      clientLogger.error("document-table.delete-failed", err);
       alert(tCard("errors.deleteFailed"));
     } finally {
       setDeleting(false);
@@ -190,7 +191,7 @@ export function DocumentTable({
       onRename?.(selectedDoc.id, newName.trim());
       setSelectedDoc(null);
     } catch (err) {
-      console.error("Failed to rename:", err);
+      clientLogger.error("document-table.rename-failed", err);
       alert(tCard("errors.renameFailed"));
     } finally {
       setRenaming(false);
@@ -207,7 +208,7 @@ export function DocumentTable({
       const downloadUrl = api.getDocumentDownloadUrl(result.document_id);
       setPreviewUrl(downloadUrl);
     } catch (err) {
-      console.error("Failed to load preview:", err);
+      clientLogger.error("document-table.preview-failed", err);
       alert(tCard("errors.previewFailed"));
       setPreviewOpen(false);
     } finally {
@@ -272,7 +273,7 @@ export function DocumentTable({
 
       setExportDialogOpen(false);
     } catch (err) {
-      console.error("Failed to export:", err);
+      clientLogger.error("document-table.export-failed", err);
       alert(tCard("errors.exportFailed"));
       setExportDialogOpen(false);
     } finally {

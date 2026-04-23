@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { serverLogger } from "@/lib/server-logger";
 
 // Configuration from environment variables
 const mailConfig = {
@@ -35,10 +36,10 @@ export async function sendEmail({ to, subject, html, text }: SendEmailOptions): 
       html,
     });
 
-    console.log("Email sent:", info.messageId);
+    serverLogger.info("email.sent", { messageId: info.messageId });
     return true;
   } catch (error) {
-    console.error("Failed to send email:", error);
+    serverLogger.error("email.send-failed", { error });
     return false;
   }
 }

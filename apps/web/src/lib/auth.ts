@@ -11,6 +11,7 @@ import {
   getPasswordResetEmailTemplate,
   getVerificationEmailTemplate,
 } from "./email/mailer";
+import { serverLogger } from "./server-logger";
 
 // Lazy initialization for Prisma client (server-side only)
 // This prevents the module from crashing when imported on the client side
@@ -51,7 +52,7 @@ export const auth = betterAuth({
         });
       } catch (error) {
         // Log but don't throw - email failure shouldn't block reset flow
-        console.error("Failed to send password reset email:", error);
+        serverLogger.error("auth.password-reset.send-email", { error });
       }
     },
   },
@@ -71,7 +72,7 @@ export const auth = betterAuth({
         });
       } catch (error) {
         // Log but don't throw - email failure shouldn't block signup
-        console.error("Failed to send verification email:", error);
+        serverLogger.error("auth.verification.send-email", { error });
       }
     },
   },

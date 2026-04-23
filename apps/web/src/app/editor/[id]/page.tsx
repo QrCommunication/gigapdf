@@ -43,6 +43,7 @@ import type { EditorCanvasHandle } from "@/components/editor/editor-canvas";
 import { FormsPanel } from "@/components/editor/forms-panel";
 import { useFlattenPdf, usePdfPageOperation, downloadBlob, useApplyElements } from "@giga-pdf/api";
 import { ContentEditLayer, type ElementModification } from "@/components/editor/content-edit-layer";
+import { clientLogger } from "@/lib/client-logger";
 
 /**
  * Convert a frontend Element to API ElementCreateRequest format.
@@ -235,7 +236,7 @@ export default function EditorPage() {
         const file = new File([blob], `${name}.pdf`, { type: 'application/pdf' });
         setCurrentPdfFile(file);
       } catch (err) {
-        console.error('Failed to load PDF binary:', err);
+        clientLogger.error('[editor] Failed to load PDF binary:', err);
       }
     }
 
@@ -265,7 +266,7 @@ export default function EditorPage() {
     debounceDelay: 2000, // 2s de debounce pour modifications mineures
     setDirty,
     onSaved: (id) => {
-      console.log("Document sauvegardé:", id);
+      clientLogger.debug("[editor] Document sauvegardé:", id);
     },
   });
 
@@ -325,15 +326,15 @@ export default function EditorPage() {
     documentId,
     enabled: !!documentId,
     onElementCreate: (element) => {
-      console.log("Remote element created:", element);
+      clientLogger.debug("[editor] Remote element created:", element);
       // TODO: Ajouter l'élément au canvas
     },
     onElementUpdate: (elementId, changes) => {
-      console.log("Remote element updated:", elementId, changes);
+      clientLogger.debug("[editor] Remote element updated:", elementId, changes);
       // TODO: Mettre à jour l'élément sur le canvas
     },
     onElementDelete: (elementId) => {
-      console.log("Remote element deleted:", elementId);
+      clientLogger.debug("[editor] Remote element deleted:", elementId);
       // TODO: Supprimer l'élément du canvas
     },
   });
@@ -376,7 +377,7 @@ export default function EditorPage() {
 
   const handleElementAdded = useCallback(
     async (element: Element) => {
-      console.log("Element added:", element);
+      clientLogger.debug("[editor] Element added:", element);
       setDirty(true);
       // Émettre via WebSocket pour la collaboration
       emitElementCreate(element);
@@ -387,9 +388,9 @@ export default function EditorPage() {
         try {
           const apiElement = convertToApiElement(element);
           await api.createElement(documentId, pageNumber, apiElement);
-          console.log("[API] Element created in backend:", element.elementId);
+          clientLogger.debug("[API] Element created in backend:", element.elementId);
         } catch (error) {
-          console.error("[API] Failed to create element:", error);
+          clientLogger.error("[API] Failed to create element:", error);
         }
       }
 
@@ -401,7 +402,7 @@ export default function EditorPage() {
 
   const handleElementModified = useCallback(
     async (element: Element) => {
-      console.log("Element modified:", element);
+      clientLogger.debug("[editor] Element modified:", element);
       setDirty(true);
       // Émettre via WebSocket pour la collaboration
       emitElementUpdate(element.elementId, element);
@@ -411,9 +412,9 @@ export default function EditorPage() {
         try {
           const updates = convertToApiElement(element);
           await api.updateElement(documentId, element.elementId, updates);
-          console.log("[API] Element updated in backend:", element.elementId);
+          clientLogger.debug("[API] Element updated in backend:", element.elementId);
         } catch (error) {
-          console.error("[API] Failed to update element:", error);
+          clientLogger.error("[API] Failed to update element:", error);
         }
       }
 
@@ -425,7 +426,7 @@ export default function EditorPage() {
 
   const handleElementRemoved = useCallback(
     async (elementId: string) => {
-      console.log("Element removed:", elementId);
+      clientLogger.debug("[editor] Element removed:", elementId);
       setDirty(true);
       deselectElement(elementId);
       // Émettre via WebSocket pour la collaboration
@@ -435,9 +436,9 @@ export default function EditorPage() {
       if (documentId) {
         try {
           await api.deleteElement(documentId, elementId);
-          console.log("[API] Element deleted from backend:", elementId);
+          clientLogger.debug("[API] Element deleted from backend:", elementId);
         } catch (error) {
-          console.error("[API] Failed to delete element:", error);
+          clientLogger.error("[API] Failed to delete element:", error);
         }
       }
 
@@ -472,7 +473,7 @@ export default function EditorPage() {
 
   const handleElementUpdate = useCallback(
     async (elementId: string, updates: Partial<Element>) => {
-      console.log("Element update:", elementId, updates);
+      clientLogger.debug("[editor] Element update:", elementId, updates);
       setDirty(true);
       // Émettre via WebSocket pour la collaboration
       emitElementUpdate(elementId, updates as Element);
@@ -502,9 +503,9 @@ export default function EditorPage() {
             apiUpdates.style = updates.style as unknown as Record<string, unknown>;
           }
           await api.updateElement(documentId, elementId, apiUpdates);
-          console.log("[API] Element updated in backend:", elementId);
+          clientLogger.debug("[API] Element updated in backend:", elementId);
         } catch (error) {
-          console.error("[API] Failed to update element:", error);
+          clientLogger.error("[API] Failed to update element:", error);
         }
       }
 
@@ -516,7 +517,7 @@ export default function EditorPage() {
 
   const handleFormatAction = useCallback(
     (action: string) => {
-      console.log("Format action:", action);
+      clientLogger.debug("[editor] Format action:", action);
       setDirty(true);
       // TODO: Appliquer le formatage aux éléments sélectionnés
       // Modification de style → sauvegarde debounced vers S3
@@ -567,7 +568,7 @@ export default function EditorPage() {
       downloadBlob(fileToExport instanceof Blob ? fileToExport : new Blob([fileToExport]),
         `${name || 'document'}.pdf`);
     } catch (err) {
-      console.error('Export failed:', err);
+      clientLogger.error('[editor] Export failed:', err);
       // Fall back to server download
       if (documentId) {
         window.open(api.getDocumentDownloadUrl(documentId), "_blank");
@@ -581,7 +582,7 @@ export default function EditorPage() {
       const blob = await flattenPdf.mutateAsync({ file: currentPdfFile });
       downloadBlob(blob, "flattened.pdf");
     } catch (error) {
-      console.error("Flatten failed:", error);
+      clientLogger.error("[editor] Flatten failed:", error);
     }
   };
 
@@ -596,7 +597,7 @@ export default function EditorPage() {
       const file = new File([result as Blob], currentPdfFile.name, { type: 'application/pdf' });
       setCurrentPdfFile(file);
     } catch (err) {
-      console.error('Rotate failed:', err);
+      clientLogger.error('[editor] Rotate failed:', err);
     }
   }, [currentPdfFile, pageOperation]);
 
@@ -610,7 +611,7 @@ export default function EditorPage() {
       });
       downloadBlob(result as Blob, `page-${pageIndex + 1}.pdf`);
     } catch (err) {
-      console.error('Extract failed:', err);
+      clientLogger.error('[editor] Extract failed:', err);
     }
   }, [currentPdfFile, pageOperation]);
 
@@ -635,7 +636,7 @@ export default function EditorPage() {
 
   // Handler pour la visibilité des calques
   const handleLayerVisibilityChange = useCallback((layerId: string, visible: boolean) => {
-    console.log("Layer visibility changed:", layerId, visible);
+    clientLogger.debug("[editor] Layer visibility changed:", layerId, visible);
     // TODO: Implémenter la logique de changement de visibilité des calques
     setDirty(true);
     saveWithPriority("debounced");
@@ -643,7 +644,7 @@ export default function EditorPage() {
 
   // Handler pour le verrouillage des calques
   const handleLayerLockChange = useCallback((layerId: string, locked: boolean) => {
-    console.log("Layer lock changed:", layerId, locked);
+    clientLogger.debug("[editor] Layer lock changed:", layerId, locked);
     // TODO: Implémenter la logique de verrouillage des calques
     setDirty(true);
     saveWithPriority("debounced");

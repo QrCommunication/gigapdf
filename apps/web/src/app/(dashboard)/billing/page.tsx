@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@giga
 import { Badge } from "@giga-pdf/ui";
 import { Check, CreditCard, Download, ExternalLink, Loader2, Trash2 } from "lucide-react";
 import { api, Plan, QuotaSummary, Subscription, PaymentMethod, Invoice } from "@/lib/api";
+import { clientLogger } from "@/lib/client-logger";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -70,7 +71,7 @@ export default function BillingPage() {
       setPaymentMethods(paymentMethodsResponse || []);
       setInvoices(invoicesResponse || []);
     } catch (err) {
-      console.error("Failed to load billing data:", err);
+      clientLogger.error("billing.load-failed", err);
       setError(tCommon("error"));
     } finally {
       setLoading(false);
@@ -103,7 +104,7 @@ export default function BillingPage() {
 
       await loadBillingData();
     } catch (err) {
-      console.error("Failed to upgrade:", err);
+      clientLogger.error("billing.upgrade-failed", err);
       setError(err instanceof Error ? err.message : t("errors.upgradeFailed"));
     } finally {
       setActionLoading(null);
@@ -118,7 +119,7 @@ export default function BillingPage() {
       await api.cancelSubscription(false);
       await loadBillingData();
     } catch (err) {
-      console.error("Failed to cancel:", err);
+      clientLogger.error("billing.cancel-failed", err);
       setError(err instanceof Error ? err.message : t("errors.cancelFailed"));
     } finally {
       setActionLoading(null);
@@ -131,7 +132,7 @@ export default function BillingPage() {
       await api.reactivateSubscription();
       await loadBillingData();
     } catch (err) {
-      console.error("Failed to reactivate:", err);
+      clientLogger.error("billing.reactivate-failed", err);
       setError(err instanceof Error ? err.message : t("errors.reactivateFailed"));
     } finally {
       setActionLoading(null);
@@ -146,7 +147,7 @@ export default function BillingPage() {
       );
       window.location.href = session.url;
     } catch (err) {
-      console.error("Failed to open portal:", err);
+      clientLogger.error("billing.portal-failed", err);
       setError(err instanceof Error ? err.message : t("errors.openPortalFailed"));
       setActionLoading(null);
     }
@@ -160,7 +161,7 @@ export default function BillingPage() {
       await api.removePaymentMethod(paymentMethodId);
       await loadBillingData();
     } catch (err) {
-      console.error("Failed to remove payment method:", err);
+      clientLogger.error("billing.remove-payment-method-failed", err);
       setError(err instanceof Error ? err.message : t("errors.removePaymentMethodFailed"));
     } finally {
       setActionLoading(null);
@@ -173,7 +174,7 @@ export default function BillingPage() {
       await api.setDefaultPaymentMethod(paymentMethodId);
       await loadBillingData();
     } catch (err) {
-      console.error("Failed to set default:", err);
+      clientLogger.error("billing.set-default-failed", err);
       setError(err instanceof Error ? err.message : t("errors.setDefaultFailed"));
     } finally {
       setActionLoading(null);

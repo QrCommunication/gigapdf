@@ -10,6 +10,7 @@ import type {
   AnnotationType,
 } from "@giga-pdf/types";
 import type { Canvas as FabricCanvas, FabricObject } from "fabric";
+import { clientLogger } from "@/lib/client-logger";
 
 // API base URL for image loading
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -353,7 +354,7 @@ export function EditorCanvas({
       if (elementId) {
         // Sauvegarder le contenu original avant edition
         originalContentRef.current.set(elementId, currentText);
-        console.log("[EditorCanvas] Text editing started, saved original content:", elementId, `"${currentText}"`);
+        clientLogger.debug("[EditorCanvas] Text editing started, saved original content:", elementId, `"${currentText}"`);
       }
     }
   }, []);
@@ -365,7 +366,7 @@ export function EditorCanvas({
     const elementId = obj.data?.elementId;
     const currentText = (obj as FabricObjectWithData & { text?: string }).text || "";
 
-    console.log("[EditorCanvas] Text changed in real-time:", elementId, `"${currentText}"`);
+    clientLogger.debug("[EditorCanvas] Text changed in real-time:", elementId, `"${currentText}"`);
   }, []);
 
   // Handler appele quand un texte sort du mode edition
@@ -377,9 +378,9 @@ export function EditorCanvas({
     const originalText = elementId ? originalContentRef.current.get(elementId) : undefined;
 
     if (originalText !== undefined && originalText !== currentText) {
-      console.log(`[EditorCanvas] Text editing exited with CONTENT CHANGE: "${originalText}" -> "${currentText}"`);
+      clientLogger.debug(`[EditorCanvas] Text editing exited with CONTENT CHANGE: "${originalText}" -> "${currentText}"`);
     } else {
-      console.log("[EditorCanvas] Text editing exited (no content change)");
+      clientLogger.debug("[EditorCanvas] Text editing exited (no content change)");
     }
 
     // Note: On ne supprime pas du map ici car object:modified peut etre appele apres
@@ -403,21 +404,21 @@ export function EditorCanvas({
 
         if (originalText !== undefined && originalText !== currentText) {
           modificationType = 'content';
-          console.log(`[EditorCanvas] Text content MODIFIED: "${originalText}" -> "${currentText}"`);
+          clientLogger.debug(`[EditorCanvas] Text content MODIFIED: "${originalText}" -> "${currentText}"`);
           // Mettre a jour le contenu original pour les prochaines comparaisons
           if (elementId) {
             originalContentRef.current.set(elementId, currentText);
           }
         } else {
-          console.log("[EditorCanvas] Element position/style changed only (no content change)");
+          clientLogger.debug("[EditorCanvas] Element position/style changed only (no content change)");
         }
       } else {
-        console.log("[EditorCanvas] Non-text element modified (position/style)");
+        clientLogger.debug("[EditorCanvas] Non-text element modified (position/style)");
       }
 
       const element = fabricObjectToElement(obj);
       if (element) {
-        console.log("[EditorCanvas] Object modified:", element.elementId, element.type, "modification:", modificationType);
+        clientLogger.debug("[EditorCanvas] Object modified:", element.elementId, element.type, "modification:", modificationType);
         // Appeler le callback avec l'element (le type de modification peut etre utilise plus tard)
         onElementModifiedRef.current?.(element);
       }
@@ -436,7 +437,7 @@ export function EditorCanvas({
       if ((e.target as FabricObjectWithData).data?.isPdfBackground) return;
       const element = fabricObjectToElement(e.target as FabricObjectWithData);
       if (element) {
-        console.log("[EditorCanvas] Object added:", element.elementId, element.type);
+        clientLogger.debug("[EditorCanvas] Object added:", element.elementId, element.type);
         onElementAddedRef.current?.(element);
       }
     },
@@ -449,7 +450,7 @@ export function EditorCanvas({
       if (!e.target) return;
       const elementId = (e.target as FabricObjectWithData).data?.elementId;
       if (elementId) {
-        console.log("[EditorCanvas] Object removed:", elementId);
+        clientLogger.debug("[EditorCanvas] Object removed:", elementId);
         onElementRemovedRef.current?.(elementId);
       }
     },
@@ -535,14 +536,14 @@ export function EditorCanvas({
         const currentFillColor = fillColorRef.current;
         const currentStrokeWidth = strokeWidthRef.current;
 
-        console.log("[EditorCanvas] mouse:down - tool:", currentTool);
+        clientLogger.debug("[EditorCanvas] mouse:down - tool:", currentTool);
 
         let newObj: FabricObject | null = null;
 
         try {
           switch (currentTool) {
             case "text": {
-              console.log("[EditorCanvas] Creating IText with:", { pointer, strokeColor: currentStrokeColor });
+              clientLogger.debug("[EditorCanvas] Creating IText with:", { pointer, strokeColor: currentStrokeColor });
               newObj = new IText(t("defaultText") || "Text", {
                 left: pointer.x,
                 top: pointer.y,
@@ -551,7 +552,7 @@ export function EditorCanvas({
                 fill: currentStrokeColor,
               });
               (newObj as FabricObjectWithData).data = { elementId: generateId() };
-              console.log("[EditorCanvas] IText created successfully:", newObj);
+              clientLogger.debug("[EditorCanvas] IText created successfully:", newObj);
               break;
             }
 
@@ -701,18 +702,18 @@ export function EditorCanvas({
           }
           }
         } catch (error) {
-          console.error("[EditorCanvas] Error creating object:", error);
+          clientLogger.error("[EditorCanvas] Error creating object:", error);
         }
 
         if (newObj) {
-          console.log("[EditorCanvas] Adding new object to canvas:", currentTool, (newObj as FabricObjectWithData).data?.elementId);
+          clientLogger.debug("[EditorCanvas] Adding new object to canvas:", currentTool, (newObj as FabricObjectWithData).data?.elementId);
           currentCanvas.add(newObj);
           currentCanvas.setActiveObject(newObj);
           currentCanvas.renderAll();
           saveHistory(currentCanvas);
-          console.log("[EditorCanvas] Object added to canvas, total objects:", currentCanvas.getObjects().length);
+          clientLogger.debug("[EditorCanvas] Object added to canvas, total objects:", currentCanvas.getObjects().length);
         } else {
-          console.log("[EditorCanvas] mouse:down - newObj is null for tool:", currentTool);
+          clientLogger.debug("[EditorCanvas] mouse:down - newObj is null for tool:", currentTool);
         }
       });
 
@@ -856,7 +857,7 @@ export function EditorCanvas({
                 canvas.add(img);
               })
               .catch((err) => {
-                console.error("[EditorCanvas] Failed to load image element:", imgElement.elementId, err);
+                clientLogger.error("[EditorCanvas] Failed to load image element:", imgElement.elementId, err);
               });
             imageLoadPromises.push(loadPromise);
           }
@@ -1111,7 +1112,7 @@ export function EditorCanvas({
             canvas.add(bgImg); // canvas est vide ici → bgImg est à l'index 0
           }
         } catch (e) {
-          console.warn("[EditorCanvas] Could not render PDF background:", e);
+          clientLogger.warn("[EditorCanvas] Could not render PDF background:", e);
         }
       }
 

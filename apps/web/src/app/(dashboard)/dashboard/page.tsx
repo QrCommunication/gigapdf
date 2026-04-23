@@ -8,6 +8,7 @@ import { DocumentGrid } from "@/components/dashboard/document-grid";
 import { Button, Skeleton } from "@giga-pdf/ui";
 import { Plus, Upload } from "lucide-react";
 import { api, StoredDocument, QuotaSummary } from "@/lib/api";
+import { clientLogger } from "@/lib/client-logger";
 
 interface DashboardDocument {
   id: string;
@@ -55,7 +56,7 @@ export default function DashboardPage() {
       setDocuments(transformedDocs);
       setQuota(quotaResponse);
     } catch (err) {
-      console.error("Failed to load dashboard data:", err);
+      clientLogger.error("dashboard.load-failed", err);
       setError(tDocs("upload.error"));
     } finally {
       setLoading(false);
@@ -103,7 +104,7 @@ export default function DashboardPage() {
       await loadDashboardData();
 
     } catch (err) {
-      console.error("Upload failed:", err);
+      clientLogger.error("dashboard.upload-failed", err);
       setError(err instanceof Error ? err.message : tDocs("upload.error"));
     } finally {
       setUploading(false);

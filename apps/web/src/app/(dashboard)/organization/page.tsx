@@ -60,6 +60,7 @@ import {
   OrganizationInvitation,
   CreateOrganizationRequest,
 } from "@/lib/api";
+import { clientLogger } from "@/lib/client-logger";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -141,7 +142,7 @@ export default function OrganizationPage() {
           setInvitations(invitationsList);
         }
       } catch (err) {
-        console.error("Failed to load organization:", err);
+        clientLogger.error("org.load-failed", err);
         // No organization found - that's ok
       } finally {
         setLoading(false);
@@ -181,7 +182,7 @@ export default function OrganizationPage() {
       const membersList = await api.getOrganizationMembers(org.id);
       setMembers(membersList);
     } catch (err) {
-      console.error("Failed to create organization:", err);
+      clientLogger.error("org.create-failed", err);
       setError(err instanceof Error ? err.message : t("errors.createFailed"));
     } finally {
       setCreateLoading(false);
@@ -206,7 +207,7 @@ export default function OrganizationPage() {
       setInviteEmail("");
       setInviteRole("member");
     } catch (err) {
-      console.error("Failed to invite member:", err);
+      clientLogger.error("org.invite-member-failed", err);
       setError(err instanceof Error ? err.message : t("errors.inviteFailed"));
     } finally {
       setInviteLoading(false);
@@ -221,7 +222,7 @@ export default function OrganizationPage() {
       await api.cancelInvitation(organization.id, invitationId);
       setInvitations(invitations.filter(inv => inv.id !== invitationId));
     } catch (err) {
-      console.error("Failed to cancel invitation:", err);
+      clientLogger.error("org.cancel-invitation-failed", err);
     }
   };
 
@@ -233,7 +234,7 @@ export default function OrganizationPage() {
       await api.removeMember(organization.id, memberId);
       setMembers(members.filter(m => m.id !== memberId));
     } catch (err) {
-      console.error("Failed to remove member:", err);
+      clientLogger.error("org.remove-member-failed", err);
     }
   };
 

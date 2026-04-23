@@ -29,6 +29,7 @@ import {
   type ElementModification,
 } from "@/components/editor/content-edit-layer";
 import { createDefaultLogger } from "@giga-pdf/logger";
+import { clientLogger } from "@/lib/client-logger";
 
 const embedLogger = createDefaultLogger({ enableRemote: false });
 
@@ -324,7 +325,7 @@ export default function EmbedPage() {
         });
         setCurrentPdfFile(file);
       } catch (err) {
-        console.error("[Embed] Failed to load PDF binary:", err);
+        clientLogger.error("[Embed] Failed to load PDF binary:", err);
       }
     }
 
@@ -428,7 +429,7 @@ export default function EmbedPage() {
         data: { blob: exportBlob, format: "pdf" },
       });
     } catch (err) {
-      console.error("[Embed] Export failed:", err);
+      clientLogger.error("[Embed] Export failed:", err);
       sendToParent({
         type: "gigapdf:event",
         event: "error",
@@ -500,7 +501,7 @@ export default function EmbedPage() {
         data: { blob },
       });
     } catch (err) {
-      console.error("[Embed] getFile failed:", err);
+      clientLogger.error("[Embed] getFile failed:", err);
       sendToParent({
         type: "gigapdf:event",
         event: "error",
@@ -573,7 +574,7 @@ export default function EmbedPage() {
           const apiElement = convertToApiElement(element);
           await api.createElement(sessionDocumentId, pageNumber, apiElement);
         } catch (err) {
-          console.error("[Embed] Failed to create element:", err);
+          clientLogger.error("[Embed] Failed to create element:", err);
         }
       }
       saveWithPriority("immediate");
@@ -589,7 +590,7 @@ export default function EmbedPage() {
           const updates = convertToApiElement(element);
           await api.updateElement(sessionDocumentId, element.elementId, updates);
         } catch (err) {
-          console.error("[Embed] Failed to update element:", err);
+          clientLogger.error("[Embed] Failed to update element:", err);
         }
       }
       saveWithPriority("debounced");
@@ -605,7 +606,7 @@ export default function EmbedPage() {
         try {
           await api.deleteElement(sessionDocumentId, elementId);
         } catch (err) {
-          console.error("[Embed] Failed to delete element:", err);
+          clientLogger.error("[Embed] Failed to delete element:", err);
         }
       }
       saveWithPriority("immediate");
@@ -946,7 +947,7 @@ export default function EmbedPage() {
               });
               downloadBlob(blob, "flattened.pdf");
             } catch (err) {
-              console.error("[Embed] Flatten failed:", err);
+              clientLogger.error("[Embed] Flatten failed:", err);
             }
           }}
           isContentEditActive={isContentEditActive}

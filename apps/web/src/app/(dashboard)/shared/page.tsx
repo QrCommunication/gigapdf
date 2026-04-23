@@ -49,6 +49,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { api, SharedWithMeDocument } from "@/lib/api";
+import { clientLogger } from "@/lib/client-logger";
 import { formatDate, formatBytes } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -114,7 +115,7 @@ export default function SharedWithMePage() {
       setTotalPages(response.total_pages);
       setTotal(response.total);
     } catch (err) {
-      console.error("Failed to load shared documents:", err);
+      clientLogger.error("shared.load-failed", err);
       setError(t("errors.loadFailed"));
     } finally {
       setLoading(false);
@@ -138,7 +139,7 @@ export default function SharedWithMePage() {
       const downloadUrl = api.getDocumentDownloadUrl(result.document_id);
       setPreviewUrl(downloadUrl);
     } catch (err) {
-      console.error("Failed to load preview:", err);
+      clientLogger.error("shared.load-preview-failed", err);
       setPreviewOpen(false);
     } finally {
       setPreviewLoading(false);
@@ -152,7 +153,7 @@ export default function SharedWithMePage() {
       const downloadUrl = api.getDocumentDownloadUrl(result.document_id);
       window.open(downloadUrl, "_blank");
     } catch (err) {
-      console.error("Failed to download:", err);
+      clientLogger.error("shared.download-failed", err);
     } finally {
       setLoadingId(null);
     }
@@ -172,7 +173,7 @@ export default function SharedWithMePage() {
       setSelectedDoc(null);
       await loadDocuments();
     } catch (err) {
-      console.error("Failed to remove document:", err);
+      clientLogger.error("shared.remove-document-failed", err);
     } finally {
       setRemoving(false);
     }
