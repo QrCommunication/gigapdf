@@ -202,9 +202,10 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
       const renderTask = page.render({
         canvasContext: context as unknown as CanvasRenderingContext2D,
+        canvas: req.offscreen as unknown as HTMLCanvasElement,
         viewport,
         renderInteractiveForms: false,
-      });
+      } as Parameters<typeof page.render>[0]);
       await renderTask.promise;
 
       // Transfer the pixels back as an ImageBitmap (zero-copy transfer)

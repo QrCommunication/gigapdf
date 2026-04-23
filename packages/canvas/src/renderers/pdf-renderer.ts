@@ -508,9 +508,10 @@ export class PDFRenderer {
 
     const renderTask = page.render({
       canvasContext: context,
+      canvas,
       viewport,
       renderInteractiveForms: renderAnnotations,
-    });
+    } as Parameters<typeof page.render>[0]);
     await renderTask.promise;
   }
 
