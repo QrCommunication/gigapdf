@@ -1115,7 +1115,11 @@ export function EditorCanvas({
             // Rendre à une résolution plus élevée (HiDPI) pour un rendu net,
             // puis réduire l'image via scaleX/scaleY pour garder les dimensions PDF correctes.
             const renderScale = Math.min(window.devicePixelRatio || 2, 3);
-            const dataUrl = await renderer.renderPageToDataURL(pageData.pageNumber, { scale: renderScale });
+            const dataUrl = await renderer.renderPageToDataURL(pageData.pageNumber, {
+              scale: renderScale,
+              // Hide PDF text — Fabric overlay is the single source of editable text
+              maskText: true,
+            });
             renderer.dispose();
 
             const bgImg = await fabricModule.FabricImage.fromURL(dataUrl);

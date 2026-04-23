@@ -281,6 +281,12 @@ export interface PDFRenderOptions {
   rotation?: 0 | 90 | 180 | 270;
   renderAnnotations?: boolean;
   renderTextLayer?: boolean;
+  /**
+   * When true, text regions are masked with white rectangles after rendering.
+   * Useful for editor backgrounds where the text layer is handled separately
+   * by an overlay (e.g. Fabric.js). Default: false.
+   */
+  maskText?: boolean;
 }
 
 export interface PDFDocumentProxy {
@@ -475,12 +481,12 @@ export class PDFRenderer {
     pageNumber: number,
     options: PDFRenderOptions = {}
   ): Promise<void> {
-    const { scale = 1, rotation = 0, renderAnnotations = false } = options;
+    const { scale = 1, rotation = 0, renderAnnotations = false, maskText = false } = options;
 
     if (this.workerLoaded) {
       await this._workerRenderPage(canvas, pageNumber, scale, rotation as 0 | 90 | 180 | 270);
     } else {
-      await this._mainThreadRenderPage(canvas, pageNumber, scale, rotation as 0 | 90 | 180 | 270, renderAnnotations);
+      await this._mainThreadRenderPage(canvas, pageNumber, scale, rotation as 0 | 90 | 180 | 270, renderAnnotations, maskText);
     }
   }
 
@@ -544,7 +550,8 @@ export class PDFRenderer {
     pageNumber: number,
     scale: number,
     rotation: 0 | 90 | 180 | 270,
-    renderAnnotations: boolean
+    renderAnnotations: boolean,
+    maskText = false,
   ): Promise<void> {
     const page = await this.getPage(pageNumber);
     const viewport = page.getViewport({ scale, rotation });
@@ -567,10 +574,11 @@ export class PDFRenderer {
     } as Parameters<typeof page.render>[0]);
     await renderTask.promise;
 
-    // Mask text from the rendered image so the Fabric overlay is the only visible text.
-    // Without this, PDF background text and Fabric overlay text stack with different
-    // font metrics (browser Helvetica vs PDF embedded font), creating visual duplicates.
-    await maskTextLayer(page, context, viewport);
+    // Optionally mask text from the rendered image so the Fabric overlay is the
+    // only visible text. Only used by the editor background; disabled for thumbnails.
+    if (maskText) {
+      await maskTextLayer(page, context, viewport);
+    }
   }
 
   // ── renderPageToDataURL ──────────────────────────────────────────────────────
@@ -625,7 +633,8 @@ export class PDFRenderer {
       pageNumber,
       scale,
       rotation as 0 | 90 | 180 | 270,
-      options.renderAnnotations ?? false
+      options.renderAnnotations ?? false,
+      options.maskText ?? false,
     );
     return canvas.toDataURL("image/png");
   }
