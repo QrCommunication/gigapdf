@@ -5,3 +5,4 @@ export { addAnnotation } from './annotation-renderer';
 export { addFormField, updateFormFieldValue } from './form-renderer';
 export { deleteElementArea } from './redaction';
 export { flattenAnnotations, flattenForms } from './flatten';
+export type { FlattenAnnotationsResult } from './flatten';
