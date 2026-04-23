@@ -1,13 +1,17 @@
-# DEPRECATED: Use @giga-pdf/pdf-engine via Next.js API routes instead
 """
 PDF security endpoints.
 
-Handles PDF encryption, decryption, and permission management.
+Handles PDF encryption, decryption, and permission management via pikepdf.
+Encryption is applied inline using pikepdf (AES-256 / AES-128 / RC4-128) and
+the resulting bytes are persisted back into the document session so that
+subsequent save / download operations return the actually-encrypted file.
 """
 
+import io
 import time
 from typing import Optional
 
+import pikepdf
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
@@ -249,7 +253,7 @@ async def encrypt_document(
     request: EncryptDocumentRequest,
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
-    """Add password protection and set permissions."""
+    """Apply real AES-256 / AES-128 / RC4-128 encryption via pikepdf and persist bytes."""
     start_time = time.time()
 
     from app.repositories.document_repo import document_sessions
@@ -259,7 +263,7 @@ async def encrypt_document(
         from app.middleware.error_handler import DocumentNotFoundError
         raise DocumentNotFoundError(document_id)
 
-    # Validate at least one password is provided
+    # Validate: at least one password is required by the PDF spec
     if not request.user_password and not request.owner_password:
         from app.middleware.error_handler import InvalidOperationError
         raise InvalidOperationError("At least one password (user or owner) is required")
@@ -272,50 +276,62 @@ async def encrypt_document(
             f"Invalid encryption algorithm. Must be one of: {', '.join(valid_algorithms)}"
         )
 
-    # Build permissions bitmask using PDF spec bit positions (ISO 32000-1 §7.6.3.3).
-    # These are the raw flag values previously exposed as fitz.PDF_PERM_* constants.
-    # Encryption itself is applied by the TypeScript pdf-engine on save; we only
-    # store the parameters here for later use.
-    PDF_PERM_PRINT = 4        # bit 3 — print
-    PDF_PERM_MODIFY = 8       # bit 4 — modify content
-    PDF_PERM_COPY = 16        # bit 5 — copy / extract text
-    PDF_PERM_ANNOTATE = 32    # bit 6 — add/modify annotations
-    PDF_PERM_FORM = 256       # bit 9 — fill-in form fields
-    PDF_PERM_ASSEMBLE = 1024  # bit 11 — assemble pages
-
-    perm = 0
-    if request.allow_printing:
-        perm |= PDF_PERM_PRINT
-    if request.allow_modification:
-        perm |= PDF_PERM_MODIFY
-    if request.allow_copying:
-        perm |= PDF_PERM_COPY
-    if request.allow_annotation:
-        perm |= PDF_PERM_ANNOTATE
-    if request.allow_form_filling:
-        perm |= PDF_PERM_FORM
-    if request.allow_assembly:
-        perm |= PDF_PERM_ASSEMBLE
-
-    # Map algorithm to a label used by the TS engine when saving
-    encryption_method = request.encryption_algorithm  # passed through as-is to TS engine
-
-    # Set encryption on the document (LegacyDocumentProxy: permissions setter is no-op,
-    # actual encryption is applied by @giga-pdf/pdf-engine on save)
-    session.pdf_doc.set_metadata({"encryption": request.encryption_algorithm})
-    session.pdf_doc.permissions = perm
-
-    # Note: PyMuPDF applies encryption when saving, not immediately
-    # We'll store the encryption parameters in the session for later use
-    if not hasattr(session, "encryption_params"):
-        session.encryption_params = {}
-
-    session.encryption_params = {
-        "user_password": request.user_password,
-        "owner_password": request.owner_password,
-        "permissions": perm,
-        "encryption_method": encryption_method,
+    # Map algorithm label to pikepdf R value (ISO 32000-1 §7.6.3.3)
+    # R=4 → AES-128 / RC4-128 (PDF 1.4–1.5), R=6 → AES-256 (PDF 1.7 ext3)
+    _algo_to_R = {
+        "RC4-128": 4,
+        "AES-128": 4,
+        "AES-256": 6,
     }
+    R = _algo_to_R[request.encryption_algorithm]
+    # R=4 supports both RC4-128 and AES-128; pikepdf uses AES when R=4 and aes=True
+    use_aes = request.encryption_algorithm != "RC4-128"
+
+    # Build pikepdf.Permissions from request flags
+    # pikepdf field names follow the PDF spec permission names
+    perms = pikepdf.Permissions(
+        print_lowres=request.allow_printing,
+        print_highres=request.allow_printing,
+        modify_other=request.allow_modification,
+        extract=request.allow_copying,
+        accessibility=request.allow_copying,  # linked to extract in PDF spec
+        modify_annotation=request.allow_annotation,
+        modify_form=request.allow_form_filling,
+        modify_assembly=request.allow_assembly,
+    )
+
+    enc = pikepdf.Encryption(
+        user=request.user_password or "",
+        owner=request.owner_password or request.user_password or "",
+        R=R,
+        allow=perms,
+        aes=use_aes,
+        metadata=True,  # encrypt XMP metadata stream as well
+    )
+
+    # Get current PDF bytes from session
+    pdf_bytes = session.pdf_doc.tobytes()
+
+    try:
+        with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
+            output = io.BytesIO()
+            pdf.save(output, encryption=enc)
+            encrypted_bytes = output.getvalue()
+    except pikepdf.PdfError as exc:
+        from app.middleware.error_handler import InvalidOperationError
+        raise InvalidOperationError(f"PDF encryption failed: {exc}") from exc
+
+    # Persist encrypted bytes back into the document session so that
+    # tobytes(), Redis persistence, and download all return the ciphertext.
+    # This mirrors the pattern used by LegacyDocumentProxy.select().
+    from app.core.pdf_engine import pdf_engine
+    pdf_engine._documents[document_id] = encrypted_bytes
+    session.pdf_doc._pdf_bytes = encrypted_bytes
+    session.pdf_doc.is_encrypted = True
+
+    # Keep _pdf_bytes on session in sync for direct access paths
+    if hasattr(session, "_pdf_bytes"):
+        session._pdf_bytes = encrypted_bytes
 
     # Add history entry
     document_sessions.push_history(
@@ -496,7 +512,7 @@ async def decrypt_document(
     request: DecryptDocumentRequest,
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
-    """Remove password protection."""
+    """Remove password protection via pikepdf and persist the plaintext bytes."""
     start_time = time.time()
 
     from app.repositories.document_repo import document_sessions
@@ -506,20 +522,34 @@ async def decrypt_document(
         from app.middleware.error_handler import DocumentNotFoundError
         raise DocumentNotFoundError(document_id)
 
-    # Check if document is encrypted
+    # Check if document is actually encrypted
     if not session.pdf_doc.is_encrypted:
         from app.middleware.error_handler import InvalidOperationError
         raise InvalidOperationError("Document is not encrypted")
 
-    # Try to authenticate with the password
-    auth_result = session.pdf_doc.authenticate(request.password)
-    if not auth_result:
+    # Authenticate with pikepdf and save without encryption in one pass
+    pdf_bytes = session.pdf_doc.tobytes()
+    try:
+        with pikepdf.open(io.BytesIO(pdf_bytes), password=request.password) as pdf:
+            output = io.BytesIO()
+            # Saving without an `encryption=` argument strips all password protection
+            pdf.save(output)
+            decrypted_bytes = output.getvalue()
+    except pikepdf.PasswordError:
         from app.middleware.error_handler import InvalidOperationError
         raise InvalidOperationError("Invalid password")
+    except pikepdf.PdfError as exc:
+        from app.middleware.error_handler import InvalidOperationError
+        raise InvalidOperationError(f"PDF decryption failed: {exc}") from exc
 
-    # Remove encryption parameters if they exist
-    if hasattr(session, "encryption_params"):
-        delattr(session, "encryption_params")
+    # Persist plaintext bytes back into the session (mirrors encrypt_document pattern)
+    from app.core.pdf_engine import pdf_engine
+    pdf_engine._documents[document_id] = decrypted_bytes
+    session.pdf_doc._pdf_bytes = decrypted_bytes
+    session.pdf_doc.is_encrypted = False
+
+    if hasattr(session, "_pdf_bytes"):
+        session._pdf_bytes = decrypted_bytes
 
     # Add history entry
     document_sessions.push_history(
