@@ -2,10 +2,8 @@
 export {
   openDocument,
   saveDocument,
-  closeDocument,
   getMetadata,
   setMetadata,
-  getPageDimensions,
   addPage,
   deletePage,
   movePage,
@@ -21,13 +19,16 @@ export type {
 } from './engine';
 
 // Parse
-export {
-  parseDocument,
-  parsePage,
-  parseMetadata,
-  parseBookmarks,
-} from './parse';
-export type { ParseOptions, ParsePageOptions } from './parse';
+export { parseDocument } from './parse';
+export type { ParseOptions } from './parse';
+
+// Extract — rich standalone APIs
+export { extractTextBlocks } from './parse/text-extractor';
+export type { TextBlock } from './parse/text-extractor';
+export { extractImages } from './parse/image-extractor';
+export type { ExtractedImage, ExtractImagesOptions } from './parse/image-extractor';
+export { extractFormFields } from './parse/form-extractor';
+export type { FormField, FormFieldType } from './parse/form-extractor';
 
 // Render
 export {
@@ -57,25 +58,15 @@ export { encryptPDF, decryptPDF, getPermissions, setPermissions } from './encryp
 export type { EncryptOptions, EncryptionAlgorithm, PermissionsResult } from './encrypt';
 
 // Preview
-export {
-  renderPage,
-  renderThumbnail,
-  renderAllThumbnails,
-  extractImage,
-  setCanvasPoolSize,
-  destroyCanvasPool,
-} from './preview';
+export { renderPage, renderThumbnail, renderAllThumbnails } from './preview';
 export type { RenderOptions, ThumbnailOptions, PreviewFormat } from './preview';
 
 // Convert
-export {
-  htmlToPDF,
-  urlToPDF,
-  urlToPDFSafe,
-  setPlaywrightPoolSize,
-  destroyPlaywrightPool,
-} from './convert';
+export { htmlToPDF, urlToPDFSafe } from './convert';
 export type { ConvertOptions, UrlToPDFSafeOptions } from './convert';
+
+// Utils
+export { parsePageRange, type PageRange } from './utils';
 
 // Errors
 export {
@@ -87,24 +78,3 @@ export {
   PDFPageOutOfRangeError,
   PDFUnsupportedOperationError,
 } from './errors';
-
-// Constants
-export {
-  POINTS_PER_INCH,
-  DEFAULT_PAGE_WIDTH,
-  DEFAULT_PAGE_HEIGHT,
-  A4_PAGE_WIDTH,
-  A4_PAGE_HEIGHT,
-  MAX_PREVIEW_DPI,
-  DEFAULT_PREVIEW_DPI,
-} from './constants';
-
-// Utils
-export { hexToRgb, rgbToHex, normalizeColor } from './utils';
-export { webToPdf, pdfToWeb, scaleRect } from './utils';
-export { normalizeFontName, resolveStandardFont, isStandardFont, mapPdfFontToStandard } from './utils';
-export { parsePageRange, type PageRange } from './utils';
-export { engineLogger } from './utils';
-
-// Text renderer utilities (cache management)
-export { clearFontCache } from './render/text-renderer';
