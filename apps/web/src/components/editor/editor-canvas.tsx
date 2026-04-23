@@ -806,7 +806,7 @@ export function EditorCanvas({
             ...baseOptions,
             width: textElement.bounds.width,
             fontSize: textElement.style.fontSize ?? 12,
-            fontFamily: textElement.style.originalFont || textElement.style.fontFamily || "Helvetica",
+            fontFamily: textElement.style.fontFamily || "Helvetica",
             fontWeight: textElement.style.fontWeight || "normal",
             fontStyle: textElement.style.fontStyle || "normal",
             fill: textElement.style.color || "#000000",
