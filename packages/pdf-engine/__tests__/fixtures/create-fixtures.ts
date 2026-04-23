@@ -388,10 +388,15 @@ async function createMixedFontsPdf(): Promise<Uint8Array> {
 
 async function createSimplePdf(): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
-  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const helvetica = await doc.embedFont(StandardFonts.Helvetica);
+  // Include a second font (Courier) so the fixture has non-Helvetica text content.
+  // This is required for RT-02 round-trip tests that verify font preservation.
+  const courier = await doc.embedFont(StandardFonts.Courier);
   const page = doc.addPage([612, 792]);
-  page.drawText('Hello GigaPDF Test', { x: 50, y: 700, size: 24, font, color: rgb(0, 0, 0) });
-  page.drawText('Second line of text', { x: 50, y: 660, size: 14, font, color: rgb(0.2, 0.2, 0.2) });
+  page.drawText('Hello GigaPDF Test', { x: 50, y: 700, size: 24, font: helvetica, color: rgb(0, 0, 0) });
+  page.drawText('Second line of text', { x: 50, y: 660, size: 14, font: helvetica, color: rgb(0.2, 0.2, 0.2) });
+  // Courier line — ensures simple.pdf has a non-Helvetica font in its text runs
+  page.drawText('Monospace reference line', { x: 50, y: 620, size: 12, font: courier, color: rgb(0.3, 0.3, 0.3) });
   page.drawRectangle({ x: 50, y: 500, width: 200, height: 100, color: rgb(0.9, 0.1, 0.1), opacity: 0.5 });
   page.drawLine({ start: { x: 50, y: 480 }, end: { x: 300, y: 480 }, color: rgb(0, 0, 1), thickness: 2 });
   page.drawEllipse({ x: 400, y: 550, xScale: 60, yScale: 40, color: rgb(0, 0.8, 0) });

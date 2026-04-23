@@ -38,12 +38,16 @@ function emit(level: LogLevel, message: string, context?: Record<string, unknown
 
   const formatted = formatEntry(entry);
 
+  // Use console methods so test spies (vi.spyOn(console, 'warn')) can intercept.
+  // In production (non-development) the formatted string is JSON-structured.
   if (level === 'error') {
-    process.stderr.write(formatted + '\n');
+    console.error(formatted);
   } else if (level === 'warn') {
-    process.stderr.write(formatted + '\n');
+    console.warn(formatted);
   } else {
-    process.stdout.write(formatted + '\n');
+    // For debug and info levels, write to stdout via console.log.
+    // Avoid process.stdout.write so that test environments without TTY work correctly.
+    console.log(formatted);
   }
 }
 
