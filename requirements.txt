@@ -29,7 +29,7 @@ SQLAlchemy[asyncio]>=2.0.25
 alembic>=1.13.0
 
 # Authentication
-python-jose[cryptography]>=3.3.0
+PyJWT[crypto]>=2.8.0
 httpx>=0.26.0
 
 # Encryption

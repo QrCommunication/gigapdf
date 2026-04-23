@@ -13,8 +13,9 @@ from dataclasses import dataclass
 from typing import Annotated, Optional
 
 import httpx
+import jwt as pyjwt
 from fastapi import Depends, Header, Request
-from jose import JWTError, jwt
+from jwt.exceptions import InvalidTokenError as JWTError
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
@@ -306,9 +307,6 @@ async def decode_jwt_token(token: str) -> dict:
     Raises:
         AuthInvalidError: If token is invalid or expired.
     """
-    from jose import jwk
-    from jose.constants import ALGORITHMS
-
     settings = get_settings()
 
     try:
@@ -324,7 +322,7 @@ async def decode_jwt_token(token: str) -> dict:
                 raise AuthInvalidError("No keys found in JWKS")
 
             # Get the key ID from token header to match the right key
-            unverified_header = jwt.get_unverified_header(token)
+            unverified_header = pyjwt.get_unverified_header(token)
             token_kid = unverified_header.get("kid")
 
             # Find matching key or use first key
@@ -336,20 +334,23 @@ async def decode_jwt_token(token: str) -> dict:
             if not key_data:
                 key_data = keys[0]
 
-            # Convert JWK to PEM format for jose
-            rsa_key = jwk.construct(key_data, algorithm=ALGORITHMS.RS256)
-            public_key = rsa_key.to_pem().decode("utf-8")
+            # Convert JWK dict to a public key object using PyJWT's RSA helper
+            import json as _json
+            from jwt.algorithms import RSAAlgorithm
+
+            public_key = RSAAlgorithm.from_jwk(_json.dumps(key_data))
         else:
             public_key = public_key_config
 
-        # Build verification options
-        verify_options = {
-            "verify_aud": bool(settings.auth_jwt_audience),
-            "verify_iss": bool(settings.auth_jwt_issuer),
-        }
+        # Build verification options — skip claims not configured (PyJWT option keys)
+        verify_options: dict = {}
+        if not settings.auth_jwt_audience:
+            verify_options["verify_aud"] = False
+        if not settings.auth_jwt_issuer:
+            verify_options["verify_iss"] = False
 
         # Decode token - Better Auth JWT uses 'sub' for user ID
-        claims = jwt.decode(
+        claims = pyjwt.decode(
             token,
             public_key,
             algorithms=[settings.auth_jwt_algorithm],
@@ -447,7 +448,11 @@ async def get_current_user(
         if is_jwt_token(token):
             try:
                 # Decode without verification (dev mode only!)
-                unverified_claims = jwt.get_unverified_claims(token)
+                unverified_claims = pyjwt.decode(
+                    token,
+                    options={"verify_signature": False},
+                    algorithms=["RS256", "HS256", "RS384", "RS512", "HS384", "HS512"],
+                )
                 user_id = unverified_claims.get("sub", unverified_claims.get("user_id", ""))
                 if user_id:
                     logger.debug(f"Dev mode: Extracted user ID from JWT: {user_id}")

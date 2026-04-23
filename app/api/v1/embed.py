@@ -14,9 +14,10 @@ import time
 import uuid
 from typing import Any
 
+import jwt as pyjwt
 from fastapi import APIRouter, Body, File, Request, UploadFile, status
 from fastapi.responses import Response
-from jose import JWTError, jwt
+from jwt.exceptions import InvalidTokenError as JWTError
 
 from app.middleware.request_id import get_request_id
 from app.schemas.responses.common import APIResponse, MetaInfo
@@ -96,7 +97,7 @@ def _create_embed_token(
         # origin restrictions without a DB round-trip.
         "aud": allowed_domains or "",
     }
-    return jwt.encode(payload, _get_embed_jwt_secret(), algorithm=_EMBED_JWT_ALGORITHM)
+    return pyjwt.encode(payload, _get_embed_jwt_secret(), algorithm=_EMBED_JWT_ALGORITHM)
 
 
 def _decode_embed_token(token: str) -> dict[str, Any]:
@@ -106,7 +107,7 @@ def _decode_embed_token(token: str) -> dict[str, Any]:
     Raises:
         JWTError: When the token is invalid, expired, or tampered with.
     """
-    return jwt.decode(
+    return pyjwt.decode(
         token,
         _get_embed_jwt_secret(),
         algorithms=[_EMBED_JWT_ALGORITHM],
