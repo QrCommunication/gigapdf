@@ -7,7 +7,7 @@ Handles text search, replacement, and extraction from PDF documents.
 import time
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from app.middleware.auth import OptionalUser
 from app.middleware.request_id import get_request_id
@@ -286,33 +286,10 @@ async def search_text(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Search for text in a document."""
-    start_time = time.time()
-
-    # TODO: Implement text search logic using document service
-    # This is a placeholder implementation
-    matches = []
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data={
-            "matches": matches,
-            "total_matches": len(matches),
-            "pages_searched": 0,
-            "query": request.query,
-            "settings": {
-                "regex": request.regex,
-                "case_sensitive": request.case_sensitive,
-                "whole_word": request.whole_word,
-                "page_range": request.page_range,
-            },
-        },
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -493,37 +470,10 @@ async def replace_text(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Search and replace text in a document."""
-    start_time = time.time()
-
-    # TODO: Implement text replace logic using document service
-    # This is a placeholder implementation
-    replacements_made = 0
-    pages_affected = []
-    replaced_elements = []
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data={
-            "replacements_made": replacements_made,
-            "pages_affected": pages_affected,
-            "replaced_elements": replaced_elements,
-            "settings": {
-                "search": request.search,
-                "replace": request.replace,
-                "regex": request.regex,
-                "case_sensitive": request.case_sensitive,
-                "whole_word": request.whole_word,
-                "page_range": request.page_range,
-                "max_replacements": request.max_replacements,
-            },
-        },
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -728,33 +678,10 @@ async def extract_text(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Extract all text from a document."""
-    start_time = time.time()
-
-    # TODO: Implement text extraction logic using document service
-    # This is a placeholder implementation
-    pages_data = []
-    full_text = ""
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data={
-            "pages": pages_data,
-            "full_text": full_text,
-            "total_pages": len(pages_data),
-            "total_characters": len(full_text),
-            "settings": {
-                "page_range": page_range,
-                "include_formatting": include_formatting,
-                "preserve_layout": preserve_layout,
-            },
-        },
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -1053,37 +980,10 @@ async def ocr_document(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Run OCR on a document to extract text from scanned pages."""
-    start_time = time.time()
-
-    # TODO: Implement OCR logic using document service and OCR engine
-    # This is a placeholder implementation
-    pages_data = []
-    full_text = ""
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data={
-            "pages": pages_data,
-            "full_text": full_text,
-            "total_pages_processed": len(request.pages) if request.pages else 0,
-            "average_confidence": 0.0,
-            "language_detected": request.language.split("+")[0],
-            "settings": {
-                "pages": request.pages,
-                "language": request.language,
-                "dpi": request.dpi,
-                "enhance_image": request.enhance_image,
-                "detect_orientation": request.detect_orientation,
-                "output_format": request.output_format,
-            },
-        },
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -1291,29 +1191,10 @@ async def get_ocr_status(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Get the status of an OCR processing job."""
-    start_time = time.time()
-
-    # TODO: Implement OCR status check using job service
-    # This is a placeholder implementation
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data={
-            "job_id": job_id,
-            "status": "completed",
-            "progress": 100,
-            "pages_processed": 0,
-            "total_pages": 0,
-            "estimated_time_remaining": 0,
-            "started_at": now_utc(),
-            "completed_at": now_utc(),
-        },
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 

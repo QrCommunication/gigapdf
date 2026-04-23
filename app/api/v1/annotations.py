@@ -7,7 +7,7 @@ Handles creation of various annotation types (highlights, notes, links, etc.).
 import time
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.middleware.auth import OptionalUser
 from app.middleware.request_id import get_request_id
@@ -190,32 +190,10 @@ async def create_markup_annotation(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Create a markup annotation (highlight, underline, etc.)."""
-    start_time = time.time()
-
-    # TODO: Implement annotation creation using element service
-    # This is a placeholder implementation
-    annotation_data = {
-        "element_id": "placeholder-uuid",
-        "type": "annotation",
-        "annotation_type": request.annotation_type,
-        "bounds": request.bounds,
-        "content": request.content,
-        "style": {
-            "color": request.color,
-            "opacity": request.opacity,
-        },
-    }
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data=annotation_data,
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -314,34 +292,10 @@ async def create_note_annotation(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Create a note annotation."""
-    start_time = time.time()
-
-    # TODO: Implement note annotation creation using element service
-    # This is a placeholder implementation
-    annotation_data = {
-        "element_id": "placeholder-uuid",
-        "type": "annotation",
-        "annotation_type": "note",
-        "bounds": request.bounds,
-        "content": request.content,
-        "style": {
-            "color": request.color,
-        },
-        "popup": {
-            "is_open": request.popup_open,
-        },
-    }
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data=annotation_data,
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -481,39 +435,8 @@ async def create_link_annotation(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Create a link annotation."""
-    start_time = time.time()
-
-    # TODO: Implement link annotation creation using element service
-    # This is a placeholder implementation
-    link_destination = {
-        "type": request.link_type,
-    }
-
-    if request.link_type == "external":
-        link_destination["url"] = request.url
-    else:
-        link_destination["page_number"] = request.target_page
-        link_destination["position"] = request.target_position
-
-    annotation_data = {
-        "element_id": "placeholder-uuid",
-        "type": "annotation",
-        "annotation_type": "link",
-        "bounds": request.bounds,
-        "link_destination": link_destination,
-        "style": {
-            "color": request.color,
-        },
-    }
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data=annotation_data,
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )

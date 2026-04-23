@@ -7,7 +7,7 @@ Handles PDF bookmarks (document outline/table of contents).
 import time
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.middleware.auth import OptionalUser
 from app.middleware.request_id import get_request_id
@@ -194,33 +194,10 @@ async def list_bookmarks(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """List all bookmarks in a document."""
-    start_time = time.time()
-
-    # TODO: Implement bookmark listing using document service
-    # This is a placeholder implementation
-    bookmarks = []
-
-    def count_bookmarks(bookmark_list):
-        count = len(bookmark_list)
-        for bookmark in bookmark_list:
-            count += count_bookmarks(bookmark.get("children", []))
-        return count
-
-    total = count_bookmarks(bookmarks)
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data={
-            "bookmarks": bookmarks,
-            "total_bookmarks": total,
-        },
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -435,36 +412,10 @@ async def create_bookmark(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Create a new bookmark."""
-    start_time = time.time()
-
-    # TODO: Implement bookmark creation using document service
-    # This is a placeholder implementation
-    bookmark_data = {
-        "bookmark_id": "placeholder-uuid",
-        "title": request.title,
-        "destination": {
-            "page_number": request.page_number,
-            "position": request.position,
-            "zoom": request.zoom,
-        },
-        "style": request.style or {
-            "bold": False,
-            "italic": False,
-            "color": "#000000",
-        },
-        "children": [],
-    }
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data=bookmark_data,
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -663,38 +614,10 @@ async def update_bookmark(
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Update a bookmark."""
-    start_time = time.time()
-
-    # TODO: Implement bookmark update using document service
-    # This is a placeholder implementation
-    updates = request.model_dump(exclude_none=True)
-
-    bookmark_data = {
-        "bookmark_id": bookmark_id,
-        "title": updates.get("title", "Bookmark"),
-        "destination": {
-            "page_number": updates.get("page_number", 1),
-            "position": updates.get("position"),
-            "zoom": updates.get("zoom"),
-        },
-        "style": updates.get("style", {
-            "bold": False,
-            "italic": False,
-            "color": "#000000",
-        }),
-        "children": [],
-    }
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data=bookmark_data,
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -857,5 +780,8 @@ async def delete_bookmark(
     user: OptionalUser = None,
 ) -> None:
     """Delete a bookmark."""
-    # TODO: Implement bookmark deletion using document service
-    pass
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
+    )

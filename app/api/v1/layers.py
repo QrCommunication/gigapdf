@@ -7,7 +7,7 @@ Handles PDF Optional Content Groups (OCG) - layers that can be shown/hidden.
 import time
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.middleware.auth import OptionalUser
 from app.middleware.request_id import get_request_id
@@ -198,25 +198,10 @@ async def list_layers(
     Returns:
         APIResponse containing a list of layers and total count.
     """
-    start_time = time.time()
-
-    # TODO: Implement layer listing using document service
-    # This is a placeholder implementation
-    layers = []
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data={
-            "layers": layers,
-            "total_layers": len(layers),
-        },
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -386,30 +371,10 @@ async def create_layer(
     Returns:
         APIResponse containing the created layer data with its assigned ID.
     """
-    start_time = time.time()
-
-    # TODO: Implement layer creation using document service
-    # This is a placeholder implementation
-    layer_data = {
-        "layer_id": "placeholder-uuid",
-        "name": request.name,
-        "visible": request.visible,
-        "locked": request.locked,
-        "opacity": request.opacity,
-        "print": request.print,
-        "order": request.order,
-    }
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data=layer_data,
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -567,27 +532,10 @@ async def update_layer(
     Returns:
         APIResponse containing the updated layer data.
     """
-    start_time = time.time()
-
-    # TODO: Implement layer update using document service
-    # This is a placeholder implementation
-    updates = request.model_dump(exclude_none=True)
-
-    layer_data = {
-        "layer_id": layer_id,
-        **updates,
-    }
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data=layer_data,
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -713,8 +661,11 @@ async def delete_layer(
     Returns:
         None. Returns 204 No Content on success.
     """
-    # TODO: Implement layer deletion using document service
-    pass
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
+    )
 
 
 @router.put(
@@ -877,22 +828,8 @@ async def reorder_layers(
     Returns:
         APIResponse containing the updated list of layers with new order values.
     """
-    start_time = time.time()
-
-    # TODO: Implement layer reordering using document service
-    # This is a placeholder implementation
-    layers = []
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data={
-            "layers": layers,
-        },
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )

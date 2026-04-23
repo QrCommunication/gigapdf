@@ -7,7 +7,7 @@ Handles form field listing, filling, creation, and flattening operations.
 import time
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.middleware.auth import OptionalUser
 from app.middleware.request_id import get_request_id
@@ -227,28 +227,10 @@ async def list_form_fields(
         - total_fields: Total count of form fields in the document
         - filled_fields: Count of fields that have values
     """
-    start_time = time.time()
-
-    # TODO: Implement form field listing using document service
-    # This is a placeholder implementation
-    fields = []
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    filled_count = sum(1 for f in fields if f.get("value"))
-
-    return APIResponse(
-        success=True,
-        data={
-            "fields": fields,
-            "total_fields": len(fields),
-            "filled_fields": filled_count,
-        },
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -476,28 +458,10 @@ async def fill_form_fields(
         - failed_count: Number of fields that failed to fill
         - results: Detailed results for each field operation
     """
-    start_time = time.time()
-
-    # TODO: Implement form filling logic using document service
-    # This is a placeholder implementation
-    results = []
-    filled_count = 0
-    failed_count = 0
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data={
-            "filled_count": filled_count,
-            "failed_count": failed_count,
-            "results": results,
-        },
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -733,32 +697,10 @@ async def create_form_field(
         - properties: Field behavior properties
         - style: Visual styling properties
     """
-    start_time = time.time()
-
-    # TODO: Implement form field creation using element service
-    # This is a placeholder implementation
-    field_data = {
-        "element_id": "placeholder-uuid",
-        "type": "form_field",
-        "field_type": request.field_type,
-        "field_name": request.field_name,
-        "bounds": request.bounds,
-        "value": request.value or "",
-        "options": request.options,
-        "properties": request.properties or {},
-        "style": request.style or {},
-    }
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data=field_data,
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
 
 
@@ -924,26 +866,8 @@ async def flatten_form_fields(
         - pages_affected: List of page numbers containing flattened fields
         - field_names: Names of all fields that were flattened
     """
-    start_time = time.time()
-
-    # TODO: Implement form flattening logic using document service
-    # This is a placeholder implementation
-    flattened_count = 0
-    pages_affected = []
-    field_names = []
-
-    processing_time = int((time.time() - start_time) * 1000)
-
-    return APIResponse(
-        success=True,
-        data={
-            "flattened_count": flattened_count,
-            "pages_affected": pages_affected,
-            "field_names": field_names,
-        },
-        meta=MetaInfo(
-            request_id=get_request_id(),
-            timestamp=now_utc(),
-            processing_time_ms=processing_time,
-        ),
+    # TODO: implement — currently returns 501
+    raise HTTPException(
+        status_code=501,
+        detail="Not implemented. This endpoint is a stub — use the TypeScript engine via /api/pdf/* routes for now.",
     )
