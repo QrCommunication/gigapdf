@@ -398,8 +398,13 @@ class DocumentService:
         if not session:
             raise DocumentNotFoundError(document_id)
 
-        # Add page to PDF
-        self.engine.add_page(document_id, position, width, height)
+        # Add page to PDF (0-indexed: position - 1 inserts before existing page at that slot)
+        self.engine.add_page(document_id, position - 1, width, height)
+
+        # Propagate updated bytes to session proxy so save_session / tobytes() are correct
+        updated_bytes = self.engine._documents[document_id]
+        session._pdf_bytes = updated_bytes
+        session.pdf_doc._pdf_bytes = updated_bytes
 
         # Build a minimal PageObject for the new blank page.
         # The TS engine loads the real scene_graph via parse-from-s3.
@@ -451,6 +456,11 @@ class DocumentService:
         # Delete from PDF
         self.engine.delete_page(document_id, page_number)
 
+        # Propagate updated bytes to session proxy so save_session / tobytes() are correct
+        updated_bytes = self.engine._documents[document_id]
+        session._pdf_bytes = updated_bytes
+        session.pdf_doc._pdf_bytes = updated_bytes
+
         # Update scene graph
         del session.scene_graph.pages[page_number - 1]
 
@@ -495,12 +505,20 @@ class DocumentService:
         from app.utils.validators import validate_rotation
         normalized_angle = validate_rotation(angle)
 
-        # Rotate in PDF
-        self.engine.rotate_page(document_id, page_number, normalized_angle)
+        # Compute the new absolute rotation (PDF /Rotate is absolute, not cumulative)
+        page = session.scene_graph.pages[page_number - 1]
+        absolute_rotation = (page.dimensions.rotation + normalized_angle) % 360
+
+        # Rotate in PDF with the absolute target angle
+        self.engine.rotate_page(document_id, page_number, absolute_rotation)
+
+        # Propagate updated bytes to session proxy so save_session / tobytes() are correct
+        updated_bytes = self.engine._documents[document_id]
+        session._pdf_bytes = updated_bytes
+        session.pdf_doc._pdf_bytes = updated_bytes
 
         # Update scene graph
-        page = session.scene_graph.pages[page_number - 1]
-        page.dimensions.rotation = (page.dimensions.rotation + normalized_angle) % 360
+        page.dimensions.rotation = absolute_rotation
 
         # Add history entry
         document_sessions.push_history(
@@ -538,9 +556,13 @@ class DocumentService:
                 f"Invalid page order. Expected pages 1-{page_count}"
             )
 
-        # Reorder in PDF
-        # PyMuPDF requires sequential moves, so we use select
+        # Reorder in PDF via engine (0-indexed).
+        # session.pdf_doc.select() delegates to pdf_engine.reorder_pages() and
+        # updates session.pdf_doc._pdf_bytes automatically.
         session.pdf_doc.select([p - 1 for p in new_order])
+
+        # Keep session bytes in sync with the proxy bytes
+        session._pdf_bytes = session.pdf_doc._pdf_bytes
 
         # Reorder scene graph pages
         new_pages = [session.scene_graph.pages[p - 1] for p in new_order]

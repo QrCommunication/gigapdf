@@ -228,6 +228,38 @@ class PDFEngine:
 
         return LegacyPageProxy(page_number, width, height)
 
+    def reorder_pages(self, document_id: str, new_order: list[int]) -> None:
+        """
+        Reorder pages in the document.
+
+        Args:
+            document_id: Document identifier.
+            new_order: 0-indexed list of page indices representing the new order.
+                       Must be a permutation of range(len(pages)).
+
+        Raises:
+            KeyError: If document not found.
+            ValueError: If new_order is not a valid permutation of page indices.
+        """
+        if document_id not in self._documents:
+            raise KeyError(f"Document not found: {document_id}")
+
+        pdf_bytes = self._documents[document_id]
+        with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
+            if set(new_order) != set(range(len(pdf.pages))):
+                raise ValueError(
+                    f"new_order must be a permutation of page indices 0..{len(pdf.pages) - 1}, "
+                    f"got {new_order}"
+                )
+            new_pdf = pikepdf.Pdf.new()
+            for idx in new_order:
+                new_pdf.pages.append(pdf.pages[idx])
+            output = io.BytesIO()
+            new_pdf.save(output)
+
+        self._documents[document_id] = output.getvalue()
+        logger.info(f"Reordered {len(new_order)} pages for document {document_id}")
+
     def add_page(
         self,
         document_id: str,
@@ -238,24 +270,65 @@ class PDFEngine:
         """
         Add a new blank page to the document.
 
-        DEPRECATED: Page operations are now handled by @giga-pdf/pdf-engine (TypeScript).
-        TODO: Route this call to the TS engine via HTTP.
+        Args:
+            document_id: Document identifier.
+            position: 0-indexed insertion position (page is inserted before this index).
+            width: Page width in points (default: 612 — US Letter).
+            height: Page height in points (default: 792 — US Letter).
+
+        Returns:
+            LegacyPageProxy: Proxy for the newly inserted page.
+
+        Raises:
+            KeyError: If document not found.
         """
-        logger.warning(
-            "PDFEngine.add_page() is deprecated. Use @giga-pdf/pdf-engine via Next.js API routes."
-        )
-        return LegacyPageProxy(position, width, height)
+        if document_id not in self._documents:
+            raise KeyError(f"Document not found: {document_id}")
+
+        pdf_bytes = self._documents[document_id]
+        with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
+            blank = pikepdf.Dictionary(
+                Type=pikepdf.Name("/Page"),
+                MediaBox=pikepdf.Array([0, 0, width, height]),
+                Resources=pikepdf.Dictionary(),
+            )
+            blank_page = pikepdf.Page(blank)
+            pdf.pages.insert(position, blank_page)
+            output = io.BytesIO()
+            pdf.save(output)
+
+        self._documents[document_id] = output.getvalue()
+        logger.info(f"Inserted blank page at position {position} in document {document_id}")
+        # Return 1-indexed page proxy
+        return LegacyPageProxy(position + 1, width, height, 0)
 
     def delete_page(self, document_id: str, page_number: int) -> None:
         """
         Delete a page from the document.
 
-        DEPRECATED: Page operations are now handled by @giga-pdf/pdf-engine (TypeScript).
-        TODO: Route this call to the TS engine via HTTP.
+        Args:
+            document_id: Document identifier.
+            page_number: 1-indexed page number to delete.
+
+        Raises:
+            KeyError: If document not found.
+            IndexError: If page_number is out of range.
         """
-        logger.warning(
-            "PDFEngine.delete_page() is deprecated. Use @giga-pdf/pdf-engine via Next.js API routes."
-        )
+        if document_id not in self._documents:
+            raise KeyError(f"Document not found: {document_id}")
+
+        pdf_bytes = self._documents[document_id]
+        with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
+            if page_number < 1 or page_number > len(pdf.pages):
+                raise IndexError(
+                    f"Page {page_number} out of range (document has {len(pdf.pages)} pages)"
+                )
+            del pdf.pages[page_number - 1]
+            output = io.BytesIO()
+            pdf.save(output)
+
+        self._documents[document_id] = output.getvalue()
+        logger.info(f"Deleted page {page_number} from document {document_id}")
 
     def move_page(self, document_id: str, from_page: int, to_page: int) -> None:
         """
@@ -270,14 +343,39 @@ class PDFEngine:
 
     def rotate_page(self, document_id: str, page_number: int, angle: int) -> None:
         """
-        Rotate a page.
+        Set absolute rotation on a page.
 
-        DEPRECATED: Page operations are now handled by @giga-pdf/pdf-engine (TypeScript).
-        TODO: Route this call to the TS engine via HTTP.
+        The PDF /Rotate key stores an absolute clockwise rotation value.
+        This method replaces whatever rotation was previously set.
+
+        Args:
+            document_id: Document identifier.
+            page_number: 1-indexed page number.
+            angle: Absolute rotation in degrees; must be 0, 90, 180, or 270.
+
+        Raises:
+            KeyError: If document not found.
+            ValueError: If angle is not a valid PDF rotation value.
+            IndexError: If page_number is out of range.
         """
-        logger.warning(
-            "PDFEngine.rotate_page() is deprecated. Use @giga-pdf/pdf-engine via Next.js API routes."
-        )
+        if document_id not in self._documents:
+            raise KeyError(f"Document not found: {document_id}")
+        if angle not in (0, 90, 180, 270):
+            raise ValueError(f"rotation must be 0, 90, 180, or 270; got {angle}")
+
+        pdf_bytes = self._documents[document_id]
+        with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
+            if page_number < 1 or page_number > len(pdf.pages):
+                raise IndexError(
+                    f"Page {page_number} out of range (document has {len(pdf.pages)} pages)"
+                )
+            page = pdf.pages[page_number - 1]
+            page["/Rotate"] = angle
+            output = io.BytesIO()
+            pdf.save(output)
+
+        self._documents[document_id] = output.getvalue()
+        logger.info(f"Rotated page {page_number} to {angle}° in document {document_id}")
 
     def copy_page(
         self,
@@ -496,14 +594,19 @@ class LegacyDocumentProxy:
 
     def select(self, page_indices: list[int]) -> None:
         """
-        Reorder pages via pikepdf — kept for document_service.reorder_pages().
+        Reorder pages to match page_indices order, delegating to the global pdf_engine.
 
-        DEPRECATED: Use @giga-pdf/pdf-engine for page reordering.
+        This mirrors the PyMuPDF Document.select() contract: page_indices is a
+        0-indexed list that specifies which pages (and in what order) should appear
+        in the document.  After the call, self._pdf_bytes is updated to reflect the
+        new byte sequence.
+
+        Args:
+            page_indices: 0-indexed list of page positions (permutation).
         """
-        logger.warning(
-            "LegacyDocumentProxy.select() is deprecated. "
-            "Use @giga-pdf/pdf-engine for page operations."
-        )
+        pdf_engine.reorder_pages(self.document_id, page_indices)
+        # Keep proxy bytes in sync so that tobytes() returns the modified PDF
+        self._pdf_bytes = pdf_engine._documents[self.document_id]
 
 
 class LegacyPageProxy:
