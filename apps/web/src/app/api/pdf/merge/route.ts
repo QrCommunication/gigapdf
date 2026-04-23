@@ -19,6 +19,8 @@ import { PDFCorruptedError } from '@giga-pdf/pdf-engine';
 import type { MergeOptions } from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
+import { serverLogger } from '@/lib/server-logger';
+import { MAX_FILE_SIZE_BYTES } from '@/lib/request-validation';
 
 export async function POST(request: Request): Promise<Response> {
   const authResult = await requireSession();
@@ -33,6 +35,25 @@ export async function POST(request: Request): Promise<Response> {
         { success: false, error: 'At least two PDF files are required (field name: files[]).' },
         { status: 400 },
       );
+    }
+
+    // Validate each file: non-empty + size cap
+    for (const f of files) {
+      if (f.size === 0) {
+        return NextResponse.json(
+          { success: false, error: `File "${f.name}" is empty.` },
+          { status: 400 },
+        );
+      }
+      if (f.size > MAX_FILE_SIZE_BYTES) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `File "${f.name}" exceeds the ${MAX_FILE_SIZE_BYTES / 1024 / 1024} MB size limit.`,
+          },
+          { status: 413 },
+        );
+      }
     }
 
     const rangeStrings = formData.getAll('ranges[]') as string[];
@@ -75,7 +96,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    console.error('[api/pdf/merge]', error);
+    serverLogger.error('api.pdf.merge', { error });
     return NextResponse.json(
       { success: false, error: 'Failed to merge PDF documents.' },
       { status: 500 },

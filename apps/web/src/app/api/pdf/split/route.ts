@@ -34,6 +34,8 @@ import { splitAt, splitPDF, parsePageRange } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError, PDFPageOutOfRangeError } from '@giga-pdf/pdf-engine';
 import type { PageRange } from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
+import { validatePdfFile } from '@/lib/request-validation';
+import { serverLogger } from '@/lib/server-logger';
 
 export async function POST(request: Request): Promise<Response> {
   const authResult = await requireSession();
@@ -42,13 +44,9 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const formData = await request.formData();
 
-    const file = formData.get('file');
-    if (!file || !(file instanceof File)) {
-      return NextResponse.json(
-        { success: false, error: 'Missing required field: file' },
-        { status: 400 },
-      );
-    }
+    const fileValidation = validatePdfFile(formData.get('file'));
+    if (!fileValidation.ok) return fileValidation.response;
+    const file = fileValidation.file;
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
@@ -162,7 +160,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    console.error('[api/pdf/split]', error);
+    serverLogger.error('api.pdf.split', { error });
     return NextResponse.json(
       { success: false, error: 'Failed to split PDF document.' },
       { status: 500 },

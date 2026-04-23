@@ -36,6 +36,8 @@ import { PDFCorruptedError } from '@giga-pdf/pdf-engine';
 import type { DocumentMetadata } from '@giga-pdf/types';
 import { requireSession } from '@/lib/auth-helpers';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
+import { serverLogger } from '@/lib/server-logger';
+import { validatePdfFile } from '@/lib/request-validation';
 
 export async function POST(request: Request): Promise<Response> {
   const authResult = await requireSession();
@@ -44,13 +46,9 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const formData = await request.formData();
 
-    const file = formData.get('file');
-    if (!file || !(file instanceof File)) {
-      return NextResponse.json(
-        { success: false, error: 'Missing required field: file' },
-        { status: 400 },
-      );
-    }
+    const fileValidation = validatePdfFile(formData.get('file'));
+    if (!fileValidation.ok) return fileValidation.response;
+    const file = fileValidation.file;
 
     const action = formData.get('action') as string | null;
     if (action !== 'get' && action !== 'set') {
@@ -111,7 +109,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    console.error('[api/pdf/metadata]', error);
+    serverLogger.error('api.pdf.metadata', { error });
     return NextResponse.json(
       { success: false, error: 'Failed to process metadata operation.' },
       { status: 500 },

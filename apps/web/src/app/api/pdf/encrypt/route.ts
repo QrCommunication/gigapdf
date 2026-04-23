@@ -52,6 +52,8 @@ import {
 import type { EncryptionAlgorithm } from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
+import { serverLogger } from '@/lib/server-logger';
+import { validatePdfFile } from '@/lib/request-validation';
 
 export async function POST(request: Request): Promise<Response> {
   const authResult = await requireSession();
@@ -60,13 +62,9 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const formData = await request.formData();
 
-    const file = formData.get('file');
-    if (!file || !(file instanceof File)) {
-      return NextResponse.json(
-        { success: false, error: 'Missing required field: file' },
-        { status: 400 },
-      );
-    }
+    const fileValidation = validatePdfFile(formData.get('file'));
+    if (!fileValidation.ok) return fileValidation.response;
+    const file = fileValidation.file;
 
     const action = formData.get('action') as string | null;
     const validActions = ['encrypt', 'decrypt', 'getPermissions', 'setPermissions'];
@@ -224,7 +222,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    console.error('[api/pdf/encrypt]', error);
+    serverLogger.error('api.pdf.encrypt', { error });
     return NextResponse.json(
       { success: false, error: 'Failed to process encryption operation.' },
       { status: 500 },

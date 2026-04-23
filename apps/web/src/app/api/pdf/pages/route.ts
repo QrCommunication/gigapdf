@@ -35,6 +35,8 @@ import {
 import { PDFCorruptedError, PDFPageOutOfRangeError } from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
+import { serverLogger } from '@/lib/server-logger';
+import { validatePdfFile } from '@/lib/request-validation';
 
 type Operation = 'add' | 'delete' | 'move' | 'rotate' | 'copy' | 'resize';
 
@@ -45,13 +47,9 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const formData = await request.formData();
 
-    const file = formData.get('file');
-    if (!file || !(file instanceof File)) {
-      return NextResponse.json(
-        { success: false, error: 'Missing required field: file' },
-        { status: 400 },
-      );
-    }
+    const fileValidation = validatePdfFile(formData.get('file'));
+    if (!fileValidation.ok) return fileValidation.response;
+    const file = fileValidation.file;
 
     const operation = formData.get('operation') as Operation | null;
     const validOperations: Operation[] = ['add', 'delete', 'move', 'rotate', 'copy', 'resize'];
@@ -196,7 +194,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    console.error('[api/pdf/pages]', error);
+    serverLogger.error('api.pdf.pages', { error });
     return NextResponse.json(
       { success: false, error: 'Failed to perform page operation.' },
       { status: 500 },
