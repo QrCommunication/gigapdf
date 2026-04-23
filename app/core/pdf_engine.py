@@ -377,24 +377,6 @@ class PDFEngine:
         self._documents[document_id] = output.getvalue()
         logger.info(f"Rotated page {page_number} to {angle}° in document {document_id}")
 
-    def copy_page(
-        self,
-        source_doc_id: str,
-        source_page: int,
-        target_doc_id: Optional[str] = None,
-        target_position: Optional[int] = None,
-    ) -> int:
-        """
-        Copy a page within or between documents.
-
-        DEPRECATED: Page operations are now handled by @giga-pdf/pdf-engine (TypeScript).
-        TODO: Route this call to the TS engine via HTTP.
-        """
-        logger.warning(
-            "PDFEngine.copy_page() is deprecated. Use @giga-pdf/pdf-engine via Next.js API routes."
-        )
-        return target_position or 1
-
     def get_metadata(self, document_id: str) -> dict[str, Any]:
         """
         Get document metadata via pikepdf.
@@ -534,24 +516,6 @@ class PDFEngine:
 
         return {"width": width, "height": height, "rotation": rotate}
 
-    def resize_page(
-        self,
-        document_id: str,
-        page_number: int,
-        width: float,
-        height: float,
-        scale_content: bool = False,
-    ) -> None:
-        """
-        Resize a page.
-
-        DEPRECATED: Page operations are now handled by @giga-pdf/pdf-engine (TypeScript).
-        TODO: Route this call to the TS engine via HTTP.
-        """
-        logger.warning(
-            "PDFEngine.resize_page() is deprecated. Use @giga-pdf/pdf-engine via Next.js API routes."
-        )
-
     def clear_all(self) -> None:
         """Clear all stored document bytes from memory."""
         self._documents.clear()
@@ -625,10 +589,6 @@ class LegacyDocumentProxy:
             "LegacyDocumentProxy.set_metadata() is a no-op. "
             "Use PDFEngine.set_metadata() or @giga-pdf/pdf-engine."
         )
-
-    def close(self) -> None:
-        """No-op close for backward compatibility."""
-        pass
 
     def select(self, page_indices: list[int]) -> None:
         """

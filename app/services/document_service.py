@@ -15,6 +15,7 @@ from app.core.preview import PreviewGenerator
 from app.middleware.error_handler import (
     DocumentNotFoundError,
     InvalidOperationError,
+    PageNotFoundError,
 )
 from app.models.document import DocumentMetadata, DocumentObject
 from app.models.page import Dimensions, MediaBox, PageObject
@@ -197,7 +198,6 @@ class DocumentService:
         doc = session.scene_graph
 
         if page_number < 1 or page_number > len(doc.pages):
-            from app.middleware.error_handler import PageNotFoundError
             raise PageNotFoundError(page_number)
 
         page = doc.pages[page_number - 1]

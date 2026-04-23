@@ -22,6 +22,7 @@ from app.core.cache import get_rate_limiter
 from app.core.database import get_db_session
 from app.middleware.request_id import get_request_id
 from app.models.api_key import ApiKey
+from app.services.security_audit_service import SecurityAuditService, SecurityEventType
 from app.utils.helpers import now_utc
 
 logger = logging.getLogger(__name__)
@@ -185,6 +186,14 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
                 "API key not found or inactive",
                 extra={"path": path, "method": request.method, "publishable": is_publishable},
             )
+            try:
+                await self._audit_auth_failure(
+                    SecurityEventType.LOGIN_FAILED,
+                    request,
+                    extra_data={"reason": "API_KEY_INVALID", "path": path},
+                )
+            except Exception:  # noqa: BLE001
+                pass
             return _build_error_response(
                 status.HTTP_401_UNAUTHORIZED,
                 "API_KEY_INVALID",
@@ -210,6 +219,15 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
                     "Expired API key used",
                     extra={"key_id": key_record.id, "path": path},
                 )
+                try:
+                    await self._audit_auth_failure(
+                        SecurityEventType.LOGIN_FAILED,
+                        request,
+                        user_id=key_record.user_id,
+                        extra_data={"reason": "API_KEY_EXPIRED", "key_id": key_record.id, "path": path},
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
                 return _build_error_response(
                     status.HTTP_401_UNAUTHORIZED,
                     "API_KEY_EXPIRED",
@@ -223,6 +241,15 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
                 "API key used from disallowed origin",
                 extra={"key_id": key_record.id, "origin": origin, "path": path},
             )
+            try:
+                await self._audit_auth_failure(
+                    SecurityEventType.ACCESS_DENIED,
+                    request,
+                    user_id=key_record.user_id,
+                    extra_data={"reason": "API_KEY_DOMAIN_NOT_ALLOWED", "origin": origin, "key_id": key_record.id},
+                )
+            except Exception:  # noqa: BLE001
+                pass
             return _build_error_response(
                 status.HTTP_403_FORBIDDEN,
                 "API_KEY_DOMAIN_NOT_ALLOWED",
@@ -371,3 +398,38 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
             if key_record is not None:
                 key_record.last_used_at = now_utc()
                 await session.flush()
+
+    async def _audit_auth_failure(
+        self,
+        event_type: SecurityEventType,
+        request: Request,
+        user_id: Optional[str] = None,
+        extra_data: Optional[dict] = None,
+    ) -> None:
+        """
+        Persist a security audit event for a failed API key authentication attempt.
+
+        Runs fire-and-forget: errors are logged but never raised so that the
+        audit path never interferes with the request/response cycle.
+
+        Args:
+            event_type: The security event type to record.
+            request: The incoming HTTP request (used for IP and User-Agent).
+            user_id: Owning user ID when the key record is available.
+            extra_data: Additional context to attach to the event.
+        """
+        try:
+            async with get_db_session() as session:
+                audit = SecurityAuditService(session)
+                await audit.log_event(
+                    event_type=event_type,
+                    user_id=user_id or "anonymous",
+                    ip_address=request.client.host if request.client else None,
+                    user_agent=request.headers.get("User-Agent"),
+                    extra_data=extra_data or {},
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to persist security audit event",
+                extra={"event_type": event_type.value, "error": str(exc)},
+            )
