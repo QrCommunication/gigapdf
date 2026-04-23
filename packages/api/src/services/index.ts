@@ -12,8 +12,6 @@ export { jobService } from './jobs';
 export { storageService } from './storage';
 export { billingService } from './billing';
 export { pdfService } from './pdf';
-export { fontsService } from './fonts';
-export type { ExtractedFontMetadata, FontData } from './fonts';
 export type {
   OpenPdfOptions,
   OpenPdfResult,

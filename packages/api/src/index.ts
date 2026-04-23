@@ -31,11 +31,8 @@ export {
   storageService,
   billingService,
   pdfService,
-  fontsService,
 } from './services';
 export type {
-  ExtractedFontMetadata,
-  FontData,
   OpenPdfOptions,
   OpenPdfResult,
   SavePdfOptions,
