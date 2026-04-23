@@ -4,6 +4,7 @@ Persistent storage endpoints.
 Handles saving, loading, versioning, and organizing documents in persistent storage.
 """
 
+import asyncio
 import hashlib
 import io
 import json
@@ -35,6 +36,19 @@ from app.utils.helpers import generate_uuid, now_utc
 _logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _count_pdf_pages_sync(pdf_bytes: bytes) -> int:
+    """Count PDF pages synchronously via pikepdf (CPU-bound).
+
+    Extracted as a module-level function so it can be safely offloaded
+    to a thread pool with asyncio.to_thread() from async handlers,
+    preventing the event loop from blocking during PDF parsing.
+    """
+    import pikepdf  # lazy import — only needed for page counting
+
+    with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
+        return len(pdf.pages)
 
 
 class CreateFolderRequest(BaseModel):
@@ -202,8 +216,6 @@ async def save_document(
          The DB records remain; a reconciliation job can clean them up or
          the next save attempt will reuse/overwrite the same s3_key.
     """
-    import pikepdf  # pikepdf is lightweight for page counting only
-
     start_time = time.time()
 
     _logger.info(
@@ -228,10 +240,9 @@ async def save_document(
     file_hash = hashlib.sha256(pdf_bytes).hexdigest()
     _logger.debug("save_document: received %d bytes (sha256=%s)", file_size, file_hash[:16])
 
-    # ── 2. Count pages via pikepdf ───────────────────────────────────────
+    # ── 2. Count pages via pikepdf (offloaded — CPU-bound, not async-safe) ─
     try:
-        with pikepdf.open(io.BytesIO(pdf_bytes)) as _pdf:
-            page_count = len(_pdf.pages)
+        page_count = await asyncio.to_thread(_count_pdf_pages_sync, pdf_bytes)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Cannot read PDF structure: {exc}") from exc
 
@@ -1075,8 +1086,6 @@ async def create_version(
          and rolling back current_version in a separate DB transaction,
          then re-raise so the caller gets a clean error.
     """
-    import pikepdf  # pikepdf is lightweight for page counting only
-
     start_time = time.time()
 
     # ── 1. Read + validate PDF bytes ────────────────────────────────────
@@ -1096,10 +1105,9 @@ async def create_version(
     file_hash = hashlib.sha256(doc_bytes).hexdigest()
     _logger.debug("create_version: received %d bytes (sha256=%s)", file_size, file_hash[:16])
 
-    # ── 2. Count pages via pikepdf ───────────────────────────────────────
+    # ── 2. Count pages via pikepdf (offloaded — CPU-bound, not async-safe) ─
     try:
-        with pikepdf.open(io.BytesIO(doc_bytes)) as _pdf:
-            page_count = len(_pdf.pages)
+        page_count = await asyncio.to_thread(_count_pdf_pages_sync, doc_bytes)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Cannot read PDF structure: {exc}") from exc
 

@@ -471,6 +471,44 @@ class PDFEngine:
         self._documents[document_id] = output.getvalue()
         logger.info(f"Updated metadata for document {document_id}")
 
+    def get_all_page_dimensions(self, document_id: str) -> list[dict[str, float]]:
+        """
+        Extract dimensions for all pages in a single pikepdf open.
+
+        Avoids the N+1 pikepdf.open() pattern that arises when calling
+        get_page() once per page during document upload.
+
+        Args:
+            document_id: Document identifier.
+
+        Returns:
+            list[dict]: One entry per page with keys
+                {page_number (1-indexed), width, height, rotation}.
+
+        Raises:
+            KeyError: If document_id is not loaded in the engine.
+        """
+        if document_id not in self._documents:
+            raise KeyError(f"Document not found: {document_id}")
+
+        pdf_bytes = self._documents[document_id]
+        with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
+            dimensions = []
+            for i, page in enumerate(pdf.pages):
+                media_box = page.MediaBox
+                width = float(media_box[2]) - float(media_box[0])
+                height = float(media_box[3]) - float(media_box[1])
+                rotation = int(page.get("/Rotate", 0))
+                dimensions.append(
+                    {
+                        "page_number": i + 1,
+                        "width": width,
+                        "height": height,
+                        "rotation": rotation,
+                    }
+                )
+            return dimensions
+
     def get_page_dimensions(self, document_id: str, page_number: int) -> dict[str, float]:
         """
         Get page dimensions via pikepdf.

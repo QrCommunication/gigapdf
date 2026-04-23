@@ -45,6 +45,16 @@ from app.utils.helpers import now_utc
 logger = logging.getLogger(__name__)
 
 
+def _inspect_pdf_sync(pdf_bytes: bytes) -> tuple[int, bool]:
+    """Return (page_count, is_encrypted) for raw PDF bytes via pikepdf.
+
+    CPU-bound operation — must be called via asyncio.to_thread() from
+    async contexts to avoid blocking the event loop.
+    """
+    with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
+        return len(pdf.pages), pdf.is_encrypted
+
+
 class RedisDocumentSessionManager:
     """
     Redis-backed document session manager with local LRU cache.
@@ -340,11 +350,12 @@ class RedisDocumentSessionManager:
                 logger.debug("Session %s not found in Redis", document_id)
                 return None
 
-            # Rebuild document handle
+            # Rebuild document handle.
+            # pikepdf.open() is CPU-bound and blocks the event loop; offload it.
             from app.core.pdf_engine import LegacyDocumentProxy, pdf_engine
-            with pikepdf.open(io.BytesIO(pdf_bytes)) as _pdf:
-                _page_count = len(_pdf.pages)
-                _is_encrypted = _pdf.is_encrypted
+            _page_count, _is_encrypted = await asyncio.to_thread(
+                _inspect_pdf_sync, pdf_bytes
+            )
 
             pdf_doc = LegacyDocumentProxy(document_id, pdf_bytes, _page_count, _is_encrypted)
             # Register raw bytes with pdf_engine (NOT the proxy).

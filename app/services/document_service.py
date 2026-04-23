@@ -81,27 +81,30 @@ class DocumentService:
             # Build a minimal scene_graph: page dimensions only.
             # The real scene_graph (text, images, annotations, forms) is loaded
             # by the TypeScript pdf-engine via /api/pdf/parse-from-s3.
-            pages = []
-            for i in range(pdf_doc.page_count):
-                page_proxy = self.engine.get_page(document_id, i + 1)
-                pages.append(
-                    PageObject(
-                        page_id=generate_uuid(),
-                        page_number=i + 1,
-                        dimensions=Dimensions(
-                            width=page_proxy.rect.width,
-                            height=page_proxy.rect.height,
-                            rotation=int(page_proxy.rotation or 0),
-                        ),
-                        media_box=MediaBox(
-                            x=0,
-                            y=0,
-                            width=page_proxy.rect.width,
-                            height=page_proxy.rect.height,
-                        ),
-                        elements=[],
-                    )
+            #
+            # Use get_all_page_dimensions() to extract all page dimensions in a
+            # single pikepdf.open() call instead of calling get_page() once per
+            # page (which was an N+1 pikepdf.open() pattern).
+            all_dims = self.engine.get_all_page_dimensions(document_id)
+            pages = [
+                PageObject(
+                    page_id=generate_uuid(),
+                    page_number=d["page_number"],
+                    dimensions=Dimensions(
+                        width=d["width"],
+                        height=d["height"],
+                        rotation=d["rotation"],
+                    ),
+                    media_box=MediaBox(
+                        x=0,
+                        y=0,
+                        width=d["width"],
+                        height=d["height"],
+                    ),
+                    elements=[],
                 )
+                for d in all_dims
+            ]
             scene_graph = DocumentObject(
                 document_id=document_id,
                 metadata=DocumentMetadata(page_count=pdf_doc.page_count),
