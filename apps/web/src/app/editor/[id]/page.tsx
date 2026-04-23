@@ -30,6 +30,8 @@ import { useDocument } from "@/hooks/use-document";
 import { useDocumentSave } from "@/hooks/use-document-save";
 import { useCollaboration } from "@/hooks/use-collaboration";
 import { usePageThumbnails } from "@/hooks/use-page-thumbnails";
+import { useEmbeddedFonts } from "@giga-pdf/editor";
+import { getAuthToken } from "@/lib/api";
 import { api, type ElementCreateRequest } from "@/lib/api";
 import {
   EditorCanvas,
@@ -222,6 +224,15 @@ export default function EditorPage() {
 
   // Client-side thumbnails generated via pdfjs (durable solution — no server roundtrip)
   const thumbnails = usePageThumbnails(currentPdfFile, pages.length, { scale: 0.18 });
+
+  // Dynamically load embedded PDF fonts via FontFace API (backed by IndexedDB cache).
+  // Maps originalFont names (like "g_d0_f1") to real CSS font-family names,
+  // so Fabric can render text with the SAME font as the PDF background.
+  const { getFontFaceName } = useEmbeddedFonts({
+    documentId: documentId || "",
+    enabled: Boolean(documentId),
+    getAuthToken,
+  });
 
   // Fetch the actual PDF binary when document loads
   useEffect(() => {
@@ -1076,6 +1087,7 @@ export default function EditorPage() {
           <EditorCanvas
             page={currentPage}
             documentId={documentId}
+            getFontFaceName={getFontFaceName}
             tool={activeTool}
             zoom={zoom}
             shapeType={shapeType}

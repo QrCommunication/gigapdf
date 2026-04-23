@@ -48,3 +48,12 @@ export type {
   Point,
   Transform,
 } from "@giga-pdf/types";
+
+// Embedded fonts: dynamic font loading from PDF via FontFace API + IndexedDB cache
+export { useEmbeddedFonts } from "./hooks/use-embedded-fonts";
+export type {
+  UseEmbeddedFontsOptions,
+  UseEmbeddedFontsResult,
+  LoadedFont,
+  FontLoadStatus,
+} from "./hooks/use-embedded-fonts";

@@ -60,6 +60,12 @@ export interface EditorCanvasProps {
   width?: number;
   /** Hauteur du canvas */
   height?: number;
+  /**
+   * Resolver for embedded PDF font names: maps the original font ID (e.g. "g_d0_f1")
+   * to a CSS font-family registered via FontFace API. When the embedded font is loaded,
+   * text is rendered with the SAME font as the PDF background. Returns null for unknown.
+   */
+  getFontFaceName?: (originalName: string) => string | null;
   /** Type de forme sélectionné */
   shapeType?: ShapeType;
   /** Type d'annotation sélectionné */
@@ -107,6 +113,7 @@ export function EditorCanvas({
   zoom,
   width = 800,
   height = 600,
+  getFontFaceName,
   shapeType = "rectangle",
   annotationType = "highlight",
   strokeColor = "#000000",
@@ -806,7 +813,18 @@ export function EditorCanvas({
             ...baseOptions,
             width: textElement.bounds.width,
             fontSize: textElement.style.fontSize ?? 12,
-            fontFamily: textElement.style.fontFamily || "Helvetica",
+            fontFamily: (() => {
+              const orig = textElement.style.originalFont;
+              // If we have a dynamically-loaded FontFace registered for this orig name,
+              // use it (browser will render with the exact PDF embedded font).
+              if (orig && getFontFaceName) {
+                const registered = getFontFaceName(orig);
+                if (registered) return registered;
+              }
+              // Otherwise fallback to the mapped standard font (Helvetica/Times/Courier).
+              // Never use raw pdfjs internal names (like 'g_d0_f1') — browser has no glyphs for those.
+              return textElement.style.fontFamily || "Helvetica";
+            })(),
             fontWeight: textElement.style.fontWeight || "normal",
             fontStyle: textElement.style.fontStyle || "normal",
             fill: textElement.style.color || "#000000",

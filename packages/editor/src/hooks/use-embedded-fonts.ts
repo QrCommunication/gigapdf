@@ -75,8 +75,13 @@ export interface UseEmbeddedFontsOptions {
   /** Disable hook entirely when false (default: true) */
   enabled?: boolean;
   /**
+   * Optional async getter that returns the current JWT token.
+   * When provided, token is sent as Authorization: Bearer header.
+   */
+  getAuthToken?: () => Promise<string | null> | string | null;
+  /**
    * Injectable function to fetch font metadata list.
-   * Defaults to fetch against /api/pdf/fonts/:documentId.
+   * Defaults to fetch against /api/v1/pdf/fonts/:documentId.
    * Override in tests or for custom auth handling.
    */
   fetchFontList?: (documentId: string) => Promise<{ fonts: ExtractedFontMetadata[] }>;
@@ -130,17 +135,16 @@ function formatToMime(format: 'ttf' | 'otf' | 'cff'): string {
   return 'font/ttf';
 }
 
-function getAuthHeader(): HeadersInit {
-  if (typeof window === 'undefined') return {};
-  const token = localStorage.getItem('access_token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 async function defaultFetchFontList(
   documentId: string,
+  getToken?: () => Promise<string | null> | string | null,
 ): Promise<{ fonts: ExtractedFontMetadata[] }> {
-  const response = await fetch(`/api/pdf/fonts/${encodeURIComponent(documentId)}`, {
-    headers: { ...getAuthHeader(), Accept: 'application/json' },
+  const token = getToken ? await Promise.resolve(getToken()) : null;
+  const headers: HeadersInit = { Accept: 'application/json' };
+  if (token) (headers as Record<string, string>).Authorization = `Bearer ${token}`;
+  const response = await fetch(`/api/v1/pdf/fonts/${encodeURIComponent(documentId)}`, {
+    headers,
+    credentials: 'include',
   });
   if (!response.ok) {
     throw new Error(`Failed to fetch font list: HTTP ${response.status}`);
@@ -157,10 +161,14 @@ async function defaultFetchFontList(
 async function defaultFetchFontData(
   documentId: string,
   fontId: string,
+  getToken?: () => Promise<string | null> | string | null,
 ): Promise<{ dataBase64: string; format: 'ttf' | 'otf' | 'cff'; mimeType: string }> {
+  const token = getToken ? await Promise.resolve(getToken()) : null;
+  const headers: HeadersInit = { Accept: 'application/json' };
+  if (token) (headers as Record<string, string>).Authorization = `Bearer ${token}`;
   const response = await fetch(
-    `/api/pdf/fonts/${encodeURIComponent(documentId)}/${encodeURIComponent(fontId)}`,
-    { headers: { ...getAuthHeader(), Accept: 'application/json' } },
+    `/api/v1/pdf/fonts/${encodeURIComponent(documentId)}/${encodeURIComponent(fontId)}`,
+    { headers, credentials: 'include' },
   );
   if (!response.ok) {
     throw new Error(`Failed to fetch font data: HTTP ${response.status}`);
@@ -180,8 +188,9 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
   const {
     documentId,
     enabled = true,
-    fetchFontList = defaultFetchFontList,
-    fetchFontData = defaultFetchFontData,
+    getAuthToken,
+    fetchFontList = (id: string) => defaultFetchFontList(id, getAuthToken),
+    fetchFontData = (id: string, fid: string) => defaultFetchFontData(id, fid, getAuthToken),
     cache = defaultFontCache,
   } = opts;
 
