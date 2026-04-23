@@ -49,7 +49,8 @@ interface RenderRequest {
   docKey: string;
   pageNumber: number;
   scale: number;
-  rotation: 0 | 90 | 180 | 270;
+  /** Optional override; when undefined the PDF's native /Rotate flag is used. */
+  rotation: 0 | 90 | 180 | 270 | undefined;
   offscreen: OffscreenCanvas;
 }
 
@@ -184,10 +185,12 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
     try {
       const page = await pdf.getPage(req.pageNumber);
-      const viewport = page.getViewport({
-        scale: req.scale,
-        rotation: req.rotation,
-      });
+      // Passing rotation:0 would override the PDF's /Rotate flag. When the
+      // caller omitted rotation, let pdfjs use the PDF's native rotation.
+      const viewport =
+        req.rotation === undefined
+          ? page.getViewport({ scale: req.scale })
+          : page.getViewport({ scale: req.scale, rotation: req.rotation });
 
       // Resize the transferred OffscreenCanvas to match the viewport
       req.offscreen.width = viewport.width;

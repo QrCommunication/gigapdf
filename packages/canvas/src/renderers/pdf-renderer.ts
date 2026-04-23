@@ -481,12 +481,12 @@ export class PDFRenderer {
     pageNumber: number,
     options: PDFRenderOptions = {}
   ): Promise<void> {
-    const { scale = 1, rotation = 0, renderAnnotations = false, maskText = false } = options;
+    const { scale = 1, rotation, renderAnnotations = false, maskText = false } = options;
 
     if (this.workerLoaded) {
-      await this._workerRenderPage(canvas, pageNumber, scale, rotation as 0 | 90 | 180 | 270);
+      await this._workerRenderPage(canvas, pageNumber, scale, rotation as 0 | 90 | 180 | 270 | undefined);
     } else {
-      await this._mainThreadRenderPage(canvas, pageNumber, scale, rotation as 0 | 90 | 180 | 270, renderAnnotations, maskText);
+      await this._mainThreadRenderPage(canvas, pageNumber, scale, rotation as 0 | 90 | 180 | 270 | undefined, renderAnnotations, maskText);
     }
   }
 
@@ -494,7 +494,7 @@ export class PDFRenderer {
     canvas: HTMLCanvasElement,
     pageNumber: number,
     scale: number,
-    rotation: 0 | 90 | 180 | 270
+    rotation: 0 | 90 | 180 | 270 | undefined,
   ): Promise<void> {
     const bitmap = await this._renderToBitmap(pageNumber, scale, rotation);
 
@@ -519,7 +519,7 @@ export class PDFRenderer {
   private async _renderToBitmap(
     pageNumber: number,
     scale: number,
-    rotation: 0 | 90 | 180 | 270
+    rotation: 0 | 90 | 180 | 270 | undefined,
   ): Promise<ImageBitmap> {
     // A 1×1 OffscreenCanvas is the cheapest placeholder; the worker resizes it
     // to the correct viewport dimensions before drawing.
@@ -549,12 +549,18 @@ export class PDFRenderer {
     canvas: HTMLCanvasElement,
     pageNumber: number,
     scale: number,
-    rotation: 0 | 90 | 180 | 270,
+    rotation: 0 | 90 | 180 | 270 | undefined,
     renderAnnotations: boolean,
     maskText = false,
   ): Promise<void> {
     const page = await this.getPage(pageNumber);
-    const viewport = page.getViewport({ scale, rotation });
+    // Passing `rotation: 0` to getViewport OVERRIDES the PDF's native /Rotate
+    // flag. Omit the param when the caller didn't specify a rotation so
+    // rotated pages render as the user expects (thumbnails, editor bg).
+    const viewport =
+      rotation === undefined
+        ? page.getViewport({ scale })
+        : page.getViewport({ scale, rotation });
 
     canvas.width = viewport.width;
     canvas.height = viewport.height;
@@ -596,13 +602,13 @@ export class PDFRenderer {
     pageNumber: number,
     options: PDFRenderOptions = {}
   ): Promise<string> {
-    const { scale = 1, rotation = 0 } = options;
+    const { scale = 1, rotation } = options;
 
     if (this.workerLoaded) {
       const bitmap = await this._renderToBitmap(
         pageNumber,
         scale,
-        rotation as 0 | 90 | 180 | 270
+        rotation as 0 | 90 | 180 | 270 | undefined,
       );
 
       // OffscreenCanvas.convertToBlob() is available in all browsers that
