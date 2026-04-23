@@ -28,7 +28,7 @@
     "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.2.0",
     "@sentry/nextjs": "^9.0.0",
-    "better-auth": "^1.4.13",
+    "better-auth": "^1.6.7",
     "clsx": "^2.1.1",
     "fabric": "^7.1.0",
     "jose": "^6.1.3",
