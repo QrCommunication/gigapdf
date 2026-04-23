@@ -88,21 +88,27 @@ function renderText(
   scale: number,
 ): FabricObject {
   const { bounds, style, content } = element;
+  // Width must fit the actual text — if too small Fabric will wrap, if too large
+  // the click area extends beyond visible text. Use bounds.width + 5% safety margin
+  // since different font renderings (Fabric vs PDF original) can slightly differ.
+  const width = bounds.width * scale * 1.05;
   const obj = new fabric.Textbox(content, {
     ...common,
-    width: bounds.width * scale,
+    width,
     fontSize: style.fontSize * scale,
     fontFamily: style.fontFamily,
     fontWeight: style.fontWeight,
     fontStyle: style.fontStyle,
     fill: style.color,
     textAlign: style.textAlign,
-    lineHeight: style.lineHeight,
+    lineHeight: 1, // tight line height — bounds.height is exact
     charSpacing: style.letterSpacing * 1000, // Fabric uses thousandths of em
     underline: style.underline,
     linethrough: style.strikethrough,
     opacity: style.opacity,
     backgroundColor: style.backgroundColor ?? "",
+    // Prevent Fabric splitting the text on multiple lines when possible
+    splitByGrapheme: false,
   });
 
   // Enrichir data avec les infos de police originale pour la sauvegarde
