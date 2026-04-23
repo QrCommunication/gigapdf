@@ -18,6 +18,7 @@ import { mergePDFs, parsePageRange } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError } from '@giga-pdf/pdf-engine';
 import type { MergeOptions } from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
+import { sanitizeContentDisposition } from '@/lib/content-disposition';
 
 export async function POST(request: Request): Promise<Response> {
   const authResult = await requireSession();
@@ -62,7 +63,7 @@ export async function POST(request: Request): Promise<Response> {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${outputName}"`,
+        'Content-Disposition': sanitizeContentDisposition(outputName),
         'Content-Length': String(mergedBytes.byteLength),
       },
     });

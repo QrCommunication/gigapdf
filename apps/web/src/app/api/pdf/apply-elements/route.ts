@@ -37,6 +37,8 @@ import {
 } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError, PDFPageOutOfRangeError } from '@giga-pdf/pdf-engine';
 import type { TextElement, ImageElement, ShapeElement, AnnotationElement, FormFieldElement, Bounds } from '@giga-pdf/types';
+import { requireSession } from '@/lib/auth-helpers';
+import { sanitizeContentDisposition } from '@/lib/content-disposition';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +74,9 @@ function extractImageData(element: Record<string, unknown>): Uint8Array | undefi
 // ─── Route Handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: Request): Promise<Response> {
+  const authResult = await requireSession();
+  if (!authResult.ok) return authResult.response;
+
   try {
     const formData = await request.formData();
 
@@ -207,7 +212,7 @@ export async function POST(request: Request): Promise<Response> {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${file.name}"`,
+        'Content-Disposition': sanitizeContentDisposition(file.name),
         'Content-Length': String(savedBytes.byteLength),
       },
     });

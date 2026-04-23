@@ -39,6 +39,8 @@ import {
   SsrfBlockedError,
 } from '@/lib/security/url-validation';
 import { serverLogger } from '@/lib/server-logger';
+import { requireSession } from '@/lib/auth-helpers';
+import { sanitizeContentDisposition } from '@/lib/content-disposition';
 
 // Maximum Playwright timeout for URL-to-PDF conversions.
 // A generous per-user timeout is fine for HTML (no external fetch), but for
@@ -46,6 +48,9 @@ import { serverLogger } from '@/lib/server-logger';
 const URL_TO_PDF_TIMEOUT_MS = 15_000;
 
 export async function POST(request: Request): Promise<Response> {
+  const authResult = await requireSession();
+  if (!authResult.ok) return authResult.response;
+
   try {
     let body: Record<string, unknown>;
     try {
@@ -156,7 +161,7 @@ export async function POST(request: Request): Promise<Response> {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${outputFilename}"`,
+        'Content-Disposition': sanitizeContentDisposition(outputFilename),
         'Content-Length': String(pdfBuffer.byteLength),
       },
     });

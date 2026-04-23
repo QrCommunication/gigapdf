@@ -23,6 +23,7 @@ import {
 } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError, PDFPageOutOfRangeError } from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
+import { sanitizeContentDisposition } from '@/lib/content-disposition';
 
 export async function POST(request: Request): Promise<Response> {
   const authResult = await requireSession();
@@ -77,7 +78,7 @@ export async function POST(request: Request): Promise<Response> {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${file.name}"`,
+        'Content-Disposition': sanitizeContentDisposition(file.name),
         'Content-Length': String(savedBytes.byteLength),
       },
     });
