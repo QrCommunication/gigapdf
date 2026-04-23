@@ -20,15 +20,19 @@ import { extractBookmarks } from './bookmark-extractor';
 
 // Configure pdfjs worker source for Node.js runtime. pdfjs-dist 5.x dynamic-imports
 // the worker module; in Next.js standalone we must resolve the absolute path
-// so the dynamic import can find the file.
-if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-  try {
-    const requireFn = createRequire(import.meta.url);
-    pdfjsLib.GlobalWorkerOptions.workerSrc = requireFn.resolve(
-      'pdfjs-dist/legacy/build/pdf.worker.mjs',
-    );
-  } catch {
-    // Fallback: empty string triggers fakeWorker fallback (may fail in strict Node)
+// with file:// prefix so Node's import() accepts it.
+// We force-set (not conditional) to override any earlier `workerSrc = ''`
+// initialization from other extractor modules imported before parser.ts.
+try {
+  const requireFn = createRequire(import.meta.url);
+  const workerPath = requireFn.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
+  // Node's dynamic import() requires file:// URL for absolute paths
+  pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath.startsWith('file://')
+    ? workerPath
+    : `file://${workerPath}`;
+} catch {
+  // Fallback: empty string triggers fakeWorker fallback
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = '';
   }
 }
