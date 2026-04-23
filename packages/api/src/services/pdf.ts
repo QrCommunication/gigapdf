@@ -574,18 +574,20 @@ export const pdfService = {
 
   /**
    * Page operations (extract, rotate, delete, reorder)
+   *
+   * Backend contract (/api/pdf/pages):
+   *   - operation: 'add' | 'delete' | 'move' | 'rotate' | 'copy' | 'resize' | 'extract'
+   *   - params: JSON-stringified operation-specific parameters
    */
   pageOperation: async (
     file: File | Blob,
-    action: string,
+    operation: string,
     params: Record<string, unknown> = {},
   ): Promise<Blob | Record<string, unknown>> => {
     const form = new FormData();
     appendFileToForm(form, file);
-    form.append('action', action);
-    for (const [key, value] of Object.entries(params)) {
-      form.append(key, typeof value === 'string' ? value : JSON.stringify(value));
-    }
+    form.append('operation', operation);
+    form.append('params', JSON.stringify(params));
 
     const response = await fetch('/api/pdf/pages', {
       method: 'POST',

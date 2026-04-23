@@ -254,13 +254,13 @@ export const usePdfPageOperation = () => {
   return useMutation({
     mutationFn: ({
       file,
-      action,
+      operation,
       params,
     }: {
       file: File | Blob;
-      action: string;
+      operation: string;
       params?: Record<string, unknown>;
-    }) => pdfService.pageOperation(file, action, params),
+    }) => pdfService.pageOperation(file, operation, params),
   });
 };
 

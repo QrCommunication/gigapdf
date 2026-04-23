@@ -609,7 +609,7 @@ export default function EditorPage() {
     try {
       const result = await pageOperation.mutateAsync({
         file: currentPdfFile,
-        action: 'rotate',
+        operation: 'rotate',
         params: { pageNumber: pageIndex + 1, degrees: 90 },
       });
       const file = new File([result as Blob], currentPdfFile.name, { type: 'application/pdf' });
@@ -624,8 +624,8 @@ export default function EditorPage() {
     try {
       const result = await pageOperation.mutateAsync({
         file: currentPdfFile,
-        action: 'extract',
-        params: { pages: [pageIndex + 1] },
+        operation: 'extract',
+        params: { pageNumbers: [pageIndex + 1] },
       });
       downloadBlob(result as Blob, `page-${pageIndex + 1}.pdf`);
     } catch (err) {
