@@ -33,8 +33,12 @@ import { NextResponse } from 'next/server';
 import { splitAt, splitPDF, parsePageRange } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError, PDFPageOutOfRangeError } from '@giga-pdf/pdf-engine';
 import type { PageRange } from '@giga-pdf/pdf-engine';
+import { requireSession } from '@/lib/auth-helpers';
 
 export async function POST(request: Request): Promise<Response> {
+  const authResult = await requireSession();
+  if (!authResult.ok) return authResult.response;
+
   try {
     const formData = await request.formData();
 

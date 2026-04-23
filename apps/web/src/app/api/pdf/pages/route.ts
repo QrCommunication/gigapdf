@@ -33,10 +33,14 @@ import {
   resizePage,
 } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError, PDFPageOutOfRangeError } from '@giga-pdf/pdf-engine';
+import { requireSession } from '@/lib/auth-helpers';
 
 type Operation = 'add' | 'delete' | 'move' | 'rotate' | 'copy' | 'resize';
 
 export async function POST(request: Request): Promise<Response> {
+  const authResult = await requireSession();
+  if (!authResult.ok) return authResult.response;
+
   try {
     const formData = await request.formData();
 

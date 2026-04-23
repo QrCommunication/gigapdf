@@ -34,8 +34,12 @@ import {
 } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError } from '@giga-pdf/pdf-engine';
 import type { DocumentMetadata } from '@giga-pdf/types';
+import { requireSession } from '@/lib/auth-helpers';
 
 export async function POST(request: Request): Promise<Response> {
+  const authResult = await requireSession();
+  if (!authResult.ok) return authResult.response;
+
   try {
     const formData = await request.formData();
 

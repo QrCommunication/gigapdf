@@ -29,6 +29,7 @@ import {
 } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError, PDFPageOutOfRangeError } from '@giga-pdf/pdf-engine';
 import type { PreviewFormat, ThumbnailOptions, RenderOptions } from '@giga-pdf/pdf-engine';
+import { requireSession } from '@/lib/auth-helpers';
 
 const CONTENT_TYPES: Record<PreviewFormat, string> = {
   png: 'image/png',
@@ -37,6 +38,9 @@ const CONTENT_TYPES: Record<PreviewFormat, string> = {
 };
 
 export async function POST(request: Request): Promise<Response> {
+  const authResult = await requireSession();
+  if (!authResult.ok) return authResult.response;
+
   try {
     const formData = await request.formData();
 

@@ -14,8 +14,12 @@
 import { NextResponse } from 'next/server';
 import { openDocument, saveDocument } from '@giga-pdf/pdf-engine';
 import { PDFEncryptedError, PDFCorruptedError } from '@giga-pdf/pdf-engine';
+import { requireSession } from '@/lib/auth-helpers';
 
 export async function POST(request: Request): Promise<Response> {
+  const authResult = await requireSession();
+  if (!authResult.ok) return authResult.response;
+
   try {
     const formData = await request.formData();
 
