@@ -60,7 +60,16 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   transpilePackages: ["@giga-pdf/ui", "@giga-pdf/types", "@giga-pdf/api"],
   // Exclude Node.js-only packages from client bundle
-  serverExternalPackages: ["pg", "@prisma/adapter-pg", "@prisma/client", "nodemailer"],
+  serverExternalPackages: [
+    "pg",
+    "@prisma/adapter-pg",
+    "@prisma/client",
+    "nodemailer",
+    // Keep pdfjs-dist external so Node resolves pdf.worker.mjs correctly
+    // (Turbopack bundling breaks import.meta.url → createRequire resolution)
+    "pdfjs-dist",
+    "@giga-pdf/pdf-engine",
+  ],
   // Force dynamic rendering to avoid SSG issues with client components
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
