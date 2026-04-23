@@ -253,7 +253,7 @@ export default function EditorPage() {
         const blob = await response.blob();
         if (cancelled) return;
         const file = new File([blob], `${name}.pdf`, { type: 'application/pdf' });
-        setCurrentPdfFile(file);
+        updateCurrentPdfFile(file);
       } catch (err) {
         clientLogger.error('[editor] Failed to load PDF binary:', err);
       }
@@ -278,18 +278,31 @@ export default function EditorPage() {
   // via apply-elements). The save flow uploads this blob directly, so any
   // op that already updated currentPdfFile is persisted, even if the op
   // queue is empty at save time.
+  //
+  // We keep a ref alongside the state because setState is async: callers
+  // that invoke save() immediately after setCurrentPdfFile would otherwise
+  // read the stale closure value and upload the pre-mutation binary. The
+  // ref is updated synchronously before every save trigger.
   const drainOperations = useOperationsStore((s) => s.drain);
   const prependOperations = useOperationsStore((s) => s.prepend);
+  const currentPdfFileRef = useRef<File | null>(null);
   const contentModificationsRef = useRef<ElementModification[]>([]);
+
+  const updateCurrentPdfFile = useCallback((file: File | null) => {
+    currentPdfFileRef.current = file;
+    setCurrentPdfFile(file);
+  }, []);
+
   const getPreparedBlob = useCallback(async (): Promise<Blob | null> => {
-    if (!currentPdfFile) return null;
+    const pdfFile = currentPdfFileRef.current;
+    if (!pdfFile) return null;
     const ops = drainOperations();
     const contentMods = contentModificationsRef.current;
 
     // Nothing to bake — upload the current in-memory PDF as-is. This covers
     // page-level ops (rotate/extract) that already mutated currentPdfFile.
     if (ops.length === 0 && contentMods.length === 0) {
-      return currentPdfFile;
+      return pdfFile;
     }
 
     // Merge element ops + content-edit-layer mods into a single apply call.
@@ -308,14 +321,14 @@ export default function EditorPage() {
 
     try {
       const modified = await applyElements.mutateAsync({
-        file: currentPdfFile,
+        file: pdfFile,
         operations: allOps,
       });
       const blob =
         modified instanceof Blob ? modified : new Blob([modified as BlobPart]);
       // Update local cache so subsequent ops apply on top of the new binary.
-      setCurrentPdfFile(
-        new File([blob], currentPdfFile.name, { type: "application/pdf" }),
+      updateCurrentPdfFile(
+        new File([blob], pdfFile.name, { type: "application/pdf" }),
       );
       // Clear content modifications now that they're baked in.
       setContentModifications([]);
@@ -326,9 +339,9 @@ export default function EditorPage() {
       prependOperations(ops);
       // Fall back to uploading the last known good binary — never upload
       // the S3 original, which would wipe prior successful edits.
-      return currentPdfFile;
+      return pdfFile;
     }
-  }, [currentPdfFile, drainOperations, prependOperations, applyElements]);
+  }, [drainOperations, prependOperations, applyElements, updateCurrentPdfFile]);
 
   // Keep the ref in sync so getPreparedBlob can read the latest mods without
   // being reconstructed on every keystroke.
@@ -708,9 +721,9 @@ export default function EditorPage() {
         params: { pageNumber: pageIndex + 1, degrees: 90 },
       });
       const file = new File([result as Blob], currentPdfFile.name, { type: 'application/pdf' });
-      setCurrentPdfFile(file);
-      // Persist the rotated binary so it survives reload. save reads
-      // currentPdfFile via getPreparedBlob, so no separate upload call needed.
+      // updateCurrentPdfFile sets the ref synchronously, so the save below
+      // reads the rotated binary (not the stale state closure).
+      updateCurrentPdfFile(file);
       setDirty(true);
       saveWithPriority("immediate");
     } catch (err) {
@@ -1252,7 +1265,7 @@ export default function EditorPage() {
                 currentPdfFile?.name ?? "document.pdf",
                 { type: "application/pdf" }
               );
-              setCurrentPdfFile(file);
+              updateCurrentPdfFile(file);
             }}
           />
         )}
