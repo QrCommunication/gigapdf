@@ -60,10 +60,20 @@ function buildCommonProps(
   scale: number,
   readonly: boolean,
 ): Record<string, unknown> {
-  const { bounds } = element;
+  const { bounds, transform } = element;
   return {
     left: bounds.x * scale,
     top: bounds.y * scale,
+    // Fabric v6 defaults originX/Y to 'center' — we position by the
+    // PDF baseline start (for text) or top-left corner (other types),
+    // so we must force 'left'/'top'. Without this, rotated text lands
+    // width/2 pixels off because Fabric assumes (left, top) = center.
+    originX: "left" as const,
+    originY: "top" as const,
+    // Propagate the rotation extracted from the PDF text matrix so
+    // text runs on rotated pages render vertically (or at any angle)
+    // instead of collapsing to horizontal at the baseline origin.
+    angle: transform?.rotation ?? 0,
     selectable: !readonly,
     evented: !readonly,
     hasControls: !readonly,
@@ -90,10 +100,17 @@ function renderText(
   const { style, content } = element;
   // Use fabric.Text (single-line, non-wrapping) instead of fabric.Textbox
   // because pdfjs extracts each text run as a standalone single-line item.
-  // fabric.Text positions text with baseline at (left, top + fontSize * ~0.88),
-  // which matches how PDF stores baselines.
+  //
+  // Text extractor stores bounds.{x,y} at the PDF baseline START (vpE, vpF
+  // post-composition), not the top-of-box. For horizontal text this is the
+  // bottom-left of the visible glyphs; for rotated text it's the pivot.
+  // Using originY='bottom' makes Fabric align the baseline with (left, top)
+  // so Fabric.Text rotates around the correct pivot when angle != 0 — this
+  // is what keeps vertical text runs (e.g. from a 90°-rotated page)
+  // positioned where the PDF background expects them.
   const obj = new fabric.Text(content, {
     ...common,
+    originY: "bottom" as const,
     fontSize: style.fontSize * scale,
     fontFamily: style.fontFamily,
     fontWeight: style.fontWeight,

@@ -391,15 +391,28 @@ export async function extractTextElements(
     const fontSize = Math.sqrt((vpA ?? 1) * (vpA ?? 1) + (vpB ?? 0) * (vpB ?? 0));
     if (fontSize < 0.1) continue;
 
-    // item.width and item.height are already in VIEWPORT units (PDF points at scale 1).
-    // Do NOT re-scale by fontSize — that would inflate boxes and cause text overlap.
-    const width = item.width > 0 ? item.width : fontSize * item.str.length * 0.5;
+    // Rotation angle of the baseline in canvas space (Y-down).
+    // atan2(b, a) returns 0 for horizontal text, π/2 for 90° CCW, etc.
+    // Convert to degrees so Fabric can consume it directly.
+    const rotationRad = Math.atan2(vpB ?? 0, vpA ?? 1);
+    const rotationDeg = rotationRad * 180 / Math.PI;
+
+    // item.width is in PDF user-space units (already × fontSize). Height
+    // is similarly in viewport units. For rotated text the bbox width/
+    // height swap in canvas space — but the *intrinsic* run length and
+    // line height (the numbers the editor needs to typeset the IText)
+    // stay the same. We store the run length as bounds.width and fontSize
+    // as bounds.height; callers apply bounds.rotation to orient them.
+    const runLength = item.width > 0 ? item.width : fontSize * item.str.length * 0.5;
     const height = item.height > 0 ? item.height : fontSize;
 
-    // vpE, vpF = BASELINE position in viewport (Y-down, top-left origin).
-    // Top of text box = baseline - ascender (≈ 0.8 * fontSize in viewport-space units).
+    // vpE, vpF = BASELINE START in canvas (Y-down, top-left origin).
+    // For horizontal text, top-of-box = baseline - ascender. For rotated
+    // text we keep (x, y) = baseline start and rely on rotation to
+    // orient the rectangle. Callers (Fabric renderer) place the IText
+    // at (x, y) with originY='bottom' so the baseline aligns.
     const x = vpE ?? 0;
-    const y = (vpF ?? 0) - fontSize * 0.8;
+    const y = vpF ?? 0;
     // Unused but suppress warning
     void pageHeight;
 
@@ -408,8 +421,8 @@ export async function extractTextElements(
     elements.push({
       elementId: randomUUID(),
       type: 'text',
-      bounds: { x, y, width, height },
-      transform: { rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
+      bounds: { x, y, width: runLength, height },
+      transform: { rotation: rotationDeg, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
       layerId: null,
       locked: false,
       visible: true,
