@@ -131,6 +131,9 @@
       "selfHostNote": "Vous voulez auto-héberger ?",
       "selfHostLink": "Déployez GigaPDF sur votre propre infrastructure",
       "forFree": "gratuitement.",
+      "comingSoon": "Bientôt disponible",
+      "comingSoonBadge": "Bientôt",
+      "comingSoonNote": "Les forfaits payants seront disponibles prochainement. En attendant, profitez de l'éditeur complet sur le forfait gratuit.",
       "plans": {
         "free": {
           "name": "Gratuit",
@@ -140,7 +143,7 @@
             "storage": "5 Go de stockage",
             "apiCalls": "1 000 appels API/mois",
             "documents": "100 documents",
-            "editing": "Édition PDF basique",
+            "editing": "Éditeur PDF complet",
             "support": "Support communautaire"
           }
         },
@@ -632,6 +635,9 @@
     "popular": "Populaire",
     "free": "Gratuit",
     "getStarted": "Commencer",
+    "comingSoon": "Bientôt disponible",
+    "comingSoonBadge": "Bientôt",
+    "comingSoonNotice": "Les forfaits payants seront disponibles très prochainement. Votre forfait gratuit actuel vous donne accès à l'éditeur PDF complet.",
     "paymentMethod": "Moyen de paiement",
     "paymentMethodDescription": "Gérez vos informations de paiement",
     "noPaymentMethod": "Aucun moyen de paiement enregistré",

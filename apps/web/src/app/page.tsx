@@ -479,81 +479,99 @@ export default function HomePage() {
             </div>
 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 max-w-6xl mx-auto">
-              {plans.map((plan) => (
-                <div
-                  key={plan.id}
-                  className={`relative rounded-xl border bg-card/50 backdrop-blur-sm p-6 flex flex-col transition-all duration-300 ${
-                    plan.popular
-                      ? "border-primary shadow-lg scale-[1.02] lg:scale-105"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  {/* Popular Badge */}
-                  {plan.popular && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <span className="rounded-full bg-primary px-4 py-1 text-xs font-medium text-primary-foreground shadow-lg">
-                        {t("landing.pricing.mostPopular")}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Plan Header */}
-                  <div className="mb-6">
-                    <h3 className="text-xl font-bold">{plan.name}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {plan.description}
-                    </p>
-                  </div>
-
-                  {/* Price */}
-                  <div className="mb-6">
-                    <div className="flex items-baseline gap-1">
-                      {plan.price === 0 && plan.id === "free" ? (
-                        <span className="text-4xl font-bold font-mono">{t("landing.pricing.free")}</span>
-                      ) : plan.price === 0 && plan.id === "enterprise" ? (
-                        <span className="text-2xl font-bold">{t("landing.pricing.contactUs")}</span>
-                      ) : (
-                        <>
-                          <span className="text-4xl font-bold font-mono">{plan.price}</span>
-                          <span className="text-muted-foreground">
-                            {plan.currency}{t("landing.pricing.perMonth")}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Features List */}
-                  <ul className="mb-8 space-y-3 flex-1">
-                    {plan.features.map((feature, featureIndex) => (
-                      <li key={featureIndex} className="flex items-start gap-2">
-                        <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                        <span className="text-sm">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/* CTA Button */}
-                  <Link
-                    href={
-                      plan.id === "enterprise"
-                        ? "/contact"
-                        : plan.id === "free"
-                        ? "/register"
-                        : `/register?plan=${plan.id}`
-                    }
-                    className="w-full"
+              {plans.map((plan) => {
+                const isComingSoon = plan.id !== "free";
+                return (
+                  <div
+                    key={plan.id}
+                    className={`relative rounded-xl border bg-card/50 backdrop-blur-sm p-6 flex flex-col transition-all duration-300 ${
+                      plan.popular && !isComingSoon
+                        ? "border-primary shadow-lg scale-[1.02] lg:scale-105"
+                        : "border-border hover:border-primary/50"
+                    } ${isComingSoon ? "opacity-75" : ""}`}
                   >
-                    <Button
-                      className={`w-full gap-2 ${plan.popular ? "btn-glow" : ""}`}
-                      variant={plan.popular ? "default" : "outline"}
-                    >
-                      {plan.cta}
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </Link>
-                </div>
-              ))}
+                    {/* Coming Soon Badge (replaces Popular badge for paid plans) */}
+                    {isComingSoon ? (
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                        <span className="rounded-full bg-muted border border-border px-4 py-1 text-xs font-medium text-muted-foreground shadow-lg">
+                          {t("landing.pricing.comingSoonBadge")}
+                        </span>
+                      </div>
+                    ) : plan.popular ? (
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                        <span className="rounded-full bg-primary px-4 py-1 text-xs font-medium text-primary-foreground shadow-lg">
+                          {t("landing.pricing.mostPopular")}
+                        </span>
+                      </div>
+                    ) : null}
+
+                    {/* Plan Header */}
+                    <div className="mb-6">
+                      <h3 className="text-xl font-bold">{plan.name}</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {plan.description}
+                      </p>
+                    </div>
+
+                    {/* Price */}
+                    <div className="mb-6">
+                      <div className="flex items-baseline gap-1">
+                        {plan.price === 0 && plan.id === "free" ? (
+                          <span className="text-4xl font-bold font-mono">{t("landing.pricing.free")}</span>
+                        ) : plan.price === 0 && plan.id === "enterprise" ? (
+                          <span className="text-2xl font-bold">{t("landing.pricing.contactUs")}</span>
+                        ) : (
+                          <>
+                            <span className="text-4xl font-bold font-mono">{plan.price}</span>
+                            <span className="text-muted-foreground">
+                              {plan.currency}{t("landing.pricing.perMonth")}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Features List */}
+                    <ul className="mb-8 space-y-3 flex-1">
+                      {plan.features.map((feature, featureIndex) => (
+                        <li key={featureIndex} className="flex items-start gap-2">
+                          <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                          <span className="text-sm">{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/* CTA Button — disabled for paid plans until launch */}
+                    {isComingSoon ? (
+                      <Button
+                        className="w-full gap-2"
+                        variant="outline"
+                        disabled
+                        aria-disabled="true"
+                      >
+                        {t("landing.pricing.comingSoon")}
+                      </Button>
+                    ) : (
+                      <Link href="/register" className="w-full">
+                        <Button
+                          className={`w-full gap-2 ${plan.popular ? "btn-glow" : ""}`}
+                          variant={plan.popular ? "default" : "outline"}
+                        >
+                          {plan.cta}
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Coming soon explanatory note */}
+            <div className="mt-8 text-center">
+              <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
+                {t("landing.pricing.comingSoonNote")}
+              </p>
             </div>
 
             {/* Self-host Note */}

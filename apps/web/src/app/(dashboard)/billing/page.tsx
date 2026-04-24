@@ -355,6 +355,12 @@ export default function BillingPage() {
       {/* Available Plans */}
       <div>
         <h2 className="mb-6 text-2xl font-bold">{t("availablePlans")}</h2>
+
+        {/* Coming soon notice — paid plan subscriptions temporarily disabled */}
+        <div className="mb-6 rounded-lg border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+          {t("comingSoonNotice")}
+        </div>
+
         {plans.length === 0 ? (
           <p className="text-muted-foreground">{t("noPlans")}</p>
         ) : (
@@ -364,19 +370,24 @@ export default function BillingPage() {
               .sort((a, b) => a.display_order - b.display_order)
               .map((plan) => {
                 const isCurrentPlan = plan.slug === currentPlanSlug;
+                const isFreePlan = plan.slug === "free" || plan.price === 0;
+                // Paid plans are temporarily locked behind a "coming soon" gate
+                const isComingSoon = !isFreePlan;
                 const features = getPlanFeatures(plan);
-                const isUpgrade = plan.price > (plans.find((p) => p.slug === currentPlanSlug)?.price ?? 0);
-                const isDowngrade = plan.price < (plans.find((p) => p.slug === currentPlanSlug)?.price ?? 0);
 
                 return (
                   <Card
                     key={plan.id}
-                    className={plan.is_popular ? "border-primary shadow-lg" : ""}
+                    className={`${plan.is_popular && !isComingSoon ? "border-primary shadow-lg" : ""} ${isComingSoon ? "opacity-75" : ""}`}
                   >
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <CardTitle>{plan.name}</CardTitle>
-                        {plan.is_popular && <Badge>{t("popular")}</Badge>}
+                        {isComingSoon ? (
+                          <Badge variant="secondary">{t("comingSoonBadge")}</Badge>
+                        ) : plan.is_popular ? (
+                          <Badge>{t("popular")}</Badge>
+                        ) : null}
                       </div>
                       <CardDescription>
                         <span className="text-3xl font-bold">
@@ -405,22 +416,29 @@ export default function BillingPage() {
                       </ul>
                       <Button
                         className="w-full"
-                        variant={plan.is_popular && !isCurrentPlan ? "default" : "outline"}
-                        disabled={isCurrentPlan || actionLoading === `upgrade-${plan.slug}` || subscription?.billing_entity_type === "tenant"}
-                        onClick={() => handleUpgrade(plan.slug)}
+                        variant={plan.is_popular && !isCurrentPlan && !isComingSoon ? "default" : "outline"}
+                        disabled={
+                          isCurrentPlan ||
+                          isComingSoon ||
+                          actionLoading === `upgrade-${plan.slug}` ||
+                          subscription?.billing_entity_type === "tenant"
+                        }
+                        aria-disabled={isComingSoon ? "true" : undefined}
+                        onClick={() => {
+                          if (isComingSoon) return;
+                          handleUpgrade(plan.slug);
+                        }}
                       >
                         {actionLoading === `upgrade-${plan.slug}` ? (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : null}
                         {isCurrentPlan
                           ? t("currentPlan")
+                          : isComingSoon
+                          ? t("comingSoon")
                           : subscription?.billing_entity_type === "tenant"
                           ? t("managedByOrganization")
-                          : isUpgrade
-                          ? t("upgrade")
-                          : isDowngrade
-                          ? t("downgrade")
-                          : plan.cta_text || (plan.price === 0 ? t("getStarted") : t("upgrade"))}
+                          : plan.cta_text || t("getStarted")}
                       </Button>
                     </CardContent>
                   </Card>
