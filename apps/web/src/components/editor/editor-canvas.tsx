@@ -9,6 +9,7 @@ import type {
   ShapeType,
   AnnotationType,
   AnnotationElement,
+  FieldType,
 } from "@giga-pdf/types";
 import type { Canvas as FabricCanvas, FabricObject } from "fabric";
 import { clientLogger } from "@/lib/client-logger";
@@ -71,6 +72,8 @@ export interface EditorCanvasProps {
   shapeType?: ShapeType;
   /** Type d'annotation sélectionné */
   annotationType?: AnnotationType;
+  /** Type de champ de formulaire sélectionné (text/checkbox/radio/dropdown) */
+  fieldType?: FieldType;
   /** Couleur de contour */
   strokeColor?: string;
   /** Couleur de remplissage */
@@ -117,6 +120,7 @@ export function EditorCanvas({
   getFontFaceName,
   shapeType = "rectangle",
   annotationType = "highlight",
+  fieldType = "text",
   strokeColor = "#000000",
   fillColor = "transparent",
   strokeWidth = 2,
@@ -149,6 +153,7 @@ export function EditorCanvas({
   const toolRef = useRef(tool);
   const shapeTypeRef = useRef(shapeType);
   const annotationTypeRef = useRef(annotationType);
+  const fieldTypeRef = useRef(fieldType);
   const strokeColorRef = useRef(strokeColor);
   const fillColorRef = useRef(fillColor);
   const strokeWidthRef = useRef(strokeWidth);
@@ -166,6 +171,7 @@ export function EditorCanvas({
     toolRef.current = tool;
     shapeTypeRef.current = shapeType;
     annotationTypeRef.current = annotationType;
+    fieldTypeRef.current = fieldType;
     strokeColorRef.current = strokeColor;
     fillColorRef.current = fillColor;
     strokeWidthRef.current = strokeWidth;
@@ -363,6 +369,41 @@ export function EditorCanvas({
             strokeOpacity: 1,
             strokeDashArray: [],
           },
+        };
+      }
+
+      // Form fields — Group with data.formFieldType set by mouse:down.
+      // text/checkbox/radio/dropdown/signature all round-trip through the
+      // same mapping so the backend can emit the right PDF AcroForm widget.
+      if (typeName === "Group" && obj.data?.formFieldType) {
+        const ft = obj.data.formFieldType as FieldType;
+        const isBooleanField = ft === "checkbox" || ft === "radio";
+        const isListField = ft === "dropdown" || ft === "listbox";
+        return {
+          ...baseElement,
+          type: "form_field" as const,
+          fieldType: ft,
+          fieldName: (obj.data.fieldName as string) ?? `${ft}_${Date.now()}`,
+          value: isBooleanField ? false : isListField ? [] : "",
+          defaultValue: isBooleanField ? false : isListField ? [] : "",
+          options: isListField ? ((obj.data.options as string[]) ?? []) : null,
+          properties: {
+            required: Boolean(obj.data.required),
+            readOnly: false,
+            maxLength: null,
+            multiline: false,
+            password: false,
+            comb: false,
+          },
+          style: {
+            fontFamily: "Arial",
+            fontSize: 12,
+            textColor: "#000000",
+            backgroundColor: "#ffffff",
+            borderColor: "#cccccc",
+            borderWidth: 1,
+          },
+          format: { type: "none" as const, pattern: null },
         };
       }
 
@@ -704,41 +745,117 @@ export function EditorCanvas({
           }
 
           case "form_field": {
-            // Créer un champ de formulaire (text input)
-            const formFieldGroup = new Group(
-              [
-                // Fond du champ
-                new Rect({
-                  left: 0,
-                  top: 0,
-                  width: 200,
-                  height: 30,
-                  fill: "#ffffff",
-                  stroke: "#cccccc",
-                  strokeWidth: 1,
-                  rx: 4,
-                  ry: 4,
-                }),
-                // Texte placeholder
-                new FabricText(t("textPlaceholder"), {
-                  left: 10,
-                  top: 8,
-                  fontSize: 12,
-                  fontFamily: "Arial",
-                  fill: "#999999",
-                }),
-              ],
-              {
-                left: pointer.x,
-                top: pointer.y,
+            // Crée le champ selon le fieldType sélectionné dans la toolbar.
+            // text/checkbox/radio/dropdown ont des visuels distincts pour
+            // que l'utilisateur identifie le type au coup d'œil.
+            const currentFieldType = fieldTypeRef.current;
+            let formFieldGroup: InstanceType<typeof Group>;
+
+            switch (currentFieldType) {
+              case "checkbox": {
+                formFieldGroup = new Group(
+                  [
+                    new Rect({
+                      left: 0,
+                      top: 0,
+                      width: 20,
+                      height: 20,
+                      fill: "#ffffff",
+                      stroke: "#555555",
+                      strokeWidth: 1.5,
+                      rx: 2,
+                      ry: 2,
+                    }),
+                  ],
+                  { left: pointer.x, top: pointer.y },
+                );
+                break;
               }
-            );
+              case "radio": {
+                formFieldGroup = new Group(
+                  [
+                    new Circle({
+                      left: 0,
+                      top: 0,
+                      radius: 10,
+                      fill: "#ffffff",
+                      stroke: "#555555",
+                      strokeWidth: 1.5,
+                    }),
+                  ],
+                  { left: pointer.x, top: pointer.y },
+                );
+                break;
+              }
+              case "dropdown":
+              case "listbox": {
+                formFieldGroup = new Group(
+                  [
+                    new Rect({
+                      left: 0,
+                      top: 0,
+                      width: 200,
+                      height: 30,
+                      fill: "#ffffff",
+                      stroke: "#cccccc",
+                      strokeWidth: 1,
+                      rx: 4,
+                      ry: 4,
+                    }),
+                    new FabricText("Sélectionner…", {
+                      left: 10,
+                      top: 8,
+                      fontSize: 12,
+                      fontFamily: "Arial",
+                      fill: "#999999",
+                    }),
+                    new FabricText("▾", {
+                      left: 175,
+                      top: 6,
+                      fontSize: 14,
+                      fontFamily: "Arial",
+                      fill: "#666666",
+                    }),
+                  ],
+                  { left: pointer.x, top: pointer.y },
+                );
+                break;
+              }
+              case "text":
+              default: {
+                formFieldGroup = new Group(
+                  [
+                    new Rect({
+                      left: 0,
+                      top: 0,
+                      width: 200,
+                      height: 30,
+                      fill: "#ffffff",
+                      stroke: "#cccccc",
+                      strokeWidth: 1,
+                      rx: 4,
+                      ry: 4,
+                    }),
+                    new FabricText(t("textPlaceholder"), {
+                      left: 10,
+                      top: 8,
+                      fontSize: 12,
+                      fontFamily: "Arial",
+                      fill: "#999999",
+                    }),
+                  ],
+                  { left: pointer.x, top: pointer.y },
+                );
+                break;
+              }
+            }
+
             (formFieldGroup as FabricObjectWithData).data = {
               elementId: generateId(),
-              formFieldType: "text",
-              fieldName: `field_${Date.now()}`,
+              formFieldType: currentFieldType,
+              fieldName: `${currentFieldType}_${Date.now()}`,
               required: false,
-              placeholder: t("textPlaceholder"),
+              placeholder: currentFieldType === "text" ? t("textPlaceholder") : "",
             };
             newObj = formFieldGroup;
             break;

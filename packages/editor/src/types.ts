@@ -2,7 +2,7 @@
  * Internal store types for the editor package
  */
 
-import type { UUID, PageObject, Tool, ShapeType, AnnotationType } from "@giga-pdf/types";
+import type { UUID, PageObject, Tool, ShapeType, AnnotationType, FieldType } from "@giga-pdf/types";
 import type { Socket } from "socket.io-client";
 
 // Document Store Types
@@ -39,6 +39,7 @@ export interface CanvasState {
   // Tool options
   shapeType: ShapeType;
   annotationType: AnnotationType;
+  fieldType: FieldType;
   strokeColor: string;
   fillColor: string;
   strokeWidth: number;

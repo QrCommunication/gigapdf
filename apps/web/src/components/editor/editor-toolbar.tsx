@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import type { Tool, ShapeType, AnnotationType, Element, TextStyle } from "@giga-pdf/types";
+import type { Tool, ShapeType, AnnotationType, FieldType, Element, TextStyle } from "@giga-pdf/types";
 import { FontPicker } from "@giga-pdf/ui";
 import {
   MousePointer2,
@@ -85,6 +85,10 @@ export interface EditorToolbarProps {
   annotationType?: AnnotationType;
   /** Callback pour changer le type d'annotation */
   onAnnotationTypeChange?: (annotationType: AnnotationType) => void;
+  /** Type de champ de formulaire sélectionné */
+  fieldType?: FieldType;
+  /** Callback pour changer le type de champ de formulaire */
+  onFieldTypeChange?: (fieldType: FieldType) => void;
   /** Couleur de contour */
   strokeColor?: string;
   /** Callback pour changer la couleur de contour */
@@ -320,6 +324,8 @@ export function EditorToolbar({
   onShapeTypeChange,
   annotationType = "highlight",
   onAnnotationTypeChange,
+  fieldType = "text",
+  onFieldTypeChange,
   strokeColor = "#000000",
   onStrokeColorChange,
   fillColor = "transparent",
@@ -341,6 +347,7 @@ export function EditorToolbar({
   const tProperties = useTranslations("editor.properties.text");
   const [showShapeDropdown, setShowShapeDropdown] = useState(false);
   const [showAnnotationDropdown, setShowAnnotationDropdown] = useState(false);
+  const [showFieldDropdown, setShowFieldDropdown] = useState(false);
   const [showColorDropdown, setShowColorDropdown] = useState(false);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const [showSplitDialog, setShowSplitDialog] = useState(false);
@@ -545,6 +552,53 @@ export function EditorToolbar({
         isActive={activeTool === "draw"}
         onClick={() => onToolChange("draw")}
       />
+
+      {/* Champ de formulaire avec dropdown (text/checkbox/radio/dropdown) */}
+      <div className="relative">
+        <ToolButton
+          icon={<FileText size={20} />}
+          label={t("formField") || "Champ"}
+          isActive={activeTool === "form_field"}
+          hasDropdown
+          onClick={() => {
+            onToolChange("form_field");
+            setShowFieldDropdown(!showFieldDropdown);
+          }}
+        />
+        <Dropdown
+          isOpen={showFieldDropdown}
+          onClose={() => setShowFieldDropdown(false)}
+        >
+          <div className="flex flex-col gap-1">
+            {[
+              { type: "text" as const, label: "Texte" },
+              { type: "checkbox" as const, label: "Case à cocher" },
+              { type: "radio" as const, label: "Bouton radio" },
+              { type: "dropdown" as const, label: "Liste déroulante" },
+            ].map(({ type, label }) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => {
+                  onFieldTypeChange?.(type);
+                  onToolChange("form_field");
+                  setShowFieldDropdown(false);
+                }}
+                className={`
+                  flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors
+                  ${
+                    fieldType === type
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted"
+                  }
+                `}
+              >
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        </Dropdown>
+      </div>
 
       <Separator />
 

@@ -5,7 +5,7 @@
 
 import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import type { Tool, ShapeType, AnnotationType } from "@giga-pdf/types";
+import type { Tool, ShapeType, AnnotationType, FieldType } from "@giga-pdf/types";
 import type { CanvasState, ViewportDimensions } from "../types";
 
 export interface CanvasStore extends CanvasState {
@@ -32,6 +32,7 @@ export interface CanvasStore extends CanvasState {
   // Tool options actions
   setShapeType: (shapeType: ShapeType) => void;
   setAnnotationType: (annotationType: AnnotationType) => void;
+  setFieldType: (fieldType: FieldType) => void;
   setStrokeColor: (color: string) => void;
   setFillColor: (color: string) => void;
   setStrokeWidth: (width: number) => void;
@@ -54,6 +55,7 @@ const initialState: CanvasState = {
   // Tool options defaults
   shapeType: "rectangle",
   annotationType: "highlight",
+  fieldType: "text",
   strokeColor: "#000000",
   fillColor: "transparent",
   strokeWidth: 2,
@@ -179,6 +181,11 @@ export const useCanvasStore: UseBoundStore<StoreApi<CanvasStore>> = create<Canva
     setAnnotationType: (annotationType) =>
       set((state) => {
         state.annotationType = annotationType;
+      }),
+
+    setFieldType: (fieldType) =>
+      set((state) => {
+        state.fieldType = fieldType;
       }),
 
     setStrokeColor: (color) =>

@@ -123,6 +123,7 @@ export default function EditorPage() {
     zoom,
     shapeType,
     annotationType,
+    fieldType,
     strokeColor,
     fillColor,
     strokeWidth,
@@ -130,6 +131,7 @@ export default function EditorPage() {
     setZoom,
     setShapeType,
     setAnnotationType,
+    setFieldType,
     setStrokeColor,
     setFillColor,
     setStrokeWidth,
@@ -139,6 +141,7 @@ export default function EditorPage() {
       zoom: s.zoom,
       shapeType: s.shapeType,
       annotationType: s.annotationType,
+      fieldType: s.fieldType,
       strokeColor: s.strokeColor,
       fillColor: s.fillColor,
       strokeWidth: s.strokeWidth,
@@ -146,6 +149,7 @@ export default function EditorPage() {
       setZoom: s.setZoom,
       setShapeType: s.setShapeType,
       setAnnotationType: s.setAnnotationType,
+      setFieldType: s.setFieldType,
       setStrokeColor: s.setStrokeColor,
       setFillColor: s.setFillColor,
       setStrokeWidth: s.setStrokeWidth,
@@ -1285,6 +1289,8 @@ export default function EditorPage() {
         onShapeTypeChange={setShapeType}
         annotationType={annotationType}
         onAnnotationTypeChange={setAnnotationType}
+        fieldType={fieldType}
+        onFieldTypeChange={setFieldType}
         strokeColor={strokeColor}
         onStrokeColorChange={setStrokeColor}
         fillColor={fillColor}
@@ -1332,6 +1338,7 @@ export default function EditorPage() {
             zoom={zoom}
             shapeType={shapeType}
             annotationType={annotationType}
+            fieldType={fieldType}
             strokeColor={strokeColor}
             fillColor={fillColor}
             strokeWidth={strokeWidth}
