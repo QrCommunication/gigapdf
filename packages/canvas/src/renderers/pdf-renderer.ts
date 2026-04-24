@@ -56,9 +56,14 @@ async function maskTextLayer(
     context.fillStyle = "#ffffff";
     for (const item of textContent.items) {
       if (!item.str || !item.transform) continue;
-      const t = item.transform;
-      // Compose item.transform with viewport.transform to get absolute canvas-space coords.
-      const combined = pdfjsLib.Util.transform(viewport.transform, t as number[]) as number[];
+
+      // Combined = viewport.transform · item.transform. Maps text-local
+      // space (0..itemWidth along baseline × 0..1 vertical) to canvas
+      // pixel space, including any rotation pdfjs applied via /Rotate.
+      const combined = pdfjsLib.Util.transform(
+        viewport.transform,
+        item.transform as number[],
+      ) as number[];
       const a = combined[0] ?? 1;
       const b = combined[1] ?? 0;
       const c = combined[2] ?? 0;
@@ -66,43 +71,40 @@ async function maskTextLayer(
       const e = combined[4] ?? 0;
       const f = combined[5] ?? 0;
 
-      // fontSize = magnitude of the first column of the 2×2 scale/rotation
-      // matrix. Works for any rotation (0°/90°/180°/270°) since both
-      // components contribute.
+      // Glyph-height magnitude (fontSize in px on the render target).
       const fontSize = Math.sqrt(a * a + b * b);
       if (fontSize < 0.1) continue;
 
-      // item.width/height are already in viewport units at scale=1, but
-      // our context is at pdfjs-render scale. We derive the UNIT text
-      // vector (along the baseline) and PERPENDICULAR (ascender dir) from
-      // the transform so the mask rotates with the glyph run. Drawing a
-      // rectangle with translate+rotate+fillRect avoids the "width=0"
-      // degenerate case that happened when we assumed axis-aligned text
-      // and read Math.abs(combined[0]) as the scale — which is 0 for 90°
-      // rotated text and left vertical glyphs unmasked.
       const itemWidth = (item.width ?? 0) > 0
         ? (item.width as number)
         : fontSize * (item.str.length || 1) * 0.5;
-      // Render scale factor: the text's actual on-canvas width equals
-      // itemWidth * (scale of the transform along its baseline).
-      const baselineScale = fontSize; // magnitude of baseline vector
-      const runLengthPx = itemWidth * baselineScale;
-      const ascender = fontSize * 0.85 + 1;
-      const totalHeight = fontSize * 1.15 + 2;
 
-      context.save();
-      context.transform(a, b, c, d, e, f);
-      // We are now in the "text" coordinate system: x along baseline, y
-      // up (PDF-style). Draw the mask rectangle covering the glyph run.
-      // fillRect uses the current transform, so x=0 y=-ascender means
-      // "at the baseline origin, extend downward (ascender)".
-      context.fillRect(-1, -0.85 - 1 / fontSize, (itemWidth) + 2, 1.15 + 2 / fontSize);
-      context.restore();
-      // runLengthPx/ascender/totalHeight are retained for future debug
-      // but unused here; referenced via void so the linter stays happy.
-      void runLengthPx;
-      void ascender;
-      void totalHeight;
+      // Compute the 4 corners of the text bounding box directly in canvas
+      // pixel space by applying `combined` to the text-local rectangle
+      // [-pad, -0.2-pad] → [width+pad, 0.85+pad]. Works for ANY rotation
+      // (0/90/180/270, shear, etc.) because we don't assume an
+      // axis-aligned bounding box — we draw the rotated quad as a path.
+      const pad = 1 / fontSize; // 1 px of padding in text-local units
+      const x0 = -pad;
+      const x1 = itemWidth + pad;
+      const y0 = -0.85 - pad; // top (ascender), in PDF Y-up
+      const y1 = 0.2 + pad;   // descender
+      const tx = (lx: number, ly: number) => ({
+        px: a * lx + c * ly + e,
+        py: b * lx + d * ly + f,
+      });
+      const tl = tx(x0, y0);
+      const tr = tx(x1, y0);
+      const br = tx(x1, y1);
+      const bl = tx(x0, y1);
+
+      context.beginPath();
+      context.moveTo(tl.px, tl.py);
+      context.lineTo(tr.px, tr.py);
+      context.lineTo(br.px, br.py);
+      context.lineTo(bl.px, bl.py);
+      context.closePath();
+      context.fill();
     }
     context.restore();
   } catch {
