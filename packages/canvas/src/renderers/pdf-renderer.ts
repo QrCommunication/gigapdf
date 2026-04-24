@@ -59,18 +59,50 @@ async function maskTextLayer(
       const t = item.transform;
       // Compose item.transform with viewport.transform to get absolute canvas-space coords.
       const combined = pdfjsLib.Util.transform(viewport.transform, t as number[]) as number[];
-      const fontSize = Math.sqrt(
-        (combined[0] ?? 1) * (combined[0] ?? 1) + (combined[1] ?? 0) * (combined[1] ?? 0),
-      );
-      const widthScale = Math.abs(combined[0] ?? 1) || 1;
-      const width = (item.width ?? 0) > 0 ? (item.width as number) * widthScale : fontSize * (item.str.length || 1) * 0.5;
-      const baselineX = combined[4] ?? 0;
-      const baselineY = combined[5] ?? 0;
-      // In viewport (Y-down), text extends: ABOVE baseline by ascender (~0.8·fontSize)
-      // and BELOW by descender (~0.2·fontSize). Add 1px padding to catch anti-aliasing edges.
-      const topY = baselineY - fontSize * 0.85 - 1;
-      const boxHeight = fontSize * 1.15 + 2;
-      context.fillRect(baselineX - 1, topY, width + 2, boxHeight);
+      const a = combined[0] ?? 1;
+      const b = combined[1] ?? 0;
+      const c = combined[2] ?? 0;
+      const d = combined[3] ?? 1;
+      const e = combined[4] ?? 0;
+      const f = combined[5] ?? 0;
+
+      // fontSize = magnitude of the first column of the 2×2 scale/rotation
+      // matrix. Works for any rotation (0°/90°/180°/270°) since both
+      // components contribute.
+      const fontSize = Math.sqrt(a * a + b * b);
+      if (fontSize < 0.1) continue;
+
+      // item.width/height are already in viewport units at scale=1, but
+      // our context is at pdfjs-render scale. We derive the UNIT text
+      // vector (along the baseline) and PERPENDICULAR (ascender dir) from
+      // the transform so the mask rotates with the glyph run. Drawing a
+      // rectangle with translate+rotate+fillRect avoids the "width=0"
+      // degenerate case that happened when we assumed axis-aligned text
+      // and read Math.abs(combined[0]) as the scale — which is 0 for 90°
+      // rotated text and left vertical glyphs unmasked.
+      const itemWidth = (item.width ?? 0) > 0
+        ? (item.width as number)
+        : fontSize * (item.str.length || 1) * 0.5;
+      // Render scale factor: the text's actual on-canvas width equals
+      // itemWidth * (scale of the transform along its baseline).
+      const baselineScale = fontSize; // magnitude of baseline vector
+      const runLengthPx = itemWidth * baselineScale;
+      const ascender = fontSize * 0.85 + 1;
+      const totalHeight = fontSize * 1.15 + 2;
+
+      context.save();
+      context.transform(a, b, c, d, e, f);
+      // We are now in the "text" coordinate system: x along baseline, y
+      // up (PDF-style). Draw the mask rectangle covering the glyph run.
+      // fillRect uses the current transform, so x=0 y=-ascender means
+      // "at the baseline origin, extend downward (ascender)".
+      context.fillRect(-1, -0.85 - 1 / fontSize, (itemWidth) + 2, 1.15 + 2 / fontSize);
+      context.restore();
+      // runLengthPx/ascender/totalHeight are retained for future debug
+      // but unused here; referenced via void so the linter stays happy.
+      void runLengthPx;
+      void ascender;
+      void totalHeight;
     }
     context.restore();
   } catch {
