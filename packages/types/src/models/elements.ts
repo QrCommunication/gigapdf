@@ -137,6 +137,22 @@ export interface AnnotationStyle {
   opacity: number;
 }
 
+/**
+ * Quad for a single highlight/underline/squiggly/strikeout run.
+ * Four corners in web coords: top-left, top-right, bottom-left, bottom-right.
+ * Maps to /QuadPoints in the PDF spec (§12.5.6.10) after Y-flip.
+ */
+export interface AnnotationQuad {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  x3: number;
+  y3: number;
+  x4: number;
+  y4: number;
+}
+
 export interface AnnotationElement extends ElementBase {
   type: "annotation";
   annotationType: AnnotationType;
@@ -144,6 +160,15 @@ export interface AnnotationElement extends ElementBase {
   style: AnnotationStyle;
   linkDestination: LinkDestination | null;
   popup: AnnotationPopup | null;
+  /**
+   * Optional author/title shown in the popup. Surfaces as /T in the PDF dict.
+   */
+  author?: string;
+  /**
+   * Runs of selected text for highlight/underline/squiggly/strikeout.
+   * When omitted, the renderer falls back to a single quad covering `bounds`.
+   */
+  quads?: AnnotationQuad[];
 }
 
 // ============= Form Field Element =============
