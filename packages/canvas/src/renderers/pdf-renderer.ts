@@ -58,8 +58,8 @@ async function maskTextLayer(
       if (!item.str || !item.transform) continue;
 
       // Combined = viewport.transform · item.transform. Maps text-local
-      // space (0..itemWidth along baseline × 0..1 vertical) to canvas
-      // pixel space, including any rotation pdfjs applied via /Rotate.
+      // space to canvas pixel space, including any rotation pdfjs
+      // applied via /Rotate. Util.transform(A, B) computes A·B.
       const combined = pdfjsLib.Util.transform(
         viewport.transform,
         item.transform as number[],
@@ -71,7 +71,6 @@ async function maskTextLayer(
       const e = combined[4] ?? 0;
       const f = combined[5] ?? 0;
 
-      // Glyph-height magnitude (fontSize in px on the render target).
       const fontSize = Math.sqrt(a * a + b * b);
       if (fontSize < 0.1) continue;
 
@@ -79,32 +78,41 @@ async function maskTextLayer(
         ? (item.width as number)
         : fontSize * (item.str.length || 1) * 0.5;
 
-      // Compute the 4 corners of the text bounding box directly in canvas
-      // pixel space by applying `combined` to the text-local rectangle
-      // [-pad, -0.2-pad] → [width+pad, 0.85+pad]. Works for ANY rotation
-      // (0/90/180/270, shear, etc.) because we don't assume an
-      // axis-aligned bounding box — we draw the rotated quad as a path.
-      const pad = 1 / fontSize; // 1 px of padding in text-local units
-      const x0 = -pad;
-      const x1 = itemWidth + pad;
-      const y0 = -0.85 - pad; // top (ascender), in PDF Y-up
-      const y1 = 0.2 + pad;   // descender
-      const tx = (lx: number, ly: number) => ({
-        px: a * lx + c * ly + e,
-        py: b * lx + d * ly + f,
-      });
-      const tl = tx(x0, y0);
-      const tr = tx(x1, y0);
-      const br = tx(x1, y1);
-      const bl = tx(x0, y1);
-
-      context.beginPath();
-      context.moveTo(tl.px, tl.py);
-      context.lineTo(tr.px, tr.py);
-      context.lineTo(br.px, br.py);
-      context.lineTo(bl.px, bl.py);
-      context.closePath();
-      context.fill();
+      // Enumerate the 4 text-local corners spanning the glyph bounds in
+      // BOTH Y conventions (ascender positive AND negative), so the
+      // resulting AABB covers the run regardless of pdfjs's text matrix
+      // orientation quirks. Then draw an axis-aligned rect of the AABB.
+      // This guarantees coverage at any rotation (0/90/180/270/shear)
+      // without needing to get the ascender-sign convention perfect.
+      const corners: Array<[number, number]> = [
+        [0, -0.85],
+        [itemWidth, -0.85],
+        [itemWidth, 0.85],
+        [0, 0.85],
+        [0, -0.3],
+        [itemWidth, -0.3],
+        [itemWidth, 0.3],
+        [0, 0.3],
+      ];
+      let minPx = Infinity;
+      let minPy = Infinity;
+      let maxPx = -Infinity;
+      let maxPy = -Infinity;
+      for (const [lx, ly] of corners) {
+        const px = a * lx + c * ly + e;
+        const py = b * lx + d * ly + f;
+        if (px < minPx) minPx = px;
+        if (py < minPy) minPy = py;
+        if (px > maxPx) maxPx = px;
+        if (py > maxPy) maxPy = py;
+      }
+      // 1 px of padding on each side to catch anti-aliasing edges.
+      context.fillRect(
+        minPx - 1,
+        minPy - 1,
+        maxPx - minPx + 2,
+        maxPy - minPy + 2,
+      );
     }
     context.restore();
   } catch {
