@@ -247,6 +247,7 @@ export type Tool =
   | "shape"
   | "annotation"
   | "form_field"
+  | "draw"   // creates a signature field area
   | "hand"
   | "zoom";
 

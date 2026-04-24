@@ -538,12 +538,12 @@ export function EditorToolbar({
         </Dropdown>
       </div>
 
-      {/* Outil dessin libre */}
+      {/* Outil dessin = zone de signature (draw tool) */}
       <ToolButton
         icon={<PenTool size={20} />}
         label={t("draw")}
-        isActive={activeTool === "form_field"}
-        onClick={() => onToolChange("form_field")}
+        isActive={activeTool === "draw"}
+        onClick={() => onToolChange("draw")}
       />
 
       <Separator />

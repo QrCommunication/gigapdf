@@ -8,6 +8,7 @@ import type {
   Element,
   ShapeType,
   AnnotationType,
+  AnnotationElement,
 } from "@giga-pdf/types";
 import type { Canvas as FabricCanvas, FabricObject } from "fabric";
 import { clientLogger } from "@/lib/client-logger";
@@ -301,6 +302,41 @@ export function EditorCanvas({
           },
           crop: null,
         };
+      }
+
+      // Annotations are stored as Fabric Rect/Line/Circle but carry a
+      // data.annotationType marker. If we returned them as "shape" they'd
+      // be drawn as regular graphics and the /Annot dict would never be
+      // created — annotations must come out as AnnotationElement so the
+      // backend renderer produces real PDF annotations (highlight,
+      // underline, sticky note, freetext…).
+      const dataAnnotationType = (obj.data?.annotationType ?? null) as
+        | null
+        | 'highlight'
+        | 'underline'
+        | 'strikeout'
+        | 'strikethrough'
+        | 'squiggly'
+        | 'note'
+        | 'comment'
+        | 'freetext'
+        | 'stamp'
+        | 'link';
+      if (dataAnnotationType) {
+        return {
+          ...baseElement,
+          type: 'annotation' as const,
+          annotationType: dataAnnotationType,
+          content: (obj.data?.content as string) ?? '',
+          style: {
+            color: (obj.stroke as string) || (obj.fill as string) || '#ffff00',
+            opacity: obj.opacity ?? 1,
+          },
+          linkDestination: (obj.data?.linkDestination as AnnotationElement['linkDestination']) ?? null,
+          popup: null,
+          author: (obj.data?.author as string) ?? undefined,
+          // quads is omitted — renderer falls back to bounds when undefined
+        } as AnnotationElement;
       }
 
       if (["Rect", "Circle", "Triangle", "Ellipse", "Line"].includes(typeName)) {
@@ -705,6 +741,49 @@ export function EditorCanvas({
               placeholder: t("textPlaceholder"),
             };
             newObj = formFieldGroup;
+            break;
+          }
+
+          case "draw": {
+            // Zone de signature — visuel distinct (bordure dashed, label
+            // "Signature" au centre) pour que l'utilisateur comprenne tout
+            // de suite que ce n'est pas un simple champ texte.
+            const signatureGroup = new Group(
+              [
+                new Rect({
+                  left: 0,
+                  top: 0,
+                  width: 240,
+                  height: 60,
+                  fill: "rgba(255, 248, 220, 0.6)",
+                  stroke: "#8b5a2b",
+                  strokeWidth: 1.5,
+                  strokeDashArray: [6, 4],
+                  rx: 4,
+                  ry: 4,
+                }),
+                new FabricText("✍  Signature", {
+                  left: 70,
+                  top: 20,
+                  fontSize: 16,
+                  fontFamily: "Arial",
+                  fontStyle: "italic",
+                  fill: "#8b5a2b",
+                }),
+              ],
+              {
+                left: pointer.x,
+                top: pointer.y,
+              },
+            );
+            (signatureGroup as FabricObjectWithData).data = {
+              elementId: generateId(),
+              formFieldType: "signature",
+              fieldName: `signature_${Date.now()}`,
+              required: false,
+              placeholder: "Signature",
+            };
+            newObj = signatureGroup;
             break;
           }
           }
