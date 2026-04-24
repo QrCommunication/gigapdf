@@ -113,6 +113,25 @@ if ! \$SKIP_INSTALL; then
   pnpm install --frozen-lockfile --prefer-offline
 fi
 
+# ── 2.4b Ensure Playwright Chromium is installed (HTML→PDF conversion) ──
+# Idempotent: playwright install only downloads if the version isn't present.
+# We install under \$VPS_PATH/.cache so the service user can read it without
+# hitting root-owned directories.
+section "Ensuring Playwright Chromium is available"
+export PLAYWRIGHT_BROWSERS_PATH="\$VPS_PATH/.cache/ms-playwright"
+mkdir -p "\$PLAYWRIGHT_BROWSERS_PATH"
+if pnpm exec playwright install chromium 2>&1 | tail -3; then
+  echo "  chromium ready at \$PLAYWRIGHT_BROWSERS_PATH"
+else
+  echo "  [warn] playwright install failed (HTML→PDF convert may 500 until installed manually)"
+fi
+
+# Also persist the env var in /opt/gigapdf/.env so gigapdf-web picks it up.
+if [ -f "\$VPS_PATH/.env" ] && ! sudo grep -q '^PLAYWRIGHT_BROWSERS_PATH=' "\$VPS_PATH/.env"; then
+  echo "PLAYWRIGHT_BROWSERS_PATH=\$PLAYWRIGHT_BROWSERS_PATH" | sudo tee -a "\$VPS_PATH/.env" >/dev/null
+  echo "  added PLAYWRIGHT_BROWSERS_PATH to .env"
+fi
+
 # ── 2.5 Build all workspace packages (force — no cache) ──────────────────
 section "Building workspace packages (--force)"
 NODE_OPTIONS='--max-old-space-size=1536' pnpm turbo run build \\
