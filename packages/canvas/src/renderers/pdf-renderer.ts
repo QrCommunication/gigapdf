@@ -74,24 +74,28 @@ async function maskTextLayer(
       const fontSize = Math.sqrt(a * a + b * b);
       if (fontSize < 0.1) continue;
 
+      // item.width is in PDF user-space units (points), already scaled by
+      // the font size — NOT in text-local units. To pass it through the
+      // combined matrix (which also encodes the fontSize scale), we need
+      // to divide by fontSize so we're expressing width in "text-local"
+      // units: [0, itemWidth/fontSize]. Otherwise `b * itemWidth` explodes
+      // (for rotated text, b = fontSize so b * 288 = 5184 — way off-canvas).
       const itemWidth = (item.width ?? 0) > 0
         ? (item.width as number)
         : fontSize * (item.str.length || 1) * 0.5;
+      const localWidth = itemWidth / fontSize;
 
-      // Enumerate the 4 text-local corners spanning the glyph bounds in
-      // BOTH Y conventions (ascender positive AND negative), so the
-      // resulting AABB covers the run regardless of pdfjs's text matrix
-      // orientation quirks. Then draw an axis-aligned rect of the AABB.
-      // This guarantees coverage at any rotation (0/90/180/270/shear)
-      // without needing to get the ascender-sign convention perfect.
+      // Enumerate corners spanning the glyph bounds in BOTH Y conventions
+      // (ascender positive AND negative) so the AABB covers the run
+      // regardless of pdfjs's text matrix orientation quirks.
       const corners: Array<[number, number]> = [
         [0, -0.85],
-        [itemWidth, -0.85],
-        [itemWidth, 0.85],
+        [localWidth, -0.85],
+        [localWidth, 0.85],
         [0, 0.85],
         [0, -0.3],
-        [itemWidth, -0.3],
-        [itemWidth, 0.3],
+        [localWidth, -0.3],
+        [localWidth, 0.3],
         [0, 0.3],
       ];
       let minPx = Infinity;
