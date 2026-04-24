@@ -68,20 +68,33 @@ export async function movePage(
   markDirty(doc);
 }
 
+export type RotateMode = 'set' | 'delta';
+
 export function rotatePage(
   handle: PDFDocumentHandle,
   pageNumber: number,
   angle: number,
+  mode: RotateMode = 'delta',
 ): void {
   const doc = handle._pdfDoc;
   validatePageNumber(pageNumber, doc.getPageCount());
 
+  const page = doc.getPage(pageNumber - 1);
+
+  // mode 'delta' (default) = add `angle` to the page's current rotation —
+  // matches the intuitive "rotate 90° clockwise" button behaviour. Four
+  // successive 90° clicks cycle back to 0.
+  // mode 'set'   = overwrite the page rotation with `angle`. Used when the
+  // caller already computed the absolute target.
+  const current = page.getRotation().angle;
+  const target = mode === 'delta' ? current + angle : angle;
+
   // Normalize to [0, 360) then snap to valid PDF rotation multiples of 90.
-  const normalized = ((angle % 360) + 360) % 360;
+  const normalized = ((target % 360) + 360) % 360;
   const snapped = Math.round(normalized / 90) * 90;
   const finalAngle = snapped === 360 ? 0 : snapped;
 
-  doc.getPage(pageNumber - 1).setRotation(degrees(finalAngle));
+  page.setRotation(degrees(finalAngle));
   markDirty(doc);
 }
 

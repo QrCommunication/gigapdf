@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useShallow } from "zustand/react/shallow";
 import Link from "next/link";
-import type { Element, UUID } from "@giga-pdf/types";
+import type { Element, UUID, PageObject } from "@giga-pdf/types";
 import { Button } from "@giga-pdf/ui";
 import {
   useCanvasStore,
@@ -220,6 +220,7 @@ export default function EditorPage() {
     addElementToPage,
     updateElementInPage,
     removeElementFromPage,
+    replacePages,
     setName,
     outlines,
     layers,
@@ -735,14 +736,55 @@ export default function EditorPage() {
     }
   };
 
+  // Re-parse the PDF binary to refresh the scene graph after a page op.
+  // After rotate/add/delete/move, the text items keep their original
+  // coordinates in the parse output — but the page dimensions / rotation
+  // flag have changed, so the canvas lays everything out wrong. Calling
+  // /api/pdf/parse with the fresh binary returns new bounds that match
+  // the new geometry, fixing the 'text piled up' symptom.
+  const reparseFromFile = useCallback(
+    async (file: File): Promise<void> => {
+      try {
+        const { getAuthToken } = await import('@/lib/api');
+        const token = await getAuthToken();
+        const form = new FormData();
+        form.append('file', file, file.name);
+        const res = await fetch('/api/pdf/parse', {
+          method: 'POST',
+          credentials: 'include',
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          body: form,
+        });
+        if (!res.ok) {
+          clientLogger.warn('[editor] re-parse failed:', res.status);
+          return;
+        }
+        const json = (await res.json()) as { success: boolean; data?: { pages?: unknown[] } };
+        const pages = json?.data?.pages;
+        if (Array.isArray(pages)) {
+          replacePages(pages as PageObject[]);
+        }
+      } catch (err) {
+        clientLogger.error('[editor] re-parse threw:', err);
+      }
+    },
+    [replacePages],
+  );
+
   // Shared helper: run a page-level op through /api/pdf/pages, swap the
   // binary in memory, and trigger an immediate save. Returns the new file
   // so callers can run extra local-state updates (duplicate/add/delete need
   // to mirror the scene graph) in the same tick.
+  //
+  // When `reparse` is true (default), the PDF is re-parsed after the op so
+  // the scene graph reflects the new layout. Set to false for ops that
+  // don't change element coordinates (extract = download only, no mutation
+  // on the source document).
   const runPageOperation = useCallback(
     async (
       operation: 'add' | 'copy' | 'rotate' | 'delete' | 'move',
       params: Record<string, unknown>,
+      opts: { reparse?: boolean } = {},
     ): Promise<File | null> => {
       const file = currentPdfFileRef.current;
       if (!file) return null;
@@ -758,13 +800,18 @@ export default function EditorPage() {
         updateCurrentPdfFile(newFile);
         setDirty(true);
         saveWithPriority('immediate');
+        // Refresh the scene graph from the rotated/added/moved binary so
+        // the canvas re-renders text items at the correct new bounds.
+        if (opts.reparse !== false) {
+          void reparseFromFile(newFile);
+        }
         return newFile;
       } catch (err) {
         clientLogger.error(`[editor] ${operation} page failed:`, err);
         return null;
       }
     },
-    [pageOperation, setDirty, saveWithPriority, updateCurrentPdfFile],
+    [pageOperation, setDirty, saveWithPriority, updateCurrentPdfFile, reparseFromFile],
   );
 
   const handlePageRotate = useCallback(

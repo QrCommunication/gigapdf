@@ -143,7 +143,22 @@ export async function POST(request: Request): Promise<Response> {
             { status: 400 },
           );
         }
-        rotatePage(handle, params.pageNumber as number, params.degrees as 90 | 180 | 270);
+        // mode default is 'delta' — the UI rotate button cycles by 90°
+        // each click (0 → 90 → 180 → 270 → 0). Pass params.mode = 'set'
+        // to overwrite the page rotation with an absolute value.
+        const mode = (params.mode as 'delta' | 'set' | undefined) ?? 'delta';
+        if (mode !== 'delta' && mode !== 'set') {
+          return NextResponse.json(
+            { success: false, error: 'rotate mode must be "delta" or "set".' },
+            { status: 400 },
+          );
+        }
+        rotatePage(
+          handle,
+          params.pageNumber as number,
+          params.degrees as 90 | 180 | 270,
+          mode,
+        );
         break;
       }
       case 'copy': {

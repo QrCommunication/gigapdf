@@ -53,6 +53,8 @@ export interface UseDocumentReturn {
   updateElementInPage: (elementId: string, updates: Partial<Element>) => void;
   /** Retirer un élément du scene graph */
   removeElementFromPage: (elementId: string) => void;
+  /** Remplacer les pages du scene graph (après re-parse post page-op) */
+  replacePages: (pages: PageObject[]) => void;
   /** Mettre à jour le nom du document */
   setName: (name: string) => void;
   /** Table des matières (signets) */
@@ -457,6 +459,24 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     });
   }, []);
 
+  // Remplace les pages du scene graph. Utilisé après un re-parse du PDF
+  // (rotate/add/delete/reorder modifient le layout, donc les coords des
+  // text items changent — il faut refeed le canvas avec les nouveaux
+  // bounds pour que les textes/images soient positionnés correctement).
+  const replacePages = useCallback((newPages: PageObject[]) => {
+    setDocument((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        pages: newPages,
+        metadata: {
+          ...prev.metadata,
+          pageCount: newPages.length,
+        },
+      };
+    });
+  }, []);
+
   // Pages du document
   const pages = document?.pages || [];
   const currentPage = pages[currentPageIndex] || null;
@@ -487,6 +507,7 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     addElementToPage,
     updateElementInPage,
     removeElementFromPage,
+    replacePages,
     setName,
     outlines,
     layers,
