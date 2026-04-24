@@ -92,8 +92,19 @@ export function PagesSidebar({
             `}
             onClick={() => onPageSelect(index)}
           >
-            {/* Preview image */}
-            <div className="aspect-[8.5/11] bg-white flex items-center justify-center">
+            {/* Preview image — container matches the page orientation
+                 (portrait → tall, landscape → wide) so the thumbnail keeps
+                 its true aspect ratio after a rotate/resize.
+                 page.dimensions already includes rotation (width/height
+                 are post-rotation), so we trust those values directly. */}
+            <div
+              className="bg-white flex items-center justify-center"
+              style={{
+                aspectRatio: page.dimensions?.width && page.dimensions?.height
+                  ? `${page.dimensions.width} / ${page.dimensions.height}`
+                  : "8.5 / 11",
+              }}
+            >
               {thumbnails?.get(page.pageNumber) ? (
                 <img
                   src={thumbnails.get(page.pageNumber)}
