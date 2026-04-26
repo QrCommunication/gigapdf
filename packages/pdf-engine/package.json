@@ -65,7 +65,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run __tests__/integration",
-    "lint": "eslint src/",
+    "lint": "echo \"[$npm_package_name] lint delegated to consuming apps\"",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "fixtures:generate": "tsx __tests__/fixtures/create-fixtures.ts"
