@@ -30,8 +30,17 @@ const raw: Record<string, string | undefined> = {
   NEXT_PUBLIC_LEGAL_HOST_PHONE: process.env.NEXT_PUBLIC_LEGAL_HOST_PHONE,
 };
 
+// `NEXT_PHASE` is set to "phase-production-build" by Next.js during
+// `next build` (including page-data collection). At true runtime it's
+// "phase-production-server" or undefined. We only enforce strict
+// validation at runtime — letting the build pass when env vars come
+// from a different layer (Docker secrets, K8s configmaps, etc.)
+// injected at deploy time. The runtime check still catches misconfigured
+// deployments before any user reaches a legal page.
+const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
 const isProductionDeployment =
-  process.env.NODE_ENV === "production"
+  !isBuildPhase
+  && process.env.NODE_ENV === "production"
   && process.env.NEXT_PUBLIC_APP_URL !== undefined
   && !process.env.NEXT_PUBLIC_APP_URL.startsWith("http://localhost");
 
