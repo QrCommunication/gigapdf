@@ -9,7 +9,6 @@ Provides real-time collaboration features including:
 """
 
 import logging
-from typing import Any, Optional
 
 import socketio
 from fastapi import HTTPException
@@ -34,7 +33,7 @@ def get_redis_manager():
 
     # Check if URL has ssl_ca_certs parameter (needs special handling)
     if "ssl_ca_certs=" in redis_url:
-        from urllib.parse import urlparse, parse_qs
+        from urllib.parse import parse_qs, urlparse
 
         # Parse URL and extract ssl_ca_certs
         parsed = urlparse(redis_url)
@@ -81,7 +80,7 @@ sio_app = socketio.ASGIApp(
 
 
 # Helper functions
-async def get_user_from_auth(auth_data: dict) -> Optional[dict]:
+async def get_user_from_auth(auth_data: dict) -> dict | None:
     """
     Extract and validate user from authentication data.
 

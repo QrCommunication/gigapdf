@@ -376,7 +376,7 @@ echo "Generated password: $NEW_PASS"
 echo "⚠️  SAVE THIS IN 1PASSWORD IMMEDIATELY"
 
 # 2. SSH en prod
-ssh ubuntu@51.159.105.179
+ssh ubuntu@<your-vps-ip>
 
 # 3. Arrêter les services temporairement
 sudo systemctl stop gigapdf-api gigapdf-celery gigapdf-celery-billing

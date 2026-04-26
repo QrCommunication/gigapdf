@@ -8,12 +8,11 @@ to other members of the same tenant.
 
 import logging
 from datetime import datetime
-from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, status, Query
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select, and_
+from sqlalchemy import and_, select
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
@@ -21,13 +20,12 @@ from app.middleware.auth import AuthenticatedUser
 from app.middleware.request_id import get_request_id
 from app.models.database import StoredDocument, UserQuota
 from app.models.tenant import (
-    Tenant,
-    TenantMember,
-    TenantDocument,
-    TenantRole,
-    TenantPermission,
-    TenantStatus,
     ROLE_PERMISSIONS,
+    TenantDocument,
+    TenantMember,
+    TenantPermission,
+    TenantRole,
+    TenantStatus,
 )
 from app.schemas.responses.common import APIResponse, MetaInfo
 from app.utils.helpers import now_utc
@@ -53,9 +51,9 @@ class SharedDocumentResponse(BaseModel):
     document_name: str
     access_level: str
     owner_id: str
-    owner_email: Optional[str]
+    owner_email: str | None
     shared_by_id: str
-    shared_by_email: Optional[str]
+    shared_by_email: str | None
     added_at: str
     file_size_bytes: int
     page_count: int
@@ -80,7 +78,7 @@ class TenantDocumentListResponse(BaseModel):
     page_size: int
 
 
-async def get_user_quota_by_user_id(user_id: str) -> Optional[UserQuota]:
+async def get_user_quota_by_user_id(user_id: str) -> UserQuota | None:
     """Get UserQuota by user_id string."""
     async with get_db_session() as session:
         stmt = select(UserQuota).where(UserQuota.user_id == user_id)
@@ -89,8 +87,8 @@ async def get_user_quota_by_user_id(user_id: str) -> Optional[UserQuota]:
 
 
 async def get_user_tenant_membership(
-    user_quota_id: str, tenant_id: Optional[str] = None
-) -> Optional[TenantMember]:
+    user_quota_id: str, tenant_id: str | None = None
+) -> TenantMember | None:
     """Get user's active tenant membership."""
     async with get_db_session() as session:
         stmt = (
@@ -99,7 +97,7 @@ async def get_user_tenant_membership(
             .where(
                 and_(
                     TenantMember.user_id == user_quota_id,
-                    TenantMember.is_active == True,
+                    TenantMember.is_active,
                 )
             )
         )
@@ -183,7 +181,7 @@ async def get_my_tenants(
             .where(
                 and_(
                     TenantMember.user_id == user_quota.id,
-                    TenantMember.is_active == True,
+                    TenantMember.is_active,
                 )
             )
         )
@@ -445,7 +443,7 @@ async def share_document_with_tenant(
         doc_stmt = select(StoredDocument).where(
             and_(
                 StoredDocument.id == request.document_id,
-                StoredDocument.is_deleted == False,
+                not StoredDocument.is_deleted,
             )
         )
         doc_result = await session.execute(doc_stmt)
@@ -830,7 +828,7 @@ async def check_document_access(
         doc_stmt = select(StoredDocument).where(
             and_(
                 StoredDocument.id == document_id,
-                StoredDocument.is_deleted == False,
+                not StoredDocument.is_deleted,
             )
         )
         doc_result = await session.execute(doc_stmt)

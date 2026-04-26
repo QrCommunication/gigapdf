@@ -5,7 +5,6 @@ Provides document management for the admin panel.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -13,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.database import StoredDocument, DocumentVersion
+from app.models.database import DocumentVersion, StoredDocument
 
 router = APIRouter()
 
@@ -42,7 +41,7 @@ class DocumentResponse(BaseModel):
     mime_type: str
     current_version: int
     is_deleted: bool
-    tags: Optional[list] = None
+    tags: list | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -174,8 +173,8 @@ Results are sorted by last update date (most recent first).""",
 async def list_documents(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    search: Optional[str] = Query(None),
-    owner_id: Optional[str] = Query(None),
+    search: str | None = Query(None),
+    owner_id: str | None = Query(None),
     include_deleted: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ):
@@ -187,7 +186,7 @@ async def list_documents(
 
     # Apply filters
     if not include_deleted:
-        query = query.where(StoredDocument.is_deleted == False)
+        query = query.where(not StoredDocument.is_deleted)
 
     if search:
         query = query.where(StoredDocument.name.ilike(f"%{search}%"))
@@ -335,7 +334,7 @@ async def get_document_stats(
     # Total documents
     total_result = await db.execute(
         select(func.count()).select_from(StoredDocument).where(
-            StoredDocument.is_deleted == False
+            not StoredDocument.is_deleted
         )
     )
     total_documents = total_result.scalar() or 0
@@ -343,7 +342,7 @@ async def get_document_stats(
     # Total size
     size_result = await db.execute(
         select(func.sum(StoredDocument.file_size_bytes)).where(
-            StoredDocument.is_deleted == False
+            not StoredDocument.is_deleted
         )
     )
     total_size_bytes = size_result.scalar() or 0
@@ -351,7 +350,7 @@ async def get_document_stats(
     # Average page count
     avg_result = await db.execute(
         select(func.avg(StoredDocument.page_count)).where(
-            StoredDocument.is_deleted == False
+            not StoredDocument.is_deleted
         )
     )
     avg_page_count = avg_result.scalar() or 0
@@ -359,7 +358,7 @@ async def get_document_stats(
     # Deleted count
     deleted_result = await db.execute(
         select(func.count()).select_from(StoredDocument).where(
-            StoredDocument.is_deleted == True
+            StoredDocument.is_deleted
         )
     )
     deleted_count = deleted_result.scalar() or 0
@@ -370,7 +369,7 @@ async def get_document_stats(
             StoredDocument.mime_type,
             func.count().label("count")
         ).where(
-            StoredDocument.is_deleted == False
+            not StoredDocument.is_deleted
         ).group_by(StoredDocument.mime_type)
     )
     documents_by_type = {row.mime_type: row.count for row in mime_result.all()}
@@ -857,7 +856,7 @@ async def restore_document(
     result = await db.execute(
         select(StoredDocument).where(
             StoredDocument.id == document_id,
-            StoredDocument.is_deleted == True
+            StoredDocument.is_deleted
         )
     )
     doc = result.scalar_one_or_none()

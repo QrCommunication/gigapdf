@@ -4,16 +4,12 @@ Annotation endpoints.
 Handles creation of various annotation types (highlights, notes, links, etc.).
 """
 
-import time
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from app.middleware.auth import OptionalUser
-from app.middleware.request_id import get_request_id
-from app.schemas.responses.common import APIResponse, MetaInfo
-from app.utils.helpers import now_utc
-from pydantic import BaseModel, Field
+from app.schemas.responses.common import APIResponse
 
 router = APIRouter()
 
@@ -25,11 +21,11 @@ class CreateMarkupAnnotationRequest(BaseModel):
         description="Type of markup (highlight, underline, strikeout, squiggly)"
     )
     bounds: dict = Field(description="Annotation bounds {x, y, width, height}")
-    content: Optional[str] = Field(default="", description="Annotation comment text")
-    color: Optional[str] = Field(
+    content: str | None = Field(default="", description="Annotation comment text")
+    color: str | None = Field(
         default="#FFFF00", pattern=r"^#[0-9A-Fa-f]{6}$", description="Annotation color"
     )
-    opacity: Optional[float] = Field(default=0.5, ge=0, le=1, description="Annotation opacity")
+    opacity: float | None = Field(default=0.5, ge=0, le=1, description="Annotation opacity")
 
     class Config:
         json_schema_extra = {
@@ -48,13 +44,13 @@ class CreateNoteAnnotationRequest(BaseModel):
 
     bounds: dict = Field(description="Note icon bounds {x, y, width, height}")
     content: str = Field(description="Note text content")
-    color: Optional[str] = Field(
+    color: str | None = Field(
         default="#FFD700", pattern=r"^#[0-9A-Fa-f]{6}$", description="Note color"
     )
-    icon: Optional[str] = Field(
+    icon: str | None = Field(
         default="Comment", description="Note icon (Comment, Key, Note, Help, etc.)"
     )
-    popup_open: Optional[bool] = Field(default=False, description="Whether popup is initially open")
+    popup_open: bool | None = Field(default=False, description="Whether popup is initially open")
 
     class Config:
         json_schema_extra = {
@@ -73,17 +69,17 @@ class CreateLinkAnnotationRequest(BaseModel):
 
     bounds: dict = Field(description="Link area bounds {x, y, width, height}")
     link_type: str = Field(description="Link type (internal or external)")
-    url: Optional[str] = Field(default=None, description="External URL (for external links)")
-    target_page: Optional[int] = Field(
+    url: str | None = Field(default=None, description="External URL (for external links)")
+    target_page: int | None = Field(
         default=None, ge=1, description="Target page number (for internal links)"
     )
-    target_position: Optional[dict] = Field(
+    target_position: dict | None = Field(
         default=None, description="Position on target page {x, y}"
     )
-    border_style: Optional[str] = Field(
+    border_style: str | None = Field(
         default="none", description="Border style (solid, dashed, underline, none)"
     )
-    color: Optional[str] = Field(
+    color: str | None = Field(
         default="#0000FF", pattern=r"^#[0-9A-Fa-f]{6}$", description="Link color"
     )
 

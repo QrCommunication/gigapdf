@@ -23,10 +23,9 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 # fitz (PyMuPDF) removed — replaced by LegacyDocumentProxy / pikepdf
-
 from app.models.document import DocumentObject
-from app.models.history import DocumentSnapshot, HistoryEntry, HistoryState
-from app.utils.helpers import generate_uuid, now_utc
+from app.models.history import HistoryEntry, HistoryState
+from app.utils.helpers import now_utc
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +52,10 @@ class DocumentSession:
     locks: dict[str, str] = field(default_factory=dict)  # element_id -> user_id
     created_at: datetime = field(default_factory=now_utc)
     last_accessed: datetime = field(default_factory=now_utc)
-    owner_id: Optional[str] = None
-    original_filename: Optional[str] = None
+    owner_id: str | None = None
+    original_filename: str | None = None
     file_size_bytes: int = 0
-    _pdf_bytes: Optional[bytes] = field(default=None, repr=False)
+    _pdf_bytes: bytes | None = field(default=None, repr=False)
 
     def touch(self) -> None:
         """Update last accessed timestamp."""
@@ -96,7 +95,7 @@ class DocumentSession:
         del self.locks[element_id]
         return True
 
-    def is_locked(self, element_id: str) -> Optional[str]:
+    def is_locked(self, element_id: str) -> str | None:
         """
         Check if element is locked.
 
@@ -211,10 +210,10 @@ class DocumentSessionManager:
         document_id: str,
         pdf_doc: Any,  # LegacyDocumentProxy | pikepdf.Pdf | bytes-wrapper
         scene_graph: DocumentObject,
-        owner_id: Optional[str] = None,
-        filename: Optional[str] = None,
+        owner_id: str | None = None,
+        filename: str | None = None,
         file_size: int = 0,
-        pdf_bytes: Optional[bytes] = None,
+        pdf_bytes: bytes | None = None,
     ) -> DocumentSession:
         """
         Create a new document session.
@@ -393,7 +392,7 @@ class DocumentSessionManager:
                         pass  # Non-fatal: TTL renewal is best-effort
             return session
 
-    async def get_session_async(self, document_id: str) -> Optional[DocumentSession]:
+    async def get_session_async(self, document_id: str) -> DocumentSession | None:
         """
         Get session, checking local cache first then Redis.
 
@@ -411,7 +410,7 @@ class DocumentSessionManager:
         # Try loading from Redis
         return await self._load_from_redis(document_id)
 
-    async def _load_from_redis(self, document_id: str) -> Optional[DocumentSession]:
+    async def _load_from_redis(self, document_id: str) -> DocumentSession | None:
         """Load session from Redis and cache locally."""
         redis_client = await self._get_redis()
         if not redis_client:
@@ -433,9 +432,11 @@ class DocumentSessionManager:
 
             # Rebuild session — wrap bytes in LegacyDocumentProxy instead of fitz.Document
             # TODO: after full TS-engine migration, store/retrieve doc_id only
-            from app.core.pdf_engine import LegacyDocumentProxy
-            import pikepdf
             import io as _io
+
+            import pikepdf
+
+            from app.core.pdf_engine import LegacyDocumentProxy
             with pikepdf.open(_io.BytesIO(pdf_bytes)) as _pdf:
                 _page_count = len(_pdf.pages)
                 _is_encrypted = _pdf.is_encrypted
@@ -574,7 +575,7 @@ class DocumentSessionManager:
             except Exception as e:
                 logger.warning(f"Failed to delete from Redis: {e}")
 
-    def list_sessions(self, owner_id: Optional[str] = None) -> list[dict[str, Any]]:
+    def list_sessions(self, owner_id: str | None = None) -> list[dict[str, Any]]:
         """
         List active sessions from local cache.
 
@@ -603,8 +604,8 @@ class DocumentSessionManager:
         self,
         document_id: str,
         action: str,
-        affected_elements: Optional[list[str]] = None,
-        affected_pages: Optional[list[int]] = None,
+        affected_elements: list[str] | None = None,
+        affected_pages: list[int] | None = None,
     ) -> None:
         """
         Push a new history entry.
@@ -720,7 +721,7 @@ class DocumentSessionManager:
             "user_id": user_id,
         }
 
-    def get_embed_session(self, session_id: str) -> Optional[dict[str, str]]:
+    def get_embed_session(self, session_id: str) -> dict[str, str] | None:
         """Retrieve an embed session mapping."""
         if not hasattr(self, "_embed_sessions"):
             return None

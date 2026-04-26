@@ -6,17 +6,17 @@ notifications, and accessing shared documents.
 """
 
 import time
-from typing import Optional, Literal
+from typing import Literal
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field
 
 from app.middleware.auth import AuthenticatedUser
 from app.middleware.request_id import get_request_id
 from app.schemas.responses.common import APIResponse, MetaInfo, PaginationInfo
-from app.services.share_service import share_service, SharePermission
+from app.services.activity_service import ActivityAction, ActivityService
 from app.services.notification_service import notification_service
-from app.services.activity_service import ActivityService, ActivityAction
+from app.services.share_service import share_service
 from app.utils.helpers import now_utc
 
 router = APIRouter()
@@ -31,7 +31,7 @@ class ShareDocumentRequest(BaseModel):
     permission: Literal["view", "edit"] = Field(
         default="edit", description="Permission level (view or edit)"
     )
-    message: Optional[str] = Field(
+    message: str | None = Field(
         default=None, max_length=500, description="Optional message for the invitation"
     )
     expires_in_days: int = Field(
@@ -48,7 +48,7 @@ class UpdatePermissionRequest(BaseModel):
 class CreatePublicLinkRequest(BaseModel):
     """Request body for creating a public link."""
 
-    expires_in_days: Optional[int] = Field(
+    expires_in_days: int | None = Field(
         default=None, ge=1, le=365, description="Days until link expires (optional)"
     )
 

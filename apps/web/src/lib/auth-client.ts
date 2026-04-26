@@ -10,7 +10,7 @@ export const authClient: ReturnType<typeof createAuthClient<{ plugins: [ReturnTy
   plugins: [jwtClient()],
 });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const client = authClient as any;
 export const signIn = client.signIn;
 export const signOut = client.signOut;

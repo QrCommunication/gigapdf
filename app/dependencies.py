@@ -5,7 +5,7 @@ Provides reusable dependencies for routes including
 authentication, services, and database sessions.
 """
 
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import Depends, Header
 
@@ -28,7 +28,7 @@ SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 
 # Authentication dependencies
 AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
-OptionalUser = Annotated[Optional[CurrentUser], Depends(get_optional_user)]
+OptionalUser = Annotated[CurrentUser | None, Depends(get_optional_user)]
 
 
 # Service dependencies
@@ -102,7 +102,7 @@ DocumentSessionDep = Annotated[DocumentSession, Depends(get_document_session)]
 
 # Language header for i18n
 def get_accept_language(
-    accept_language: Annotated[Optional[str], Header(alias="Accept-Language")] = None,
+    accept_language: Annotated[str | None, Header(alias="Accept-Language")] = None,
 ) -> str:
     """
     Get preferred language from Accept-Language header.

@@ -5,15 +5,14 @@ Handles text search, replacement, and extraction from PDF documents.
 """
 
 import time
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from app.middleware.auth import OptionalUser
 from app.middleware.request_id import get_request_id
 from app.schemas.responses.common import APIResponse, MetaInfo
 from app.utils.helpers import now_utc
-from pydantic import BaseModel, Field
 
 router = APIRouter()
 
@@ -21,7 +20,7 @@ router = APIRouter()
 class OCRRequest(BaseModel):
     """Request to perform OCR on a document."""
 
-    pages: Optional[list[int]] = Field(
+    pages: list[int] | None = Field(
         default=None,
         description="Specific page numbers to process (1-indexed). If null, processes all pages."
     )
@@ -68,7 +67,7 @@ class TextSearchRequest(BaseModel):
     regex: bool = Field(default=False, description="Use regex pattern matching")
     case_sensitive: bool = Field(default=False, description="Case sensitive search")
     whole_word: bool = Field(default=False, description="Match whole words only")
-    page_range: Optional[str] = Field(default=None, description="Page range to search (e.g., '1-5,10')")
+    page_range: str | None = Field(default=None, description="Page range to search (e.g., '1-5,10')")
 
     class Config:
         json_schema_extra = {
@@ -90,8 +89,8 @@ class TextReplaceRequest(BaseModel):
     regex: bool = Field(default=False, description="Use regex pattern matching")
     case_sensitive: bool = Field(default=False, description="Case sensitive search")
     whole_word: bool = Field(default=False, description="Match whole words only")
-    page_range: Optional[str] = Field(default=None, description="Page range to replace (e.g., '1-5,10')")
-    max_replacements: Optional[int] = Field(default=None, ge=1, description="Maximum number of replacements")
+    page_range: str | None = Field(default=None, description="Page range to replace (e.g., '1-5,10')")
+    max_replacements: int | None = Field(default=None, ge=1, description="Maximum number of replacements")
 
     class Config:
         json_schema_extra = {
@@ -672,7 +671,7 @@ if ($result['success']) {
 )
 async def extract_text(
     document_id: str,
-    page_range: Optional[str] = Query(default=None, description="Page range filter"),
+    page_range: str | None = Query(default=None, description="Page range filter"),
     include_formatting: bool = Query(default=False, description="Include formatting info"),
     preserve_layout: bool = Query(default=True, description="Preserve text layout"),
     user: OptionalUser = None,

@@ -4,16 +4,12 @@ Bookmark management endpoints.
 Handles PDF bookmarks (document outline/table of contents).
 """
 
-import time
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from app.middleware.auth import OptionalUser
-from app.middleware.request_id import get_request_id
-from app.schemas.responses.common import APIResponse, MetaInfo
-from app.utils.helpers import now_utc
-from pydantic import BaseModel, Field
+from app.schemas.responses.common import APIResponse
 
 router = APIRouter()
 
@@ -23,10 +19,10 @@ class CreateBookmarkRequest(BaseModel):
 
     title: str = Field(description="Bookmark display title")
     page_number: int = Field(ge=1, description="Target page number")
-    position: Optional[dict] = Field(default=None, description="Position on page {x, y}")
-    zoom: Optional[str | float] = Field(default=None, description="Zoom level or fit mode")
-    parent_id: Optional[str] = Field(default=None, description="Parent bookmark ID for nesting")
-    style: Optional[dict] = Field(default=None, description="Bookmark style (bold, italic, color)")
+    position: dict | None = Field(default=None, description="Position on page {x, y}")
+    zoom: str | float | None = Field(default=None, description="Zoom level or fit mode")
+    parent_id: str | None = Field(default=None, description="Parent bookmark ID for nesting")
+    style: dict | None = Field(default=None, description="Bookmark style (bold, italic, color)")
 
     class Config:
         json_schema_extra = {
@@ -44,12 +40,12 @@ class CreateBookmarkRequest(BaseModel):
 class UpdateBookmarkRequest(BaseModel):
     """Request to update a bookmark."""
 
-    title: Optional[str] = Field(default=None, description="Bookmark display title")
-    page_number: Optional[int] = Field(default=None, ge=1, description="Target page number")
-    position: Optional[dict] = Field(default=None, description="Position on page")
-    zoom: Optional[str | float] = Field(default=None, description="Zoom level or fit mode")
-    parent_id: Optional[str] = Field(default=None, description="Parent bookmark ID")
-    style: Optional[dict] = Field(default=None, description="Bookmark style")
+    title: str | None = Field(default=None, description="Bookmark display title")
+    page_number: int | None = Field(default=None, ge=1, description="Target page number")
+    position: dict | None = Field(default=None, description="Position on page")
+    zoom: str | float | None = Field(default=None, description="Zoom level or fit mode")
+    parent_id: str | None = Field(default=None, description="Parent bookmark ID")
+    style: dict | None = Field(default=None, description="Bookmark style")
 
     class Config:
         json_schema_extra = {

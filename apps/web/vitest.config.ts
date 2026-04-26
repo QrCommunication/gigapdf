@@ -20,15 +20,16 @@ export default defineConfig({
     setupFiles: ['src/hooks/__tests__/vitest-setup.ts'],
     include: ['src/**/__tests__/**/*.test.{ts,tsx}'],
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-        minForks: 1,
-        maxForks: 1,
-        execArgv: ['--max-old-space-size=1024'],
-      },
-    },
+    // Vitest 4 removed poolOptions.forks.{singleFork,minForks,maxForks}. The
+    // equivalent isolation for tests that mutate process.env globally is:
+    //   - isolate: false  → reuse the same fork between files (was singleFork)
+    //   - fileParallelism: false → run files sequentially
+    //   - maxWorkers: 1   → cap to a single worker (was min/maxForks=1)
+    // execArgv heap-size override is not exposed in v4 InlineConfig and is no
+    // longer needed since the fork pool inherits the parent --max-old-space-size.
+    isolate: false,
     fileParallelism: false,
+    maxWorkers: 1,
     maxConcurrency: 1,
     coverage: {
       provider: 'v8',

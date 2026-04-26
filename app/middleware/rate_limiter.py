@@ -17,12 +17,12 @@ IP resolution strategy:
 import ipaddress
 import logging
 import os
-from typing import Annotated, Optional
+from typing import Annotated
 
-from fastapi import Depends, Header, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from app.core.cache import get_rate_limiter, RateLimiter
+from app.core.cache import get_rate_limiter
 from app.core.i18n import get_translation, parse_accept_language
 from app.middleware.request_id import get_request_id
 from app.utils.helpers import now_utc
@@ -131,7 +131,7 @@ def _resolve_client_ip(request: Request) -> str:
     return peer_ip or "unknown"
 
 
-def get_rate_limit_key(request: Request, user_id: Optional[str] = None) -> str:
+def get_rate_limit_key(request: Request, user_id: str | None = None) -> str:
     """
     Generate rate limit key from request.
 
@@ -183,8 +183,8 @@ def get_endpoint_category(path: str, method: str) -> str:
 
 async def check_rate_limit(
     request: Request,
-    user_id: Optional[str] = None,
-    category: Optional[str] = None,
+    user_id: str | None = None,
+    category: str | None = None,
 ) -> tuple[bool, dict]:
     """
     Check if request is within rate limits.
@@ -312,7 +312,7 @@ class RateLimitMiddleware:
         # Extract user_id populated by the auth middleware (BACK-01).
         # getattr with None default makes this safe even when the auth
         # middleware hasn't run yet (e.g., public endpoints).
-        user_id: Optional[str] = getattr(request.state, "user_id", None)
+        user_id: str | None = getattr(request.state, "user_id", None)
 
         # Check rate limit
         is_allowed, info = await check_rate_limit(request, user_id=user_id)
@@ -344,7 +344,7 @@ class RateLimitMiddleware:
 # Dependency for per-endpoint rate limiting
 async def rate_limit_dependency(
     request: Request,
-    accept_language: Annotated[Optional[str], Header(alias="Accept-Language")] = None,
+    accept_language: Annotated[str | None, Header(alias="Accept-Language")] = None,
 ) -> None:
     """
     FastAPI dependency for rate limiting.
@@ -354,12 +354,37 @@ async def rate_limit_dependency(
 
     Raises 429 if rate limit exceeded.
     """
-    user_id: Optional[str] = getattr(request.state, "user_id", None)
+    user_id: str | None = getattr(request.state, "user_id", None)
     is_allowed, info = await check_rate_limit(request, user_id=user_id)
 
     if not is_allowed:
         language = parse_accept_language(accept_language)
-        raise create_rate_limit_response(info, language)
+        # `create_rate_limit_response` returns a JSONResponse, which is NOT an
+        # exception — `raise`-ing it crashed the dependency at runtime
+        # (TypeError: exceptions must derive from BaseException). Use the
+        # FastAPI-native HTTPException so the framework formats the 429.
+        message = get_translation(
+            "RATE_LIMIT_EXCEEDED",
+            language,
+            seconds=info["reset_in"],
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "RATE_LIMIT_EXCEEDED",
+                "message": message,
+                "details": {
+                    "limit": info["limit"],
+                    "reset_in_seconds": info["reset_in"],
+                },
+            },
+            headers={
+                "X-RateLimit-Limit": str(info["limit"]),
+                "X-RateLimit-Remaining": str(info["remaining"]),
+                "X-RateLimit-Reset": str(info["reset_in"]),
+                "Retry-After": str(info["reset_in"]),
+            },
+        )
 
 
 RateLimitDep = Annotated[None, Depends(rate_limit_dependency)]

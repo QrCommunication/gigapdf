@@ -7,7 +7,6 @@ Responsibilities:
 """
 
 import logging
-from typing import Optional
 
 from sqlalchemy import select
 
@@ -16,7 +15,6 @@ from app.models.database import (
     DocumentShare,
     ShareNotification,
     StoredDocument,
-    UserQuota,
 )
 from app.models.tenant import TenantDocument, TenantMember
 from app.utils.helpers import generate_uuid, now_utc
@@ -33,8 +31,8 @@ class PermissionService:
     async def check_access(
         document_id: str,
         user_id: str,
-        user_email: Optional[str] = None,
-        user_quota_id: Optional[str] = None,
+        user_email: str | None = None,
+        user_quota_id: str | None = None,
     ) -> dict:
         """
         Determine whether *user_id* has access to *document_id* and at which level.
@@ -59,7 +57,7 @@ class PermissionService:
             doc_result = await session.execute(
                 select(StoredDocument).where(
                     StoredDocument.id == document_id,
-                    StoredDocument.is_deleted == False,
+                    not StoredDocument.is_deleted,
                 )
             )
             document = doc_result.scalar_one_or_none()
@@ -100,7 +98,7 @@ class PermissionService:
                 membership_result = await session.execute(
                     select(TenantMember).where(
                         TenantMember.user_id == user_quota_id,
-                        TenantMember.is_active == True,
+                        TenantMember.is_active,
                     )
                 )
                 memberships = membership_result.scalars().all()

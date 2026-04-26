@@ -12,7 +12,7 @@ git clone https://github.com/YOUR_USERNAME/gigapdf.git
 cd gigapdf
 
 # Add upstream
-git remote add upstream https://github.com/ronylicha/gigapdf.git
+git remote add upstream https://github.com/QrCommunication/gigapdf.git
 
 # Install dependencies
 python3.12 -m venv .venv
@@ -34,12 +34,63 @@ pnpm dev:all
 
 ---
 
+## Sign your commits (DCO)
+
+GigaPDF uses the [Developer Certificate of Origin](https://developercertificate.org)
+(DCO) instead of a CLA. Every commit must be signed off:
+
+```bash
+git commit -s -m "your message"
+```
+
+This adds a `Signed-off-by: Your Name <your@email>` line, certifying that
+you wrote the patch (or otherwise have the right to submit it under the
+project's AGPL-3.0-or-later license).
+
+### One-time git config
+
+```bash
+git config user.name "Your Name"
+git config user.email "your@email"
+```
+
+### Forgot to sign?
+
+Sign all commits in your branch retroactively:
+
+```bash
+git rebase --signoff main
+git push --force-with-lease
+```
+
+A GitHub Action checks every commit on every PR. If a commit is not
+signed off, the check fails and the PR cannot be merged.
+
+### What you certify by signing off
+
+> By making a contribution to this project, I certify that:
+> (a) The contribution was created in whole or in part by me and I have
+>     the right to submit it under the open source license indicated;
+> (b) The contribution is based upon previous work that, to the best of
+>     my knowledge, is covered under an appropriate open source license
+>     and I have the right under that license to submit that work with
+>     modifications [...];
+> (c) The contribution was provided directly to me by some other person
+>     who certified (a), (b) or (c) and I have not modified it.
+> (d) I understand and agree that this project and the contribution are
+>     public and that a record of the contribution [...] is maintained
+>     indefinitely and may be redistributed [...].
+
+Full text: https://developercertificate.org
+
+---
+
 ## Ways to Contribute
 
 | Type | Description |
 |------|-------------|
-| **Bug Reports** | [Open an issue](https://github.com/ronylicha/gigapdf/issues/new) |
-| **Feature Requests** | Start a [discussion](https://github.com/ronylicha/gigapdf/discussions) |
+| **Bug Reports** | [Open an issue](https://github.com/QrCommunication/gigapdf/issues/new) |
+| **Feature Requests** | Start a [discussion](https://github.com/QrCommunication/gigapdf/discussions) |
 | **Code** | Submit a pull request |
 | **Documentation** | Improve docs or translations |
 | **Testing** | Write or improve tests |
@@ -114,7 +165,7 @@ git commit -m "docs(readme): update installation instructions"
 git push origin feature/my-feature
 ```
 
-Then [create a pull request](https://github.com/ronylicha/gigapdf/compare) with:
+Then [create a pull request](https://github.com/QrCommunication/gigapdf/compare) with:
 
 - Clear description of changes
 - Link to related issues
@@ -200,18 +251,19 @@ gigapdf/
 
 ## Getting Help
 
-- **Questions:** [GitHub Discussions](https://github.com/ronylicha/gigapdf/discussions)
-- **Bugs:** [GitHub Issues](https://github.com/ronylicha/gigapdf/issues)
+- **Questions:** [GitHub Discussions](https://github.com/QrCommunication/gigapdf/discussions)
+- **Bugs:** [GitHub Issues](https://github.com/QrCommunication/gigapdf/issues)
 - **Security:** Email security@giga-pdf.com
-
----
-
-## License
-
-By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
 
 ---
 
 <p align="center">
   Thank you for helping make GigaPDF better!
 </p>
+
+---
+
+## License
+
+By contributing, you agree that your contributions will be licensed under
+the [GNU AGPL-3.0-or-later](LICENSE).

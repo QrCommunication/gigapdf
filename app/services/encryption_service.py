@@ -13,18 +13,15 @@ Security Features:
 - Integrity verification via GCM authentication tag
 """
 
-import os
 import base64
 import hashlib
 import logging
 import secrets
-from typing import Tuple, Optional
-from datetime import datetime, timezone
 
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from app.config import get_settings
 
@@ -86,7 +83,7 @@ class EncryptionService:
         self._master_key = kdf.derive(master_secret)
         logger.info("Encryption service initialized with derived KEK")
 
-    def generate_document_key(self) -> Tuple[bytes, bytes]:
+    def generate_document_key(self) -> tuple[bytes, bytes]:
         """
         Generate a new Data Encryption Key (DEK) for a document.
 
@@ -149,7 +146,7 @@ class EncryptionService:
         document_data: bytes,
         document_id: str,
         user_id: str
-    ) -> Tuple[bytes, bytes]:
+    ) -> tuple[bytes, bytes]:
         """
         Encrypt a document using envelope encryption.
 
@@ -263,7 +260,7 @@ class EncryptionService:
         Returns:
             AAD bytes.
         """
-        return f"gigapdf:doc:{document_id}:user:{user_id}".encode('utf-8')
+        return f"gigapdf:doc:{document_id}:user:{user_id}".encode()
 
     def rotate_document_key(
         self,
@@ -271,7 +268,7 @@ class EncryptionService:
         old_encrypted_dek: bytes,
         document_id: str,
         user_id: str
-    ) -> Tuple[bytes, bytes]:
+    ) -> tuple[bytes, bytes]:
         """
         Re-encrypt a document with a new DEK (key rotation).
 

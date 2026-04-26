@@ -10,7 +10,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Annotated, Optional
+from typing import Annotated
 
 import httpx
 import jwt as pyjwt
@@ -31,8 +31,8 @@ class CurrentUser:
     """Represents the authenticated user from JWT claims."""
 
     user_id: str
-    email: Optional[str] = None
-    name: Optional[str] = None
+    email: str | None = None
+    name: str | None = None
     roles: list[str] | None = None
 
     @classmethod
@@ -268,7 +268,7 @@ async def get_jwks_keys(jwks_url: str) -> dict:
                     data=jwks_data,
                     expires_at=time.time() + 300,
                 )
-                logger.debug(f"JWKS retrieved from L2 after lock wait")
+                logger.debug("JWKS retrieved from L2 after lock wait")
                 return jwks_data
 
             # Fallback: direct fetch (safe, but may duplicate request if lock holder also fails)
@@ -336,6 +336,7 @@ async def decode_jwt_token(token: str) -> dict:
 
             # Convert JWK dict to a public key object using PyJWT's RSA helper
             import json as _json
+
             from jwt.algorithms import RSAAlgorithm
 
             public_key = RSAAlgorithm.from_jwk(_json.dumps(key_data))
@@ -413,7 +414,7 @@ async def validate_session_with_better_auth(token: str, session_url: str) -> dic
 
 
 async def get_current_user(
-    authorization: Annotated[Optional[str], Header()] = None,
+    authorization: Annotated[str | None, Header()] = None,
 ) -> CurrentUser:
     """
     Dependency to get the current authenticated user.
@@ -523,8 +524,8 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    authorization: Annotated[Optional[str], Header()] = None,
-) -> Optional[CurrentUser]:
+    authorization: Annotated[str | None, Header()] = None,
+) -> CurrentUser | None:
     """
     Dependency to optionally get the current user.
 
@@ -544,4 +545,4 @@ async def get_optional_user(
 
 # Type alias for dependency injection
 AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
-OptionalUser = Annotated[Optional[CurrentUser], Depends(get_optional_user)]
+OptionalUser = Annotated[CurrentUser | None, Depends(get_optional_user)]

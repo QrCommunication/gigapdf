@@ -6,7 +6,6 @@ Provides CRUD operations for tenants, member management, and permissions.
 
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -16,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
+from app.models.database import StoredDocument, UserQuota
 from app.models.tenant import (
     Tenant,
     TenantDocument,
@@ -23,10 +23,7 @@ from app.models.tenant import (
     TenantMember,
     TenantRole,
     TenantStatus,
-    TenantPermission,
-    ROLE_PERMISSIONS,
 )
-from app.models.database import UserQuota, StoredDocument
 
 router = APIRouter()
 
@@ -38,26 +35,26 @@ class TenantCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
     slug: str = Field(..., min_length=2, max_length=100, pattern=r"^[a-z0-9-]+$")
     email: EmailStr
-    description: Optional[str] = None
-    phone: Optional[str] = None
-    website: Optional[str] = None
+    description: str | None = None
+    phone: str | None = None
+    website: str | None = None
     max_members: int = Field(default=5, ge=1, le=1000)
     storage_limit_bytes: int = Field(default=5 * 1024 * 1024 * 1024)  # 5GB
 
 
 class TenantUpdate(BaseModel):
     """Schema for updating a tenant."""
-    name: Optional[str] = Field(None, min_length=2, max_length=255)
-    description: Optional[str] = None
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = None
-    website: Optional[str] = None
-    logo_url: Optional[str] = None
-    status: Optional[TenantStatus] = None
-    max_members: Optional[int] = Field(None, ge=1, le=1000)
-    storage_limit_bytes: Optional[int] = None
-    allow_member_invites: Optional[bool] = None
-    require_2fa: Optional[bool] = None
+    name: str | None = Field(None, min_length=2, max_length=255)
+    description: str | None = None
+    email: EmailStr | None = None
+    phone: str | None = None
+    website: str | None = None
+    logo_url: str | None = None
+    status: TenantStatus | None = None
+    max_members: int | None = Field(None, ge=1, le=1000)
+    storage_limit_bytes: int | None = None
+    allow_member_invites: bool | None = None
+    require_2fa: bool | None = None
 
 
 class TenantResponse(BaseModel):
@@ -65,11 +62,11 @@ class TenantResponse(BaseModel):
     id: UUID
     name: str
     slug: str
-    description: Optional[str]
-    logo_url: Optional[str]
+    description: str | None
+    logo_url: str | None
     email: str
-    phone: Optional[str]
-    website: Optional[str]
+    phone: str | None
+    website: str | None
     status: TenantStatus
     member_count: int = 0
     document_count: int = 0
@@ -94,21 +91,21 @@ class MemberCreate(BaseModel):
 
 class MemberUpdate(BaseModel):
     """Schema for updating a member's role."""
-    role: Optional[TenantRole] = None
-    is_active: Optional[bool] = None
-    custom_permissions: Optional[list[str]] = None
+    role: TenantRole | None = None
+    is_active: bool | None = None
+    custom_permissions: list[str] | None = None
 
 
 class MemberResponse(BaseModel):
     """Schema for member response."""
     id: UUID
     user_id: UUID
-    user_email: Optional[str]
+    user_email: str | None
     role: TenantRole
     is_active: bool
     permissions: list[str]
     joined_at: datetime
-    last_active_at: Optional[datetime]
+    last_active_at: datetime | None
 
     class Config:
         from_attributes = True
@@ -147,7 +144,7 @@ class TenantDocumentResponse(BaseModel):
     document_id: UUID
     document_name: str
     access_level: str
-    added_by_email: Optional[str]
+    added_by_email: str | None
     added_at: datetime
 
     class Config:
@@ -222,8 +219,8 @@ $tenants = $data['tenants'];
 async def list_tenants(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    status: Optional[TenantStatus] = None,
-    search: Optional[str] = None,
+    status: TenantStatus | None = None,
+    search: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """List all tenants with pagination and filters."""
@@ -1011,7 +1008,7 @@ async def list_invitations(
     query = select(TenantInvitation).where(TenantInvitation.tenant_id == tenant_id)
 
     if not include_accepted:
-        query = query.where(TenantInvitation.is_accepted == False)
+        query = query.where(not TenantInvitation.is_accepted)
 
     result = await db.execute(query.order_by(TenantInvitation.created_at.desc()))
     invitations = result.scalars().all()
@@ -1119,7 +1116,7 @@ async def create_invitation(
         select(TenantInvitation).where(
             TenantInvitation.tenant_id == tenant_id,
             TenantInvitation.email == data.email,
-            TenantInvitation.is_accepted == False
+            not TenantInvitation.is_accepted
         )
     )).scalar_one_or_none()
 

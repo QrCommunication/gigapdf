@@ -6,8 +6,7 @@ Handles permission checks for billing operations based on tenant membership.
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +17,6 @@ from app.models.tenant import (
     Tenant,
     TenantMember,
     TenantPermission,
-    TenantRole,
     TenantStatus,
 )
 
@@ -38,8 +36,8 @@ class BillingContext:
 
     # Tenant information (if applicable)
     is_tenant_member: bool = False
-    tenant: Optional[Tenant] = None
-    tenant_membership: Optional[TenantMember] = None
+    tenant: Tenant | None = None
+    tenant_membership: TenantMember | None = None
 
     # Permissions
     can_manage_billing: bool = False
@@ -47,13 +45,13 @@ class BillingContext:
 
     # Billing target (user or tenant)
     billing_entity_type: str = "user"  # "user" or "tenant"
-    stripe_customer_id: Optional[str] = None
-    stripe_subscription_id: Optional[str] = None
+    stripe_customer_id: str | None = None
+    stripe_subscription_id: str | None = None
 
     # Trial information
     is_in_trial: bool = False
-    trial_start_at: Optional[datetime] = None
-    trial_ends_at: Optional[datetime] = None
+    trial_start_at: datetime | None = None
+    trial_ends_at: datetime | None = None
     has_used_trial: bool = False
     trial_days_remaining: int = 0
 
@@ -110,7 +108,7 @@ class BillingPermissionService:
             .options(selectinload(TenantMember.tenant).selectinload(Tenant.plan))
             .where(
                 TenantMember.user_id == user_quota.id,
-                TenantMember.is_active == True,
+                TenantMember.is_active,
             )
         )
         membership = membership_result.scalar_one_or_none()
@@ -165,7 +163,7 @@ class BillingPermissionService:
 
     def _is_in_trial(
         self,
-        trial_ends_at: Optional[datetime],
+        trial_ends_at: datetime | None,
         status: str,
     ) -> bool:
         """Check if currently in trial period."""
@@ -173,9 +171,9 @@ class BillingPermissionService:
             return False
 
         # Ensure timezone aware comparison
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if trial_ends_at.tzinfo is None:
-            trial_ends_at = trial_ends_at.replace(tzinfo=timezone.utc)
+            trial_ends_at = trial_ends_at.replace(tzinfo=UTC)
 
         # Check if trial is still active
         if now < trial_ends_at:
@@ -188,15 +186,15 @@ class BillingPermissionService:
 
     def _calculate_trial_days_remaining(
         self,
-        trial_ends_at: Optional[datetime],
+        trial_ends_at: datetime | None,
     ) -> int:
         """Calculate days remaining in trial."""
         if not trial_ends_at:
             return 0
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if trial_ends_at.tzinfo is None:
-            trial_ends_at = trial_ends_at.replace(tzinfo=timezone.utc)
+            trial_ends_at = trial_ends_at.replace(tzinfo=UTC)
 
         if now >= trial_ends_at:
             return 0
@@ -224,7 +222,7 @@ class BillingPermissionService:
         Raises:
             ValueError: If trial already used
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         trial_end = now + timedelta(days=TRIAL_DURATION_DAYS)
 
         if context.billing_entity_type == "tenant":
@@ -237,7 +235,7 @@ class BillingPermissionService:
 
             # Get plan and apply limits to tenant
             plan_result = await session.execute(
-                select(Plan).where(Plan.slug == plan_slug, Plan.is_active == True)
+                select(Plan).where(Plan.slug == plan_slug, Plan.is_active)
             )
             plan = plan_result.scalar_one_or_none()
 

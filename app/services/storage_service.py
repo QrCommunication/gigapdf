@@ -12,17 +12,15 @@ Security Features:
 
 import hashlib
 import logging
-from pathlib import Path
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.models.database import (
-    StoredDocument,
     DocumentVersion,
     Folder,
+    StoredDocument,
     UserQuota,
 )
 from app.utils.helpers import generate_uuid, now_utc
@@ -46,9 +44,9 @@ class StorageService:
         user_id: str,
         document_bytes: bytes,
         name: str,
-        folder_id: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-        version_comment: Optional[str] = None,
+        folder_id: str | None = None,
+        tags: list[str] | None = None,
+        version_comment: str | None = None,
         page_count: int = 0,
     ) -> StoredDocument:
         """
@@ -159,7 +157,7 @@ class StorageService:
 
     async def get_document(
         self, db: AsyncSession, stored_document_id: str, user_id: str
-    ) -> Optional[StoredDocument]:
+    ) -> StoredDocument | None:
         """
         Get stored document by ID.
 
@@ -175,14 +173,14 @@ class StorageService:
             select(StoredDocument).where(
                 StoredDocument.id == stored_document_id,
                 StoredDocument.owner_id == user_id,
-                StoredDocument.is_deleted == False,
+                not StoredDocument.is_deleted,
             )
         )
         return result.scalar_one_or_none()
 
     async def load_document_file(
         self, db: AsyncSession, stored_document_id: str, user_id: str
-    ) -> Optional[bytes]:
+    ) -> bytes | None:
         """
         Load document file from storage, decrypting if necessary.
 
@@ -245,7 +243,7 @@ class StorageService:
         stored_document_id: str,
         user_id: str,
         document_bytes: bytes,
-        comment: Optional[str] = None,
+        comment: str | None = None,
         page_count: int = 0,
     ) -> DocumentVersion:
         """
@@ -376,7 +374,7 @@ class StorageService:
         db: AsyncSession,
         user_id: str,
         name: str,
-        parent_id: Optional[str] = None,
+        parent_id: str | None = None,
     ) -> Folder:
         """
         Create a new folder.

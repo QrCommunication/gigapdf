@@ -5,12 +5,9 @@ Manages document state history for reversible operations
 using incremental snapshots stored in memory and Redis.
 """
 
-import copy
-import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional
 
 from app.middleware.error_handler import DocumentNotFoundError, InvalidOperationError
 from app.models.document import DocumentObject
@@ -86,8 +83,8 @@ class HistoryManager:
         document_id: str,
         scene_graph: DocumentObject,
         action: str,
-        affected_elements: Optional[list[str]] = None,
-        affected_pages: Optional[list[int]] = None,
+        affected_elements: list[str] | None = None,
+        affected_pages: list[int] | None = None,
     ) -> None:
         """
         Save current state to history.
@@ -299,8 +296,8 @@ class HistoryManager:
         self,
         scene_graph: DocumentObject,
         action: str,
-        affected_elements: Optional[list[str]] = None,
-        affected_pages: Optional[list[int]] = None,
+        affected_elements: list[str] | None = None,
+        affected_pages: list[int] | None = None,
     ) -> DocumentSnapshot:
         """
         Create a snapshot of the current document state.
@@ -388,8 +385,8 @@ class HistoryService:
         self,
         document_id: str,
         action: str,
-        affected_elements: Optional[list[str]] = None,
-        affected_pages: Optional[list[int]] = None,
+        affected_elements: list[str] | None = None,
+        affected_pages: list[int] | None = None,
     ) -> None:
         """
         Record a new state in history.

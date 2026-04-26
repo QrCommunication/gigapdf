@@ -5,7 +5,7 @@ Handles document export to various formats (images, text, HTML, etc.).
 """
 
 import time
-from typing import Literal, Optional
+from typing import Literal
 
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
@@ -325,7 +325,7 @@ async def start_export(
     format: Literal["png", "jpeg", "webp", "svg", "html", "txt", "docx", "xlsx"] = Query(
         ..., description="Output format"
     ),
-    page_range: Optional[str] = Query(default=None, description="Page range (e.g., '1-5,10')"),
+    page_range: str | None = Query(default=None, description="Page range (e.g., '1-5,10')"),
     dpi: int = Query(default=150, ge=72, le=600, description="DPI for image formats"),
     quality: int = Query(default=85, ge=1, le=100, description="Quality for JPEG/WebP"),
     single_file: bool = Query(default=False, description="Combine into single archive"),
@@ -342,8 +342,8 @@ async def start_export(
         raise DocumentNotFoundError(document_id)
 
     # Create job in database
-    from app.models.database import AsyncJob
     from app.core.database import get_db_session
+    from app.models.database import AsyncJob
 
     async with get_db_session() as session:
         job_id = generate_uuid()
@@ -659,9 +659,11 @@ async def get_export_result(
 ) -> Response:
     """Get export result/download."""
     import os
-    from app.models.database import AsyncJob
-    from app.core.database import get_db_session
+
     from sqlalchemy import select
+
+    from app.core.database import get_db_session
+    from app.models.database import AsyncJob
 
     async with get_db_session() as session:
         result = await session.execute(select(AsyncJob).where(AsyncJob.id == job_id))
@@ -722,7 +724,7 @@ async def get_export_result(
         content_type = content_type_map.get(export_format, "application/octet-stream")
 
         # Determine filename from original format if available
-        original_format = job.result.get("original_format", export_format)
+        job.result.get("original_format", export_format)
         filename = f"export_{document_id}.{export_format}"
 
         return Response(

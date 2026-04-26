@@ -6,7 +6,7 @@ annotations, form fields).
 """
 
 import logging
-from typing import Any, Optional, Union
+from typing import Any
 
 from app.middleware.error_handler import (
     DocumentNotFoundError,
@@ -41,8 +41,8 @@ class ElementService:
         self,
         document_id: str,
         page_number: int,
-        element_type: Optional[ElementType] = None,
-        layer_id: Optional[str] = None,
+        element_type: ElementType | None = None,
+        layer_id: str | None = None,
     ) -> list[Element]:
         """
         Get elements from a page.
@@ -189,7 +189,7 @@ class ElementService:
         page = session.scene_graph.pages[page_number - 1]
 
         # Store old bounds for re-rendering
-        old_bounds = element.bounds.model_copy()
+        element.bounds.model_copy()
 
         # Find element index
         element_index = None
@@ -285,7 +285,7 @@ class ElementService:
         document_id: str,
         element_id: str,
         target_page: int,
-        new_bounds: Optional[Bounds] = None,
+        new_bounds: Bounds | None = None,
     ) -> Element:
         """
         Move an element to a different page.
@@ -352,7 +352,7 @@ class ElementService:
         self,
         document_id: str,
         element_id: str,
-        target_page: Optional[int] = None,
+        target_page: int | None = None,
         offset_x: float = 10,
         offset_y: float = 10,
     ) -> Element:
@@ -448,7 +448,7 @@ class ElementService:
         self,
         page_number: int,
         element: Element,
-        image_data: Optional[bytes] = None,
+        image_data: bytes | None = None,
     ) -> None:
         """
         No-op stub — rendering is handled by @giga-pdf/pdf-engine (TypeScript).

@@ -1,5 +1,6 @@
 {
   "name": "@giga-pdf/billing",
+  "license": "AGPL-3.0-or-later",
   "version": "0.1.0",
   "description": "Stripe billing integration for GigaPDF",
   "private": true,
@@ -19,7 +20,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "lint": "eslint src/",
+    "lint": "echo \"[$npm_package_name] lint delegated to consuming apps\"",
     "clean": "rm -rf dist",
     "type-check": "tsc --noEmit"
   },

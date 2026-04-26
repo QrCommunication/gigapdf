@@ -24,7 +24,7 @@ A scan of the GigaPDF repository revealed several instances of credentials and s
 **Action**:
 ```bash
 # Execute rotation script
-./scripts/rotate-postgres-password.sh --host 51.159.105.179 --user ubuntu
+./scripts/rotate-postgres-password.sh --host <your-vps-ip> --user ubuntu
 ```
 
 **Timeline**: Within 24 hours
@@ -115,7 +115,7 @@ Based on the project architecture, audit the following credentials for proper ro
 **Action**: Run comprehensive audit on production server:
 ```bash
 # SSH to production
-ssh ubuntu@51.159.105.179
+ssh ubuntu@<your-vps-ip>
 
 # Check what credentials are in use
 cat /opt/gigapdf/.env | grep -E "PASSWORD|SECRET|KEY" | cut -c1-40

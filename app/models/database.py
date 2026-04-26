@@ -5,10 +5,9 @@ Provides database models for documents, versions, users, and quotas.
 """
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 from uuid import uuid4
-
-from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
@@ -19,7 +18,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    LargeBinary,
     Numeric,
     String,
     Text,
@@ -50,18 +48,18 @@ class StoredDocument(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     owner_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    folder_id: Mapped[Optional[str]] = mapped_column(
+    folder_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False), ForeignKey("folders.id", ondelete="SET NULL"), nullable=True
     )
     page_count: Mapped[int] = mapped_column(Integer, default=0)
     current_version: Mapped[int] = mapped_column(Integer, default=1)
     file_size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     mime_type: Mapped[str] = mapped_column(String(100), default="application/pdf")
-    tags: Mapped[Optional[dict]] = mapped_column(JSON, default=list)
-    metadata_cache: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    thumbnail_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    tags: Mapped[dict | None] = mapped_column(JSON, default=list)
+    metadata_cache: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    thumbnail_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=func.now(), nullable=False
     )
@@ -106,14 +104,14 @@ class DocumentVersion(Base):
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     file_size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     file_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256
-    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=func.now(), nullable=False
     )
 
     # Encryption fields for AES-256-GCM at rest encryption
-    encryption_key: Mapped[Optional[str]] = mapped_column(
+    encryption_key: Mapped[str | None] = mapped_column(
         Text, nullable=True, comment="Base64-encoded encrypted DEK for this version"
     )
     is_encrypted: Mapped[bool] = mapped_column(
@@ -145,7 +143,7 @@ class Folder(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     owner_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    parent_id: Mapped[Optional[str]] = mapped_column(
+    parent_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False), ForeignKey("folders.id", ondelete="CASCADE"), nullable=True
     )
     path: Mapped[str] = mapped_column(String(1000), default="/")  # Materialized path
@@ -188,7 +186,7 @@ class UserQuota(Base):
         UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
     )
     user_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Storage quotas
     storage_used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
@@ -209,40 +207,40 @@ class UserQuota(Base):
     plan_type: Mapped[str] = mapped_column(
         String(20), default="free"  # free, pro, enterprise
     )
-    plan_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    plan_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Stripe subscription fields
-    stripe_customer_id: Mapped[Optional[str]] = mapped_column(
+    stripe_customer_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True, unique=True, index=True
     )
-    stripe_subscription_id: Mapped[Optional[str]] = mapped_column(
+    stripe_subscription_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
     subscription_status: Mapped[str] = mapped_column(
         String(50), default="none"  # none, active, canceled, past_due, trialing, incomplete
     )
-    current_period_end: Mapped[Optional[datetime]] = mapped_column(
+    current_period_end: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Trial period fields
-    trial_start_at: Mapped[Optional[datetime]] = mapped_column(
+    trial_start_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    trial_ends_at: Mapped[Optional[datetime]] = mapped_column(
+    trial_ends_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     has_used_trial: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Account suspension (for payment failures)
     is_suspended: Mapped[bool] = mapped_column(Boolean, default=False)
-    suspended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    suspension_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    suspension_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Payment failure tracking
     payment_failed_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_payment_failed_at: Mapped[Optional[datetime]] = mapped_column(
+    last_payment_failed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
@@ -276,19 +274,19 @@ class DocumentShareInvitation(Base):
     )
     inviter_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     invitee_email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    invitee_user_id: Mapped[Optional[str]] = mapped_column(
+    invitee_user_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True, index=True  # Populated when user accepts/is found
     )
     token: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     permission: Mapped[str] = mapped_column(
         String(20), default="edit"  # view, edit (default is edit per user request)
     )
-    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(20), default="pending"  # pending, accepted, declined, revoked, expired
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    responded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=func.now(), nullable=False
     )
@@ -328,19 +326,19 @@ class ShareNotification(Base):
         String(50), nullable=False
         # Types: share_invitation, share_accepted, share_declined, share_revoked, permission_changed
     )
-    document_id: Mapped[Optional[str]] = mapped_column(
+    document_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("stored_documents.id", ondelete="CASCADE"),
         nullable=True,
     )
-    share_invitation_id: Mapped[Optional[str]] = mapped_column(
+    share_invitation_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("document_share_invitations.id", ondelete="SET NULL"),
         nullable=True,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    extra_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extra_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=func.now(), nullable=False
@@ -380,16 +378,16 @@ class DocumentShare(Base):
         ForeignKey("stored_documents.id", ondelete="CASCADE"),
         nullable=False,
     )
-    shared_with_user_id: Mapped[Optional[str]] = mapped_column(
+    shared_with_user_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True  # NULL for public link
     )
-    share_token: Mapped[Optional[str]] = mapped_column(
+    share_token: Mapped[str | None] = mapped_column(
         String(64), nullable=True, unique=True  # For public links
     )
     permission: Mapped[str] = mapped_column(
         String(20), default="edit"  # view, edit (default changed to edit)
     )
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=func.now(), nullable=False
@@ -399,13 +397,13 @@ class DocumentShare(Base):
     status: Mapped[str] = mapped_column(
         String(20), default="active"  # active, revoked
     )
-    invitation_id: Mapped[Optional[str]] = mapped_column(
+    invitation_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("document_share_invitations.id", ondelete="SET NULL"),
         nullable=True,
     )
-    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    revoked_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Relationships
     invitation: Mapped[Optional["DocumentShareInvitation"]] = relationship(
@@ -432,7 +430,7 @@ class AsyncJob(Base):
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
     )
-    celery_task_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    celery_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     job_type: Mapped[str] = mapped_column(
         String(50), nullable=False  # ocr, export, merge, split, upload
     )
@@ -440,16 +438,16 @@ class AsyncJob(Base):
         String(20), default="pending"  # pending, processing, completed, failed, cancelled
     )
     progress: Mapped[float] = mapped_column(Float, default=0.0)
-    document_id: Mapped[Optional[str]] = mapped_column(
+    document_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False), nullable=True
     )
     owner_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    input_params: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    result: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    error_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    input_params: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=func.now(), nullable=False
     )
@@ -477,10 +475,10 @@ class CollaborationSession(Base):
     user_id: Mapped[str] = mapped_column(String(255), nullable=False)
     user_name: Mapped[str] = mapped_column(String(255), nullable=False)
     user_color: Mapped[str] = mapped_column(String(7), default="#3B82F6")  # Hex color
-    socket_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    cursor_page: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    cursor_x: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    cursor_y: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    socket_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cursor_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cursor_x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cursor_y: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=func.now(), nullable=False
@@ -539,15 +537,15 @@ class Plan(Base):
     )
     slug: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Pricing
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
     currency: Mapped[str] = mapped_column(String(3), default="EUR")
     interval: Mapped[str] = mapped_column(String(10), default="month")  # month, year
-    stripe_product_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    stripe_price_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    stripe_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    stripe_product_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stripe_price_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stripe_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Limits
     storage_limit_bytes: Mapped[int] = mapped_column(
@@ -559,12 +557,12 @@ class Plan(Base):
     # Tenant/Enterprise plan settings
     is_tenant_plan: Mapped[bool] = mapped_column(Boolean, default=False)
     max_members: Mapped[int] = mapped_column(Integer, default=1)  # For tenant plans
-    linked_tenant_id: Mapped[Optional[str]] = mapped_column(
+    linked_tenant_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False), nullable=True, index=True
     )  # If set, plan is exclusive to this tenant (private plan)
 
     # Features (JSON for flexibility)
-    features: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    features: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Status and display
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -573,7 +571,7 @@ class Plan(Base):
     cta_text: Mapped[str] = mapped_column(String(50), default="Get Started")
 
     # Trial settings
-    trial_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    trial_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -612,7 +610,7 @@ class ActivityLog(Base):
     )
 
     # Document reference (nullable for tenant-level actions)
-    document_id: Mapped[Optional[str]] = mapped_column(
+    document_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("stored_documents.id", ondelete="CASCADE"),
         nullable=True,
@@ -621,8 +619,8 @@ class ActivityLog(Base):
 
     # Who performed the action
     user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    user_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    user_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    user_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    user_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Action details
     action: Mapped[str] = mapped_column(
@@ -635,7 +633,7 @@ class ActivityLog(Base):
     )  # document, folder, tenant, user
 
     # Additional data (JSON for flexibility)
-    extra_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    extra_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Examples:
     # - rename: {"old_name": "...", "new_name": "..."}
     # - share: {"shared_with": "email@...", "permission": "view"}
@@ -643,11 +641,11 @@ class ActivityLog(Base):
     # - edit: {"changes": [...], "version": 2}
 
     # IP and user agent for security audits
-    ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
-    user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Tenant context (for tenant-level audit)
-    tenant_id: Mapped[Optional[str]] = mapped_column(
+    tenant_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False), nullable=True, index=True
     )
 
@@ -687,23 +685,23 @@ class InfrastructureMetric(Base):
     )
 
     # CPU metrics
-    cpu_percent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    cpu_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Memory metrics
-    memory_used_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    memory_total_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    memory_used_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    memory_total_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     # Disk metrics
-    disk_used_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    disk_total_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    disk_used_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    disk_total_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     # S3 metrics
-    s3_objects_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    s3_total_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    s3_objects_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    s3_total_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     # Network metrics
-    network_rx_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    network_tx_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    network_rx_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    network_tx_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     __table_args__ = (
         Index("idx_infra_metrics_time", "recorded_at"),
@@ -712,7 +710,6 @@ class InfrastructureMetric(Base):
 
 # Import tenant models at the end to resolve forward references
 # This ensures TenantDocument is registered when the mapper is configured
-from app.models.tenant import TenantDocument, Tenant, TenantMember  # noqa: E402, F401
-
 # Import api_key model to register it with the SQLAlchemy mapper
 from app.models.api_key import ApiKey  # noqa: E402, F401
+from app.models.tenant import Tenant, TenantDocument, TenantMember  # noqa: E402, F401

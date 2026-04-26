@@ -16,11 +16,10 @@ Preview Generator - Renders PDF pages to images.
 
 import io
 import logging
-from typing import Literal, Optional
+from typing import Literal
 
 # fitz (PyMuPDF) removed — page rendering now done by @giga-pdf/pdf-engine (TypeScript)
 import pdfplumber  # MIT-licensed — used for basic page info
-from PIL import Image
 
 from app.config import get_settings
 
@@ -49,7 +48,7 @@ class PreviewGenerator:
         self.doc = doc
         self.settings = get_settings()
 
-    def _get_pdf_bytes(self) -> Optional[bytes]:
+    def _get_pdf_bytes(self) -> bytes | None:
         """Extract raw PDF bytes from whatever doc handle we have."""
         if isinstance(self.doc, bytes):
             return self.doc
@@ -65,7 +64,7 @@ class PreviewGenerator:
         dpi: int = 150,
         format: Literal["png", "jpeg", "webp", "svg"] = "png",
         quality: int = 85,
-        scale: Optional[float] = None,
+        scale: float | None = None,
     ) -> bytes:
         """
         Render a page to an image via pdfplumber.

@@ -6,16 +6,14 @@ elements (text, images, shapes, annotations) on specific pages.
 """
 
 import time
-from typing import Optional
 
 from fastapi import APIRouter
+from pydantic import BaseModel, Field
 
 from app.middleware.auth import OptionalUser
 from app.middleware.request_id import get_request_id
 from app.schemas.responses.common import APIResponse, MetaInfo
 from app.utils.helpers import now_utc
-from pydantic import BaseModel, Field
-
 
 router = APIRouter()
 
@@ -23,14 +21,14 @@ router = APIRouter()
 class ElementStyle(BaseModel):
     """Style properties for an element."""
 
-    font_family: Optional[str] = Field(default=None, description="Font family name")
-    font_size: Optional[float] = Field(default=None, ge=1, le=1000, description="Font size in points")
-    color: Optional[str] = Field(default=None, description="Color in hex format (#RRGGBB)")
-    opacity: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Opacity (0.0 to 1.0)")
-    bold: Optional[bool] = Field(default=None, description="Bold text")
-    italic: Optional[bool] = Field(default=None, description="Italic text")
-    line_width: Optional[float] = Field(default=None, ge=0, description="Stroke line width")
-    fill_color: Optional[str] = Field(default=None, description="Fill color in hex format (#RRGGBB)")
+    font_family: str | None = Field(default=None, description="Font family name")
+    font_size: float | None = Field(default=None, ge=1, le=1000, description="Font size in points")
+    color: str | None = Field(default=None, description="Color in hex format (#RRGGBB)")
+    opacity: float | None = Field(default=None, ge=0.0, le=1.0, description="Opacity (0.0 to 1.0)")
+    bold: bool | None = Field(default=None, description="Bold text")
+    italic: bool | None = Field(default=None, description="Italic text")
+    line_width: float | None = Field(default=None, ge=0, description="Stroke line width")
+    fill_color: str | None = Field(default=None, description="Fill color in hex format (#RRGGBB)")
 
 
 class ElementBounds(BaseModel):
@@ -45,10 +43,10 @@ class ElementBounds(BaseModel):
 class ElementData(BaseModel):
     """Data describing an element to add or update."""
 
-    content: Optional[str] = Field(default=None, description="Text content or image URL/base64")
+    content: str | None = Field(default=None, description="Text content or image URL/base64")
     bounds: ElementBounds = Field(description="Position and dimensions")
-    style: Optional[ElementStyle] = Field(default=None, description="Visual style properties")
-    rotation: Optional[float] = Field(default=None, description="Rotation angle in degrees")
+    style: ElementStyle | None = Field(default=None, description="Visual style properties")
+    rotation: float | None = Field(default=None, description="Rotation angle in degrees")
 
 
 class ModifyOperation(BaseModel):
@@ -63,15 +61,15 @@ class ModifyOperation(BaseModel):
         json_schema_extra={"enum": ["text", "image", "shape", "annotation"]},
     )
     page_number: int = Field(ge=1, description="Target page number (1-indexed)")
-    element: Optional[ElementData] = Field(
+    element: ElementData | None = Field(
         default=None,
         description="Element data. Required for 'add' and 'update' actions.",
     )
-    element_id: Optional[str] = Field(
+    element_id: str | None = Field(
         default=None,
         description="Element ID. Required for 'update' and 'delete' actions.",
     )
-    old_bounds: Optional[ElementBounds] = Field(
+    old_bounds: ElementBounds | None = Field(
         default=None,
         description="Previous bounds of the element. Required for 'update' action.",
     )

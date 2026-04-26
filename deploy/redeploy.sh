@@ -28,7 +28,7 @@ set -euo pipefail
 
 # ── Configuration ───────────────────────────────────────────────────────────
 VPS_USER="${GIGAPDF_VPS_USER:-ubuntu}"
-VPS_HOST="${GIGAPDF_VPS_HOST:-51.159.105.179}"
+VPS_HOST="${GIGAPDF_VPS_HOST:?GIGAPDF_VPS_HOST is required (e.g. 'export GIGAPDF_VPS_HOST=your.vps.example.com')}"
 VPS_PATH="${GIGAPDF_VPS_PATH:-/opt/gigapdf}"
 APP_USER="${GIGAPDF_APP_USER:-gigapdf}"
 APP_GROUP="${GIGAPDF_APP_GROUP:-gigapdf}"

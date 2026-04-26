@@ -5,7 +5,7 @@ Provides cost monitoring and system performance metrics.
 """
 
 from datetime import datetime, timedelta
-from typing import Literal, Optional
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
@@ -17,12 +17,8 @@ from app.schemas.infrastructure import (
     CostHistoryResponse,
     CurrentCostsResponse,
     CurrentMetricsResponse,
-    DiskMetrics,
-    MemoryMetrics,
     MetricPoint,
     MetricsHistoryResponse,
-    NetworkMetrics,
-    S3Metrics,
 )
 from app.services.infra_metrics_service import infra_metrics_service
 from app.services.scaleway_service import scaleway_service
@@ -98,7 +94,7 @@ router = APIRouter()
     },
 )
 async def get_current_costs(
-    billing_period: Optional[str] = Query(
+    billing_period: str | None = Query(
         None,
         description="Billing period in YYYY-MM format. Defaults to current month.",
         regex=r"^\d{4}-\d{2}$",

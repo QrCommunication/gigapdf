@@ -76,6 +76,9 @@ venv.bak/
 
 # Project specific
 *.pdf
+# But DO track test fixture PDFs (required for CI)
+!packages/pdf-engine/__tests__/fixtures/*.pdf
+!tests/unit/services/fixtures/*.pdf
 *.log
 uploads/
 storage/

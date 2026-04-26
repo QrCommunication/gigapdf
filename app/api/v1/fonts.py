@@ -13,8 +13,7 @@ import json
 import logging
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, status
 
 from app.config import get_settings
 from app.core.cache import get_redis

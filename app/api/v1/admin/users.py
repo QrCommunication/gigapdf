@@ -5,11 +5,10 @@ Provides user management for the admin panel.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, EmailStr
-from sqlalchemy import func, select, or_
+from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -21,8 +20,8 @@ router = APIRouter()
 class UserResponse(BaseModel):
     """User response model."""
     id: str
-    email: Optional[str] = None
-    name: Optional[str] = None
+    email: str | None = None
+    name: str | None = None
     plan_type: str
     storage_used_bytes: int
     storage_limit_bytes: int
@@ -32,7 +31,7 @@ class UserResponse(BaseModel):
     api_calls_used: int
     api_calls_limit: int
     status: str  # active, suspended, pending
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
     updated_at: datetime
 
 
@@ -47,11 +46,11 @@ class UserListResponse(BaseModel):
 
 class UserUpdateRequest(BaseModel):
     """User update request."""
-    plan_type: Optional[str] = None
-    storage_limit_bytes: Optional[int] = None
-    api_calls_limit: Optional[int] = None
-    document_limit: Optional[int] = None
-    status: Optional[str] = None
+    plan_type: str | None = None
+    storage_limit_bytes: int | None = None
+    api_calls_limit: int | None = None
+    document_limit: int | None = None
+    status: str | None = None
 
 
 def format_bytes(bytes_val: int) -> str:
@@ -163,9 +162,9 @@ quota information (storage, API calls, document count) and their current plan.
 async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    search: Optional[str] = Query(None),
-    plan_type: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
+    search: str | None = Query(None),
+    plan_type: str | None = Query(None),
+    status: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -271,7 +270,7 @@ Returns `404` if no user with the given ID exists.
                     "import requests\n\n"
                     "user_id = 'usr_abc123'\n"
                     "response = requests.get(\n"
-                    f'    f"https://api.giga-pdf.com/api/v1/admin/users/{{user_id}}",\n'
+                    '    f"https://api.giga-pdf.com/api/v1/admin/users/{user_id}",\n'
                     '    headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},\n'
                     ")\n"
                     "user = response.json()\n"
@@ -396,7 +395,7 @@ Returns `404` if no user with the given ID exists.
                     "import requests\n\n"
                     "user_id = 'usr_abc123'\n"
                     "response = requests.patch(\n"
-                    f'    f"https://api.giga-pdf.com/api/v1/admin/users/{{user_id}}",\n'
+                    '    f"https://api.giga-pdf.com/api/v1/admin/users/{user_id}",\n'
                     '    json={"plan_type": "enterprise", "storage_limit_bytes": 107374182400},\n'
                     '    headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},\n'
                     ")\n"
@@ -536,7 +535,7 @@ Returns `404` if no user with the given ID exists.
                     "import requests\n\n"
                     "user_id = 'usr_abc123'\n"
                     "response = requests.delete(\n"
-                    f'    f"https://api.giga-pdf.com/api/v1/admin/users/{{user_id}}",\n'
+                    '    f"https://api.giga-pdf.com/api/v1/admin/users/{user_id}",\n'
                     '    headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},\n'
                     ")\n"
                     "print(response.json()['message'])"
@@ -642,7 +641,7 @@ Returns `404` if the specified user does not exist.
                     "import requests\n\n"
                     "user_id = 'usr_abc123'\n"
                     "response = requests.get(\n"
-                    f'    f"https://api.giga-pdf.com/api/v1/admin/users/{{user_id}}/documents",\n'
+                    '    f"https://api.giga-pdf.com/api/v1/admin/users/{user_id}/documents",\n'
                     '    params={"page": 1, "page_size": 20},\n'
                     '    headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},\n'
                     ")\n"
@@ -711,7 +710,7 @@ async def get_user_documents(
     # Get documents
     query = select(StoredDocument).where(
         StoredDocument.owner_id == user_id,
-        StoredDocument.is_deleted == False
+        not StoredDocument.is_deleted
     )
 
     # Get total count

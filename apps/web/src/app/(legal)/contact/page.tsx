@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Input, Label, Textarea } from "@giga-pdf/ui";
-import { Mail, Phone, MapPin, Github, Linkedin, Globe, Send, CheckCircle } from "lucide-react";
+import { Mail, Phone, MapPin, Github, Send, CheckCircle } from "lucide-react";
+import { env } from "@/lib/env";
 
 export default function ContactPage() {
   const t = useTranslations("legal.contact");
@@ -39,8 +40,8 @@ export default function ContactPage() {
               <div>
                 <h3 className="font-medium">{t("info.email.title")}</h3>
                 <p className="text-muted-foreground text-sm mb-1">{t("info.email.description")}</p>
-                <a href="mailto:contact@giga-pdf.com" className="text-primary hover:underline">
-                  contact@giga-pdf.com
+                <a href={`mailto:${env.NEXT_PUBLIC_LEGAL_CONTACT_EMAIL}`} className="text-primary hover:underline">
+                  {env.NEXT_PUBLIC_LEGAL_CONTACT_EMAIL}
                 </a>
               </div>
             </div>
@@ -52,8 +53,8 @@ export default function ContactPage() {
               <div>
                 <h3 className="font-medium">{t("info.phone.title")}</h3>
                 <p className="text-muted-foreground text-sm mb-1">{t("info.phone.description")}</p>
-                <a href="tel:+33767987176" className="text-primary hover:underline">
-                  +33 7 67 98 71 76
+                <a href={`tel:${env.NEXT_PUBLIC_LEGAL_PHONE.replace(/\s/g, "")}`} className="text-primary hover:underline">
+                  {env.NEXT_PUBLIC_LEGAL_PHONE}
                 </a>
               </div>
             </div>
@@ -64,7 +65,7 @@ export default function ContactPage() {
               </div>
               <div>
                 <h3 className="font-medium">{t("info.address.title")}</h3>
-                <p className="text-muted-foreground">Paris, France</p>
+                <p className="text-muted-foreground">{env.NEXT_PUBLIC_LEGAL_ADDRESS}</p>
               </div>
             </div>
           </div>
@@ -74,28 +75,12 @@ export default function ContactPage() {
             <h3 className="font-medium mb-4">{t("info.social.title")}</h3>
             <div className="flex gap-4">
               <a
-                href="https://github.com/ronylicha"
+                href="https://github.com/QrCommunication/gigapdf"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="rounded-full bg-muted p-3 hover:bg-muted/80 transition-colors"
               >
                 <Github className="h-5 w-5" />
-              </a>
-              <a
-                href="https://www.linkedin.com/in/rony-licha-8b911189"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-full bg-muted p-3 hover:bg-muted/80 transition-colors"
-              >
-                <Linkedin className="h-5 w-5" />
-              </a>
-              <a
-                href="https://ronylicha.net"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-full bg-muted p-3 hover:bg-muted/80 transition-colors"
-              >
-                <Globe className="h-5 w-5" />
               </a>
             </div>
           </div>
@@ -104,14 +89,9 @@ export default function ContactPage() {
           <div className="mt-10 rounded-lg border p-6">
             <h3 className="font-medium mb-4">{t("info.company.title")}</h3>
             <div className="text-sm text-muted-foreground space-y-2">
-              <p><strong>Rony Licha</strong></p>
-              <p>Développeur Full Stack indépendant</p>
-              <p>15+ ans d'expérience</p>
-              <p className="pt-2">
-                <a href="https://ronylicha.net" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                  ronylicha.net
-                </a>
-              </p>
+              <p><strong>{env.NEXT_PUBLIC_LEGAL_COMPANY_NAME} {env.NEXT_PUBLIC_LEGAL_COMPANY_FORM}</strong></p>
+              <p>SIREN : {env.NEXT_PUBLIC_LEGAL_SIREN}</p>
+              <p>{env.NEXT_PUBLIC_LEGAL_ADDRESS}</p>
             </div>
           </div>
         </div>

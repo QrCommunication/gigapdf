@@ -1,6 +1,6 @@
 """Request schemas for page operations."""
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -66,10 +66,10 @@ class ReorderPagesRequest(BaseModel):
 class ExtractPagesRequest(BaseModel):
     """Request to extract pages to a new document."""
 
-    page_numbers: Optional[list[int]] = Field(
+    page_numbers: list[int] | None = Field(
         default=None, description="Specific page numbers to extract"
     )
-    page_ranges: Optional[list[str]] = Field(
+    page_ranges: list[str] | None = Field(
         default=None, description="Page ranges like '1-5', '10-15'"
     )
 

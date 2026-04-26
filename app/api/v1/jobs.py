@@ -5,7 +5,6 @@ Handles async job status, cancellation, and listing.
 """
 
 import time
-from typing import Optional
 
 from fastapi import APIRouter, Query
 
@@ -94,8 +93,9 @@ async def get_job_status(
     """Get job status with progress."""
     start_time = time.time()
 
-    from app.core.database import get_db_session
     from sqlalchemy import select
+
+    from app.core.database import get_db_session
 
     async with get_db_session() as session:
         result = await session.execute(select(AsyncJob).where(AsyncJob.id == job_id))
@@ -215,8 +215,9 @@ async def cancel_job(
     """Cancel a running job."""
     start_time = time.time()
 
-    from app.core.database import get_db_session
     from sqlalchemy import select
+
+    from app.core.database import get_db_session
 
     async with get_db_session() as session:
         result = await session.execute(select(AsyncJob).where(AsyncJob.id == job_id))
@@ -355,14 +356,15 @@ async def list_jobs(
     user: AuthenticatedUser,
     page: int = Query(default=1, ge=1, description="Page number"),
     per_page: int = Query(default=20, ge=1, le=100, description="Items per page"),
-    job_type: Optional[str] = Query(default=None, description="Filter by job type"),
-    status: Optional[str] = Query(default=None, description="Filter by status"),
+    job_type: str | None = Query(default=None, description="Filter by job type"),
+    status: str | None = Query(default=None, description="Filter by status"),
 ) -> APIResponse[dict]:
     """List user's jobs with pagination."""
     start_time = time.time()
 
+    from sqlalchemy import func, select
+
     from app.core.database import get_db_session
-    from sqlalchemy import select, func
 
     async with get_db_session() as session:
         # Build base query

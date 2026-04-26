@@ -16,7 +16,7 @@ Main PDF engine.
 import io
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pikepdf  # MIT-licensed replacement for PyMuPDF PDF operations
 
@@ -51,7 +51,7 @@ class PDFEngine:
     def open_document(
         self,
         source: bytes | str | Path,
-        password: Optional[str] = None,
+        password: str | None = None,
     ) -> tuple[str, "LegacyDocumentProxy"]:
         """
         Open a PDF document from bytes, file path, or stream.
@@ -158,16 +158,16 @@ class PDFEngine:
     def save_document(
         self,
         document_id: str,
-        output_path: Optional[str | Path] = None,
+        output_path: str | Path | None = None,
         garbage: int = 4,
         deflate: bool = True,
         deflate_images: bool = True,
         deflate_fonts: bool = True,
         clean: bool = True,
         incremental: bool = False,
-        encryption: Optional[int] = None,
-        owner_pw: Optional[str] = None,
-        user_pw: Optional[str] = None,
+        encryption: int | None = None,
+        owner_pw: str | None = None,
+        user_pw: str | None = None,
         permissions: int = -1,
     ) -> bytes:
         """
@@ -392,7 +392,7 @@ class PDFEngine:
 
         pdf_bytes = self._documents[document_id]
         with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
-            meta = pdf.open_metadata()
+            pdf.open_metadata()
             page_count = len(pdf.pages)
             is_encrypted = pdf.is_encrypted
             docinfo = pdf.docinfo
@@ -414,12 +414,12 @@ class PDFEngine:
     def set_metadata(
         self,
         document_id: str,
-        title: Optional[str] = None,
-        author: Optional[str] = None,
-        subject: Optional[str] = None,
-        keywords: Optional[list[str]] = None,
-        creator: Optional[str] = None,
-        producer: Optional[str] = None,
+        title: str | None = None,
+        author: str | None = None,
+        subject: str | None = None,
+        keywords: list[str] | None = None,
+        creator: str | None = None,
+        producer: str | None = None,
     ) -> None:
         """
         Set document metadata via pikepdf.
@@ -435,7 +435,7 @@ class PDFEngine:
         output = io.BytesIO()
 
         with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
-            with pdf.open_metadata(set_pikepdf_as_editor=False) as meta:
+            with pdf.open_metadata(set_pikepdf_as_editor=False):
                 if title is not None:
                     pdf.docinfo["/Title"] = title
                 if author is not None:

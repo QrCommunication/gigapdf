@@ -7,7 +7,6 @@ their programmatic API keys.
 """
 
 from datetime import datetime
-from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -22,7 +21,7 @@ class CreateApiKeyRequest(BaseModel):
         description="Human-readable label for the key, e.g. 'My mobile app'.",
         examples=["My mobile app"],
     )
-    scopes: Optional[str] = Field(
+    scopes: str | None = Field(
         default="read,write",
         description=(
             "Comma-separated list of authorized scopes. "
@@ -31,7 +30,7 @@ class CreateApiKeyRequest(BaseModel):
         ),
         examples=["read,write"],
     )
-    allowed_domains: Optional[str] = Field(
+    allowed_domains: str | None = Field(
         default=None,
         description=(
             "Comma-separated list of allowed origins (e.g. 'https://app.example.com'). "
@@ -39,14 +38,14 @@ class CreateApiKeyRequest(BaseModel):
         ),
         examples=["https://app.example.com,https://www.example.com"],
     )
-    rate_limit: Optional[int] = Field(
+    rate_limit: int | None = Field(
         default=60,
         ge=1,
         le=10000,
         description="Maximum number of requests per minute for this key. Defaults to 60.",
         examples=[60],
     )
-    expires_at: Optional[datetime] = Field(
+    expires_at: datetime | None = Field(
         default=None,
         description=(
             "ISO-8601 expiration date-time. "
@@ -57,7 +56,7 @@ class CreateApiKeyRequest(BaseModel):
 
     @field_validator("scopes")
     @classmethod
-    def validate_scopes(cls, v: Optional[str]) -> Optional[str]:
+    def validate_scopes(cls, v: str | None) -> str | None:
         """Ensure all scope tokens are from the allowed set."""
         if v is None:
             return v
@@ -86,14 +85,14 @@ class CreateApiKeyRequest(BaseModel):
 class UpdateApiKeyRequest(BaseModel):
     """Request body for partially updating an API key."""
 
-    name: Optional[str] = Field(
+    name: str | None = Field(
         default=None,
         min_length=1,
         max_length=255,
         description="New human-readable label for the key.",
         examples=["Renamed key"],
     )
-    scopes: Optional[str] = Field(
+    scopes: str | None = Field(
         default=None,
         description=(
             "Updated comma-separated list of authorized scopes. "
@@ -101,7 +100,7 @@ class UpdateApiKeyRequest(BaseModel):
         ),
         examples=["read"],
     )
-    allowed_domains: Optional[str] = Field(
+    allowed_domains: str | None = Field(
         default=None,
         description=(
             "Updated comma-separated list of allowed origins. "
@@ -109,14 +108,14 @@ class UpdateApiKeyRequest(BaseModel):
         ),
         examples=["https://app.example.com"],
     )
-    rate_limit: Optional[int] = Field(
+    rate_limit: int | None = Field(
         default=None,
         ge=1,
         le=10000,
         description="Updated maximum requests per minute.",
         examples=[120],
     )
-    is_active: Optional[bool] = Field(
+    is_active: bool | None = Field(
         default=None,
         description="Set to false to deactivate the key without deleting it.",
         examples=[False],
@@ -124,7 +123,7 @@ class UpdateApiKeyRequest(BaseModel):
 
     @field_validator("scopes")
     @classmethod
-    def validate_scopes(cls, v: Optional[str]) -> Optional[str]:
+    def validate_scopes(cls, v: str | None) -> str | None:
         """Ensure all scope tokens are from the allowed set."""
         if v is None:
             return v
@@ -164,21 +163,21 @@ class ApiKeyResponse(BaseModel):
     key_prefix: str = Field(
         description="First 16 characters of the secret key for identification (e.g. 'giga_pk_xxxxxxxx')."
     )
-    publishable_key_prefix: Optional[str] = Field(
+    publishable_key_prefix: str | None = Field(
         default=None,
         description="First 20 characters of the publishable key (e.g. 'giga_pub_xxxxxxxxxx').",
     )
-    scopes: List[str] = Field(description="List of authorized scopes.")
-    allowed_domains: Optional[List[str]] = Field(
+    scopes: list[str] = Field(description="List of authorized scopes.")
+    allowed_domains: list[str] | None = Field(
         default=None,
         description="List of allowed origin domains, or null if unrestricted.",
     )
     rate_limit: int = Field(description="Maximum requests per minute.")
     is_active: bool = Field(description="Whether the key is currently active.")
-    last_used_at: Optional[datetime] = Field(
+    last_used_at: datetime | None = Field(
         default=None, description="Timestamp of the last successful use."
     )
-    expires_at: Optional[datetime] = Field(
+    expires_at: datetime | None = Field(
         default=None, description="Expiration date-time, or null if the key never expires."
     )
     created_at: datetime = Field(description="Creation timestamp.")

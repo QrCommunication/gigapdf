@@ -11,9 +11,6 @@ Security Features:
 """
 
 import logging
-import os
-from typing import Optional, BinaryIO, Tuple
-from io import BytesIO
 
 import boto3
 from botocore.config import Config
@@ -71,7 +68,7 @@ class S3Service:
         file_data: bytes,
         key: str,
         content_type: str = "application/pdf",
-        metadata: Optional[dict] = None,
+        metadata: dict | None = None,
         server_side_encryption: bool = True,
     ) -> dict:
         """
@@ -135,8 +132,8 @@ class S3Service:
         key: str,
         document_id: str,
         user_id: str,
-        metadata: Optional[dict] = None,
-    ) -> Tuple[dict, str]:
+        metadata: dict | None = None,
+    ) -> tuple[dict, str]:
         """
         Upload a document with application-level encryption + SSE-S3.
 
@@ -154,10 +151,7 @@ class S3Service:
         Returns:
             Tuple of (upload result dict, encrypted DEK as base64 string).
         """
-        from app.services.encryption_service import (
-            encryption_service,
-            encode_encrypted_key
-        )
+        from app.services.encryption_service import encode_encrypted_key, encryption_service
 
         # Encrypt the document at application level
         encrypted_data, encrypted_dek = encryption_service.encrypt_document(
@@ -213,10 +207,7 @@ class S3Service:
         Returns:
             Decrypted document bytes.
         """
-        from app.services.encryption_service import (
-            encryption_service,
-            decode_encrypted_key
-        )
+        from app.services.encryption_service import decode_encrypted_key, encryption_service
 
         # Download encrypted data from S3
         encrypted_data = self.download_file(key)

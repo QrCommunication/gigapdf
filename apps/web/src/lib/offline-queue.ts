@@ -412,7 +412,7 @@ export class OfflineQueue {
 
   /** Supprime la clé IDB interne avant d'exposer l'op */
   private _stripKey(op: StoredOperation): PendingOperation {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     const { _key, ...rest } = op;
     return rest;
   }

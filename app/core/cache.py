@@ -5,10 +5,8 @@ Provides caching layer for expensive operations like
 page preview generation.
 """
 
-import hashlib
 import json
 import logging
-from typing import Any, Optional
 
 import redis.asyncio as redis
 
@@ -17,7 +15,7 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 # Global Redis client
-_redis_client: Optional[redis.Redis] = None
+_redis_client: redis.Redis | None = None
 
 
 async def get_redis() -> redis.Redis:
@@ -76,7 +74,7 @@ class PreviewCache:
         page_number: int,
         dpi: int,
         format: str,
-    ) -> Optional[bytes]:
+    ) -> bytes | None:
         """
         Get cached preview.
 
@@ -106,7 +104,7 @@ class PreviewCache:
         dpi: int,
         format: str,
         data: bytes,
-        ttl: Optional[int] = None,
+        ttl: int | None = None,
     ) -> bool:
         """
         Cache preview data.
@@ -205,7 +203,7 @@ class SessionCache:
         """Generate cache key for session."""
         return f"{self.PREFIX}:{document_id}"
 
-    async def get_metadata(self, document_id: str) -> Optional[dict]:
+    async def get_metadata(self, document_id: str) -> dict | None:
         """Get cached session metadata."""
         key = self._make_key(document_id)
         try:
@@ -221,7 +219,7 @@ class SessionCache:
         self,
         document_id: str,
         metadata: dict,
-        ttl: Optional[int] = None,
+        ttl: int | None = None,
     ) -> bool:
         """Cache session metadata."""
         key = self._make_key(document_id)
@@ -246,7 +244,7 @@ class SessionCache:
             logger.warning(f"Session cache delete error: {e}")
             return False
 
-    async def touch(self, document_id: str, ttl: Optional[int] = None) -> bool:
+    async def touch(self, document_id: str, ttl: int | None = None) -> bool:
         """Extend session TTL."""
         key = self._make_key(document_id)
         try:

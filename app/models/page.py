@@ -5,7 +5,6 @@ A page contains all elements and metadata for a single PDF page,
 with coordinates in web-standard format.
 """
 
-from typing import Optional
 
 from pydantic import ConfigDict, Field
 
@@ -62,9 +61,9 @@ class PageObject(CamelCaseModel):
     page_number: int = Field(ge=1, description="Page number (1-indexed)")
     dimensions: Dimensions = Field(description="Page dimensions")
     media_box: MediaBox = Field(description="PDF media box")
-    crop_box: Optional[MediaBox] = Field(default=None, description="Optional crop box")
+    crop_box: MediaBox | None = Field(default=None, description="Optional crop box")
     elements: list[Element] = Field(default_factory=list, description="Page elements")
-    preview: Optional[PagePreview] = Field(default=None, description="Preview URLs")
+    preview: PagePreview | None = Field(default=None, description="Preview URLs")
 
     model_config = ConfigDict(
         alias_generator=to_camel,
@@ -92,4 +91,4 @@ class PageSummary(CamelCaseModel):
     page_number: int = Field(ge=1, description="Page number")
     dimensions: Dimensions = Field(description="Page dimensions")
     element_count: int = Field(ge=0, description="Number of elements on page")
-    thumbnail_url: Optional[str] = Field(default=None, description="Thumbnail URL")
+    thumbnail_url: str | None = Field(default=None, description="Thumbnail URL")

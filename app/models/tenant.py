@@ -5,9 +5,8 @@ Tenants allow users to belong to organizations and share documents,
 storage, and collaborate with defined permissions.
 """
 
-from datetime import datetime
-from enum import Enum
-from typing import Optional
+from datetime import UTC, datetime
+from enum import StrEnum
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -15,7 +14,6 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-    Enum as SQLEnum,
     ForeignKey,
     Index,
     Integer,
@@ -24,13 +22,16 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy import (
+    Enum as SQLEnum,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.models.database import Base
 
 
-class TenantRole(str, Enum):
+class TenantRole(StrEnum):
     """Roles within a tenant organization."""
     OWNER = "owner"           # Full control, can delete tenant
     ADMIN = "admin"           # Manage members, settings, all documents
@@ -39,7 +40,7 @@ class TenantRole(str, Enum):
     VIEWER = "viewer"         # Read-only access
 
 
-class TenantPermission(str, Enum):
+class TenantPermission(StrEnum):
     """Granular permissions for tenant members."""
     # Document permissions
     VIEW_DOCUMENTS = "view_documents"
@@ -109,7 +110,7 @@ ROLE_PERMISSIONS = {
 }
 
 
-class TenantStatus(str, Enum):
+class TenantStatus(StrEnum):
     """Tenant account status."""
     ACTIVE = "active"
     SUSPENDED = "suspended"
@@ -375,5 +376,4 @@ class TenantInvitation(Base):
     @property
     def is_expired(self) -> bool:
         """Check if invitation has expired."""
-        from datetime import timezone
-        return datetime.now(timezone.utc) > self.expires_at
+        return datetime.now(UTC) > self.expires_at

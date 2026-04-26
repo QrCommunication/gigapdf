@@ -1,5 +1,6 @@
 {
   "name": "@giga-pdf/eslint-config",
+  "license": "AGPL-3.0-or-later",
   "version": "0.1.0",
   "private": true,
   "main": "base.js",

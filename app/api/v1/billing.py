@@ -8,8 +8,7 @@ Members share the tenant's quotas and subscription.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -19,8 +18,8 @@ from app.config import get_settings
 from app.core.database import get_db
 from app.middleware.auth import AuthenticatedUser
 from app.middleware.request_id import get_request_id
-from app.models.database import Plan, UserQuota
-from app.models.tenant import Tenant, TenantStatus
+from app.models.database import Plan
+from app.models.tenant import TenantStatus
 from app.schemas.billing import (
     AddPaymentMethodRequest,
     BillingPlanResponse,
@@ -337,7 +336,7 @@ async def update_subscription(
 
     # Get the new plan
     plan_result = await db.execute(
-        select(Plan).where(Plan.slug == request.plan_id, Plan.is_active == True)
+        select(Plan).where(Plan.slug == request.plan_id, Plan.is_active)
     )
     plan = plan_result.scalar_one_or_none()
 
@@ -395,7 +394,7 @@ async def update_subscription(
         else:
             context.user_quota.plan_type = request.plan_id
             context.user_quota.current_period_end = datetime.fromtimestamp(
-                updated_sub.current_period_end, tz=timezone.utc
+                updated_sub.current_period_end, tz=UTC
             )
             await quota_service.upgrade_plan(user.user_id, request.plan_id)
 
@@ -409,7 +408,7 @@ async def update_subscription(
                 plan_name=plan.name,
                 billing_cycle=plan.interval,
                 current_period_end=datetime.fromtimestamp(
-                    updated_sub.current_period_end, tz=timezone.utc
+                    updated_sub.current_period_end, tz=UTC
                 ),
                 cancel_at_period_end=updated_sub.cancel_at_period_end,
                 stripe_customer_id=context.stripe_customer_id,
@@ -818,7 +817,7 @@ async def create_checkout(
 
     # Get plan details
     plan_result = await db.execute(
-        select(Plan).where(Plan.slug == request.plan_id, Plan.is_active == True)
+        select(Plan).where(Plan.slug == request.plan_id, Plan.is_active)
     )
     plan = plan_result.scalar_one_or_none()
 
@@ -1015,7 +1014,7 @@ async def list_plans(
     """List all available subscription plans."""
     result = await db.execute(
         select(Plan)
-        .where(Plan.is_active == True, Plan.is_tenant_plan == False)
+        .where(Plan.is_active, not Plan.is_tenant_plan)
         .order_by(Plan.display_order)
     )
     plans = result.scalars().all()
@@ -1131,16 +1130,16 @@ async def list_invoices(
                 amount_due=inv.amount_due,
                 amount_paid=inv.amount_paid,
                 currency=inv.currency,
-                created=datetime.fromtimestamp(inv.created, tz=timezone.utc),
-                due_date=datetime.fromtimestamp(inv.due_date, tz=timezone.utc)
+                created=datetime.fromtimestamp(inv.created, tz=UTC),
+                due_date=datetime.fromtimestamp(inv.due_date, tz=UTC)
                 if inv.due_date
                 else None,
                 pdf_url=inv.invoice_pdf,
                 hosted_invoice_url=inv.hosted_invoice_url,
-                period_start=datetime.fromtimestamp(inv.period_start, tz=timezone.utc)
+                period_start=datetime.fromtimestamp(inv.period_start, tz=UTC)
                 if inv.period_start
                 else None,
-                period_end=datetime.fromtimestamp(inv.period_end, tz=timezone.utc)
+                period_end=datetime.fromtimestamp(inv.period_end, tz=UTC)
                 if inv.period_end
                 else None,
             )
@@ -1230,8 +1229,8 @@ async def get_invoice(
                 amount_due=inv.amount_due,
                 amount_paid=inv.amount_paid,
                 currency=inv.currency,
-                created=datetime.fromtimestamp(inv.created, tz=timezone.utc),
-                due_date=datetime.fromtimestamp(inv.due_date, tz=timezone.utc)
+                created=datetime.fromtimestamp(inv.created, tz=UTC),
+                due_date=datetime.fromtimestamp(inv.due_date, tz=UTC)
                 if inv.due_date
                 else None,
                 pdf_url=inv.invoice_pdf,
@@ -1417,7 +1416,7 @@ async def list_payment_methods(
                     type=pm.type,
                     card=card_details,
                     is_default=pm.id == default_pm_id,
-                    created_at=datetime.fromtimestamp(pm.created, tz=timezone.utc),
+                    created_at=datetime.fromtimestamp(pm.created, tz=UTC),
                 )
             )
 
@@ -1514,7 +1513,7 @@ async def add_payment_method(
                 type=pm.type,
                 card=card_details,
                 is_default=False,
-                created_at=datetime.fromtimestamp(pm.created, tz=timezone.utc),
+                created_at=datetime.fromtimestamp(pm.created, tz=UTC),
             ),
             meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
         )
@@ -1682,7 +1681,7 @@ async def set_default_payment_method(
                 type=pm.type,
                 card=card_details,
                 is_default=True,
-                created_at=datetime.fromtimestamp(pm.created, tz=timezone.utc),
+                created_at=datetime.fromtimestamp(pm.created, tz=UTC),
             ),
             meta=MetaInfo(request_id=get_request_id(), timestamp=now_utc()),
         )
@@ -1745,7 +1744,7 @@ async def get_usage(
     )
 
     # Calculate period dates
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if context.is_in_trial:
         period_start = context.trial_start_at or now

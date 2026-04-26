@@ -7,7 +7,6 @@ and session management.
 """
 
 import logging
-from typing import Optional
 
 from app.config import get_settings
 from app.core.pdf_engine import pdf_engine
@@ -19,7 +18,7 @@ from app.middleware.error_handler import (
 )
 from app.models.document import DocumentMetadata, DocumentObject
 from app.models.page import Dimensions, MediaBox, PageObject
-from app.repositories.document_repo import DocumentSession, document_sessions
+from app.repositories.document_repo import document_sessions
 from app.utils.helpers import generate_uuid, sanitize_filename
 
 logger = logging.getLogger(__name__)
@@ -41,8 +40,8 @@ class DocumentService:
         self,
         file_data: bytes,
         filename: str,
-        password: Optional[str] = None,
-        owner_id: Optional[str] = None,
+        password: str | None = None,
+        owner_id: str | None = None,
         extract_text: bool = True,
         generate_previews: bool = True,
     ) -> tuple[str, DocumentObject]:
@@ -113,7 +112,7 @@ class DocumentService:
             )
 
             # Create session with PDF bytes for Redis storage (awaited — durable before return)
-            session = await document_sessions.create_session(
+            await document_sessions.create_session(
                 document_id=document_id,
                 pdf_doc=pdf_doc,
                 scene_graph=scene_graph,
@@ -126,7 +125,7 @@ class DocumentService:
             logger.info(f"Document uploaded: {document_id} ({safe_filename})")
             return document_id, scene_graph
 
-        except Exception as e:
+        except Exception:
             # Clean up on error
             self.engine.close_document(document_id)
             raise
@@ -135,7 +134,7 @@ class DocumentService:
         self,
         document_id: str,
         include_elements: bool = True,
-        page_range: Optional[str] = None,
+        page_range: str | None = None,
     ) -> DocumentObject:
         """
         Get document structure.

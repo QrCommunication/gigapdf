@@ -6,17 +6,16 @@ Handles document upload, retrieval, download, and deletion.
 
 import logging
 import time
-from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import Response
 
 from app.dependencies import preload_document_session
-from app.middleware.auth import AuthenticatedUser, OptionalUser
+from app.middleware.auth import OptionalUser
 from app.middleware.request_id import get_request_id
 from app.repositories.document_repo import document_sessions
-from app.schemas.requests.documents import DownloadDocumentParams, UnlockDocumentRequest
-from app.schemas.responses.common import APIResponse, MetaInfo, SuccessResponse
+from app.schemas.requests.documents import UnlockDocumentRequest
+from app.schemas.responses.common import APIResponse, MetaInfo
 from app.services.document_service import document_service
 from app.utils.helpers import now_utc
 
@@ -231,7 +230,7 @@ Returns the parsed document structure including:
 )
 async def upload_document(
     file: UploadFile = File(..., description="PDF file to upload"),
-    password: Optional[str] = Form(default=None, description="PDF password"),
+    password: str | None = Form(default=None, description="PDF password"),
     extract_text: bool = Form(default=True, description="Extract text elements"),
     ocr_enabled: bool = Form(default=False, description="Enable OCR"),
     ocr_languages: str = Form(default="fra+eng", description="OCR languages"),
@@ -515,7 +514,7 @@ async def get_document(
     document_id: str,
     include_elements: bool = Query(default=True, description="Include page elements"),
     include_previews: bool = Query(default=True, description="Include preview URLs"),
-    page_range: Optional[str] = Query(default=None, description="Page range filter"),
+    page_range: str | None = Query(default=None, description="Page range filter"),
     user: OptionalUser = None,
 ) -> APIResponse[dict]:
     """Get document structure."""

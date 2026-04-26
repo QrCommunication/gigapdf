@@ -6,7 +6,7 @@ with proper error codes and messages.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, Request, status
@@ -199,7 +199,7 @@ def create_error_response(
             },
             "meta": {
                 "request_id": get_request_id(),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
         },
     )

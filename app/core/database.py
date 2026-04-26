@@ -6,10 +6,10 @@ plus sync versions for Celery workers.
 """
 
 import logging
+from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager
-from typing import AsyncGenerator, Generator
 
-from sqlalchemy import create_engine as create_sync_engine, event
+from sqlalchemy import create_engine as create_sync_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import NullPool
 
 from app.config import get_settings
 from app.models.database import Base

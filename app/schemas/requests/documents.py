@@ -1,6 +1,5 @@
 """Request schemas for document operations."""
 
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -8,7 +7,7 @@ from pydantic import BaseModel, Field
 class DocumentUploadParams(BaseModel):
     """Parameters for document upload."""
 
-    password: Optional[str] = Field(
+    password: str | None = Field(
         default=None,
         description="PDF password if the document is encrypted. Required to open password-protected PDFs.",
         examples=["my-secret-password"],
@@ -101,7 +100,7 @@ class DownloadDocumentParams(BaseModel):
         description="Apply file size optimization before download. May reduce quality of embedded images.",
         examples=[False],
     )
-    pdf_version: Optional[str] = Field(
+    pdf_version: str | None = Field(
         default=None,
         description="Target PDF version for the output file (e.g. '1.4', '1.7', '2.0'). Uses the source document version if not specified.",
         examples=["1.7", "2.0", None],
@@ -136,7 +135,7 @@ class MergeDocumentsRequest(BaseModel):
             ]
         ],
     )
-    output_name: Optional[str] = Field(
+    output_name: str | None = Field(
         default=None,
         description="Filename for the merged output document (without .pdf extension). Defaults to 'merged' if not provided.",
         examples=["merged-report", "Q1-combined", None],
@@ -167,19 +166,19 @@ class SplitDocumentRequest(BaseModel):
         ),
         examples=["by_pages", "by_size", "by_bookmarks"],
     )
-    pages_per_document: Optional[int] = Field(
+    pages_per_document: int | None = Field(
         default=None,
         ge=1,
         description="Number of pages per output document. Required when `split_method` is `by_pages`.",
         examples=[10, 5, None],
     )
-    max_size_mb: Optional[float] = Field(
+    max_size_mb: float | None = Field(
         default=None,
         gt=0,
         description="Maximum size in MB for each output document. Required when `split_method` is `by_size`.",
         examples=[5.0, 10.0, None],
     )
-    bookmark_level: Optional[int] = Field(
+    bookmark_level: int | None = Field(
         default=None,
         ge=1,
         description="Bookmark depth level to split at (1 = top-level chapters, 2 = sub-chapters, etc.). Required when `split_method` is `by_bookmarks`.",

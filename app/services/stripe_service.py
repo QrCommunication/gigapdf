@@ -5,15 +5,11 @@ Handles all Stripe API interactions for subscriptions, customers, and payments.
 """
 
 import logging
-from datetime import datetime
-from typing import Optional
 
 import stripe
 from stripe import (
-    AuthenticationError,
     CardError,
     InvalidRequestError,
-    RateLimitError,
     StripeError,
 )
 
@@ -78,8 +74,8 @@ class StripeService:
     def create_customer(
         user_id: str,
         email: str,
-        name: Optional[str] = None,
-        metadata: Optional[dict] = None,
+        name: str | None = None,
+        metadata: dict | None = None,
     ) -> stripe.Customer:
         """
         Create a new Stripe customer.
@@ -140,9 +136,9 @@ class StripeService:
     @staticmethod
     def update_customer(
         customer_id: str,
-        email: Optional[str] = None,
-        name: Optional[str] = None,
-        metadata: Optional[dict] = None,
+        email: str | None = None,
+        name: str | None = None,
+        metadata: dict | None = None,
     ) -> stripe.Customer:
         """
         Update a Stripe customer.
@@ -179,8 +175,8 @@ class StripeService:
         price_id: str,
         success_url: str,
         cancel_url: str,
-        trial_days: Optional[int] = None,
-        metadata: Optional[dict] = None,
+        trial_days: int | None = None,
+        metadata: dict | None = None,
     ) -> stripe.checkout.Session:
         """
         Create a Stripe Checkout session for subscription.
@@ -287,7 +283,7 @@ class StripeService:
     @staticmethod
     def list_subscriptions(
         customer_id: str,
-        status: Optional[str] = None,
+        status: str | None = None,
         limit: int = 10,
     ) -> list[stripe.Subscription]:
         """
@@ -414,7 +410,7 @@ class StripeService:
     def list_invoices(
         customer_id: str,
         limit: int = 10,
-        starting_after: Optional[str] = None,
+        starting_after: str | None = None,
     ) -> list[stripe.Invoice]:
         """
         List invoices for a customer.
@@ -670,9 +666,10 @@ class StripeService:
             pass
 
         # Database lookup
+        from sqlalchemy import select
+
         from app.core.database import get_db_session
         from app.models.database import Plan
-        from sqlalchemy import select
 
         async with get_db_session() as session:
             result = await session.execute(
@@ -697,13 +694,14 @@ class StripeService:
         Returns:
             str | None: Stripe price ID or None if not found
         """
+        from sqlalchemy import select
+
         from app.core.database import get_db_session
         from app.models.database import Plan
-        from sqlalchemy import select
 
         async with get_db_session() as session:
             result = await session.execute(
-                select(Plan).where(Plan.slug == plan_slug, Plan.is_active == True)
+                select(Plan).where(Plan.slug == plan_slug, Plan.is_active)
             )
             plan = result.scalar_one_or_none()
             if plan and plan.stripe_price_id:

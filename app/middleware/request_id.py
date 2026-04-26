@@ -7,17 +7,16 @@ enabling distributed tracing and debugging.
 
 import uuid
 from contextvars import ContextVar
-from typing import Optional
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 
 # Context variable to store the current request ID
-request_id_var: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
+request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
 
 
-def get_request_id() -> Optional[str]:
+def get_request_id() -> str | None:
     """
     Get the current request ID from context.
 

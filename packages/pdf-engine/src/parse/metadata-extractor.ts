@@ -60,12 +60,13 @@ export async function extractLayers(doc: PDFDocumentProxy): Promise<LayerObject[
     const optionalContentConfig = await doc.getOptionalContentConfig();
     if (!optionalContentConfig) return [];
 
-    const groups = optionalContentConfig.getGroups();
-    if (!groups) return [];
+    // pdfjs 5.x: OptionalContentConfig is iterable, yields [id, group] pairs
+    const groups = Array.from(optionalContentConfig as Iterable<[unknown, { name?: string }]>);
+    if (groups.length === 0) return [];
 
-    return Object.entries(groups).map(([, group], index) => ({
+    return groups.map(([, group], index) => ({
       layerId: randomUUID(),
-      name: (group as { name?: string }).name ?? `Layer ${index + 1}`,
+      name: group.name ?? `Layer ${index + 1}`,
       visible: true,
       locked: false,
       opacity: 1,

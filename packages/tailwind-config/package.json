@@ -1,9 +1,13 @@
 {
   "name": "@giga-pdf/tailwind-config",
+  "license": "AGPL-3.0-or-later",
   "version": "0.1.0",
   "private": true,
   "main": "tailwind.config.ts",
-  "files": ["*.ts", "*.js"],
+  "files": [
+    "*.ts",
+    "*.js"
+  ],
   "peerDependencies": {
     "tailwindcss": "^4.0.0"
   }

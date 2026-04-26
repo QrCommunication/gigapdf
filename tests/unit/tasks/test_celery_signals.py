@@ -150,12 +150,18 @@ class TestWatchdogPendingTasks:
         assert watchdog_pending_tasks.name == "infra.watchdog_pending_tasks"
 
     def test_watchdog_task_signature(self):
-        """Verify watchdog task has required parameters."""
-        from app.tasks.infra_tasks import watchdog_pending_tasks
+        """Verify watchdog task exposes the expected user-visible parameters.
+
+        Note: Celery's decorator strips ``self`` from the public signature
+        even when ``bind=True``. We therefore inspect only the user-visible
+        arguments here; binding is exercised at runtime by
+        ``test_watchdog_marks_old_pending_jobs_failed``.
+        """
         import inspect
 
+        from app.tasks.infra_tasks import watchdog_pending_tasks
+
         sig = inspect.signature(watchdog_pending_tasks)
-        assert "self" in sig.parameters
         assert "timeout_hours" in sig.parameters
         assert sig.parameters["timeout_hours"].default == 1
 
