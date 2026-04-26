@@ -6,11 +6,11 @@ describe("legal env validation", () => {
   beforeEach(() => {
     for (const key of Object.keys(process.env)) {
       if (key.startsWith("NEXT_PUBLIC_LEGAL_")) {
-        delete process.env[key];
+        delete (process.env as Record<string, string | undefined>)[key];
       }
     }
-    delete process.env.NODE_ENV;
-    delete process.env.NEXT_PUBLIC_APP_URL;
+    delete (process.env as Record<string, string | undefined>).NODE_ENV;
+    delete (process.env as Record<string, string | undefined>).NEXT_PUBLIC_APP_URL;
   });
 
   afterEach(() => {
@@ -41,7 +41,7 @@ describe("legal env validation", () => {
   });
 
   it("warns in dev when env vars are missing (does not throw)", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as Record<string, string | undefined>).NODE_ENV = "development";
     process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.resetModules();
@@ -51,7 +51,7 @@ describe("legal env validation", () => {
   });
 
   it("throws in production when env vars are missing", async () => {
-    process.env.NODE_ENV = "production";
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
     process.env.NEXT_PUBLIC_APP_URL = "https://giga-pdf.com";
     vi.resetModules();
     await expect(import("../env")).rejects.toThrow(
@@ -60,7 +60,7 @@ describe("legal env validation", () => {
   });
 
   it("does not throw in production when NEXT_PUBLIC_APP_URL is localhost (dev override)", async () => {
-    process.env.NODE_ENV = "production";
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
     process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.resetModules();
@@ -69,7 +69,7 @@ describe("legal env validation", () => {
   });
 
   it("rejects an invalid email", async () => {
-    process.env.NODE_ENV = "production";
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
     process.env.NEXT_PUBLIC_APP_URL = "https://giga-pdf.com";
     setLegalEnv({ NEXT_PUBLIC_LEGAL_CONTACT_EMAIL: "not-an-email" });
     vi.resetModules();
