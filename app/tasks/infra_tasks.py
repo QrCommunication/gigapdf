@@ -12,7 +12,7 @@ from celery import shared_task
 from sqlalchemy import delete, select
 
 from app.core.database import get_sync_session
-from app.models.database import InfrastructureMetric, AsyncJob
+from app.models.database import AsyncJob, InfrastructureMetric
 from app.services.infra_metrics_service import infra_metrics_service
 
 logger = logging.getLogger(__name__)

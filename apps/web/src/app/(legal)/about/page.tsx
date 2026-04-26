@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { Building2, Code2, Globe, Heart, Mail, MapPin, Phone, Users } from "lucide-react";
 import Link from "next/link";
+import { env } from "@/lib/env";
 
 export default function AboutPage() {
   const t = useTranslations("legal.about");
@@ -60,16 +61,16 @@ export default function AboutPage() {
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Users className="h-4 w-4" />
-                <span>Rony Licha - CTO & Développeur Full Stack</span>
+                <span>{env.NEXT_PUBLIC_LEGAL_COMPANY_NAME} {env.NEXT_PUBLIC_LEGAL_COMPANY_FORM} — SIREN {env.NEXT_PUBLIC_LEGAL_SIREN}</span>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <MapPin className="h-4 w-4" />
-                <span>Paris, France</span>
+                <span>{env.NEXT_PUBLIC_LEGAL_ADDRESS}</span>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Globe className="h-4 w-4" />
-                <a href="https://ronylicha.net" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                  ronylicha.net
+                <a href="https://github.com/QrCommunication/gigapdf" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  github.com/QrCommunication/gigapdf
                 </a>
               </div>
             </div>

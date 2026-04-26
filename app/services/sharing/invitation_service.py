@@ -10,7 +10,6 @@ Responsibilities:
 import logging
 import secrets
 from datetime import timedelta
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -44,7 +43,7 @@ class InvitationService:
         inviter_id: str,
         invitee_email: str,
         permission: str = SharePermission.EDIT,
-        message: Optional[str] = None,
+        message: str | None = None,
         expires_in_days: int = 7,
     ) -> dict:
         """
@@ -75,7 +74,7 @@ class InvitationService:
                 select(StoredDocument).where(
                     StoredDocument.id == document_id,
                     StoredDocument.owner_id == inviter_id,
-                    StoredDocument.is_deleted == False,
+                    not StoredDocument.is_deleted,
                 )
             )
             document = doc_result.scalar_one_or_none()
@@ -340,7 +339,7 @@ class InvitationService:
                     DocumentShareInvitation.invitee_email == user_email,
                     DocumentShareInvitation.status == InvitationStatus.PENDING,
                     DocumentShareInvitation.expires_at > now_utc(),
-                    StoredDocument.is_deleted == False,
+                    not StoredDocument.is_deleted,
                 )
                 .order_by(DocumentShareInvitation.created_at.desc())
             )

@@ -7,7 +7,6 @@ and cursor tracking for real-time multi-user PDF editing.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import and_, delete, select, update
@@ -75,7 +74,7 @@ class CollaborationManager:
                 and_(
                     CollaborationSession.document_id == document_id,
                     CollaborationSession.user_id == user_id,
-                    CollaborationSession.is_active == True,
+                    CollaborationSession.is_active,
                 )
             )
             result = await session.execute(stmt)
@@ -123,7 +122,7 @@ class CollaborationManager:
     async def remove_session(
         self,
         socket_id: str,
-    ) -> Optional[CollaborationSession]:
+    ) -> CollaborationSession | None:
         """
         Remove a collaboration session by socket ID.
 
@@ -171,7 +170,7 @@ class CollaborationManager:
         page: int,
         x: float,
         y: float,
-    ) -> Optional[CollaborationSession]:
+    ) -> CollaborationSession | None:
         """
         Update user cursor position.
 
@@ -220,7 +219,7 @@ class CollaborationManager:
             stmt = select(CollaborationSession).where(
                 and_(
                     CollaborationSession.document_id == document_id,
-                    CollaborationSession.is_active == True,
+                    CollaborationSession.is_active,
                 )
             )
             result = await session.execute(stmt)
@@ -233,7 +232,7 @@ class CollaborationManager:
         user_id: str,
         session_id: str,
         duration_seconds: int = LOCK_EXPIRATION_SECONDS,
-    ) -> tuple[bool, Optional[ElementLock]]:
+    ) -> tuple[bool, ElementLock | None]:
         """
         Acquire a lock on an element for editing.
 
@@ -416,7 +415,7 @@ class CollaborationManager:
             # Find inactive sessions
             stmt = select(CollaborationSession).where(
                 and_(
-                    CollaborationSession.is_active == True,
+                    CollaborationSession.is_active,
                     CollaborationSession.last_seen_at < cutoff_time,
                 )
             )
@@ -460,7 +459,7 @@ class CollaborationManager:
         stmt = select(CollaborationSession.user_color).where(
             and_(
                 CollaborationSession.document_id == document_id,
-                CollaborationSession.is_active == True,
+                CollaborationSession.is_active,
             )
         )
         result = await session.execute(stmt)

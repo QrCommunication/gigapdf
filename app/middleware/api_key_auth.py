@@ -10,7 +10,6 @@ and the existing JWT auth flow takes over.
 
 import hashlib
 import logging
-from typing import Optional
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
@@ -33,7 +32,7 @@ def _hash_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.encode()).hexdigest()
 
 
-def _extract_origin(request: Request) -> Optional[str]:
+def _extract_origin(request: Request) -> str | None:
     """
     Return the caller's origin from the ``Origin`` or ``Referer`` header.
 
@@ -62,7 +61,7 @@ def _extract_origin(request: Request) -> Optional[str]:
     return None
 
 
-def _is_domain_allowed(origin: Optional[str], allowed_domains: Optional[str]) -> bool:
+def _is_domain_allowed(origin: str | None, allowed_domains: str | None) -> bool:
     """
     Verify that *origin* is in the comma-separated *allowed_domains* list.
 
@@ -309,7 +308,7 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
     # Private helpers
     # ------------------------------------------------------------------
 
-    async def _lookup_key(self, raw_key: str, *, publishable: bool = False) -> Optional[ApiKey]:
+    async def _lookup_key(self, raw_key: str, *, publishable: bool = False) -> ApiKey | None:
         """
         Hash *raw_key* and return the matching active ``ApiKey`` row.
 
@@ -403,8 +402,8 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
         self,
         event_type: SecurityEventType,
         request: Request,
-        user_id: Optional[str] = None,
-        extra_data: Optional[dict] = None,
+        user_id: str | None = None,
+        extra_data: dict | None = None,
     ) -> None:
         """
         Persist a security audit event for a failed API key authentication attempt.

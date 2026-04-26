@@ -6,15 +6,15 @@ annotations, and form fields. All coordinates use web-standard system
 (origin top-left, Y increases downward).
 """
 
-from enum import Enum
-from typing import Annotated, Literal, Optional, Union
+from enum import StrEnum
+from typing import Annotated, Literal
 
 from pydantic import Field
 
 from app.models.base import CamelCaseModel
 
 
-class ElementType(str, Enum):
+class ElementType(StrEnum):
     """Types of elements that can exist on a PDF page."""
 
     TEXT = "text"
@@ -55,7 +55,7 @@ class ElementBase(CamelCaseModel):
     type: ElementType = Field(description="Element type")
     bounds: Bounds = Field(description="Bounding rectangle")
     transform: Transform = Field(default_factory=Transform, description="Transformation")
-    layer_id: Optional[str] = Field(default=None, description="Optional layer ID")
+    layer_id: str | None = Field(default=None, description="Optional layer ID")
     locked: bool = Field(default=False, description="Whether element is locked")
     visible: bool = Field(default=True, description="Whether element is visible")
 
@@ -81,14 +81,14 @@ class TextStyle(CamelCaseModel):
     # Additional text decorations
     underline: bool = Field(default=False, description="Underline decoration")
     strikethrough: bool = Field(default=False, description="Strikethrough decoration")
-    background_color: Optional[str] = Field(
+    background_color: str | None = Field(
         default=None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Text background/highlight color"
     )
     vertical_align: Literal["baseline", "superscript", "subscript"] = Field(
         default="baseline", description="Vertical alignment for super/subscript"
     )
     # Original font info for 1:1 rendering
-    original_font: Optional[str] = Field(default=None, description="Original PDF font name")
+    original_font: str | None = Field(default=None, description="Original PDF font name")
 
 
 class TextElement(ElementBase):
@@ -97,12 +97,12 @@ class TextElement(ElementBase):
     type: Literal[ElementType.TEXT] = ElementType.TEXT
     content: str = Field(description="Text content")
     style: TextStyle = Field(default_factory=TextStyle, description="Text styling")
-    ocr_confidence: Optional[float] = Field(
+    ocr_confidence: float | None = Field(
         default=None, ge=0, le=100, description="OCR confidence score if from OCR"
     )
     # Link support for clickable text
-    link_url: Optional[str] = Field(default=None, description="External URL if text is a link")
-    link_page: Optional[int] = Field(default=None, description="Internal page number if text is a link")
+    link_url: str | None = Field(default=None, description="External URL if text is a link")
+    link_page: int | None = Field(default=None, description="Internal page number if text is a link")
 
 
 # =============================================================================
@@ -145,7 +145,7 @@ class ImageElement(ElementBase):
     type: Literal[ElementType.IMAGE] = ElementType.IMAGE
     source: ImageSource = Field(description="Image source information")
     style: ImageStyle = Field(default_factory=ImageStyle, description="Image styling")
-    crop: Optional[ImageCrop] = Field(default=None, description="Optional crop region")
+    crop: ImageCrop | None = Field(default=None, description="Optional crop region")
 
 
 # =============================================================================
@@ -153,7 +153,7 @@ class ImageElement(ElementBase):
 # =============================================================================
 
 
-class ShapeType(str, Enum):
+class ShapeType(StrEnum):
     """Types of shapes that can be drawn."""
 
     RECTANGLE = "rectangle"
@@ -174,18 +174,18 @@ class ShapeGeometry(CamelCaseModel):
     """Geometry definition for shapes."""
 
     points: list[Point] = Field(default_factory=list, description="Points for polygon/path")
-    path_data: Optional[str] = Field(default=None, description="SVG path syntax for complex shapes")
+    path_data: str | None = Field(default=None, description="SVG path syntax for complex shapes")
     corner_radius: float = Field(default=0.0, ge=0, description="Corner radius for rectangles")
 
 
 class ShapeStyle(CamelCaseModel):
     """Styling for shape elements."""
 
-    fill_color: Optional[str] = Field(
+    fill_color: str | None = Field(
         default=None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Fill color (hex)"
     )
     fill_opacity: float = Field(default=1.0, ge=0, le=1)
-    stroke_color: Optional[str] = Field(
+    stroke_color: str | None = Field(
         default=None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Stroke color (hex)"
     )
     stroke_width: float = Field(default=0.0, ge=0, description="Stroke width in points")
@@ -209,7 +209,7 @@ class ShapeElement(ElementBase):
 # =============================================================================
 
 
-class AnnotationType(str, Enum):
+class AnnotationType(StrEnum):
     """Types of PDF annotations."""
 
     HIGHLIGHT = "highlight"
@@ -226,9 +226,9 @@ class LinkDestination(CamelCaseModel):
     """Destination for a link annotation."""
 
     type: Literal["internal", "external"] = Field(description="Link type")
-    page_number: Optional[int] = Field(default=None, description="Target page (internal)")
-    url: Optional[str] = Field(default=None, description="Target URL (external)")
-    position: Optional[Point] = Field(default=None, description="Position on target page")
+    page_number: int | None = Field(default=None, description="Target page (internal)")
+    url: str | None = Field(default=None, description="Target URL (external)")
+    position: Point | None = Field(default=None, description="Position on target page")
 
 
 class AnnotationPopup(CamelCaseModel):
@@ -252,10 +252,10 @@ class AnnotationElement(ElementBase):
     annotation_type: AnnotationType = Field(description="Type of annotation")
     content: str = Field(default="", description="Annotation text content")
     style: AnnotationStyle = Field(default_factory=AnnotationStyle)
-    link_destination: Optional[LinkDestination] = Field(
+    link_destination: LinkDestination | None = Field(
         default=None, description="Link destination (for link annotations)"
     )
-    popup: Optional[AnnotationPopup] = Field(
+    popup: AnnotationPopup | None = Field(
         default=None, description="Popup configuration"
     )
 
@@ -265,7 +265,7 @@ class AnnotationElement(ElementBase):
 # =============================================================================
 
 
-class FieldType(str, Enum):
+class FieldType(StrEnum):
     """Types of form fields."""
 
     TEXT = "text"
@@ -283,7 +283,7 @@ class FieldFormat(CamelCaseModel):
     type: Literal["none", "number", "date", "time", "percentage", "currency"] = Field(
         default="none"
     )
-    pattern: Optional[str] = Field(default=None, description="Custom format pattern")
+    pattern: str | None = Field(default=None, description="Custom format pattern")
 
 
 class FieldProperties(CamelCaseModel):
@@ -291,7 +291,7 @@ class FieldProperties(CamelCaseModel):
 
     required: bool = Field(default=False)
     read_only: bool = Field(default=False)
-    max_length: Optional[int] = Field(default=None, ge=1)
+    max_length: int | None = Field(default=None, ge=1)
     multiline: bool = Field(default=False)
     password: bool = Field(default=False)
     comb: bool = Field(default=False, description="Characters in separate cells")
@@ -304,8 +304,8 @@ class FieldStyle(CamelCaseModel):
     font_family: str = Field(default="Helvetica")
     font_size: float = Field(default=12.0, ge=1)
     text_color: str = Field(default="#000000", pattern=r"^#[0-9A-Fa-f]{6}$")
-    background_color: Optional[str] = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
-    border_color: Optional[str] = Field(default="#000000", pattern=r"^#[0-9A-Fa-f]{6}$")
+    background_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    border_color: str | None = Field(default="#000000", pattern=r"^#[0-9A-Fa-f]{6}$")
     border_width: float = Field(default=1.0, ge=0)
 
 
@@ -315,9 +315,9 @@ class FormFieldElement(ElementBase):
     type: Literal[ElementType.FORM_FIELD] = ElementType.FORM_FIELD
     field_type: FieldType = Field(description="Type of form field")
     field_name: str = Field(description="Technical field name")
-    value: Union[str, bool, list[str]] = Field(default="", description="Current field value")
-    default_value: Union[str, bool, list[str]] = Field(default="", description="Default value")
-    options: Optional[list[str]] = Field(
+    value: str | bool | list[str] = Field(default="", description="Current field value")
+    default_value: str | bool | list[str] = Field(default="", description="Default value")
+    options: list[str] | None = Field(
         default=None, description="Options for dropdown/listbox/radio"
     )
     properties: FieldProperties = Field(default_factory=FieldProperties)
@@ -329,6 +329,6 @@ class FormFieldElement(ElementBase):
 # =============================================================================
 
 Element = Annotated[
-    Union[TextElement, ImageElement, ShapeElement, AnnotationElement, FormFieldElement],
+    TextElement | ImageElement | ShapeElement | AnnotationElement | FormFieldElement,
     Field(discriminator="type"),
 ]

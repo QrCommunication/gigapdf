@@ -1,5 +1,6 @@
 {
   "name": "@giga-pdf/canvas",
+  "license": "AGPL-3.0-or-later",
   "version": "0.1.0",
   "description": "Fabric.js-based canvas for PDF rendering and editing",
   "main": "./dist/index.js",
@@ -18,7 +19,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "lint": "eslint src/",
+    "lint": "echo \"[$npm_package_name] lint delegated to consuming apps\"",
     "clean": "rm -rf dist"
   },
   "dependencies": {

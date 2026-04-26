@@ -12,8 +12,8 @@ check — the dependency is applied once at the router level via
 
 from fastapi import APIRouter, Depends
 
-from app.api.v1.admin import stats, users, documents, jobs, logs, settings, tenants, infrastructure
 from app.api.dependencies.admin import get_current_admin_user
+from app.api.v1.admin import documents, infrastructure, jobs, logs, settings, stats, tenants, users
 
 # The Depends(get_current_admin_user) applied here runs before EVERY route
 # registered on admin_router (including all sub-routers included below).

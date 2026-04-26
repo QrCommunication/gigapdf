@@ -5,10 +5,9 @@ Provides system settings management for the admin panel.
 """
 
 import os
-from typing import Optional
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel, EmailStr
+from fastapi import APIRouter
+from pydantic import BaseModel
 
 from app.config import get_settings
 
@@ -29,15 +28,15 @@ class SystemSettings(BaseModel):
 
     # Storage
     storage_provider: str = "s3"
-    storage_bucket: Optional[str] = None
-    storage_region: Optional[str] = None
-    storage_endpoint: Optional[str] = None
+    storage_bucket: str | None = None
+    storage_region: str | None = None
+    storage_endpoint: str | None = None
 
     # Email (SMTP)
-    smtp_host: Optional[str] = None
+    smtp_host: str | None = None
     smtp_port: int = 587
-    smtp_user: Optional[str] = None
-    smtp_from: Optional[str] = None
+    smtp_user: str | None = None
+    smtp_from: str | None = None
     smtp_secure: bool = True
 
     # Features
@@ -51,29 +50,29 @@ class SystemSettings(BaseModel):
 class SettingsUpdateRequest(BaseModel):
     """Settings update request (partial)."""
     # General
-    system_name: Optional[str] = None
-    system_url: Optional[str] = None
-    support_email: Optional[str] = None
+    system_name: str | None = None
+    system_url: str | None = None
+    support_email: str | None = None
 
     # Limits
-    max_file_size_mb: Optional[int] = None
-    max_pages_per_document: Optional[int] = None
-    max_documents_per_user: Optional[int] = None
+    max_file_size_mb: int | None = None
+    max_pages_per_document: int | None = None
+    max_documents_per_user: int | None = None
 
     # Email
-    smtp_host: Optional[str] = None
-    smtp_port: Optional[int] = None
-    smtp_user: Optional[str] = None
-    smtp_password: Optional[str] = None
-    smtp_from: Optional[str] = None
-    smtp_secure: Optional[bool] = None
+    smtp_host: str | None = None
+    smtp_port: int | None = None
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str | None = None
+    smtp_secure: bool | None = None
 
     # Features
-    enable_registration: Optional[bool] = None
-    enable_public_sharing: Optional[bool] = None
-    enable_ocr: Optional[bool] = None
-    enable_collaboration: Optional[bool] = None
-    maintenance_mode: Optional[bool] = None
+    enable_registration: bool | None = None
+    enable_public_sharing: bool | None = None
+    enable_ocr: bool | None = None
+    enable_collaboration: bool | None = None
+    maintenance_mode: bool | None = None
 
 
 # In-memory settings store (in production, use database or config file)
@@ -82,7 +81,7 @@ _settings_store: dict = {}
 
 def get_current_settings() -> SystemSettings:
     """Get current system settings."""
-    settings = get_settings()
+    get_settings()
 
     # Merge environment settings with stored settings
     base_settings = {
@@ -608,7 +607,7 @@ async def get_storage_info():
         )
 
         # Get bucket location
-        location = s3_client.get_bucket_location(Bucket=settings.storage_bucket)
+        s3_client.get_bucket_location(Bucket=settings.storage_bucket)
 
         # Count objects (limited for performance)
         paginator = s3_client.get_paginator('list_objects_v2')

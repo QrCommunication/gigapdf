@@ -13,16 +13,15 @@ import io
 import logging
 import os
 import zipfile
-from datetime import datetime, timezone, timedelta
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import httpx
-import pikepdf
 import pdfplumber
+import pikepdf
 
-from app.tasks.celery_app import celery_app
 from app.config import get_settings
+from app.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -127,7 +126,7 @@ def _save_export_data(data: bytes, format: str, document_id: str) -> str:
     _ensure_export_dir()
 
     # Generate unique filename with timestamp
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     unique_id = str(uuid4())[:8]
     filename = f"{document_id}_{timestamp}_{unique_id}.{format}"
     filepath = os.path.join(EXPORT_DIR, filename)
@@ -139,7 +138,7 @@ def _save_export_data(data: bytes, format: str, document_id: str) -> str:
     return filepath
 
 
-def _get_document_bytes(document_id: str) -> Optional[bytes]:
+def _get_document_bytes(document_id: str) -> bytes | None:
     """
     Get document bytes from storage service.
 
@@ -149,10 +148,11 @@ def _get_document_bytes(document_id: str) -> Optional[bytes]:
 
     async def _load_from_storage():
         """Load document from storage service."""
-        from app.core.database import get_db_session
-        from app.models.database import StoredDocument, DocumentVersion
-        from app.services.storage_service import storage_service
         from sqlalchemy import select
+
+        from app.core.database import get_db_session
+        from app.models.database import DocumentVersion, StoredDocument
+        from app.services.storage_service import storage_service
 
         async with get_db_session() as session:
             # First try to find stored document by session ID (document_id)
@@ -217,7 +217,7 @@ def export_document(
     self,
     document_id: str,
     format: str,
-    page_range: Optional[str] = None,
+    page_range: str | None = None,
     dpi: int = 150,
     quality: int = 85,
     single_file: bool = False,
@@ -444,7 +444,6 @@ def export_document(
     # Word (DOCX) format — pdfplumber replaces fitz page.get_text("dict")
     elif format == "docx":
         from docx import Document as DocxDocument
-        from docx.shared import Pt
 
         docx_doc = DocxDocument()
 
@@ -589,7 +588,7 @@ def cleanup_expired_exports(max_age_hours: int = 24) -> dict:
     """
     _ensure_export_dir()
 
-    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    cutoff_time = datetime.now(UTC) - timedelta(hours=max_age_hours)
     deleted_count = 0
     deleted_bytes = 0
     errors = []
@@ -600,7 +599,7 @@ def cleanup_expired_exports(max_age_hours: int = 24) -> dict:
 
             try:
                 # Check file modification time
-                mtime = datetime.fromtimestamp(os.path.getmtime(filepath), tz=timezone.utc)
+                mtime = datetime.fromtimestamp(os.path.getmtime(filepath), tz=UTC)
 
                 if mtime < cutoff_time:
                     file_size = os.path.getsize(filepath)

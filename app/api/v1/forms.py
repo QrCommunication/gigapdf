@@ -4,16 +4,12 @@ Form operations endpoints.
 Handles form field listing, filling, creation, and flattening operations.
 """
 
-import time
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from app.middleware.auth import OptionalUser
-from app.middleware.request_id import get_request_id
-from app.schemas.responses.common import APIResponse, MetaInfo
-from app.utils.helpers import now_utc
-from pydantic import BaseModel, Field
+from app.schemas.responses.common import APIResponse
 
 router = APIRouter()
 
@@ -52,10 +48,10 @@ class CreateFormFieldRequest(BaseModel):
     field_type: str = Field(description="Type of form field (text, checkbox, radio, dropdown, etc.)")
     field_name: str = Field(description="Technical field name")
     bounds: dict = Field(description="Field bounds {x, y, width, height}")
-    value: Optional[str | bool | list[str]] = Field(default=None, description="Initial value")
-    options: Optional[list[str]] = Field(default=None, description="Options for dropdown/listbox/radio")
-    properties: Optional[dict] = Field(default=None, description="Field properties")
-    style: Optional[dict] = Field(default=None, description="Field styling")
+    value: str | bool | list[str] | None = Field(default=None, description="Initial value")
+    options: list[str] | None = Field(default=None, description="Options for dropdown/listbox/radio")
+    properties: dict | None = Field(default=None, description="Field properties")
+    style: dict | None = Field(default=None, description="Field styling")
 
     class Config:
         json_schema_extra = {

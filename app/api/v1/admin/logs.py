@@ -7,11 +7,10 @@ various sources: jobs, documents, etc.
 """
 
 from datetime import datetime, timedelta
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select, union_all, literal
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -26,8 +25,8 @@ class LogEntry(BaseModel):
     level: str  # info, warning, error, success
     message: str
     source: str  # system, user, job, document
-    user_id: Optional[str] = None
-    metadata: Optional[dict] = None
+    user_id: str | None = None
+    metadata: dict | None = None
     timestamp: datetime
 
 
@@ -151,11 +150,11 @@ Results are sorted from newest to oldest across all sources.
 async def list_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
-    level: Optional[str] = Query(None),
-    source: Optional[str] = Query(None),
-    user_id: Optional[str] = Query(None),
-    start_date: Optional[datetime] = Query(None),
-    end_date: Optional[datetime] = Query(None),
+    level: str | None = Query(None),
+    source: str | None = Query(None),
+    user_id: str | None = Query(None),
+    start_date: datetime | None = Query(None),
+    end_date: datetime | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -569,8 +568,8 @@ Optionally narrow the export window with `start_date` and `end_date`
 )
 async def export_logs(
     format: str = Query("json", regex="^(json|csv)$"),
-    start_date: Optional[datetime] = Query(None),
-    end_date: Optional[datetime] = Query(None),
+    start_date: datetime | None = Query(None),
+    end_date: datetime | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -593,8 +592,8 @@ async def export_logs(
         }
     else:
         # CSV format
-        import io
         import csv
+        import io
 
         output = io.StringIO()
         writer = csv.writer(output)

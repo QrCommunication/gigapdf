@@ -6,7 +6,6 @@ and other PDF-level structures.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import ConfigDict, Field
 
@@ -32,14 +31,14 @@ class DocumentPermissions(CamelCaseModel):
 class DocumentMetadata(CamelCaseModel):
     """PDF document metadata (XMP and info dict)."""
 
-    title: Optional[str] = Field(default=None, description="Document title")
-    author: Optional[str] = Field(default=None, description="Document author")
-    subject: Optional[str] = Field(default=None, description="Document subject")
+    title: str | None = Field(default=None, description="Document title")
+    author: str | None = Field(default=None, description="Document author")
+    subject: str | None = Field(default=None, description="Document subject")
     keywords: list[str] = Field(default_factory=list, description="Document keywords")
-    creator: Optional[str] = Field(default=None, description="Creating application")
-    producer: Optional[str] = Field(default=None, description="PDF producer")
-    creation_date: Optional[datetime] = Field(default=None, description="Creation date")
-    modification_date: Optional[datetime] = Field(default=None, description="Last modification")
+    creator: str | None = Field(default=None, description="Creating application")
+    producer: str | None = Field(default=None, description="PDF producer")
+    creation_date: datetime | None = Field(default=None, description="Creation date")
+    modification_date: datetime | None = Field(default=None, description="Last modification")
     page_count: int = Field(ge=0, description="Total number of pages")
     pdf_version: str = Field(default="1.7", description="PDF version")
     is_encrypted: bool = Field(default=False, description="Whether PDF is encrypted")
@@ -55,9 +54,9 @@ class EmbeddedFileObject(CamelCaseModel):
     name: str = Field(description="Original filename")
     mime_type: str = Field(description="MIME type")
     size_bytes: int = Field(ge=0, description="File size in bytes")
-    description: Optional[str] = Field(default=None, description="File description")
-    creation_date: Optional[datetime] = Field(default=None)
-    modification_date: Optional[datetime] = Field(default=None)
+    description: str | None = Field(default=None, description="File description")
+    creation_date: datetime | None = Field(default=None)
+    modification_date: datetime | None = Field(default=None)
     data_url: str = Field(description="URL to download the file")
 
 
@@ -66,8 +65,8 @@ class NamedDestination(CamelCaseModel):
 
     name: str = Field(description="Destination name")
     page_number: int = Field(ge=1, description="Target page number")
-    position: Optional[dict[str, float]] = Field(default=None, description="Position on page")
-    zoom: Optional[float] = Field(default=None, ge=0, description="Zoom level")
+    position: dict[str, float] | None = Field(default=None, description="Position on page")
+    zoom: float | None = Field(default=None, ge=0, description="Zoom level")
 
 
 class DocumentObject(CamelCaseModel):
@@ -123,7 +122,7 @@ class DocumentSummary(CamelCaseModel):
     """Lightweight document representation for listings."""
 
     document_id: str = Field(description="Unique document identifier")
-    title: Optional[str] = Field(default=None)
+    title: str | None = Field(default=None)
     page_count: int = Field(ge=0)
     is_encrypted: bool = Field(default=False)
     created_at: datetime

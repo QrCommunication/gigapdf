@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { FileText, Scale, ShieldCheck, CreditCard, AlertTriangle, Gavel, Code2, Mail, Server, Ban } from "lucide-react";
+import { env } from "@/lib/env";
 
 export default function TermsPage() {
   const t = useTranslations("legal.terms");
@@ -48,10 +49,11 @@ export default function TermsPage() {
         <div className="grid gap-4 md:grid-cols-2 not-prose">
           <div className="rounded-xl border border-border bg-card/50 p-6 font-mono text-sm space-y-1">
             <p className="text-muted-foreground mb-2"># Publisher</p>
-            <p><span className="text-terminal-cyan">name:</span> "Rony Licha"</p>
-            <p><span className="text-terminal-cyan">role:</span> "Independent Developer"</p>
-            <p><span className="text-terminal-cyan">location:</span> "Paris, France"</p>
-            <p><span className="text-terminal-cyan">email:</span> <a href="mailto:rony@ronylicha.net" className="text-primary hover:underline">"rony@ronylicha.net"</a></p>
+            <p><span className="text-terminal-cyan">name:</span> "{env.NEXT_PUBLIC_LEGAL_COMPANY_NAME}"</p>
+            <p><span className="text-terminal-cyan">form:</span> "{env.NEXT_PUBLIC_LEGAL_COMPANY_FORM}"</p>
+            <p><span className="text-terminal-cyan">siren:</span> "{env.NEXT_PUBLIC_LEGAL_SIREN}"</p>
+            <p><span className="text-terminal-cyan">address:</span> "{env.NEXT_PUBLIC_LEGAL_ADDRESS}"</p>
+            <p><span className="text-terminal-cyan">email:</span> <a href={`mailto:${env.NEXT_PUBLIC_LEGAL_CONTACT_EMAIL}`} className="text-primary hover:underline">"{env.NEXT_PUBLIC_LEGAL_CONTACT_EMAIL}"</a></p>
           </div>
           <div className="rounded-xl border border-border bg-card/50 p-6 font-mono text-sm space-y-1">
             <p className="text-muted-foreground mb-2"># {t("publisher.hosting")}</p>

@@ -1,0 +1,82 @@
+name: 🐛 Bug Report
+description: Report a reproducible bug
+title: "[Bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in the
+        sections below so we can reproduce and fix it quickly.
+
+        **Security issues should NOT be reported here** — see
+        [SECURITY.md](https://github.com/QrCommunication/gigapdf/blob/main/SECURITY.md).
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Output of `git rev-parse HEAD` if self-hosted, or release tag
+      placeholder: "e.g. v1.0.0 or commit abc1234"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered list of exact steps
+      placeholder: |
+        1. Open editor at /editor/abc
+        2. Click "Add Text"
+        3. Type "hello"
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Browser console / server logs
+      description: Paste relevant errors. Redact any secrets.
+      render: shell
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - "Cloud (giga-pdf.com)"
+        - "Self-hosted (Docker)"
+        - "Self-hosted (other)"
+        - "Local development"
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser + version
+      placeholder: "e.g. Chrome 134, Firefox 132"
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      options:
+        - label: I agree to follow the [Code of Conduct](https://github.com/QrCommunication/gigapdf/blob/main/CODE_OF_CONDUCT.md)
+          required: true

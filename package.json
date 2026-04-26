@@ -4,6 +4,16 @@
   "private": true,
   "packageManager": "pnpm@10.28.0",
   "description": "Giga-PDF - WYSIWYG PDF Editing Platform",
+  "license": "AGPL-3.0-or-later",
+  "author": "QR Communication SAS <contact@qrcommunication.com>",
+  "homepage": "https://github.com/QrCommunication/gigapdf#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/QrCommunication/gigapdf.git"
+  },
+  "bugs": {
+    "url": "https://github.com/QrCommunication/gigapdf/issues"
+  },
   "pnpm": {
     "overrides": {
       "react": "19.2.3",
@@ -28,6 +38,7 @@
       "minimatch@>=9.0.0 <9.0.7": ">=9.0.7",
       "minimatch@>=10.0.0 <10.2.3": ">=10.2.3",
       "minimatch@<3.1.4": ">=3.1.4",
+      "@eslint/config-array@<0.23.0": ">=0.23.0",
       "fast-xml-parser@>=5.0.0 <5.3.5": ">=5.3.5",
       "fast-xml-parser@>=5.0.0 <5.3.6": ">=5.3.6",
       "ajv@<6.14.0": ">=6.14.0",

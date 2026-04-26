@@ -9,7 +9,6 @@ import logging
 import subprocess
 from collections import defaultdict
 from datetime import datetime
-from typing import Optional
 
 from app.schemas.infrastructure import (
     CategoryCost,
@@ -27,11 +26,11 @@ class ScalewayService:
 
     def __init__(self):
         """Initialize the Scaleway service."""
-        self._billing_cache: Optional[dict] = None
-        self._billing_cache_time: Optional[datetime] = None
+        self._billing_cache: dict | None = None
+        self._billing_cache_time: datetime | None = None
         self._cache_ttl_seconds = 300  # 5 minutes cache
 
-    def _run_scw_command(self, args: list[str]) -> Optional[dict]:
+    def _run_scw_command(self, args: list[str]) -> dict | None:
         """
         Run a Scaleway CLI command and return JSON output.
 
@@ -76,7 +75,7 @@ class ScalewayService:
         elapsed = (datetime.utcnow() - self._billing_cache_time).total_seconds()
         return elapsed < self._cache_ttl_seconds
 
-    def get_current_costs(self, billing_period: Optional[str] = None) -> CurrentCostsResponse:
+    def get_current_costs(self, billing_period: str | None = None) -> CurrentCostsResponse:
         """
         Get current billing period costs from Scaleway.
 
@@ -196,7 +195,7 @@ class ScalewayService:
 
         return CostHistoryResponse(history=history)
 
-    def get_server_info(self, server_id: str) -> Optional[dict]:
+    def get_server_info(self, server_id: str) -> dict | None:
         """
         Get server information from Scaleway.
 

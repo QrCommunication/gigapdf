@@ -16,14 +16,13 @@ converting images to searchable text.
 
 import io
 import logging
-from typing import Optional
+from collections.abc import Callable
 
 # fitz (PyMuPDF) removed — rendering via pdfplumber + Pillow
 import pdfplumber
-from PIL import Image
 
 from app.config import get_settings
-from app.models.elements import Bounds, TextElement, TextStyle, Transform, ElementType
+from app.models.elements import Bounds, ElementType, TextElement, TextStyle, Transform
 from app.utils.coordinates import Rect
 from app.utils.helpers import generate_uuid
 
@@ -65,8 +64,8 @@ class OCRProcessor:
         languages: str = "eng",
         confidence_threshold: float = 60.0,
         *,
-        pdf_bytes: Optional[bytes] = None,
-        pdf_page_index: Optional[int] = None,
+        pdf_bytes: bytes | None = None,
+        pdf_page_index: int | None = None,
     ) -> list[TextElement]:
         """
         Perform OCR on a page and return text elements.
@@ -100,8 +99,8 @@ class OCRProcessor:
             # Determine page dimensions and render to PIL Image via pdfplumber
             if isinstance(page, pdfplumber.page.Page):
                 # Native pdfplumber path
-                page_width = float(page.width)
-                page_height = float(page.height)
+                float(page.width)
+                float(page.height)
                 # Render at 300 DPI (pdfplumber default bbox is in points, 72pt = 1 inch)
                 img = page.to_image(resolution=300).original
                 if img.mode != "RGB":
@@ -115,8 +114,8 @@ class OCRProcessor:
                     return []
                 with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
                     plumber_page = pdf.pages[pdf_page_index]
-                    page_width = float(plumber_page.width)
-                    page_height = float(plumber_page.height)
+                    float(plumber_page.width)
+                    float(plumber_page.height)
                     img = plumber_page.to_image(resolution=300).original
                     if img.mode != "RGB":
                         img = img.convert("RGB")
@@ -189,12 +188,12 @@ class OCRProcessor:
     def process_document(
         self,
         doc: object,
-        page_numbers: Optional[list[int]] = None,
+        page_numbers: list[int] | None = None,
         languages: str = "eng",
         confidence_threshold: float = 60.0,
-        progress_callback: Optional[callable] = None,
+        progress_callback: Callable[[float, str], None] | None = None,
         *,
-        pdf_bytes: Optional[bytes] = None,
+        pdf_bytes: bytes | None = None,
     ) -> dict[int, list[TextElement]]:
         """
         Perform OCR on multiple pages.

@@ -6,7 +6,6 @@ Handles collection and retrieval of system performance metrics.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
 import boto3
 import psutil
@@ -36,7 +35,7 @@ class InfraMetricsService:
 
     def __init__(self):
         """Initialize the metrics service."""
-        self._s3_client: Optional[boto3.client] = None
+        self._s3_client: boto3.client | None = None
 
     def _get_s3_client(self) -> boto3.client:
         """Get or create S3 client."""

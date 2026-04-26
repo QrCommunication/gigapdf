@@ -5,7 +5,7 @@ General helper utilities for Giga-PDF.
 import hashlib
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -144,7 +144,7 @@ def now_utc() -> datetime:
     Returns:
         datetime: Current time in UTC with timezone info.
     """
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def now_utc_naive() -> datetime:

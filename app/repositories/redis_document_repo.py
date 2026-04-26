@@ -31,7 +31,7 @@ import logging
 import threading
 from collections import OrderedDict
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 import pikepdf  # MIT-licensed replacement for PyMuPDF
 import redis.asyncio as redis
@@ -93,13 +93,13 @@ class RedisDocumentSessionManager:
         self._lock = threading.RLock()
         self.max_local_sessions = max_local_sessions
         self.session_timeout_minutes = session_timeout_minutes
-        self._redis: Optional[redis.Redis] = None
+        self._redis: redis.Redis | None = None
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _get_redis(self) -> Optional[redis.Redis]:
+    async def _get_redis(self) -> redis.Redis | None:
         """Get Redis client, returning None on failure (degraded mode)."""
         try:
             if self._redis is None:
@@ -184,10 +184,10 @@ class RedisDocumentSessionManager:
         document_id: str,
         pdf_doc: Any,  # LegacyDocumentProxy | pikepdf.Pdf | bytes-wrapper
         scene_graph: DocumentObject,
-        owner_id: Optional[str] = None,
-        filename: Optional[str] = None,
+        owner_id: str | None = None,
+        filename: str | None = None,
         file_size: int = 0,
-        pdf_bytes: Optional[bytes] = None,
+        pdf_bytes: bytes | None = None,
     ) -> DocumentSession:
         """
         Create a new document session and persist to Redis immediately.
@@ -275,7 +275,7 @@ class RedisDocumentSessionManager:
 
         return session
 
-    async def get_session(self, document_id: str) -> Optional[DocumentSession]:
+    async def get_session(self, document_id: str) -> DocumentSession | None:
         """
         Get session, checking local cache first then Redis.
 
@@ -302,11 +302,11 @@ class RedisDocumentSessionManager:
         return await self._load_from_redis(document_id)
 
     # Alias for backward compat with callers that use get_session_async()
-    async def get_session_async(self, document_id: str) -> Optional[DocumentSession]:
+    async def get_session_async(self, document_id: str) -> DocumentSession | None:
         """Alias for get_session() — always async and Redis-aware."""
         return await self.get_session(document_id)
 
-    def get_session_sync(self, document_id: str) -> Optional[DocumentSession]:
+    def get_session_sync(self, document_id: str) -> DocumentSession | None:
         """
         Synchronous local-cache-only lookup.
 
@@ -331,7 +331,7 @@ class RedisDocumentSessionManager:
                 return session
         return None
 
-    async def _load_from_redis(self, document_id: str) -> Optional[DocumentSession]:
+    async def _load_from_redis(self, document_id: str) -> DocumentSession | None:
         """Load session from Redis and populate local cache."""
         redis_client = await self._get_redis()
         if not redis_client:
@@ -606,8 +606,8 @@ class RedisDocumentSessionManager:
         self,
         document_id: str,
         action: str,
-        affected_elements: Optional[list[str]] = None,
-        affected_pages: Optional[list[int]] = None,
+        affected_elements: list[str] | None = None,
+        affected_pages: list[int] | None = None,
     ) -> None:
         """
         Push a new history entry into the local session.
@@ -652,7 +652,7 @@ class RedisDocumentSessionManager:
     # Session listing
     # ------------------------------------------------------------------
 
-    def list_sessions(self, owner_id: Optional[str] = None) -> list[dict[str, Any]]:
+    def list_sessions(self, owner_id: str | None = None) -> list[dict[str, Any]]:
         """
         List sessions from local cache only.
 
@@ -729,7 +729,7 @@ class RedisDocumentSessionManager:
             self._embed_sessions_local: dict[str, dict[str, str]] = {}
         self._embed_sessions_local[session_id] = {"document_id": document_id, "user_id": user_id}
 
-    async def get_embed_session(self, session_id: str) -> Optional[dict[str, str]]:
+    async def get_embed_session(self, session_id: str) -> dict[str, str] | None:
         """
         Retrieve an embed session mapping from Redis (or local fallback).
         """

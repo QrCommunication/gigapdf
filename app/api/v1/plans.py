@@ -6,12 +6,11 @@ Public endpoint to list active plans for users.
 """
 
 from decimal import Decimal
-from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select, update
+from sqlalchemy import select
 
 from app.core.database import get_db_session
 from app.middleware.request_id import get_request_id
@@ -39,11 +38,11 @@ class PlanCreate(BaseModel):
 
     slug: str = Field(min_length=2, max_length=50, description="Unique plan identifier")
     name: str = Field(min_length=2, max_length=100, description="Plan display name")
-    description: Optional[str] = Field(None, description="Plan description")
+    description: str | None = Field(None, description="Plan description")
     price: Decimal = Field(ge=0, description="Plan price")
     currency: str = Field(default="EUR", max_length=3, description="Currency code")
     interval: str = Field(default="month", description="Billing interval (month/year)")
-    stripe_price_id: Optional[str] = Field(None, description="Stripe Price ID")
+    stripe_price_id: str | None = Field(None, description="Stripe Price ID")
     storage_limit_bytes: int = Field(
         default=5 * 1024 * 1024 * 1024, description="Storage limit in bytes"
     )
@@ -51,36 +50,36 @@ class PlanCreate(BaseModel):
     document_limit: int = Field(default=100, description="Document limit")
     is_tenant_plan: bool = Field(default=False, description="Is this a tenant/enterprise plan")
     max_members: int = Field(default=1, description="Max members for tenant plans")
-    linked_tenant_id: Optional[str] = Field(None, description="If set, plan is exclusive to this tenant")
-    features: Optional[PlanFeatures] = Field(None, description="Plan features")
+    linked_tenant_id: str | None = Field(None, description="If set, plan is exclusive to this tenant")
+    features: PlanFeatures | None = Field(None, description="Plan features")
     is_active: bool = Field(default=True, description="Plan is active")
     is_popular: bool = Field(default=False, description="Mark as popular plan")
     display_order: int = Field(default=0, description="Display order")
     cta_text: str = Field(default="Get Started", description="Call-to-action text")
-    trial_days: Optional[int] = Field(None, description="Trial period in days")
+    trial_days: int | None = Field(None, description="Trial period in days")
 
 
 class PlanUpdate(BaseModel):
     """Schema for updating a plan."""
 
-    name: Optional[str] = Field(None, min_length=2, max_length=100)
-    description: Optional[str] = None
-    price: Optional[Decimal] = Field(None, ge=0)
-    currency: Optional[str] = Field(None, max_length=3)
-    interval: Optional[str] = None
-    stripe_price_id: Optional[str] = None
-    storage_limit_bytes: Optional[int] = None
-    api_calls_limit: Optional[int] = None
-    document_limit: Optional[int] = None
-    is_tenant_plan: Optional[bool] = None
-    max_members: Optional[int] = None
-    linked_tenant_id: Optional[str] = None
-    features: Optional[PlanFeatures] = None
-    is_active: Optional[bool] = None
-    is_popular: Optional[bool] = None
-    display_order: Optional[int] = None
-    cta_text: Optional[str] = None
-    trial_days: Optional[int] = None
+    name: str | None = Field(None, min_length=2, max_length=100)
+    description: str | None = None
+    price: Decimal | None = Field(None, ge=0)
+    currency: str | None = Field(None, max_length=3)
+    interval: str | None = None
+    stripe_price_id: str | None = None
+    storage_limit_bytes: int | None = None
+    api_calls_limit: int | None = None
+    document_limit: int | None = None
+    is_tenant_plan: bool | None = None
+    max_members: int | None = None
+    linked_tenant_id: str | None = None
+    features: PlanFeatures | None = None
+    is_active: bool | None = None
+    is_popular: bool | None = None
+    display_order: int | None = None
+    cta_text: str | None = None
+    trial_days: int | None = None
 
 
 class PlanResponse(BaseModel):
@@ -89,23 +88,23 @@ class PlanResponse(BaseModel):
     id: str
     slug: str
     name: str
-    description: Optional[str]
+    description: str | None
     price: float
     currency: str
     interval: str
-    stripe_price_id: Optional[str]
+    stripe_price_id: str | None
     storage_limit_bytes: int
     api_calls_limit: int
     document_limit: int
     is_tenant_plan: bool
     max_members: int
-    linked_tenant_id: Optional[str]
-    features: Optional[dict]
+    linked_tenant_id: str | None
+    features: dict | None
     is_active: bool
     is_popular: bool
     display_order: int
     cta_text: str
-    trial_days: Optional[int]
+    trial_days: int | None
     created_at: str
     updated_at: str
 
@@ -185,7 +184,7 @@ Use `tenant_id` to also return private plans associated with a specific tenant.
 async def list_plans(
     include_inactive: bool = False,
     include_tenant_plans: bool = False,
-    tenant_id: Optional[str] = Query(None, description="Filter to include plans for this tenant"),
+    tenant_id: str | None = Query(None, description="Filter to include plans for this tenant"),
 ) -> APIResponse[dict]:
     """
     List all subscription plans.
@@ -201,9 +200,9 @@ async def list_plans(
     async with get_db_session() as session:
         stmt = select(Plan)
         if not include_inactive:
-            stmt = stmt.where(Plan.is_active == True)
+            stmt = stmt.where(Plan.is_active)
         if not include_tenant_plans:
-            stmt = stmt.where(Plan.is_tenant_plan == False)
+            stmt = stmt.where(not Plan.is_tenant_plan)
 
         # Filter private plans (linked_tenant_id)
         # By default, only show public plans (linked_tenant_id is NULL)
@@ -211,11 +210,11 @@ async def list_plans(
         if tenant_id:
             # Show public plans OR plans linked to this specific tenant
             stmt = stmt.where(
-                (Plan.linked_tenant_id == None) | (Plan.linked_tenant_id == tenant_id)
+                (Plan.linked_tenant_id is None) | (Plan.linked_tenant_id == tenant_id)
             )
         else:
             # Only show public plans (no linked tenant)
-            stmt = stmt.where(Plan.linked_tenant_id == None)
+            stmt = stmt.where(Plan.linked_tenant_id is None)
 
         stmt = stmt.order_by(Plan.display_order)
 

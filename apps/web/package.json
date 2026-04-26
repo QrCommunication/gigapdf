@@ -1,20 +1,23 @@
 {
   "name": "web",
+  "license": "AGPL-3.0-or-later",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "dev:https": "node server-https.mjs",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "next lint",
-    "type-check": "tsc --noEmit",
+    "lint": "eslint .",
+    "type-check": "prisma generate && tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "clean": "rm -rf .next",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "postinstall": "node -e \"const{cpSync,mkdirSync}=require('fs');mkdirSync('public/pdf-worker',{recursive:true});cpSync(require.resolve('pdfjs-dist/build/pdf.worker.min.mjs'),'public/pdf-worker/pdf.worker.min.mjs');\""
+    "postinstall": "prisma generate || true && node -e \"const{cpSync,mkdirSync}=require('fs');mkdirSync('public/pdf-worker',{recursive:true});cpSync(require.resolve('pdfjs-dist/build/pdf.worker.min.mjs'),'public/pdf-worker/pdf.worker.min.mjs');\""
   },
   "dependencies": {
     "@better-auth/expo": "^1.4.13",
@@ -48,17 +51,23 @@
     "@giga-pdf/tailwind-config": "workspace:*",
     "@giga-pdf/typescript-config": "workspace:*",
     "@tailwindcss/postcss": "^4.0.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^25.0.9",
     "@types/nodemailer": "^7.0.5",
     "@types/pg": "^8.16.0",
     "@types/react": "^19.2.8",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/coverage-v8": "^4.1.5",
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.1.2",
+    "jsdom": "^26.1.0",
     "postcss": "^8.5.6",
     "prisma": "^7.2.0",
     "tailwindcss": "^4.0.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
   }
 }

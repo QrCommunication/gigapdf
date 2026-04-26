@@ -1,10 +1,8 @@
 """Request schemas for element operations."""
 
-from typing import Any, Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
-
-from app.models.elements import Bounds
 
 
 class CreateElementRequest(BaseModel):
@@ -14,16 +12,16 @@ class CreateElementRequest(BaseModel):
         description="Element type"
     )
     bounds: dict = Field(description="Element bounds {x, y, width, height}")
-    content: Optional[str] = Field(default=None, description="Text content (for text elements)")
-    style: Optional[dict] = Field(default=None, description="Element styling")
-    transform: Optional[dict] = Field(default=None, description="Element transformation")
-    layer_id: Optional[str] = Field(default=None, description="Target layer ID")
+    content: str | None = Field(default=None, description="Text content (for text elements)")
+    style: dict | None = Field(default=None, description="Element styling")
+    transform: dict | None = Field(default=None, description="Element transformation")
+    layer_id: str | None = Field(default=None, description="Target layer ID")
 
     # Type-specific fields
-    shape_type: Optional[str] = Field(default=None, description="Shape type (for shapes)")
-    annotation_type: Optional[str] = Field(default=None, description="Annotation type")
-    field_type: Optional[str] = Field(default=None, description="Form field type")
-    field_name: Optional[str] = Field(default=None, description="Form field name")
+    shape_type: str | None = Field(default=None, description="Shape type (for shapes)")
+    annotation_type: str | None = Field(default=None, description="Annotation type")
+    field_type: str | None = Field(default=None, description="Form field type")
+    field_name: str | None = Field(default=None, description="Form field name")
 
     class Config:
         json_schema_extra = {
@@ -39,13 +37,13 @@ class CreateElementRequest(BaseModel):
 class UpdateElementRequest(BaseModel):
     """Request to update an element."""
 
-    bounds: Optional[dict] = Field(default=None, description="Updated bounds")
-    content: Optional[str] = Field(default=None, description="Updated content")
-    style: Optional[dict] = Field(default=None, description="Updated style")
-    transform: Optional[dict] = Field(default=None, description="Updated transform")
-    layer_id: Optional[str] = Field(default=None, description="New layer ID")
-    locked: Optional[bool] = Field(default=None, description="Lock state")
-    visible: Optional[bool] = Field(default=None, description="Visibility state")
+    bounds: dict | None = Field(default=None, description="Updated bounds")
+    content: str | None = Field(default=None, description="Updated content")
+    style: dict | None = Field(default=None, description="Updated style")
+    transform: dict | None = Field(default=None, description="Updated transform")
+    layer_id: str | None = Field(default=None, description="New layer ID")
+    locked: bool | None = Field(default=None, description="Lock state")
+    visible: bool | None = Field(default=None, description="Visibility state")
 
     class Config:
         json_schema_extra = {
@@ -60,7 +58,7 @@ class MoveElementRequest(BaseModel):
     """Request to move an element to another page."""
 
     target_page_number: int = Field(ge=1, description="Target page number")
-    new_bounds: Optional[dict] = Field(default=None, description="New position")
+    new_bounds: dict | None = Field(default=None, description="New position")
 
     class Config:
         json_schema_extra = {
@@ -71,7 +69,7 @@ class MoveElementRequest(BaseModel):
 class DuplicateElementRequest(BaseModel):
     """Request to duplicate an element."""
 
-    target_page_number: Optional[int] = Field(
+    target_page_number: int | None = Field(
         default=None, description="Target page (same if null)"
     )
     offset: dict = Field(

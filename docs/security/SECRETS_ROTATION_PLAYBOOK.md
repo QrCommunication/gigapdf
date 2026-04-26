@@ -10,7 +10,7 @@
 
 ### Prerequisites
 
-- SSH access to production (`51.159.105.179`)
+- SSH access to production (`<your-vps-ip>`)
 - 1Password or password manager access
 - 5-10 minutes downtime tolerance (services restart)
 
@@ -26,14 +26,14 @@ cd /home/rony/Projets/gigapdf
 chmod +x scripts/rotate-postgres-password.sh
 
 # Verify SSH connectivity
-ssh -T ubuntu@51.159.105.179 "echo '✓ SSH OK'"
+ssh -T ubuntu@<your-vps-ip> "echo '✓ SSH OK'"
 ```
 
 #### 2. Execute Rotation (3 min)
 
 ```bash
 # Run rotation script
-./scripts/rotate-postgres-password.sh --host 51.159.105.179 --user ubuntu
+./scripts/rotate-postgres-password.sh --host <your-vps-ip> --user ubuntu
 
 # Script will:
 # 1. Generate new secure password
@@ -55,7 +55,7 @@ ssh -T ubuntu@51.159.105.179 "echo '✓ SSH OK'"
 # The script performs health checks automatically
 # But manually verify:
 
-ssh ubuntu@51.159.105.179
+ssh ubuntu@<your-vps-ip>
 
 # Check services running
 systemctl status gigapdf-api gigapdf-celery gigapdf-celery-billing
@@ -75,7 +75,7 @@ sudo -u postgres psql -c "SELECT 1;"
 # Fields:
 #   - Username: gigapdf
 #   - Password: [NEW_PASSWORD]
-#   - Host: 51.159.105.179
+#   - Host: <your-vps-ip>
 #   - Database: gigapdf
 #   - Rotation Date: [Today]
 #   - Next Rotation: [+90 days]
@@ -108,7 +108,7 @@ The script includes automatic rollback. If something goes wrong:
 # 4. Exit with error
 
 # If you need manual rollback:
-ssh ubuntu@51.159.105.179
+ssh ubuntu@<your-vps-ip>
 
 # Restore backup
 sudo cp /opt/gigapdf/.env.backup /opt/gigapdf/.env
@@ -128,7 +128,7 @@ curl -s http://localhost:8000/health
 
 ```bash
 # Check SSH key
-ssh-keyscan -H 51.159.105.179 >> ~/.ssh/known_hosts
+ssh-keyscan -H <your-vps-ip> >> ~/.ssh/known_hosts
 
 # Try again
 ./scripts/rotate-postgres-password.sh
@@ -138,7 +138,7 @@ ssh-keyscan -H 51.159.105.179 >> ~/.ssh/known_hosts
 
 ```bash
 # Manual fix:
-ssh ubuntu@51.159.105.179
+ssh ubuntu@<your-vps-ip>
 sudo -u postgres psql -c "ALTER USER gigapdf WITH PASSWORD 'new_password';"
 ```
 
@@ -195,7 +195,7 @@ Once PostgreSQL is done, audit and rotate the others:
 
 ```bash
 # Check current password
-ssh ubuntu@51.159.105.179
+ssh ubuntu@<your-vps-ip>
 grep REDIS_PASSWORD /opt/gigapdf/.env
 
 # Rotation:

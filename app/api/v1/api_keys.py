@@ -13,7 +13,6 @@ only expose the ``key_prefix`` for identification purposes.
 import hashlib
 import logging
 import secrets
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -30,7 +29,7 @@ from app.schemas.api_keys import (
     RegenerateKeyResponse,
     UpdateApiKeyRequest,
 )
-from app.schemas.responses.common import APIResponse, MetaInfo, SuccessResponse
+from app.schemas.responses.common import APIResponse, MetaInfo
 from app.utils.helpers import now_utc
 
 logger = logging.getLogger(__name__)
@@ -91,7 +90,7 @@ def _orm_to_response(api_key: ApiKey) -> ApiKeyResponse:
     Returns:
         ApiKeyResponse: Serialisable response model.
     """
-    scopes: List[str] = (
+    scopes: list[str] = (
         [s.strip() for s in api_key.scopes.split(_SCOPES_SEPARATOR) if s.strip()]
         if api_key.scopes
         else []
@@ -258,7 +257,7 @@ async def create_api_key(
 
 @router.get(
     "",
-    response_model=APIResponse[List[ApiKeyResponse]],
+    response_model=APIResponse[list[ApiKeyResponse]],
     status_code=status.HTTP_200_OK,
     summary="List API keys",
     description="""
@@ -276,7 +275,7 @@ which.
 async def list_api_keys(
     current_user: AuthenticatedUser,
     db: AsyncSession = Depends(get_db),
-) -> APIResponse[List[ApiKeyResponse]]:
+) -> APIResponse[list[ApiKeyResponse]]:
     """
     List all API keys for the authenticated user.
 

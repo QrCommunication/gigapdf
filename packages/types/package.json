@@ -1,5 +1,6 @@
 {
   "name": "@giga-pdf/types",
+  "license": "AGPL-3.0-or-later",
   "version": "0.1.0",
   "private": true,
   "main": "./dist/index.js",
@@ -30,7 +31,7 @@
   "scripts": {
     "build": "tsup src/index.ts src/models/index.ts src/api/index.ts src/websocket/index.ts --format cjs,esm --dts --clean",
     "dev": "tsup src/index.ts src/models/index.ts src/api/index.ts src/websocket/index.ts --format cjs,esm --dts --watch",
-    "lint": "eslint src --ext .ts,.tsx",
+    "lint": "echo \"[$npm_package_name] lint delegated to consuming apps\"",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist"
   },

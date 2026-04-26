@@ -5,7 +5,6 @@ Provides job monitoring for the admin panel.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -24,16 +23,16 @@ class JobResponse(BaseModel):
     job_type: str
     status: str
     progress: float
-    document_id: Optional[str] = None
+    document_id: str | None = None
     owner_id: str
-    input_params: Optional[dict] = None
-    result: Optional[dict] = None
-    error_code: Optional[str] = None
-    error_message: Optional[str] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    input_params: dict | None = None
+    result: dict | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
     created_at: datetime
-    duration_seconds: Optional[float] = None
+    duration_seconds: float | None = None
 
 
 class JobListResponse(BaseModel):
@@ -54,7 +53,7 @@ class JobStatsResponse(BaseModel):
     failed_jobs: int
     cancelled_jobs: int
     jobs_by_type: dict
-    avg_duration_seconds: Optional[float] = None
+    avg_duration_seconds: float | None = None
 
 
 @router.get(
@@ -171,9 +170,9 @@ Results are ordered by creation date (most recent first).""",
 async def list_jobs(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    status: Optional[str] = Query(None),
-    job_type: Optional[str] = Query(None),
-    owner_id: Optional[str] = Query(None),
+    status: str | None = Query(None),
+    job_type: str | None = Query(None),
+    owner_id: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     """

@@ -10,16 +10,15 @@ Handles:
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
-from app.models.database import UserQuota, Plan
+from app.models.database import Plan, UserQuota
 from app.models.tenant import Tenant, TenantMember, TenantStatus
 
 logger = logging.getLogger(__name__)
@@ -36,9 +35,9 @@ class EffectiveLimits:
     document_count: int
     plan_type: str
     is_tenant_based: bool = False
-    tenant_id: Optional[str] = None
-    tenant_name: Optional[str] = None
-    tenant_role: Optional[str] = None
+    tenant_id: str | None = None
+    tenant_name: str | None = None
+    tenant_role: str | None = None
 
     @property
     def storage_available_bytes(self) -> int:
@@ -195,7 +194,7 @@ class QuotaService:
         quota = await self.get_or_create_quota(user_id)
 
         # Check if we need to reset monthly quota
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if now >= quota.api_calls_reset_at:
             await self._reset_api_quota(user_id)
             quota = await self.get_or_create_quota(user_id)
@@ -236,7 +235,7 @@ class QuotaService:
                 quota = result.scalar_one()
 
             # Check for monthly reset
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             if now >= quota.api_calls_reset_at:
                 quota.api_calls_used = count
                 quota.api_calls_reset_at = self._get_next_reset_date()
@@ -292,7 +291,7 @@ class QuotaService:
             }
 
     async def upgrade_plan(
-        self, user_id: str, plan_type: str, expires_at: Optional[datetime] = None
+        self, user_id: str, plan_type: str, expires_at: datetime | None = None
     ) -> dict:
         """
         Upgrade user to a new plan.
@@ -351,7 +350,7 @@ class QuotaService:
         quota = await self.get_or_create_quota(user_id)
 
         # Check for monthly reset
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if now >= quota.api_calls_reset_at:
             await self._reset_api_quota(user_id)
             quota = await self.get_or_create_quota(user_id)
@@ -409,7 +408,7 @@ class QuotaService:
 
     def _get_next_reset_date(self) -> datetime:
         """Get next monthly reset date (1st of next month)."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if now.month == 12:
             return datetime(now.year + 1, 1, 1)
         return datetime(now.year, now.month + 1, 1)
@@ -471,7 +470,7 @@ class QuotaService:
 
     async def _get_active_tenant_membership(
         self, session: AsyncSession, user_quota_id: str
-    ) -> Optional[TenantMember]:
+    ) -> TenantMember | None:
         """
         Get user's active tenant membership with an enterprise plan.
 
@@ -499,7 +498,7 @@ class QuotaService:
             .where(
                 and_(
                     TenantMember.user_id == user_quota_id,
-                    TenantMember.is_active == True,
+                    TenantMember.is_active,
                     Tenant.status == TenantStatus.ACTIVE,
                 )
             )
@@ -610,7 +609,7 @@ class QuotaService:
                 raise ValueError(f"Tenant not found: {tenant_id}")
 
             # Check for monthly reset
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             if tenant.api_calls_reset_at and now >= tenant.api_calls_reset_at:
                 tenant.api_calls_used = count
                 tenant.api_calls_reset_at = self._get_next_reset_date()

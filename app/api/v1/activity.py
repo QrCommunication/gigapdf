@@ -6,7 +6,6 @@ Only users with access to the document can view its history.
 """
 
 import time
-from typing import Optional
 
 from fastapi import APIRouter, Query
 
@@ -290,7 +289,7 @@ async def get_document_history(
     user: AuthenticatedUser,
     limit: int = Query(default=50, ge=1, le=100, description="Max results"),
     offset: int = Query(default=0, ge=0, description="Skip N results"),
-    action: Optional[str] = Query(
+    action: str | None = Query(
         default=None, description="Filter by action type"
     ),
 ) -> APIResponse[dict]:
@@ -597,8 +596,8 @@ async def get_my_activity(
     user: AuthenticatedUser,
     limit: int = Query(default=50, ge=1, le=100, description="Max results"),
     offset: int = Query(default=0, ge=0, description="Skip N results"),
-    action: Optional[str] = Query(default=None, description="Filter by action"),
-    resource_type: Optional[str] = Query(
+    action: str | None = Query(default=None, description="Filter by action"),
+    resource_type: str | None = Query(
         default=None, description="Filter by resource type"
     ),
 ) -> APIResponse[dict]:

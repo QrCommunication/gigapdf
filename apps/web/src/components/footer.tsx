@@ -21,7 +21,7 @@ export function Footer() {
             </p>
             <div className="flex gap-4">
               <a
-                href="https://github.com/ronylicha/gigapdf"
+                href="https://github.com/QrCommunication/gigapdf"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-foreground transition-colors"
@@ -68,7 +68,7 @@ export function Footer() {
             <ul className="space-y-3 text-sm">
               <li>
                 <a
-                  href="https://github.com/ronylicha/gigapdf"
+                  href="https://github.com/QrCommunication/gigapdf"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
@@ -79,7 +79,7 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="https://github.com/ronylicha/gigapdf/blob/main/CONTRIBUTING.md"
+                  href="https://github.com/QrCommunication/gigapdf/blob/main/CONTRIBUTING.md"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
@@ -90,7 +90,7 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="https://github.com/ronylicha/gigapdf/blob/main/LICENSE"
+                  href="https://github.com/QrCommunication/gigapdf/blob/main/LICENSE"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
@@ -124,31 +124,42 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Company Links */}
+          {/* Legal Links */}
           <div>
             <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider text-muted-foreground">
-              {t("landing.footer.company.title")}
+              Légal
             </h4>
             <ul className="space-y-3 text-sm">
               <li>
-                <Link href="/about" className="text-muted-foreground hover:text-foreground transition-colors">
-                  {t("landing.footer.company.about")}
+                <Link href="/legal-notice" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Mentions légales
                 </Link>
               </li>
               <li>
                 <Link href="/privacy" className="text-muted-foreground hover:text-foreground transition-colors">
-                  {t("landing.footer.company.privacy")}
+                  Confidentialité
                 </Link>
               </li>
               <li>
                 <Link href="/terms" className="text-muted-foreground hover:text-foreground transition-colors">
-                  {t("landing.footer.company.terms")}
+                  CGU
                 </Link>
               </li>
               <li>
-                <Link href="/contact" className="text-muted-foreground hover:text-foreground transition-colors">
-                  {t("landing.footer.company.contact")}
+                <Link href="/cookies" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Cookies
                 </Link>
+              </li>
+              <li>
+                <a
+                  href="https://github.com/QrCommunication/gigapdf/blob/main/LICENSE"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+                >
+                  AGPL-3.0
+                  <ExternalLink className="h-3 w-3" />
+                </a>
               </li>
             </ul>
           </div>

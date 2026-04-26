@@ -14,9 +14,8 @@ Tracked Events:
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Optional, Any
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 
-class SecurityEventType(str, Enum):
+class SecurityEventType(StrEnum):
     """Types of security events to audit."""
     # Encryption events
     DOCUMENT_ENCRYPTED = "document.encrypted"
@@ -74,13 +73,13 @@ class SecurityAuditService:
         self,
         event_type: SecurityEventType,
         user_id: str,
-        document_id: Optional[str] = None,
-        user_email: Optional[str] = None,
-        user_name: Optional[str] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        extra_data: Optional[dict] = None,
+        document_id: str | None = None,
+        user_email: str | None = None,
+        user_name: str | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+        tenant_id: str | None = None,
+        extra_data: dict | None = None,
     ) -> str:
         """
         Log a security event.
@@ -105,7 +104,7 @@ class SecurityAuditService:
         security_data = {
             "event_category": "security",
             "event_type": event_type.value,
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "timestamp_utc": datetime.now(UTC).isoformat(),
         }
 
         if extra_data:
@@ -204,7 +203,7 @@ class SecurityAuditService:
         document_id: str,
         granted: bool,
         access_type: str = "read",
-        reason: Optional[str] = None,
+        reason: str | None = None,
         **kwargs
     ) -> str:
         """
@@ -251,7 +250,7 @@ class SecurityAuditService:
         self,
         user_id: str,
         document_id: str,
-        shared_with: Optional[str],
+        shared_with: str | None,
         permission: str,
         created: bool = True,
         **kwargs
@@ -328,11 +327,11 @@ class SecurityAuditService:
 
 async def get_security_events(
     db: AsyncSession,
-    document_id: Optional[str] = None,
-    user_id: Optional[str] = None,
-    event_types: Optional[list[SecurityEventType]] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    document_id: str | None = None,
+    user_id: str | None = None,
+    event_types: list[SecurityEventType] | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict]:

@@ -134,7 +134,7 @@ Voir `FUTURE_BACKLOG.md`. Points principaux :
 - Deploy production : à faire manuellement via SSH (git pull + build + restart)
 - Commandes :
   ```bash
-  ssh -i ~/.ssh/id_ed25519 ubuntu@51.159.105.179
+  ssh -i ~/.ssh/id_ed25519 ubuntu@<your-vps-ip>
   sudo chown -R gigapdf:gigapdf /opt/gigapdf
   sudo -u gigapdf -H bash -c 'cd /opt/gigapdf && git fetch /opt/gigapdf-repo.git main && git reset --hard FETCH_HEAD && CI=1 pnpm install --frozen-lockfile && pnpm build'
   cp -r /opt/gigapdf/apps/web/.next/static /opt/gigapdf/apps/web/.next/standalone/apps/web/.next/

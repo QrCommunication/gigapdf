@@ -22,7 +22,7 @@
 set -euo pipefail
 
 # Configuration
-PROD_HOST="${GIGAPDF_PROD_HOST:-51.159.105.179}"
+PROD_HOST="${GIGAPDF_PROD_HOST:?GIGAPDF_PROD_HOST is required (e.g. 'export GIGAPDF_PROD_HOST=your.vps.example.com')}"
 PROD_USER="${GIGAPDF_PROD_USER:-ubuntu}"
 POSTGRES_USER="${POSTGRES_USER:-gigapdf}"
 POSTGRES_DB="${POSTGRES_DB:-gigapdf}"

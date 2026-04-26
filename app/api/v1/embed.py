@@ -176,9 +176,10 @@ async def create_embed_session_token(
 
     # Retrieve the key record so we can embed allowed_domains in the JWT.
     # `request.state.api_key_id` is injected by ApiKeyAuthMiddleware.
-    from app.models.api_key import ApiKey
-    from app.core.database import get_db_session
     from sqlalchemy import select
+
+    from app.core.database import get_db_session
+    from app.models.api_key import ApiKey
 
     api_key_id: str = getattr(request.state, "api_key_id", "")
     allowed_domains: str | None = None
@@ -494,7 +495,7 @@ async def complete_embed_session(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="modified.pdf"',
+            "Content-Disposition": 'attachment; filename="modified.pdf"',
             "X-Processing-Time-Ms": str(processing_time),
         },
     )
