@@ -9,7 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "type-check": "tsc --noEmit",
+    "type-check": "prisma generate && tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "clean": "rm -rf .next",
