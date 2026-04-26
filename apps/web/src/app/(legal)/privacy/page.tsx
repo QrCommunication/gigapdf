@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { Shield, Database, Lock, Eye, Cookie, Bell, Code2, Mail, Scale } from "lucide-react";
+import { env } from "@/lib/env";
 
 export default function PrivacyPage() {
   const t = useTranslations("legal.privacy");
@@ -40,11 +41,11 @@ export default function PrivacyPage() {
           <h2 className="text-2xl font-bold m-0">{t("controller.title")}</h2>
         </div>
         <div className="rounded-xl border border-border bg-card/50 p-6 not-prose font-mono text-sm space-y-1">
-          <p><span className="text-terminal-cyan">name:</span> "Rony Licha"</p>
-          <p><span className="text-terminal-cyan">role:</span> "Independent Developer"</p>
-          <p><span className="text-terminal-cyan">location:</span> "Paris, France"</p>
-          <p><span className="text-terminal-cyan">email:</span> <a href="mailto:rony@ronylicha.net" className="text-primary hover:underline">"rony@ronylicha.net"</a></p>
-          <p><span className="text-terminal-cyan">website:</span> <a href="https://ronylicha.net" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">"ronylicha.net"</a></p>
+          <p><span className="text-terminal-cyan">name:</span> "{env.NEXT_PUBLIC_LEGAL_COMPANY_NAME}"</p>
+          <p><span className="text-terminal-cyan">form:</span> "{env.NEXT_PUBLIC_LEGAL_COMPANY_FORM}"</p>
+          <p><span className="text-terminal-cyan">siren:</span> "{env.NEXT_PUBLIC_LEGAL_SIREN}"</p>
+          <p><span className="text-terminal-cyan">address:</span> "{env.NEXT_PUBLIC_LEGAL_ADDRESS}"</p>
+          <p><span className="text-terminal-cyan">email:</span> <a href={`mailto:${env.NEXT_PUBLIC_LEGAL_CONTACT_EMAIL}`} className="text-primary hover:underline">"{env.NEXT_PUBLIC_LEGAL_CONTACT_EMAIL}"</a></p>
         </div>
       </section>
 
