@@ -1,0 +1,19 @@
+name: DCO
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  dco:
+    name: Check DCO sign-off
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Signed-off-by on all commits
+        # Pinned to commit SHA (v1.1.0 tag) to defend against tag-replay attacks
+        uses: tim-actions/dco@2fd0504dc0d27b33f542867c300c60840c6dcb20
+        with:
+          commits: ${{ github.event.pull_request.commits_url }}
