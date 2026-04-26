@@ -1162,7 +1162,7 @@ Refs: docs/superpowers/specs/2026-04-26-oss-trademark-clarification-design.md"
 
 ## Task 7: Externalize VPS IP from deploy scripts and docs
 
-**Goal:** Remove hardcoded `51.159.105.179` from all tracked files. Self-hosters set their own via env vars.
+**Goal:** Remove hardcoded `<your-vps-ip>` from all tracked files. Self-hosters set their own via env vars.
 
 **Files:**
 - Modify: `deploy/push-deploy.sh`
@@ -1178,7 +1178,7 @@ Refs: docs/superpowers/specs/2026-04-26-oss-trademark-clarification-design.md"
 Open `deploy/push-deploy.sh`, locate line 17:
 
 ```bash
-REMOTE_HOST="${DEPLOY_HOST:-51.159.105.179}"
+REMOTE_HOST="${DEPLOY_HOST:-<your-vps-ip>}"
 ```
 
 Replace with:
@@ -1192,7 +1192,7 @@ REMOTE_HOST="${DEPLOY_HOST:?DEPLOY_HOST is required (e.g. 'export DEPLOY_HOST=yo
 Open `deploy/redeploy.sh`, locate line 31:
 
 ```bash
-VPS_HOST="${GIGAPDF_VPS_HOST:-51.159.105.179}"
+VPS_HOST="${GIGAPDF_VPS_HOST:-<your-vps-ip>}"
 ```
 
 Replace with:
@@ -1206,7 +1206,7 @@ VPS_HOST="${GIGAPDF_VPS_HOST:?GIGAPDF_VPS_HOST is required (e.g. 'export GIGAPDF
 Open `deploy/setup-server.sh`, locate line 234:
 
 ```bash
-echo "   git remote add production ubuntu@51.159.105.179:/opt/gigapdf-repo.git"
+echo "   git remote add production ubuntu@<your-vps-ip>:/opt/gigapdf-repo.git"
 ```
 
 Replace with:
@@ -1237,7 +1237,7 @@ sed -i 's/51\.159\.105\.179/<your-vps-ip>/g' docs/deployment.md
 
 Verify:
 ```bash
-grep -c "51.159.105.179" docs/deployment.md
+grep -c "<your-vps-ip>" docs/deployment.md
 ```
 Expected: `0`.
 
@@ -1248,7 +1248,7 @@ Run:
 sed -i 's/51\.159\.105\.179/<your-vps-ip>/g' docs/security/SECRETS_AUDIT_FINDINGS.md
 ```
 
-Verify: `grep -c "51.159.105.179" docs/security/SECRETS_AUDIT_FINDINGS.md` → `0`.
+Verify: `grep -c "<your-vps-ip>" docs/security/SECRETS_AUDIT_FINDINGS.md` → `0`.
 
 - [ ] **Step 7.7: Replace IP in .claude session report**
 
@@ -1257,7 +1257,7 @@ Run:
 sed -i 's/51\.159\.105\.179/<your-vps-ip>/g' .claude/SESSION_20260423_023327_quality_audit_refactor/FINAL_REPORT.md
 ```
 
-Verify total: `git grep -c "51.159.105.179"` → only matches in `.git/` (not tracked content).
+Verify total: `git grep -c "<your-vps-ip>"` → only matches in `.git/` (not tracked content).
 
 - [ ] **Step 7.8: Verify no tracked file still contains the IP**
 
@@ -1291,7 +1291,7 @@ git commit -s -m "chore(deploy): require GIGAPDF_VPS_HOST and DEPLOY_HOST env va
 
 - deploy/redeploy.sh and deploy/push-deploy.sh now fail-fast with
   a clear message if the env var is missing (no IP fallback)
-- Hardcoded VPS IP (51.159.105.179) replaced by <your-vps-ip>
+- Hardcoded VPS IP (<your-vps-ip>) replaced by <your-vps-ip>
   placeholders in docs and the .claude session report
 - deploy/.env.production.example documents the required vars
 
@@ -2110,7 +2110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DCO sign-off section added, license clause added.
 - All 17 `package.json` files declare `"license": "AGPL-3.0-or-later"`
   per SPDX.
-- Hardcoded VPS IP (`51.159.105.179`) removed from deploy scripts and
+- Hardcoded VPS IP (`<your-vps-ip>`) removed from deploy scripts and
   docs. `deploy/redeploy.sh` and `deploy/push-deploy.sh` now require
   `GIGAPDF_VPS_HOST` / `DEPLOY_HOST` and fail-fast if missing.
 - Hardcoded personal email (`rony@ronylicha.net`) removed from privacy
@@ -2340,7 +2340,7 @@ Deploy scripts now require `GIGAPDF_VPS_HOST` and `DEPLOY_HOST` env vars
 - [x] `pnpm type-check` passes
 - [x] `pnpm build` succeeds
 - [x] Visual smoke test on /legal-notice, /privacy, /terms, /cookies
-- [x] No tracked file contains 51.159.105.179 or rony@ronylicha.net
+- [x] No tracked file contains <your-vps-ip> or rony@ronylicha.net
 - [x] All 13 commits signed off (DCO check will confirm on this PR)
 
 ## Companion actions (not in this PR)

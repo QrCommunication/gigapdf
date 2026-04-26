@@ -14,7 +14,7 @@ echo "=========================================="
 # Configuration
 # Override DEPLOY_HOST env var to target a different server (e.g. staging)
 REMOTE_USER="${DEPLOY_USER:-ubuntu}"
-REMOTE_HOST="${DEPLOY_HOST:-51.159.105.179}"
+REMOTE_HOST="${DEPLOY_HOST:?DEPLOY_HOST is required (e.g. 'export DEPLOY_HOST=your.vps.example.com')}"
 REMOTE_NAME="production"
 SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 

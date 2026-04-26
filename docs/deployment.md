@@ -1,6 +1,6 @@
 # GigaPDF — Procédure de déploiement zero-downtime
 
-> Infrastructure : VPS Scaleway x86_64 32 GB — `51.159.105.179`
+> Infrastructure : VPS Scaleway x86_64 32 GB — `<your-vps-ip>`
 > Stack : FastAPI (uvicorn 4 workers) + Next.js standalone + Celery, derrière Nginx + systemd
 
 ---
@@ -50,7 +50,7 @@ git push origin main
 git push origin main
 
 # Sur le serveur (post-receive hook ou manuellement)
-ssh ubuntu@51.159.105.179
+ssh ubuntu@<your-vps-ip>
 cd /opt/gigapdf
 git pull
 bash deploy/deploy.sh
@@ -69,7 +69,7 @@ Si un service ne répond pas dans les 60 s après restart, `deploy.sh` appelle a
 ### Rollback manuel
 
 ```bash
-ssh ubuntu@51.159.105.179
+ssh ubuntu@<your-vps-ip>
 
 # Lister les snapshots disponibles
 sudo bash /opt/gigapdf/scripts/rollback.sh --list
@@ -98,7 +98,7 @@ sudo bash /opt/gigapdf/scripts/rollback.sh 20260421_143022
 ### Rollback base de données (si migration breaking)
 
 ```bash
-ssh ubuntu@51.159.105.179
+ssh ubuntu@<your-vps-ip>
 cd /opt/gigapdf
 source .venv/bin/activate
 source .env

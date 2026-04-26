@@ -137,7 +137,7 @@ Ajouter `"license": "AGPL-3.0-or-later"` dans :
 | `deploy/redeploy.sh` (ligne 31) | `VPS_HOST="${GIGAPDF_VPS_HOST:?GIGAPDF_VPS_HOST is required}"` |
 | `deploy/setup-server.sh` (ligne 234) | `echo "git remote add production ubuntu@<YOUR_VPS_IP>:/opt/gigapdf-repo.git"` |
 | `deploy/.env.production.example` | + `DEPLOY_HOST=`, `GIGAPDF_VPS_HOST=` documentés |
-| `docs/deployment.md` (4 occurrences) | IP `51.159.105.179` → `<your-vps-ip>` |
+| `docs/deployment.md` (4 occurrences) | IP `<your-vps-ip>` → `<your-vps-ip>` |
 | `docs/security/SECRETS_AUDIT_FINDINGS.md` (2 occ.) | IP → `<your-vps-ip>` ou marquer "exemple historique" |
 | `.claude/SESSION_20260423_023327_quality_audit_refactor/FINAL_REPORT.md` | IP → placeholder ou retirer la ligne |
 | `.gitignore` | Vérifier présence patterns : `*.png` racine debug, `.local/`, `.claude/SESSION_*` (selon préférence) |
@@ -501,7 +501,7 @@ Le chantier est terminé quand :
 - [ ] `LICENSE`, `TRADEMARK.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` présents
 - [ ] 4 pages légales accessibles depuis le footer
 - [ ] `lib/env.ts` validé : prod sans config crash, dev sans config warning
-- [ ] Aucune référence à `51.159.105.179` ni `rony@ronylicha.net` dans `git grep` (hors `.git/config` local)
+- [ ] Aucune référence à `<your-vps-ip>` ni `rony@ronylicha.net` dans `git grep` (hors `.git/config` local)
 - [ ] DCO bot bloque les PR sans `Signed-off-by:`
 - [ ] N° de dépôt INPI obtenu et inscrit dans TRADEMARK.md
 - [ ] Annonce publique GitHub Release publiée
