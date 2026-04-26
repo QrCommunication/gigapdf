@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:https": "node server-https.mjs",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint .",
     "type-check": "prisma generate && tsc --noEmit",
@@ -17,7 +17,7 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "postinstall": "node -e \"const{cpSync,mkdirSync}=require('fs');mkdirSync('public/pdf-worker',{recursive:true});cpSync(require.resolve('pdfjs-dist/build/pdf.worker.min.mjs'),'public/pdf-worker/pdf.worker.min.mjs');\""
+    "postinstall": "prisma generate || true && node -e \"const{cpSync,mkdirSync}=require('fs');mkdirSync('public/pdf-worker',{recursive:true});cpSync(require.resolve('pdfjs-dist/build/pdf.worker.min.mjs'),'public/pdf-worker/pdf.worker.min.mjs');\""
   },
   "dependencies": {
     "@better-auth/expo": "^1.4.13",
