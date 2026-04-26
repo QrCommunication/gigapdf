@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discussions
+    url: https://github.com/QrCommunication/gigapdf/discussions
+    about: For questions, ideas, and general discussion (not bugs)
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/QrCommunication/gigapdf/security/advisories/new
+    about: Use the private GitHub Security Advisory flow — never file security issues publicly
