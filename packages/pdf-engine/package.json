@@ -1,5 +1,6 @@
 {
   "name": "@giga-pdf/pdf-engine",
+  "license": "AGPL-3.0-or-later",
   "version": "0.1.0",
   "description": "PDF manipulation engine for GigaPDF — parse, render, merge, encrypt, preview",
   "private": true,

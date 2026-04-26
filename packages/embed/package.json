@@ -1,5 +1,6 @@
 {
   "name": "@giga-pdf/embed",
+  "license": "AGPL-3.0-or-later",
   "version": "1.0.0",
   "description": "Embed GigaPDF editor in any website",
   "main": "./dist/index.cjs",
@@ -17,7 +18,9 @@
       "require": "./dist/react.cjs"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -30,8 +33,12 @@
     "react-dom": "^19.0.0"
   },
   "peerDependenciesMeta": {
-    "react": { "optional": true },
-    "react-dom": { "optional": true }
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^3.0.0",

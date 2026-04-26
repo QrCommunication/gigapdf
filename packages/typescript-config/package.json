@@ -1,6 +1,9 @@
 {
   "name": "@giga-pdf/typescript-config",
+  "license": "AGPL-3.0-or-later",
   "version": "0.1.0",
   "private": true,
-  "files": ["*.json"]
+  "files": [
+    "*.json"
+  ]
 }

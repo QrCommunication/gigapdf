@@ -1,5 +1,6 @@
 {
   "name": "gigapdf-mobile",
+  "license": "AGPL-3.0-or-later",
   "version": "0.7.0-alpha",
   "main": "expo-router/entry",
   "scripts": {
