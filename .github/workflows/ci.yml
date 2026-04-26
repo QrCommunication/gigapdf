@@ -197,6 +197,11 @@ jobs:
       NEXT_PUBLIC_LEGAL_HOST_NAME: "Scaleway SAS"
       NEXT_PUBLIC_LEGAL_HOST_ADDRESS: "8 rue de la Ville l'Évêque, 75008 Paris, France"
       NEXT_PUBLIC_LEGAL_HOST_PHONE: "+33 1 84 13 00 00"
+      # Build-time placeholders (better-auth + Prisma need a connection string
+      # at build for schema parsing; the build never connects to the DB).
+      DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder"
+      BETTER_AUTH_SECRET: "ci-build-placeholder-secret-do-not-use-in-prod"
+      BETTER_AUTH_URL: "https://app.giga-pdf.com"
     steps:
       - uses: actions/checkout@v4
 
