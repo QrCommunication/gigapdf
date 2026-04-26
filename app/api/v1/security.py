@@ -9,7 +9,6 @@ subsequent save / download operations return the actually-encrypted file.
 
 import io
 import time
-from typing import Optional
 
 import pikepdf
 from fastapi import APIRouter
@@ -26,11 +25,11 @@ router = APIRouter()
 class EncryptDocumentRequest(BaseModel):
     """Request to encrypt a PDF document."""
 
-    user_password: Optional[str] = Field(
+    user_password: str | None = Field(
         default=None,
         description="Password required to open the document (user password)",
     )
-    owner_password: Optional[str] = Field(
+    owner_password: str | None = Field(
         default=None,
         description="Password required to change permissions (owner password)",
     )

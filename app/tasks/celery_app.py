@@ -7,10 +7,10 @@ OCR, export, billing, and infrastructure operations.
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from celery import Celery
-from celery.signals import task_postrun, task_failure
+from celery.signals import task_failure, task_postrun
 
 from app.config import get_settings
 
@@ -138,9 +138,10 @@ def _run_async(coro):
 
 async def _update_job_completed(celery_task_id: str, result: dict, state: str):
     """Update job status in database after task completion."""
+    from sqlalchemy import select
+
     from app.core.database import get_db_session
     from app.models.database import AsyncJob
-    from sqlalchemy import select
 
     try:
         async with get_db_session() as session:
@@ -151,7 +152,7 @@ async def _update_job_completed(celery_task_id: str, result: dict, state: str):
             if job:
                 job.status = "completed" if state == "SUCCESS" else "failed"
                 job.progress = 100.0
-                job.completed_at = datetime.now(timezone.utc)
+                job.completed_at = datetime.now(UTC)
 
                 # Store result (file_path instead of binary data)
                 if isinstance(result, dict):
@@ -172,9 +173,10 @@ async def _update_job_completed(celery_task_id: str, result: dict, state: str):
 
 async def _update_job_failed(celery_task_id: str, error_message: str):
     """Update job status when task fails."""
+    from sqlalchemy import select
+
     from app.core.database import get_db_session
     from app.models.database import AsyncJob
-    from sqlalchemy import select
 
     try:
         async with get_db_session() as session:
@@ -185,7 +187,7 @@ async def _update_job_failed(celery_task_id: str, error_message: str):
             if job:
                 job.status = "failed"
                 job.error_message = error_message[:1000] if error_message else "Unknown error"
-                job.completed_at = datetime.now(timezone.utc)
+                job.completed_at = datetime.now(UTC)
                 await session.commit()
                 logger.error(f"Marked job {job.id} as failed: {error_message[:100]}")
     except Exception as e:

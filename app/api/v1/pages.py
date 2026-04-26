@@ -5,7 +5,7 @@ Handles page CRUD, preview generation, rotation, and reordering.
 """
 
 import time
-from typing import Literal, Optional
+from typing import Literal
 
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
@@ -262,7 +262,7 @@ async def get_page_preview(
     format: Literal["png", "jpeg", "webp", "svg"] = Query(default="png"),
     dpi: int = Query(default=150, ge=72, le=600),
     quality: int = Query(default=85, ge=1, le=100),
-    scale: Optional[float] = Query(default=None),
+    scale: float | None = Query(default=None),
     user: OptionalUser = None,
 ) -> Response:
     """Get page preview image."""

@@ -6,13 +6,12 @@ particularly for document sharing events.
 """
 
 import logging
-from typing import Optional
 
-from sqlalchemy import select, and_, func, update
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
-from app.models.database import ShareNotification, StoredDocument
+from app.models.database import ShareNotification
 from app.utils.helpers import generate_uuid, now_utc
 
 logger = logging.getLogger(__name__)
@@ -36,10 +35,10 @@ class NotificationService:
         user_id: str,
         notification_type: str,
         title: str,
-        message: Optional[str] = None,
-        document_id: Optional[str] = None,
-        share_invitation_id: Optional[str] = None,
-        metadata: Optional[dict] = None,
+        message: str | None = None,
+        document_id: str | None = None,
+        share_invitation_id: str | None = None,
+        metadata: dict | None = None,
     ) -> str:
         """
         Create a new notification.
@@ -103,7 +102,7 @@ class NotificationService:
             # Build conditions
             conditions = [ShareNotification.user_id == user_id]
             if unread_only:
-                conditions.append(ShareNotification.is_read == False)
+                conditions.append(not ShareNotification.is_read)
 
             # Count total
             count_query = select(func.count(ShareNotification.id)).where(and_(*conditions))
@@ -162,7 +161,7 @@ class NotificationService:
         async with get_db_session() as session:
             query = select(func.count(ShareNotification.id)).where(
                 ShareNotification.user_id == user_id,
-                ShareNotification.is_read == False,
+                not ShareNotification.is_read,
             )
             result = await session.execute(query)
             return result.scalar() or 0
@@ -212,7 +211,7 @@ class NotificationService:
                 update(ShareNotification)
                 .where(
                     ShareNotification.user_id == user_id,
-                    ShareNotification.is_read == False,
+                    not ShareNotification.is_read,
                 )
                 .values(is_read=True)
             )

@@ -6,7 +6,6 @@ annotations, form fields).
 """
 
 import time
-from typing import Optional
 
 from fastapi import APIRouter, Query
 
@@ -204,8 +203,8 @@ foreach ($elements as $element) {
 async def list_elements(
     document_id: str,
     page_number: int,
-    type: Optional[str] = Query(default=None, description="Filter by element type"),
-    layer_id: Optional[str] = Query(default=None, description="Filter by layer"),
+    type: str | None = Query(default=None, description="Filter by element type"),
+    layer_id: str | None = Query(default=None, description="Filter by layer"),
     page: int = Query(default=1, ge=1, description="Page number"),
     per_page: int = Query(default=50, ge=1, le=200, description="Items per page"),
     user: OptionalUser = None,

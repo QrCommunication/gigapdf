@@ -5,7 +5,6 @@ Provides dashboard statistics and analytics for the admin panel.
 """
 
 from datetime import datetime, timedelta
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -27,7 +26,7 @@ class SystemHealth(BaseModel):
     """System component health status."""
     name: str
     status: str  # healthy, warning, error
-    latency: Optional[str] = None
+    latency: str | None = None
 
 
 class DashboardStats(BaseModel):
@@ -62,7 +61,7 @@ class RecentActivity(BaseModel):
     type: str  # user_signup, document_upload, job_completed, etc.
     description: str
     timestamp: datetime
-    user_id: Optional[str] = None
+    user_id: str | None = None
 
 
 @router.get(
@@ -160,7 +159,7 @@ async def get_dashboard_stats(
     # Get total documents
     docs_result = await db.execute(
         select(func.count()).select_from(StoredDocument).where(
-            StoredDocument.is_deleted == False
+            not StoredDocument.is_deleted
         )
     )
     total_documents = docs_result.scalar() or 0
@@ -341,7 +340,7 @@ async def get_usage_stats(
             select(func.count()).select_from(StoredDocument).where(
                 StoredDocument.created_at >= month_start,
                 StoredDocument.created_at < month_end,
-                StoredDocument.is_deleted == False
+                not StoredDocument.is_deleted
             )
         )
         doc_count = docs_result.scalar() or 0
@@ -350,7 +349,7 @@ async def get_usage_stats(
         storage_result = await db.execute(
             select(func.sum(StoredDocument.file_size_bytes)).where(
                 StoredDocument.created_at < month_end,
-                StoredDocument.is_deleted == False
+                not StoredDocument.is_deleted
             )
         )
         storage_bytes = storage_result.scalar() or 0
@@ -482,7 +481,7 @@ async def get_revenue_stats(
 
         # Get plan prices for revenue calculation
         plans_result = await db.execute(
-            select(Plan).where(Plan.is_active == True)
+            select(Plan).where(Plan.is_active)
         )
         plans = {p.slug: float(p.price) for p in plans_result.scalars().all()}
 
@@ -604,7 +603,7 @@ async def get_recent_activity(
     # Get recent documents
     docs_result = await db.execute(
         select(StoredDocument)
-        .where(StoredDocument.is_deleted == False)
+        .where(not StoredDocument.is_deleted)
         .order_by(StoredDocument.created_at.desc())
         .limit(limit // 2)
     )

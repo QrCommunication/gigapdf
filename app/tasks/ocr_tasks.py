@@ -6,9 +6,6 @@ Async tasks for OCR processing of scanned PDF pages.
 
 import asyncio
 import logging
-from typing import Optional
-
-from celery import shared_task
 
 from app.tasks.celery_app import celery_app
 
@@ -19,7 +16,7 @@ logger = logging.getLogger(__name__)
 def process_ocr(
     self,
     document_id: str,
-    page_numbers: Optional[list[int]] = None,
+    page_numbers: list[int] | None = None,
     languages: str = "eng+fra",
     confidence_threshold: float = 60.0,
     output_type: str = "overlay",

@@ -5,15 +5,15 @@ Jobs represent long-running operations like OCR, export, merge, etc.
 """
 
 from datetime import datetime
-from enum import Enum
-from typing import Any, Optional
+from enum import StrEnum
+from typing import Any
 
 from pydantic import ConfigDict, Field
 
 from app.models.base import CamelCaseModel, to_camel
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     """Status of an async job."""
 
     PENDING = "pending"
@@ -23,7 +23,7 @@ class JobStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class JobType(str, Enum):
+class JobType(StrEnum):
     """Types of async jobs."""
 
     OCR = "ocr"
@@ -39,7 +39,7 @@ class JobError(CamelCaseModel):
 
     code: str = Field(description="Error code")
     message: str = Field(description="Error message")
-    details: Optional[dict[str, Any]] = Field(default=None, description="Additional details")
+    details: dict[str, Any] | None = Field(default=None, description="Additional details")
 
 
 class JobObject(CamelCaseModel):
@@ -55,12 +55,12 @@ class JobObject(CamelCaseModel):
     status: JobStatus = Field(default=JobStatus.PENDING, description="Current status")
     progress: float = Field(default=0.0, ge=0, le=100, description="Progress percentage")
     created_at: datetime = Field(description="Job creation time")
-    started_at: Optional[datetime] = Field(default=None, description="Processing start time")
-    completed_at: Optional[datetime] = Field(default=None, description="Completion time")
-    result: Optional[dict[str, Any]] = Field(default=None, description="Job result on completion")
-    error: Optional[JobError] = Field(default=None, description="Error details if failed")
-    document_id: Optional[str] = Field(default=None, description="Associated document ID")
-    websocket_channel: Optional[str] = Field(
+    started_at: datetime | None = Field(default=None, description="Processing start time")
+    completed_at: datetime | None = Field(default=None, description="Completion time")
+    result: dict[str, Any] | None = Field(default=None, description="Job result on completion")
+    error: JobError | None = Field(default=None, description="Error details if failed")
+    document_id: str | None = Field(default=None, description="Associated document ID")
+    websocket_channel: str | None = Field(
         default=None, description="WebSocket channel for progress updates"
     )
 

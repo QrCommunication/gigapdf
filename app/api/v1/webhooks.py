@@ -6,7 +6,7 @@ and tenant billing.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.config import get_settings
 from app.core.database import get_db_session
 from app.models.database import Plan, UserQuota
-from app.models.tenant import Tenant, TenantMember, TenantStatus
+from app.models.tenant import Tenant, TenantStatus
 from app.services.quota_service import quota_service
 from app.services.stripe_service import StripeServiceError, stripe_service
 
@@ -224,10 +224,10 @@ async def handle_checkout_completed(session_data: dict):
                 if subscription.status == "trialing":
                     entity.status = TenantStatus.TRIAL
                     entity.trial_start_at = datetime.fromtimestamp(
-                        subscription.trial_start, tz=timezone.utc
-                    ) if subscription.trial_start else datetime.now(timezone.utc)
+                        subscription.trial_start, tz=UTC
+                    ) if subscription.trial_start else datetime.now(UTC)
                     entity.trial_ends_at = datetime.fromtimestamp(
-                        subscription.trial_end, tz=timezone.utc
+                        subscription.trial_end, tz=UTC
                     ) if subscription.trial_end else None
                 else:
                     entity.status = TenantStatus.ACTIVE
@@ -253,17 +253,17 @@ async def handle_checkout_completed(session_data: dict):
                 if subscription.status == "trialing":
                     entity.subscription_status = "trialing"
                     entity.trial_start_at = datetime.fromtimestamp(
-                        subscription.trial_start, tz=timezone.utc
-                    ) if subscription.trial_start else datetime.now(timezone.utc)
+                        subscription.trial_start, tz=UTC
+                    ) if subscription.trial_start else datetime.now(UTC)
                     entity.trial_ends_at = datetime.fromtimestamp(
-                        subscription.trial_end, tz=timezone.utc
+                        subscription.trial_end, tz=UTC
                     ) if subscription.trial_end else None
                 else:
                     entity.subscription_status = "active"
                     entity.has_used_trial = True
 
                 entity.current_period_end = datetime.fromtimestamp(
-                    subscription.current_period_end, tz=timezone.utc
+                    subscription.current_period_end, tz=UTC
                 )
                 entity.cancel_at_period_end = subscription.cancel_at_period_end
 
@@ -301,11 +301,11 @@ async def handle_subscription_created(subscription: dict):
                 entity.status = TenantStatus.TRIAL
                 if subscription.get("trial_start"):
                     entity.trial_start_at = datetime.fromtimestamp(
-                        subscription["trial_start"], tz=timezone.utc
+                        subscription["trial_start"], tz=UTC
                     )
                 if subscription.get("trial_end"):
                     entity.trial_ends_at = datetime.fromtimestamp(
-                        subscription["trial_end"], tz=timezone.utc
+                        subscription["trial_end"], tz=UTC
                     )
             else:
                 entity.status = TenantStatus.ACTIVE
@@ -313,18 +313,18 @@ async def handle_subscription_created(subscription: dict):
             entity.stripe_subscription_id = subscription_id
             entity.subscription_status = status
             entity.current_period_end = datetime.fromtimestamp(
-                subscription.get("current_period_end", 0), tz=timezone.utc
+                subscription.get("current_period_end", 0), tz=UTC
             )
             entity.cancel_at_period_end = subscription.get("cancel_at_period_end", False)
 
             if status == "trialing":
                 if subscription.get("trial_start"):
                     entity.trial_start_at = datetime.fromtimestamp(
-                        subscription["trial_start"], tz=timezone.utc
+                        subscription["trial_start"], tz=UTC
                     )
                 if subscription.get("trial_end"):
                     entity.trial_ends_at = datetime.fromtimestamp(
-                        subscription["trial_end"], tz=timezone.utc
+                        subscription["trial_end"], tz=UTC
                     )
 
         # Determine and apply plan
@@ -387,7 +387,7 @@ async def handle_subscription_updated(subscription: dict):
         else:
             entity.subscription_status = status
             entity.current_period_end = datetime.fromtimestamp(
-                subscription.get("current_period_end", 0), tz=timezone.utc
+                subscription.get("current_period_end", 0), tz=UTC
             )
             entity.cancel_at_period_end = cancel_at_period_end
 

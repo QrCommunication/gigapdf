@@ -6,7 +6,6 @@ with hashed key storage, scope control, rate limiting, and expiration.
 """
 
 from datetime import datetime
-from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -53,7 +52,7 @@ class ApiKey(Base):
     scopes: Mapped[str] = mapped_column(
         Text, nullable=False, default="read,write"
     )  # Comma-separated list of authorised scopes
-    allowed_domains: Mapped[Optional[str]] = mapped_column(
+    allowed_domains: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )  # Comma-separated list of allowed origins for CORS, NULL means unrestricted
     rate_limit: Mapped[int] = mapped_column(
@@ -62,16 +61,16 @@ class ApiKey(Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True
     )
-    last_used_at: Mapped[Optional[datetime]] = mapped_column(
+    last_used_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    expires_at: Mapped[Optional[datetime]] = mapped_column(
+    expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )  # NULL means the key never expires
-    publishable_key_hash: Mapped[Optional[str]] = mapped_column(
+    publishable_key_hash: Mapped[str | None] = mapped_column(
         String(128), nullable=True, unique=True
     )  # SHA-256 of the publishable key (giga_pub_*)
-    publishable_key_prefix: Mapped[Optional[str]] = mapped_column(
+    publishable_key_prefix: Mapped[str | None] = mapped_column(
         String(20), nullable=True
     )  # First chars of the publishable key for display
     created_at: Mapped[datetime] = mapped_column(

@@ -23,7 +23,6 @@ focused sub-services.  The facade will be removed once all internal
 consumers have been migrated (see /docs/share-service-decomposition.md).
 """
 
-import warnings
 
 from app.services.sharing.constants import (
     InvitationStatus,

@@ -102,7 +102,7 @@ def _filter_sensitive_data(event: dict[str, Any], hint: dict[str, Any]) -> dict[
     cookies: dict | None = request.get("cookies")
     if isinstance(cookies, dict):
         # Redact all cookie values (they may carry session tokens)
-        request["cookies"] = {k: "[Filtered]" for k in cookies}
+        request["cookies"] = dict.fromkeys(cookies, "[Filtered]")
 
     # --- 3. Request body ---
     body: Any = request.get("data")

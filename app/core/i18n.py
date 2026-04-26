@@ -5,7 +5,6 @@ Provides translation of error messages and API responses
 based on Accept-Language header.
 """
 
-from typing import Optional
 
 # Translation dictionaries for supported languages
 TRANSLATIONS: dict[str, dict[str, str]] = {
@@ -249,7 +248,7 @@ def get_translation(
     return message
 
 
-def parse_accept_language(header: Optional[str]) -> str:
+def parse_accept_language(header: str | None) -> str:
     """
     Parse Accept-Language header and return best matching language.
 
@@ -327,7 +326,7 @@ class Translator:
         """
         return get_translation(key, self.language, **kwargs)
 
-    def get(self, key: str, default: Optional[str] = None, **kwargs) -> str:
+    def get(self, key: str, default: str | None = None, **kwargs) -> str:
         """
         Get translation with default fallback.
 

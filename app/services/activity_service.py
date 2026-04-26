@@ -5,15 +5,12 @@ Provides methods to log and retrieve document activities.
 """
 
 import logging
-from datetime import datetime
-from typing import Optional
 
-from sqlalchemy import select, and_
-from sqlalchemy.orm import selectinload
+from sqlalchemy import and_, select
 
 from app.core.database import get_db_session
 from app.models.database import ActivityLog, StoredDocument
-from app.utils.helpers import generate_uuid, now_utc
+from app.utils.helpers import generate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -45,15 +42,15 @@ class ActivityService:
     async def log_activity(
         user_id: str,
         action: str,
-        document_id: Optional[str] = None,
-        user_email: Optional[str] = None,
-        user_name: Optional[str] = None,
+        document_id: str | None = None,
+        user_email: str | None = None,
+        user_name: str | None = None,
         resource_type: str = "document",
-        extra_data: Optional[dict] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-    ) -> Optional[str]:
+        extra_data: dict | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+        tenant_id: str | None = None,
+    ) -> str | None:
         """
         Log an activity.
 
@@ -110,7 +107,7 @@ class ActivityService:
         user_id: str,
         limit: int = 50,
         offset: int = 0,
-        action_filter: Optional[str] = None,
+        action_filter: str | None = None,
     ) -> tuple[list[dict], int]:
         """
         Get activity history for a document.
@@ -134,7 +131,7 @@ class ActivityService:
                     select(StoredDocument).where(
                         StoredDocument.id == document_id,
                         StoredDocument.owner_id == user_id,
-                        StoredDocument.is_deleted == False,
+                        not StoredDocument.is_deleted,
                     )
                 )
                 document = doc_result.scalar_one_or_none()
@@ -194,8 +191,8 @@ class ActivityService:
         user_id: str,
         limit: int = 50,
         offset: int = 0,
-        action_filter: Optional[str] = None,
-        resource_type_filter: Optional[str] = None,
+        action_filter: str | None = None,
+        resource_type_filter: str | None = None,
     ) -> tuple[list[dict], int]:
         """
         Get activity history for a user (their own actions).

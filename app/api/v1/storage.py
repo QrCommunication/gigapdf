@@ -11,7 +11,6 @@ import json
 import logging
 import time
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
@@ -59,7 +58,7 @@ class CreateFolderRequest(BaseModel):
         min_length=1,
         max_length=255,
     )
-    parent_id: Optional[str] = Field(
+    parent_id: str | None = Field(
         default=None,
         description="Parent folder ID (null for root)",
     )
@@ -198,9 +197,9 @@ async def save_document(
     user: AuthenticatedUser,
     file: UploadFile = File(..., description="PDF file bytes"),
     name: str = Form(..., min_length=1, max_length=255, description="Display name for the document"),
-    folder_id: Optional[str] = Form(default=None, description="Folder UUID (null for root)"),
-    tags: Optional[str] = Form(default=None, description='JSON array of tags, e.g. ["contract","legal"]'),
-    version_comment: Optional[str] = Form(default=None, description="Comment describing this version"),
+    folder_id: str | None = Form(default=None, description="Folder UUID (null for root)"),
+    tags: str | None = Form(default=None, description='JSON array of tags, e.g. ["contract","legal"]'),
+    version_comment: str | None = Form(default=None, description="Comment describing this version"),
 ) -> APIResponse[dict]:
     """Save a PDF document to persistent storage.
 
@@ -505,9 +504,9 @@ async def list_stored_documents(
     user: AuthenticatedUser,
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
-    folder_id: Optional[str] = Query(default=None),
-    search: Optional[str] = Query(default=None),
-    tags: Optional[str] = Query(default=None),
+    folder_id: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    tags: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """List stored documents with pagination."""
@@ -516,7 +515,7 @@ async def list_stored_documents(
     # Build base query
     base_query = select(StoredDocument).where(
         StoredDocument.owner_id == user.user_id,
-        StoredDocument.is_deleted == False,
+        not StoredDocument.is_deleted,
     )
 
     # Filter by folder
@@ -716,7 +715,7 @@ async def load_stored_document(
         select(StoredDocument).where(
             StoredDocument.id == stored_document_id,
             StoredDocument.owner_id == user.user_id,
-            StoredDocument.is_deleted == False,
+            not StoredDocument.is_deleted,
         )
     )
     stored_doc = result.scalar_one_or_none()
@@ -1072,7 +1071,7 @@ async def create_version(
     stored_document_id: str,
     user: AuthenticatedUser,
     file: UploadFile = File(..., description="PDF file bytes"),
-    comment: Optional[str] = Form(default=None, description="Description of changes in this version"),
+    comment: str | None = Form(default=None, description="Description of changes in this version"),
 ) -> APIResponse[dict]:
     """Create a new version of a stored document via multipart PDF upload.
 
@@ -1361,7 +1360,7 @@ async def rename_stored_document(
         select(StoredDocument).where(
             StoredDocument.id == stored_document_id,
             StoredDocument.owner_id == user.user_id,
-            StoredDocument.is_deleted == False,
+            not StoredDocument.is_deleted,
         )
     )
     stored_doc = result.scalar_one_or_none()
@@ -1529,7 +1528,7 @@ async def delete_stored_document(
         select(StoredDocument).where(
             StoredDocument.id == stored_document_id,
             StoredDocument.owner_id == user.user_id,
-            StoredDocument.is_deleted == False,
+            not StoredDocument.is_deleted,
         )
     )
     stored_doc = result.scalar_one_or_none()
@@ -2102,7 +2101,7 @@ async def delete_folder(
     count_result = await db.execute(
         select(func.count()).select_from(StoredDocument).where(
             StoredDocument.folder_id == folder_id,
-            StoredDocument.is_deleted == False,
+            not StoredDocument.is_deleted,
         )
     )
     doc_count = count_result.scalar() or 0
@@ -2147,7 +2146,7 @@ async def delete_folder(
 class MoveDocumentRequest(BaseModel):
     """Request to move a document to a folder."""
 
-    folder_id: Optional[str] = Field(
+    folder_id: str | None = Field(
         default=None,
         description="Target folder ID (null for root)",
     )
@@ -2318,7 +2317,7 @@ async def move_document(
         select(StoredDocument).where(
             StoredDocument.id == stored_document_id,
             StoredDocument.owner_id == user.user_id,
-            StoredDocument.is_deleted == False,
+            not StoredDocument.is_deleted,
         )
     )
     document = result.scalar_one_or_none()
@@ -2373,7 +2372,7 @@ async def move_document(
 class MoveFolderRequest(BaseModel):
     """Request to move a folder to another folder."""
 
-    parent_id: Optional[str] = Field(
+    parent_id: str | None = Field(
         default=None,
         description="Target parent folder ID (null for root)",
     )
@@ -2581,7 +2580,6 @@ async def move_folder(
         new_path = f"{parent_folder.path}{parent_folder.id}/"
 
     # Update folder
-    old_parent_id = folder.parent_id
     old_path = folder.path
     folder.parent_id = request.parent_id
     folder.path = new_path
@@ -2773,7 +2771,7 @@ async def get_folder_stats(
         ).where(
             StoredDocument.owner_id == user.user_id,
             StoredDocument.folder_id.in_(folder_ids),
-            StoredDocument.is_deleted == False,
+            not StoredDocument.is_deleted,
         )
     )
     stats = stats_result.one()

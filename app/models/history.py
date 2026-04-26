@@ -5,7 +5,7 @@ Maintains a stack of document states for reversible operations.
 """
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import ConfigDict, Field
 
@@ -100,6 +100,6 @@ class DocumentSnapshot(CamelCaseModel):
     element_states: dict[str, Any] = Field(
         default_factory=dict, description="Element ID to element state mapping"
     )
-    metadata_state: Optional[dict[str, Any]] = Field(
+    metadata_state: dict[str, Any] | None = Field(
         default=None, description="Document metadata state if changed"
     )

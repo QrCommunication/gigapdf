@@ -5,7 +5,6 @@ Models for saved documents, versions, and folders.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import Field
 
@@ -18,7 +17,7 @@ class StoredDocumentVersion(CamelCaseModel):
     version: int = Field(ge=1, description="Version number")
     created_at: datetime = Field(description="Version creation time")
     created_by: str = Field(description="User ID who created this version")
-    comment: Optional[str] = Field(default=None, description="Version comment")
+    comment: str | None = Field(default=None, description="Version comment")
     size_bytes: int = Field(ge=0, description="File size in bytes")
 
 
@@ -31,14 +30,14 @@ class StoredDocument(CamelCaseModel):
 
     stored_document_id: str = Field(description="Unique stored document ID (UUID v4)")
     name: str = Field(description="Document display name")
-    folder_id: Optional[str] = Field(default=None, description="Parent folder ID")
+    folder_id: str | None = Field(default=None, description="Parent folder ID")
     owner_id: str = Field(description="Owner user ID")
     page_count: int = Field(ge=0, description="Number of pages")
     current_version: int = Field(ge=1, description="Current version number")
     created_at: datetime = Field(description="Initial creation time")
     modified_at: datetime = Field(description="Last modification time")
     tags: list[str] = Field(default_factory=list, description="Document tags")
-    thumbnail_url: Optional[str] = Field(default=None, description="Thumbnail URL")
+    thumbnail_url: str | None = Field(default=None, description="Thumbnail URL")
     is_deleted: bool = Field(default=False, description="Soft delete flag")
 
 
@@ -47,7 +46,7 @@ class StorageFolder(CamelCaseModel):
 
     folder_id: str = Field(description="Unique folder ID (UUID v4)")
     name: str = Field(description="Folder name")
-    parent_id: Optional[str] = Field(default=None, description="Parent folder ID")
+    parent_id: str | None = Field(default=None, description="Parent folder ID")
     owner_id: str = Field(description="Owner user ID")
     created_at: datetime = Field(description="Creation time")
     document_count: int = Field(default=0, ge=0, description="Number of documents in folder")

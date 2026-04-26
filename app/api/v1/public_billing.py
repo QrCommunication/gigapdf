@@ -10,8 +10,6 @@ billing is managed by the tenant owner only.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, EmailStr
@@ -22,7 +20,7 @@ from app.core.database import get_db_session
 from app.middleware.auth import AuthenticatedUser, OptionalUser
 from app.middleware.request_id import get_request_id
 from app.models.database import Plan, UserQuota
-from app.schemas.billing import BillingPlanResponse, CheckoutSessionResponse
+from app.schemas.billing import CheckoutSessionResponse
 from app.schemas.responses.common import APIResponse, MetaInfo
 from app.services.billing_permission_service import (
     TRIAL_DURATION_DAYS,
@@ -46,7 +44,7 @@ class PublicCheckoutRequest(BaseModel):
     """Request to create a checkout session from landing page."""
 
     plan_id: str
-    email: Optional[EmailStr] = None  # Required if not authenticated
+    email: EmailStr | None = None  # Required if not authenticated
     success_url: str
     cancel_url: str
 
@@ -56,16 +54,16 @@ class PlanComparisonResponse(BaseModel):
 
     slug: str
     name: str
-    description: Optional[str]
+    description: str | None
     price: float
     currency: str
     interval: str
     storage_gb: float
     api_calls_limit: int
     document_limit: int
-    features: Optional[list] = None
+    features: list | None = None
     is_popular: bool = False
-    trial_days: Optional[int] = None
+    trial_days: int | None = None
     cta_text: str = "Get Started"
 
 
@@ -125,7 +123,7 @@ async def list_plans_public() -> APIResponse[list[PlanComparisonResponse]]:
     async with get_db_session() as session:
         result = await session.execute(
             select(Plan)
-            .where(Plan.is_active == True, Plan.is_tenant_plan == False)
+            .where(Plan.is_active, not Plan.is_tenant_plan)
             .order_by(Plan.display_order)
         )
         plans = result.scalars().all()
@@ -202,7 +200,7 @@ async def get_plan_public(plan_slug: str) -> APIResponse[PlanComparisonResponse]
     """Get details for a specific plan (public access)."""
     async with get_db_session() as session:
         result = await session.execute(
-            select(Plan).where(Plan.slug == plan_slug, Plan.is_active == True)
+            select(Plan).where(Plan.slug == plan_slug, Plan.is_active)
         )
         plan = result.scalar_one_or_none()
 
@@ -347,7 +345,7 @@ async def create_public_checkout(
     async with get_db_session() as session:
         # Get plan details
         plan_result = await session.execute(
-            select(Plan).where(Plan.slug == request.plan_id, Plan.is_active == True)
+            select(Plan).where(Plan.slug == request.plan_id, Plan.is_active)
         )
         plan = plan_result.scalar_one_or_none()
 

@@ -11,13 +11,10 @@ Handles:
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import stripe
-from celery import shared_task
-from sqlalchemy import select, and_, or_
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -66,7 +63,7 @@ async def _sync_plans_to_stripe_async() -> dict:
     async with get_db_session() as session:
         # Get all active plans
         result = await session.execute(
-            select(Plan).where(Plan.is_active == True)
+            select(Plan).where(Plan.is_active)
         )
         plans = result.scalars().all()
 
@@ -180,7 +177,7 @@ async def _sync_single_plan(plan: Plan, session: AsyncSession):
             plan.stripe_price_id = price.id
             logger.info(f"Re-created Stripe price for plan {plan.slug}: {price.id}")
 
-    plan.stripe_synced_at = datetime.now(timezone.utc)
+    plan.stripe_synced_at = datetime.now(UTC)
 
 
 # =============================================================================
@@ -222,7 +219,7 @@ async def _process_overdue_payments_async() -> dict:
             select(UserQuota).where(
                 and_(
                     UserQuota.subscription_status == "past_due",
-                    UserQuota.is_suspended == False,
+                    not UserQuota.is_suspended,
                 )
             )
         )
@@ -294,7 +291,7 @@ async def _process_user_overdue(user: UserQuota, session: AsyncSession):
                 else:
                     # Too many failures, increment counter
                     user.payment_failed_count += 1
-                    user.last_payment_failed_at = datetime.now(timezone.utc)
+                    user.last_payment_failed_at = datetime.now(UTC)
 
         elif subscription.status == "active":
             # Payment succeeded, reset counters
@@ -332,7 +329,7 @@ async def _suspend_user_account(
 ):
     """Suspend a user account due to payment issues."""
     user.is_suspended = True
-    user.suspended_at = datetime.now(timezone.utc)
+    user.suspended_at = datetime.now(UTC)
     user.suspension_reason = reason
 
     logger.warning(f"Suspended user {user.user_id}: {reason}")
@@ -372,7 +369,7 @@ async def _process_expired_trials_async() -> dict:
     processed = 0
     downgraded = 0
     errors = []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     async with get_db_session() as session:
         # Find users with expired trials
@@ -526,9 +523,9 @@ def send_trial_reminders(self):
 async def _send_trial_reminders_async() -> dict:
     """Async implementation of trial reminders."""
     sent = 0
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     three_days_from_now = now + timedelta(days=3)
-    one_day_from_now = now + timedelta(days=1)
+    now + timedelta(days=1)
 
     async with get_db_session() as session:
         # Find users with trials ending in 3 days

@@ -4,16 +4,12 @@ Layer management endpoints.
 Handles PDF Optional Content Groups (OCG) - layers that can be shown/hidden.
 """
 
-import time
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from app.middleware.auth import OptionalUser
-from app.middleware.request_id import get_request_id
-from app.schemas.responses.common import APIResponse, MetaInfo
-from app.utils.helpers import now_utc
-from pydantic import BaseModel, Field
+from app.schemas.responses.common import APIResponse
 
 router = APIRouter()
 
@@ -22,11 +18,11 @@ class CreateLayerRequest(BaseModel):
     """Request to create a new layer."""
 
     name: str = Field(description="Layer display name")
-    visible: Optional[bool] = Field(default=True, description="Initial visibility state")
-    locked: Optional[bool] = Field(default=False, description="Whether layer is locked for editing")
-    opacity: Optional[float] = Field(default=1.0, ge=0, le=1, description="Layer opacity")
-    print: Optional[bool] = Field(default=True, description="Include layer when printing")
-    order: Optional[int] = Field(default=0, description="Z-order (higher = front)")
+    visible: bool | None = Field(default=True, description="Initial visibility state")
+    locked: bool | None = Field(default=False, description="Whether layer is locked for editing")
+    opacity: float | None = Field(default=1.0, ge=0, le=1, description="Layer opacity")
+    print: bool | None = Field(default=True, description="Include layer when printing")
+    order: int | None = Field(default=0, description="Z-order (higher = front)")
 
     class Config:
         json_schema_extra = {
@@ -44,12 +40,12 @@ class CreateLayerRequest(BaseModel):
 class UpdateLayerRequest(BaseModel):
     """Request to update a layer."""
 
-    name: Optional[str] = Field(default=None, description="Layer display name")
-    visible: Optional[bool] = Field(default=None, description="Visibility state")
-    locked: Optional[bool] = Field(default=None, description="Lock state")
-    opacity: Optional[float] = Field(default=None, ge=0, le=1, description="Layer opacity")
-    print: Optional[bool] = Field(default=None, description="Print state")
-    order: Optional[int] = Field(default=None, description="Z-order")
+    name: str | None = Field(default=None, description="Layer display name")
+    visible: bool | None = Field(default=None, description="Visibility state")
+    locked: bool | None = Field(default=None, description="Lock state")
+    opacity: float | None = Field(default=None, ge=0, le=1, description="Layer opacity")
+    print: bool | None = Field(default=None, description="Print state")
+    order: int | None = Field(default=None, description="Z-order")
 
     class Config:
         json_schema_extra = {

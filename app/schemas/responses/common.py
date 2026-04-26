@@ -1,7 +1,7 @@
 """Common response schemas."""
 
 from datetime import datetime
-from typing import Any, Generic, Optional, TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -14,9 +14,9 @@ T = TypeVar("T")
 class MetaInfo(BaseModel):
     """Response metadata."""
 
-    request_id: Optional[str] = Field(description="Request tracking ID")
+    request_id: str | None = Field(description="Request tracking ID")
     timestamp: datetime = Field(description="Response timestamp")
-    processing_time_ms: Optional[int] = Field(
+    processing_time_ms: int | None = Field(
         default=None, description="Processing time in milliseconds"
     )
 
@@ -26,7 +26,7 @@ class ErrorDetail(BaseModel):
 
     code: str = Field(description="Error code")
     message: str = Field(description="Human-readable error message")
-    details: Optional[dict[str, Any]] = Field(
+    details: dict[str, Any] | None = Field(
         default=None, description="Additional error details"
     )
 
@@ -40,7 +40,7 @@ class PaginationInfo(BaseModel):
     total_pages: int = Field(ge=0, description="Total number of pages")
 
 
-class APIResponse(BaseModel, Generic[T]):
+class APIResponse[T](BaseModel):
     """
     Standard API response wrapper.
 
@@ -48,8 +48,8 @@ class APIResponse(BaseModel, Generic[T]):
     """
 
     success: bool = Field(description="Whether the request succeeded")
-    data: Optional[T] = Field(default=None, description="Response data")
-    error: Optional[ErrorDetail] = Field(default=None, description="Error details")
+    data: T | None = Field(default=None, description="Response data")
+    error: ErrorDetail | None = Field(default=None, description="Error details")
     meta: MetaInfo = Field(description="Response metadata")
 
     class Config:
@@ -67,7 +67,7 @@ class APIResponse(BaseModel, Generic[T]):
         }
 
 
-class SuccessResponse(BaseModel, Generic[T]):
+class SuccessResponse[T](BaseModel):
     """Helper for successful responses."""
 
     success: bool = True
@@ -76,7 +76,7 @@ class SuccessResponse(BaseModel, Generic[T]):
     meta: MetaInfo
 
     @classmethod
-    def create(cls, data: T, processing_time_ms: Optional[int] = None) -> "SuccessResponse[T]":
+    def create(cls, data: T, processing_time_ms: int | None = None) -> "SuccessResponse[T]":
         """Create a success response."""
         return cls(
             data=data,
@@ -101,7 +101,7 @@ class ErrorResponse(BaseModel):
         cls,
         code: str,
         message: str,
-        details: Optional[dict] = None,
+        details: dict | None = None,
     ) -> "ErrorResponse":
         """Create an error response."""
         return cls(

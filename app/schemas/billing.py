@@ -5,10 +5,8 @@ Defines request and response models for all billing operations.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, Field
-
 
 # =============================================================================
 # Request Schemas
@@ -98,12 +96,12 @@ class SubscriptionResponse(BaseModel):
     status: str = Field(description="Subscription status (none, active, canceled, past_due, trialing)")
     current_plan: str = Field(description="Current plan slug")
     plan_name: str = Field(description="Current plan display name")
-    billing_cycle: Optional[str] = Field(default=None, description="month or year")
-    current_period_start: Optional[datetime] = Field(default=None, description="Current billing period start")
-    current_period_end: Optional[datetime] = Field(default=None, description="Current billing period end")
+    billing_cycle: str | None = Field(default=None, description="month or year")
+    current_period_start: datetime | None = Field(default=None, description="Current billing period start")
+    current_period_end: datetime | None = Field(default=None, description="Current billing period end")
     cancel_at_period_end: bool = Field(default=False, description="If subscription will cancel at period end")
-    stripe_customer_id: Optional[str] = Field(default=None, description="Stripe Customer ID")
-    stripe_subscription_id: Optional[str] = Field(default=None, description="Stripe Subscription ID")
+    stripe_customer_id: str | None = Field(default=None, description="Stripe Customer ID")
+    stripe_subscription_id: str | None = Field(default=None, description="Stripe Subscription ID")
 
     class Config:
         json_schema_extra = {
@@ -173,9 +171,9 @@ class PaymentMethodResponse(BaseModel):
 
     id: str = Field(description="Payment method ID")
     type: str = Field(description="Payment method type (card, sepa_debit, etc.)")
-    card: Optional[CardDetails] = Field(default=None, description="Card details if type is card")
+    card: CardDetails | None = Field(default=None, description="Card details if type is card")
     is_default: bool = Field(default=False, description="If this is the default payment method")
-    created_at: Optional[datetime] = Field(default=None, description="When payment method was created")
+    created_at: datetime | None = Field(default=None, description="When payment method was created")
 
     class Config:
         json_schema_extra = {
@@ -198,17 +196,17 @@ class InvoiceResponse(BaseModel):
     """Invoice information."""
 
     id: str = Field(description="Invoice ID")
-    number: Optional[str] = Field(default=None, description="Invoice number")
+    number: str | None = Field(default=None, description="Invoice number")
     status: str = Field(description="Invoice status (draft, open, paid, void, uncollectible)")
     amount_due: int = Field(description="Amount due in cents")
     amount_paid: int = Field(description="Amount paid in cents")
     currency: str = Field(description="Currency code (EUR, USD, etc.)")
     created: datetime = Field(description="Invoice creation date")
-    due_date: Optional[datetime] = Field(default=None, description="Due date")
-    pdf_url: Optional[str] = Field(default=None, description="URL to download PDF invoice")
-    hosted_invoice_url: Optional[str] = Field(default=None, description="URL to view invoice online")
-    period_start: Optional[datetime] = Field(default=None, description="Billing period start")
-    period_end: Optional[datetime] = Field(default=None, description="Billing period end")
+    due_date: datetime | None = Field(default=None, description="Due date")
+    pdf_url: str | None = Field(default=None, description="URL to download PDF invoice")
+    hosted_invoice_url: str | None = Field(default=None, description="URL to view invoice online")
+    period_start: datetime | None = Field(default=None, description="Billing period start")
+    period_end: datetime | None = Field(default=None, description="Billing period end")
 
     class Config:
         json_schema_extra = {
@@ -249,9 +247,9 @@ class UsageMetrics(BaseModel):
 class UsageLimits(BaseModel):
     """Usage limits based on plan."""
 
-    documents: Optional[int] = Field(default=None, description="Document limit (null = unlimited)")
-    storage_gb: Optional[float] = Field(default=None, description="Storage limit in GB (null = unlimited)")
-    api_calls: Optional[int] = Field(default=None, description="API call limit (null = unlimited)")
+    documents: int | None = Field(default=None, description="Document limit (null = unlimited)")
+    storage_gb: float | None = Field(default=None, description="Storage limit in GB (null = unlimited)")
+    api_calls: int | None = Field(default=None, description="API call limit (null = unlimited)")
 
     class Config:
         json_schema_extra = {
@@ -296,17 +294,17 @@ class BillingPlanResponse(BaseModel):
     id: str = Field(description="Plan ID")
     slug: str = Field(description="Plan slug (free, starter, pro, enterprise)")
     name: str = Field(description="Plan display name")
-    description: Optional[str] = Field(default=None, description="Plan description")
+    description: str | None = Field(default=None, description="Plan description")
     price: float = Field(description="Price in currency units")
     currency: str = Field(description="Currency code")
     interval: str = Field(description="Billing interval (month, year)")
     storage_gb: float = Field(description="Storage limit in GB")
     api_calls_limit: int = Field(description="API calls per month")
     document_limit: int = Field(description="Document limit")
-    features: Optional[dict] = Field(default=None, description="Additional features")
+    features: dict | None = Field(default=None, description="Additional features")
     is_popular: bool = Field(default=False, description="If plan is marked as popular")
-    stripe_price_id: Optional[str] = Field(default=None, description="Stripe Price ID")
-    trial_days: Optional[int] = Field(default=None, description="Free trial days")
+    stripe_price_id: str | None = Field(default=None, description="Stripe Price ID")
+    trial_days: int | None = Field(default=None, description="Free trial days")
 
     class Config:
         json_schema_extra = {

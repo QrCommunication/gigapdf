@@ -5,7 +5,6 @@ Free tier: 1000 calls/month
 """
 
 import logging
-from typing import Optional
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse

@@ -5,7 +5,7 @@ Bookmarks (outlines) provide a hierarchical table of contents
 for navigating within a PDF document.
 """
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import ConfigDict, Field
 
@@ -16,10 +16,10 @@ class BookmarkDestination(CamelCaseModel):
     """Navigation destination for a bookmark."""
 
     page_number: int = Field(ge=1, description="Target page number (1-indexed)")
-    position: Optional[dict[str, float]] = Field(
+    position: dict[str, float] | None = Field(
         default=None, description="Position on page {x, y}"
     )
-    zoom: Optional[float | Literal["fit", "fit-width", "fit-height"]] = Field(
+    zoom: float | Literal["fit", "fit-width", "fit-height"] | None = Field(
         default=None, description="Zoom level or fit mode"
     )
 

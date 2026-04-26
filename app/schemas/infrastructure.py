@@ -5,10 +5,8 @@ Defines request and response models for costs and performance monitoring.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, Field
-
 
 # =============================================================================
 # Cost Schemas
@@ -133,7 +131,7 @@ class CurrentMetricsResponse(BaseModel):
     memory: MemoryMetrics = Field(description="Memory metrics")
     disk: DiskMetrics = Field(description="Disk metrics")
     s3: S3Metrics = Field(description="S3 storage metrics")
-    network: Optional[NetworkMetrics] = Field(default=None, description="Network metrics")
+    network: NetworkMetrics | None = Field(default=None, description="Network metrics")
 
     class Config:
         json_schema_extra = {
@@ -176,7 +174,7 @@ class MetricPoint(BaseModel):
     cpu: float = Field(description="CPU percentage")
     memory: float = Field(description="Memory percentage")
     disk: float = Field(description="Disk percentage")
-    s3_mb: Optional[float] = Field(default=None, description="S3 size in MB")
+    s3_mb: float | None = Field(default=None, description="S3 size in MB")
 
 
 class MetricsHistoryResponse(BaseModel):

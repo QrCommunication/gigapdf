@@ -12,7 +12,7 @@ Responsibilities:
 import logging
 import secrets
 from datetime import timedelta
-from typing import Literal, Optional
+from typing import Literal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
@@ -237,7 +237,7 @@ class ShareCrudService:
                 .where(
                     StoredDocument.owner_id == user_id,
                     DocumentShare.status == ShareStatus.ACTIVE,
-                    StoredDocument.is_deleted == False,
+                    not StoredDocument.is_deleted,
                 )
             )
             total_result = await session.execute(count_query)
@@ -249,7 +249,7 @@ class ShareCrudService:
                 .where(
                     StoredDocument.owner_id == user_id,
                     DocumentShare.status == ShareStatus.ACTIVE,
-                    StoredDocument.is_deleted == False,
+                    not StoredDocument.is_deleted,
                 )
                 .order_by(DocumentShare.created_at.desc())
                 .offset((page - 1) * per_page)
@@ -312,10 +312,10 @@ class ShareCrudService:
     async def get_shared_with_me(
         user_id: str,
         user_email: str,
-        user_quota_id: Optional[str] = None,
+        user_quota_id: str | None = None,
         page: int = 1,
         per_page: int = 20,
-        source_filter: Optional[Literal["direct", "organization", "all"]] = "all",
+        source_filter: Literal["direct", "organization", "all"] | None = "all",
     ) -> dict:
         """
         Return a paginated list of documents shared *with* the authenticated user.
@@ -344,7 +344,7 @@ class ShareCrudService:
                     .where(
                         DocumentShare.shared_with_user_id == user_id,
                         DocumentShare.status == ShareStatus.ACTIVE,
-                        StoredDocument.is_deleted == False,
+                        not StoredDocument.is_deleted,
                     )
                     .order_by(DocumentShare.created_at.desc())
                 )
@@ -388,7 +388,7 @@ class ShareCrudService:
                 membership_result = await session.execute(
                     select(TenantMember).where(
                         TenantMember.user_id == user_quota_id,
-                        TenantMember.is_active == True,
+                        TenantMember.is_active,
                     )
                 )
                 memberships = membership_result.scalars().all()
@@ -402,7 +402,7 @@ class ShareCrudService:
                         )
                         .where(
                             TenantDocument.tenant_id == membership.tenant_id,
-                            StoredDocument.is_deleted == False,
+                            not StoredDocument.is_deleted,
                             StoredDocument.owner_id != user_id,
                         )
                     )
@@ -473,7 +473,7 @@ class ShareCrudService:
     async def create_public_link(
         document_id: str,
         owner_id: str,
-        expires_in_days: Optional[int] = None,
+        expires_in_days: int | None = None,
     ) -> dict:
         """
         Create a view-only public link for a document.
@@ -497,7 +497,7 @@ class ShareCrudService:
                 select(StoredDocument).where(
                     StoredDocument.id == document_id,
                     StoredDocument.owner_id == owner_id,
-                    StoredDocument.is_deleted == False,
+                    not StoredDocument.is_deleted,
                 )
             )
             document = doc_result.scalar_one_or_none()
