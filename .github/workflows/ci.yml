@@ -185,6 +185,18 @@ jobs:
       NEXT_PUBLIC_API_URL: https://api.giga-pdf.com
       NEXT_PUBLIC_WS_URL: wss://api.giga-pdf.com
       NEXT_PUBLIC_APP_URL: https://app.giga-pdf.com
+      # Legal env vars required by apps/web/src/lib/env.ts in production builds.
+      NEXT_PUBLIC_LEGAL_COMPANY_NAME: "QR Communication"
+      NEXT_PUBLIC_LEGAL_COMPANY_FORM: "SAS"
+      NEXT_PUBLIC_LEGAL_SIREN: "940 163 496"
+      NEXT_PUBLIC_LEGAL_APE: "73.12Z"
+      NEXT_PUBLIC_LEGAL_ADDRESS: "23 rue de Richelieu, 75001 Paris, France"
+      NEXT_PUBLIC_LEGAL_PHONE: "+33 1 88 83 34 51"
+      NEXT_PUBLIC_LEGAL_CONTACT_EMAIL: "contact@qrcommunication.com"
+      NEXT_PUBLIC_LEGAL_PUBLICATION_DIRECTOR: "Le Président de QR Communication SAS"
+      NEXT_PUBLIC_LEGAL_HOST_NAME: "Scaleway SAS"
+      NEXT_PUBLIC_LEGAL_HOST_ADDRESS: "8 rue de la Ville l'Évêque, 75008 Paris, France"
+      NEXT_PUBLIC_LEGAL_HOST_PHONE: "+33 1 84 13 00 00"
     steps:
       - uses: actions/checkout@v4
 
