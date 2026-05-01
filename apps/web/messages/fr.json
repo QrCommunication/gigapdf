@@ -732,6 +732,7 @@
       "shape": "Forme",
       "draw": "Dessin",
       "annotation": "Annotation",
+      "formField": "Champ de formulaire",
       "pan": "Déplacer",
       "bold": "Gras",
       "italic": "Italique",

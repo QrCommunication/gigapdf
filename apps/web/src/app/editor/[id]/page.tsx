@@ -48,6 +48,7 @@ import { FormsPanel } from "@/components/editor/forms-panel";
 import { useFlattenPdf, usePdfPageOperation, downloadBlob, useApplyElements } from "@giga-pdf/api";
 import { ContentEditLayer, type ElementModification } from "@/components/editor/content-edit-layer";
 import { clientLogger } from "@/lib/client-logger";
+import { withRetry } from "@/lib/with-retry";
 
 /**
  * Convert a frontend Element to API ElementCreateRequest format.
@@ -199,8 +200,42 @@ export default function EditorPage() {
   // Current PDF binary — kept local: File object (resource, not serializable)
   const [currentPdfFile, setCurrentPdfFile] = useState<File | null>(null);
 
-  // Content modifications — kept local: transient editor state (not persisted)
-  const [contentModifications, setContentModifications] = useState<ElementModification[]>([]);
+  // Content modifications — backed by localStorage so a reload during the
+  // 2s save debounce window doesn't drop user edits. The cache is scoped to
+  // storedDocumentId and cleared by the onSaved callback once S3 confirms the
+  // upload (see useDocumentSave below).
+  const contentModsStorageKey = storedDocumentId
+    ? `gigapdf:contentMods:${storedDocumentId}`
+    : null;
+  const [contentModifications, setContentModificationsState] = useState<ElementModification[]>(() => {
+    if (typeof window === "undefined" || !contentModsStorageKey) return [];
+    try {
+      const raw = window.localStorage.getItem(contentModsStorageKey);
+      return raw ? (JSON.parse(raw) as ElementModification[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const setContentModifications = useCallback(
+    (next: ElementModification[] | ((prev: ElementModification[]) => ElementModification[])) => {
+      setContentModificationsState((prev) => {
+        const value = typeof next === "function" ? (next as (p: ElementModification[]) => ElementModification[])(prev) : next;
+        if (typeof window !== "undefined" && contentModsStorageKey) {
+          try {
+            if (value.length === 0) {
+              window.localStorage.removeItem(contentModsStorageKey);
+            } else {
+              window.localStorage.setItem(contentModsStorageKey, JSON.stringify(value));
+            }
+          } catch {
+            // Quota exceeded or storage disabled — modifications stay in memory.
+          }
+        }
+        return value;
+      });
+    },
+    [contentModsStorageKey],
+  );
 
   // Ref for the PDF canvas element (for background capture in content edit)
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -291,10 +326,16 @@ export default function EditorPage() {
   // that invoke save() immediately after setCurrentPdfFile would otherwise
   // read the stale closure value and upload the pre-mutation binary. The
   // ref is updated synchronously before every save trigger.
+  const peekOperations = useOperationsStore((s) => s.peek);
   const drainOperations = useOperationsStore((s) => s.drain);
-  const prependOperations = useOperationsStore((s) => s.prepend);
   const currentPdfFileRef = useRef<File | null>(null);
   const contentModificationsRef = useRef<ElementModification[]>([]);
+  // ElementIds that were baked into the PDF in the most recent apply-elements
+  // call. They should be removed from the Redis backend ONLY after the S3
+  // upload succeeds — flushed by the onSaved callback below. Keeping them
+  // in Redis until S3 confirms means a transient upload failure is recoverable
+  // (Redis still has the user data, scene graph rebuilds via merge on reload).
+  const pendingFlushIdsRef = useRef<string[]>([]);
 
   const updateCurrentPdfFile = useCallback((file: File | null) => {
     currentPdfFileRef.current = file;
@@ -303,8 +344,26 @@ export default function EditorPage() {
 
   const getPreparedBlob = useCallback(async (): Promise<Blob | null> => {
     const pdfFile = currentPdfFileRef.current;
-    if (!pdfFile) return null;
-    const ops = drainOperations();
+    if (!pdfFile) {
+      // pdfFile is null only before the initial load resolves. The save flow
+      // falls back to fetching S3, which is safe in this state because the
+      // canonical binary IS S3 until the local copy is hydrated.
+      const pendingOps = peekOperations();
+      if (pendingOps.length > 0) {
+        clientLogger.warn(
+          "[editor] getPreparedBlob: queue has",
+          pendingOps.length,
+          "ops but pdfFile is not loaded yet — save will retry once the binary is available",
+        );
+      }
+      return null;
+    }
+
+    // Peek (don't drain yet): if apply-elements throws between the drain and
+    // the catch block, ops would be silently lost — even prependOperations
+    // could race with concurrent save attempts. Drain only AFTER we know the
+    // binary was successfully patched.
+    const ops = peekOperations();
     const contentMods = contentModificationsRef.current;
 
     // Nothing to bake — upload the current in-memory PDF as-is. This covers
@@ -332,6 +391,10 @@ export default function EditorPage() {
         file: pdfFile,
         operations: allOps,
       });
+      // apply-elements succeeded — now it's safe to drain the queue. Anything
+      // queued AFTER our peek stays for the next save tick.
+      drainOperations();
+
       const blob =
         modified instanceof Blob ? modified : new Blob([modified as BlobPart]);
       // Update local cache so subsequent ops apply on top of the new binary.
@@ -340,16 +403,29 @@ export default function EditorPage() {
       );
       // Clear content modifications now that they're baked in.
       setContentModifications([]);
+
+      // Stash the elementIds for post-upload Redis flush. We can't delete
+      // from Redis here because S3 hasn't confirmed yet — if upload fails,
+      // Redis is still our recovery source on next reload (via merge).
+      const elementIdsBaked = ops
+        .map((op) => {
+          const el = op.element as { elementId?: string };
+          return el?.elementId;
+        })
+        .filter((id): id is string => Boolean(id));
+      if (elementIdsBaked.length > 0) {
+        pendingFlushIdsRef.current.push(...elementIdsBaked);
+      }
+
       return blob;
     } catch (err) {
       clientLogger.error("[editor] apply-elements failed during save:", err);
-      // Requeue ops so we don't lose the user's work on transient errors.
-      prependOperations(ops);
-      // Fall back to uploading the last known good binary — never upload
-      // the S3 original, which would wipe prior successful edits.
+      // Don't drain the queue — ops stay in the store for the next save tick.
+      // Returning the last known good binary means the upload still goes
+      // through, and the user's pending ops are preserved for retry.
       return pdfFile;
     }
-  }, [drainOperations, prependOperations, applyElements, updateCurrentPdfFile]);
+  }, [peekOperations, drainOperations, applyElements, updateCurrentPdfFile]);
 
   // Keep the ref in sync so getPreparedBlob can read the latest mods without
   // being reconstructed on every keystroke.
@@ -374,8 +450,38 @@ export default function EditorPage() {
     debounceDelay: 2000, // 2s de debounce pour modifications mineures
     setDirty,
     getPreparedBlob,
-    onSaved: (id) => {
+    onSaved: async (id) => {
       clientLogger.debug("[editor] Document sauvegardé:", id);
+      // Flush Redis backend for elements that were baked into the PDF in the
+      // last apply-elements pass. We only run this AFTER S3 confirms the
+      // upload, otherwise a transient upload failure would lose the data
+      // permanently (Redis cleared + S3 unchanged).
+      const flushIds = pendingFlushIdsRef.current;
+      if (flushIds.length === 0 || !documentId) return;
+      pendingFlushIdsRef.current = [];
+      try {
+        await api.batchElementOperations(
+          documentId,
+          flushIds.map((elementId) => ({
+            action: "delete" as const,
+            element_id: elementId,
+          })),
+        );
+        clientLogger.debug(
+          "[editor] Redis flushed for",
+          flushIds.length,
+          "baked elements",
+        );
+      } catch (err) {
+        // Non-fatal: harmless duplicate at next reload (caught by the dedup
+        // heuristic in mergeBackendElements). Push the ids back so a later
+        // save tick gets another chance to clean up.
+        pendingFlushIdsRef.current.push(...flushIds);
+        clientLogger.warn(
+          "[editor] Redis flush failed — will retry next save:",
+          err,
+        );
+      }
     },
   });
 
@@ -520,14 +626,30 @@ export default function EditorPage() {
       // Émettre via WebSocket pour la collaboration
       emitElementCreate(element);
 
-      // Persister l'élément dans le backend (scene graph Redis)
+      // Persister l'élément dans le backend (scene graph Redis) avec retry
+      // exponentiel — couvre les hiccups Redis/réseau transients sans
+      // bloquer l'UI. Le PDF S3 est de toute façon savé en parallèle, donc
+      // un échec définitif côté Redis ne perd pas l'élément (le bake S3
+      // reste).
       if (documentId) {
+        const apiElement = convertToApiElement(element);
         try {
-          const apiElement = convertToApiElement(element);
-          await api.createElement(documentId, pageNumber, apiElement);
+          await withRetry(
+            () => api.createElement(documentId, pageNumber, apiElement),
+            {
+              onAttemptFailed: (attempt, err) =>
+                clientLogger.warn(
+                  `[API] createElement attempt ${attempt} failed:`,
+                  err,
+                ),
+            },
+          );
           clientLogger.debug("[API] Element created in backend:", element.elementId);
         } catch (error) {
-          clientLogger.error("[API] Failed to create element:", error);
+          clientLogger.error(
+            "[API] createElement failed after retries — element will be persisted via PDF bake only:",
+            error,
+          );
         }
       }
 
@@ -554,14 +676,26 @@ export default function EditorPage() {
       // Émettre via WebSocket pour la collaboration
       emitElementUpdate(element.elementId, element);
 
-      // Mettre à jour l'élément dans le backend
+      // Mettre à jour l'élément dans le backend avec retry exponentiel
       if (documentId) {
+        const updates = convertToApiElement(element);
         try {
-          const updates = convertToApiElement(element);
-          await api.updateElement(documentId, element.elementId, updates);
+          await withRetry(
+            () => api.updateElement(documentId, element.elementId, updates),
+            {
+              onAttemptFailed: (attempt, err) =>
+                clientLogger.warn(
+                  `[API] updateElement attempt ${attempt} failed:`,
+                  err,
+                ),
+            },
+          );
           clientLogger.debug("[API] Element updated in backend:", element.elementId);
         } catch (error) {
-          clientLogger.error("[API] Failed to update element:", error);
+          clientLogger.error(
+            "[API] updateElement failed after retries — change will persist via PDF bake:",
+            error,
+          );
         }
       }
 
@@ -591,13 +725,25 @@ export default function EditorPage() {
       // Émettre via WebSocket pour la collaboration
       emitElementDelete(elementId);
 
-      // Supprimer l'élément du backend
+      // Supprimer l'élément du backend avec retry exponentiel
       if (documentId) {
         try {
-          await api.deleteElement(documentId, elementId);
+          await withRetry(
+            () => api.deleteElement(documentId, elementId),
+            {
+              onAttemptFailed: (attempt, err) =>
+                clientLogger.warn(
+                  `[API] deleteElement attempt ${attempt} failed:`,
+                  err,
+                ),
+            },
+          );
           clientLogger.debug("[API] Element deleted from backend:", elementId);
         } catch (error) {
-          clientLogger.error("[API] Failed to delete element:", error);
+          clientLogger.error(
+            "[API] deleteElement failed after retries — deletion will persist via PDF bake:",
+            error,
+          );
         }
       }
 
@@ -661,10 +807,22 @@ export default function EditorPage() {
           if ("style" in updates && updates.style) {
             apiUpdates.style = updates.style as unknown as Record<string, unknown>;
           }
-          await api.updateElement(documentId, elementId, apiUpdates);
+          await withRetry(
+            () => api.updateElement(documentId, elementId, apiUpdates),
+            {
+              onAttemptFailed: (attempt, err) =>
+                clientLogger.warn(
+                  `[API] updateElement (panel) attempt ${attempt} failed:`,
+                  err,
+                ),
+            },
+          );
           clientLogger.debug("[API] Element updated in backend:", elementId);
         } catch (error) {
-          clientLogger.error("[API] Failed to update element:", error);
+          clientLogger.error(
+            "[API] updateElement (panel) failed after retries — change will persist via PDF bake:",
+            error,
+          );
         }
       }
 
