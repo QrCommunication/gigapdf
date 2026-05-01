@@ -237,7 +237,7 @@ class ShareCrudService:
                 .where(
                     StoredDocument.owner_id == user_id,
                     DocumentShare.status == ShareStatus.ACTIVE,
-                    not StoredDocument.is_deleted,
+                    ~StoredDocument.is_deleted,
                 )
             )
             total_result = await session.execute(count_query)
@@ -249,7 +249,7 @@ class ShareCrudService:
                 .where(
                     StoredDocument.owner_id == user_id,
                     DocumentShare.status == ShareStatus.ACTIVE,
-                    not StoredDocument.is_deleted,
+                    ~StoredDocument.is_deleted,
                 )
                 .order_by(DocumentShare.created_at.desc())
                 .offset((page - 1) * per_page)
@@ -344,7 +344,7 @@ class ShareCrudService:
                     .where(
                         DocumentShare.shared_with_user_id == user_id,
                         DocumentShare.status == ShareStatus.ACTIVE,
-                        not StoredDocument.is_deleted,
+                        ~StoredDocument.is_deleted,
                     )
                     .order_by(DocumentShare.created_at.desc())
                 )
@@ -402,7 +402,7 @@ class ShareCrudService:
                         )
                         .where(
                             TenantDocument.tenant_id == membership.tenant_id,
-                            not StoredDocument.is_deleted,
+                            ~StoredDocument.is_deleted,
                             StoredDocument.owner_id != user_id,
                         )
                     )
@@ -497,7 +497,7 @@ class ShareCrudService:
                 select(StoredDocument).where(
                     StoredDocument.id == document_id,
                     StoredDocument.owner_id == owner_id,
-                    not StoredDocument.is_deleted,
+                    ~StoredDocument.is_deleted,
                 )
             )
             document = doc_result.scalar_one_or_none()
