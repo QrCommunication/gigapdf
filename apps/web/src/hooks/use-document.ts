@@ -5,6 +5,74 @@ import { api } from "@/lib/api";
 import { clientLogger } from "@/lib/client-logger";
 import type { DocumentObject, PageObject, BookmarkObject, LayerObject, EmbeddedFileObject, Element } from "@giga-pdf/types";
 
+// Tolerance for "same position" heuristic when matching parsed PDF elements
+// against Redis elements that have a different elementId (post-bake case).
+const DEDUP_BOUNDS_TOLERANCE_PX = 2;
+
+function boundsApproxEqual(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+): boolean {
+  return (
+    Math.abs(a.x - b.x) <= DEDUP_BOUNDS_TOLERANCE_PX &&
+    Math.abs(a.y - b.y) <= DEDUP_BOUNDS_TOLERANCE_PX &&
+    Math.abs(a.width - b.width) <= DEDUP_BOUNDS_TOLERANCE_PX &&
+    Math.abs(a.height - b.height) <= DEDUP_BOUNDS_TOLERANCE_PX
+  );
+}
+
+function elementContent(el: Element): string {
+  if (el.type === "text" || el.type === "annotation") return el.content ?? "";
+  return "";
+}
+
+/**
+ * Merge backend Redis elements into PDF-parsed elements at reload time.
+ *
+ * Two pipelines persist user-added elements: Redis (sync via api.createElement)
+ * and PDF S3 (debounced 2s via apply-elements + upload). At reload only the PDF
+ * is read via parse-from-s3, so elements added in the last few seconds are
+ * invisible until baked. Merging the Redis layer closes that race window.
+ *
+ * Dedup happens in two passes:
+ *   1. elementId match — Redis wins (latest user edits)
+ *   2. Heuristic match (same type + content + bounds ±2px) — drops parsed
+ *      duplicates of already-baked Redis elements that came back with a fresh
+ *      elementId from the PDF parser
+ */
+function mergeBackendElements(
+  parsedElements: Element[],
+  backendElements: Element[],
+): Element[] {
+  const byId = new Map<string, Element>();
+  for (const el of parsedElements) byId.set(el.elementId, el);
+  for (const el of backendElements) byId.set(el.elementId, el);
+
+  // Pass 2: drop parsed elements that look like baked copies of a Redis element
+  const backendSignatures = backendElements.map((el) => ({
+    type: el.type,
+    content: elementContent(el),
+    bounds: el.bounds,
+    elementId: el.elementId,
+  }));
+  const filtered: Element[] = [];
+  for (const el of byId.values()) {
+    const isBackendOriginal = backendSignatures.some((s) => s.elementId === el.elementId);
+    if (isBackendOriginal) {
+      filtered.push(el);
+      continue;
+    }
+    const looksBaked = backendSignatures.some(
+      (s) =>
+        s.type === el.type &&
+        s.content === elementContent(el) &&
+        boundsApproxEqual(s.bounds, el.bounds),
+    );
+    if (!looksBaked) filtered.push(el);
+  }
+  return filtered;
+}
+
 export interface UseDocumentOptions {
   /** ID du document stocké (S3) - si fourni, charge depuis le stockage */
   storedDocumentId?: string;
@@ -149,6 +217,33 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       clientLogger.debug("[useDocument] First page:", pagesArray?.[0]);
       clientLogger.debug("[useDocument] First page elements:", pagesArray?.[0]?.elements);
       clientLogger.debug("[useDocument] First element:", (pagesArray?.[0]?.elements as unknown[])?.[0]);
+
+      // Merge Redis-backed user elements with PDF-parsed elements. parse-from-s3
+      // only sees what's baked into the binary, so anything queued in the last
+      // few seconds before reload (debounce + apply + upload window) would be
+      // lost without this merge. See mergeBackendElements above for the dedup.
+      const parsedPages = docData.pages as unknown as PageObject[];
+      const mergedPages = await Promise.all(
+        parsedPages.map(async (page) => {
+          try {
+            const { elements: backendElements } = await api.getPageElements(docId!, page.pageNumber, {
+              per_page: 200,
+            });
+            const merged = mergeBackendElements(
+              page.elements,
+              backendElements as unknown as Element[],
+            );
+            return { ...page, elements: merged };
+          } catch (err) {
+            clientLogger.warn(
+              `[useDocument] getPageElements failed for page ${page.pageNumber} — falling back to PDF parse only:`,
+              err,
+            );
+            return page;
+          }
+        }),
+      );
+      docData.pages = mergedPages as unknown as Array<Record<string, unknown>>;
 
       // Convertir les données en types stricts
       // Note: API returns camelCase (by_alias=True)
