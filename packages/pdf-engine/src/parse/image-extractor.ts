@@ -185,30 +185,50 @@ function boundsFromCtm(
  *
  * Returns null if the object is not available (not yet loaded or not an image).
  */
-function resolveImageObj(
+async function resolveImageObj(
   page: PDFPageProxy,
   name: string,
-): { width: number; height: number; data: Uint8ClampedArray | null } | null {
+): Promise<{ width: number; height: number; data: Uint8ClampedArray | null } | null> {
   try {
-    // pdfjs exposes `objs` (page-level) and `commonObjs` (document-level)
-    // Image XObjects are typically page-level
+    // pdfjs exposes `objs` (page-level) and `commonObjs` (document-level).
+    // Image XObjects are typically page-level. They are loaded lazily during
+    // rendering: only the first image referenced in the operator list is
+    // available synchronously after getOperatorList. Subsequent images throw
+    // "Requesting object that isn't resolved yet" if accessed via the sync
+    // get(name) API. The async callback form resolves once the data lands.
     const objs = (page as unknown as Record<string, unknown>)['objs'];
-    if (!objs || typeof (objs as Record<string, unknown>)['get'] !== 'function') {
-      return null;
-    }
+    if (!objs) return null;
+    const objsApi = objs as {
+      get: ((k: string) => unknown) & ((k: string, cb: (v: unknown) => void) => void);
+      has?: (k: string) => boolean;
+    };
+    if (typeof objsApi.get !== 'function') return null;
 
-    const imgObj = (objs as { get: (k: string) => unknown }).get(name);
-    if (!imgObj || typeof imgObj !== 'object') {
-      return null;
-    }
+    const imgObj = await new Promise<unknown>((resolve) => {
+      // Two-arg form: callback fires when the resource resolves.
+      try {
+        (objsApi.get as (k: string, cb: (v: unknown) => void) => void)(name, resolve);
+      } catch {
+        resolve(null);
+      }
+    });
+    if (!imgObj || typeof imgObj !== 'object') return null;
 
     const obj = imgObj as Record<string, unknown>;
     const w = typeof obj['width'] === 'number' ? obj['width'] : null;
     const h = typeof obj['height'] === 'number' ? obj['height'] : null;
     if (!w || !h) return null;
 
-    // data is Uint8ClampedArray (RGBA pixels) when available
-    const data = obj['data'] instanceof Uint8ClampedArray ? obj['data'] : null;
+    // pdfjs stores decoded RGBA pixels as Uint8ClampedArray; some streamed
+    // images come as Uint8Array. Accept both — the canvas ImageData
+    // constructor will copy from either.
+    let data: Uint8ClampedArray | null = null;
+    const rawData = obj['data'];
+    if (rawData instanceof Uint8ClampedArray) {
+      data = rawData;
+    } else if (rawData instanceof Uint8Array) {
+      data = new Uint8ClampedArray(rawData.buffer, rawData.byteOffset, rawData.byteLength);
+    }
 
     return { width: w, height: h, data };
   } catch {
@@ -377,7 +397,7 @@ export async function extractImageElements(
       let pixelData: Uint8ClampedArray | null = null;
 
       try {
-        const imgObj = resolveImageObj(page, resourceName);
+        const imgObj = await resolveImageObj(page, resourceName);
         if (imgObj) {
           nativeWidth = imgObj.width;
           nativeHeight = imgObj.height;
@@ -653,7 +673,7 @@ export async function extractImages(
         let dataUrl: string | null = null;
 
         try {
-          const imgObj = resolveImageObj(page, resourceName);
+          const imgObj = await resolveImageObj(page, resourceName);
           if (imgObj) {
             nativeWidth = imgObj.width;
             nativeHeight = imgObj.height;
