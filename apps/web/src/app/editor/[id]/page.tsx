@@ -660,7 +660,7 @@ export default function EditorPage() {
   );
 
   const handleElementModified = useCallback(
-    async (element: Element) => {
+    async (element: Element, oldBounds?: Element["bounds"]) => {
       clientLogger.debug("[editor] Element modified:", element);
       setDirty(true);
       const pageNumber = currentPageIndex + 1;
@@ -669,9 +669,13 @@ export default function EditorPage() {
       // reads from there, not from Fabric).
       updateElementInPage(element.elementId, element);
 
-      // Queue update — use the current bounds as oldBounds (best-effort
-      // fallback; apply-elements needs them to clear the previous region).
-      queueUpdate(pageNumber, element, element.bounds);
+      // Queue update with the TRUE oldBounds (tracked by editor-canvas
+      // before the modification). Without this, apply-elements clears
+      // the new bounds region and the original PDF glyph stays visible
+      // (texte dupliqué post-bake). Fallback to element.bounds only if
+      // tracking missed (very first modification of a freshly-loaded
+      // element with no init).
+      queueUpdate(pageNumber, element, oldBounds ?? element.bounds);
 
       // Émettre via WebSocket pour la collaboration
       emitElementUpdate(element.elementId, element);
