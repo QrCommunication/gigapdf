@@ -221,10 +221,10 @@ interface CanvasModule {
   createCanvas: (w: number, h: number) => {
     getContext: (t: '2d') => {
       putImageData: (id: unknown, x: number, y: number) => void;
-      createImageData: (data: Uint8ClampedArray, w: number, h: number) => unknown;
     };
     toDataURL: (fmt: string) => string;
   };
+  ImageData: new (data: Uint8ClampedArray, w: number, h: number) => unknown;
 }
 
 async function rgbaToDataUrl(
@@ -238,9 +238,13 @@ async function rgbaToDataUrl(
     // Dynamic import keeps this module loadable when `canvas` is absent.
     const canvasModule = (await import('canvas')) as unknown as CanvasModule;
 
+    // Standard W3C constructor: new ImageData(data, width, height).
+    // The non-standard ctx.createImageData(data, width, height) signature was
+    // throwing "input data has zero byte length" silently, returning null and
+    // dropping every image from the rendered canvas.
     const canvas = canvasModule.createCanvas(width, height);
     const ctx = canvas.getContext('2d');
-    const imageData = ctx.createImageData(data, width, height);
+    const imageData = new canvasModule.ImageData(data, width, height);
     ctx.putImageData(imageData, 0, 0);
     return canvas.toDataURL('image/png');
   } catch {
@@ -366,16 +370,18 @@ export async function extractImageElements(
         continue;
       }
 
-      // Attempt to resolve native image dimensions from pdfjs objects
+      // Attempt to resolve native image dimensions and pixel bytes from pdfjs.
       let nativeWidth = Math.round(Math.abs(ctm[0]!));
       let nativeHeight = Math.round(Math.abs(ctm[3]!));
       let originalFormat = 'unknown';
+      let pixelData: Uint8ClampedArray | null = null;
 
       try {
         const imgObj = resolveImageObj(page, resourceName);
         if (imgObj) {
           nativeWidth = imgObj.width;
           nativeHeight = imgObj.height;
+          pixelData = imgObj.data;
           const mime = detectMimeType(imgObj.data);
           originalFormat = mimeToFormat(mime);
         }
@@ -387,10 +393,19 @@ export async function extractImageElements(
         });
       }
 
-      const dataUrl =
-        baseUrl && documentId
-          ? `${baseUrl}/api/pdf/${documentId}/pages/${pageNumber}/images/${imageIndex}`
-          : '';
+      // Generate an inline data URL so the frontend can render the image
+      // without an extra round-trip. The previous implementation pointed at
+      // /api/pdf/{docId}/pages/{N}/images/{idx} — an endpoint that does not
+      // exist — so every image silently fell through to an empty source and
+      // the editor canvas dropped them entirely.
+      let dataUrl = '';
+      if (pixelData && nativeWidth > 0 && nativeHeight > 0) {
+        const generated = await rgbaToDataUrl(pixelData, nativeWidth, nativeHeight);
+        if (generated) dataUrl = generated;
+      }
+      if (!dataUrl && baseUrl && documentId) {
+        dataUrl = `${baseUrl}/api/pdf/${documentId}/pages/${pageNumber}/images/${imageIndex}`;
+      }
 
       const elementId = deriveStableId(pageNumber, bounds.x, bounds.y, resourceName);
 
