@@ -208,6 +208,12 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
   // Without this, every setError() retriggered the useEffect because
   // `fetchFontList` was recomputed on each render (unstable reference).
   const failedDocumentsRef = useRef<Set<string>>(new Set());
+  // Synchronous guard against concurrent effect invocations: React 19's
+  // Strict Mode + parent re-renders can fire useEffect multiple times in the
+  // same tick before any awaited fetch resolves. Marking the documentId as
+  // "in-flight" before the await ensures duplicate invocations bail out
+  // immediately instead of stacking up parallel HTTP requests.
+  const inFlightDocumentsRef = useRef<Set<string>>(new Set());
 
   // Stable fetcher refs: callers may pass override fetchers, but we capture
   // them once so React effects don't loop on identity changes.
@@ -339,6 +345,13 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
     if (failedDocumentsRef.current.has(documentId)) {
       return;
     }
+    // Synchronous guard against concurrent invocations: only the first effect
+    // for a given documentId actually fetches. Subsequent invocations exit
+    // immediately so we never have multiple parallel requests in flight.
+    if (inFlightDocumentsRef.current.has(documentId)) {
+      return;
+    }
+    inFlightDocumentsRef.current.add(documentId);
 
     const signal = { aborted: false };
     abortRef.current = signal;
@@ -415,6 +428,8 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
         if (!signal.aborted) {
           setIsLoading(false);
         }
+        // Always release the in-flight slot, success or failure.
+        inFlightDocumentsRef.current.delete(documentId);
       }
     }
 
