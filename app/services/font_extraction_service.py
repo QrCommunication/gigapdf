@@ -19,6 +19,7 @@ import hashlib
 import io
 import logging
 import re
+import struct
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -218,16 +219,125 @@ class FontExtractionService:
         return ExtractedFont(metadata=metadata, data=font_bytes)
 
     @staticmethod
+    def _pad_hmtx_table(font_bytes: bytes) -> bytes | None:
+        """
+        Pad the hmtx table with trailing zero leftSideBearings.
+
+        PDF subset TTFs often store only the first `numberOfHMetrics`
+        longHorMetric entries (4 bytes each) and omit the trailing array of
+        `numGlyphs - numberOfHMetrics` 2-byte LSBs. PDF readers don't need
+        them — they read each glyph by GID and apply the last advance — but
+        Chrome OTS, fontTools, and harfbuzz all reject the truncated table:
+
+            OTS parsing error: hmtx: Failed to read side bearing N
+            fontTools.TTLibError: not enough 'hmtx' table data: expected X bytes, got Y
+
+        Padding with zeros is safe: a zero LSB shifts no glyphs, and the
+        advanceWidth from the last longHorMetric still applies to all
+        trailing glyphs (per the OpenType spec).
+
+        Returns None when the binary is too small/malformed to safely patch.
+        Returns the original bytes when no padding is needed (already
+        well-formed) so callers can chain unconditionally.
+        """
+        if len(font_bytes) < 12:
+            return None
+
+        sfnt_version = font_bytes[:4]
+        if sfnt_version not in (b"\x00\x01\x00\x00", b"true", b"OTTO"):
+            # Not a TTF/OTF — pass through unchanged.
+            return font_bytes
+
+        try:
+            num_tables = struct.unpack(">H", font_bytes[4:6])[0]
+        except struct.error:
+            return None
+
+        # Parse the table directory: each entry is 16 bytes
+        # [tag(4) checksum(4) offset(4) length(4)]
+        tables: dict[bytes, tuple[int, int, int]] = {}
+        for i in range(num_tables):
+            dir_off = 12 + i * 16
+            if dir_off + 16 > len(font_bytes):
+                return None
+            tag = font_bytes[dir_off : dir_off + 4]
+            try:
+                offset, length = struct.unpack(
+                    ">II", font_bytes[dir_off + 8 : dir_off + 16]
+                )
+            except struct.error:
+                return None
+            tables[tag] = (offset, length, dir_off)
+
+        # All three are required to compute the expected hmtx length.
+        if (
+            b"hmtx" not in tables
+            or b"maxp" not in tables
+            or b"hhea" not in tables
+        ):
+            return font_bytes
+
+        maxp_off, maxp_len, _ = tables[b"maxp"]
+        hhea_off, hhea_len, _ = tables[b"hhea"]
+        # maxp.numGlyphs is at offset 4 (uint16);
+        # hhea.numberOfHMetrics is at offset 34 (uint16).
+        if maxp_len < 6 or hhea_len < 36:
+            return None
+        try:
+            num_glyphs = struct.unpack(
+                ">H", font_bytes[maxp_off + 4 : maxp_off + 6]
+            )[0]
+            num_h_metrics = struct.unpack(
+                ">H", font_bytes[hhea_off + 34 : hhea_off + 36]
+            )[0]
+        except struct.error:
+            return None
+
+        if num_h_metrics == 0 or num_h_metrics > num_glyphs:
+            # Defensive: malformed hhea/maxp pair.
+            return font_bytes
+
+        expected_hmtx = num_h_metrics * 4 + (num_glyphs - num_h_metrics) * 2
+        hmtx_off, hmtx_len, hmtx_dir_off = tables[b"hmtx"]
+
+        if hmtx_len >= expected_hmtx:
+            # Already well-formed (rare for PDF subsets, common for raw TTFs).
+            return font_bytes
+
+        missing = expected_hmtx - hmtx_len
+        insert_at = hmtx_off + hmtx_len
+
+        # Splice zero bytes into the binary, then update offsets in the
+        # table directory for every table that comes physically after hmtx.
+        new_bytes = (
+            bytearray(font_bytes[:insert_at])
+            + bytearray(missing)
+            + bytearray(font_bytes[insert_at:])
+        )
+        new_bytes[hmtx_dir_off + 12 : hmtx_dir_off + 16] = struct.pack(
+            ">I", expected_hmtx
+        )
+        for _tag, (off, _len, dir_off) in tables.items():
+            if off > hmtx_off:
+                new_bytes[dir_off + 8 : dir_off + 12] = struct.pack(
+                    ">I", off + missing
+                )
+
+        return bytes(new_bytes)
+
+    @staticmethod
     def _repair_ttf_for_browser(
         font_bytes: bytes, font_format: str | None, postscript_name: str | None
     ) -> bytes | None:
         """
         Round-trip a font through fontTools to make it browser-OTS-compliant.
 
-        PDF-embedded subset TTFs typically lack the table integrity Chrome
-        requires (cmap, name, OS-2). fontTools' TTFont(...).save() regenerates
-        internal checksums and normalises the table layout, fixing the most
-        common rejection modes.
+        Chrome's OpenType Sanitiser (OTS) is stricter than pdf.js. PDF subset
+        TTFs typically:
+        1. Truncate hmtx to skip trailing leftSideBearings (we pad with zeros)
+        2. Have inconsistent table checksums (fontTools.save() regenerates)
+        3. Sometimes lack OS-2/name (fontTools.save() preserves whatever
+           was there, but the round-trip normalises layout)
 
         Returns None when the font cannot be loaded or saved; callers should
         treat None as "not embeddable in browser" (the metadata stays
@@ -236,61 +346,72 @@ class FontExtractionService:
         Args:
             font_bytes: Raw font program from the PDF FontFile* stream.
             font_format: Detected format ("ttf", "otf", "cff") — only TTF/OTF
-                are repaired. CFF data is wrapped in OTF by upstream code,
-                which is already browser-friendly, so we round-trip it too.
+                are repaired. CFF data needs separate handling.
             postscript_name: Used only for logging.
 
         Returns:
             Repaired font bytes (typically larger than input due to padded
-            tables), or None when repair failed.
+            tables and regenerated checksums), or the original bytes when
+            repair was not possible (fail-open: serving the raw subset gives
+            Firefox/Safari a chance and Chrome will fall back gracefully).
         """
         if not _FONTTOOLS_AVAILABLE:
-            # Without fontTools, we serve the raw subset bytes — Chrome OTS
-            # will reject most of them, but Firefox/Safari may accept some.
             return font_bytes
 
         if font_format not in ("ttf", "otf"):
             return font_bytes
 
+        # Step 1: pad hmtx in the binary so fontTools can parse it.
+        padded = FontExtractionService._pad_hmtx_table(font_bytes)
+        if padded is None:
+            logger.info(
+                "Cannot patch hmtx for font '%s' — serving raw bytes",
+                postscript_name or "unknown",
+            )
+            return font_bytes
+        if padded is not font_bytes and len(padded) != len(font_bytes):
+            logger.debug(
+                "Padded hmtx for '%s': %d -> %d bytes",
+                postscript_name or "unknown",
+                len(font_bytes),
+                len(padded),
+            )
+
+        # Step 2: round-trip via fontTools to regenerate checksums and
+        # normalise table layout. lazy=False catches malformed-table errors
+        # here rather than at write-time, giving us a clean failure path.
         try:
-            # lazy=False forces all tables to load eagerly so save() catches
-            # malformed-table errors here rather than at write-time. This
-            # gives us a clean failure path: we know up-front the font is
-            # not repairable instead of producing half-corrupt output.
-            font = TTFont(io.BytesIO(font_bytes), lazy=False, recalcBBoxes=False)
+            font = TTFont(io.BytesIO(padded), lazy=False, recalcBBoxes=False)
         except TTLibError as exc:
             logger.info(
-                "fontTools cannot parse font '%s' (%s): %s — serving raw bytes",
+                "fontTools cannot parse font '%s' (%s) even after hmtx pad: %s",
                 postscript_name or "unknown",
                 font_format,
                 exc,
             )
-            # Falling back to raw bytes is safer than dropping the font: some
-            # browsers (Firefox) tolerate the original subset and the editor
-            # already falls back to the family name when FontFace.load fails.
-            return font_bytes
+            return padded  # padded TTF is still better than the truncated original
         except Exception as exc:  # noqa: BLE001 — third-party deserialiser
             logger.warning(
                 "fontTools parse failed for font '%s': %s",
                 postscript_name or "unknown",
                 exc,
             )
-            return font_bytes
+            return padded
 
         try:
             buf = io.BytesIO()
             # reorderTables=False keeps the table physical order stable so
-            # the binary diff between the original and repaired file is
-            # minimised — easier to debug if a downstream consumer breaks.
+            # the binary diff is minimised — easier to debug if a downstream
+            # consumer breaks.
             font.save(buf, reorderTables=False)
             return buf.getvalue()
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "fontTools save failed for font '%s': %s — serving raw bytes",
+                "fontTools save failed for font '%s': %s — serving padded bytes",
                 postscript_name or "unknown",
                 exc,
             )
-            return font_bytes
+            return padded
 
     def _extract_font_bytes(
         self, descriptor: pikepdf.Object | None
