@@ -123,7 +123,7 @@ async def list_plans_public() -> APIResponse[list[PlanComparisonResponse]]:
     async with get_db_session() as session:
         result = await session.execute(
             select(Plan)
-            .where(Plan.is_active, not Plan.is_tenant_plan)
+            .where(Plan.is_active, ~Plan.is_tenant_plan)
             .order_by(Plan.display_order)
         )
         plans = result.scalars().all()

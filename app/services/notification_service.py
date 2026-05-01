@@ -102,7 +102,7 @@ class NotificationService:
             # Build conditions
             conditions = [ShareNotification.user_id == user_id]
             if unread_only:
-                conditions.append(not ShareNotification.is_read)
+                conditions.append(~ShareNotification.is_read)
 
             # Count total
             count_query = select(func.count(ShareNotification.id)).where(and_(*conditions))
@@ -161,7 +161,7 @@ class NotificationService:
         async with get_db_session() as session:
             query = select(func.count(ShareNotification.id)).where(
                 ShareNotification.user_id == user_id,
-                not ShareNotification.is_read,
+                ~ShareNotification.is_read,
             )
             result = await session.execute(query)
             return result.scalar() or 0
@@ -211,7 +211,7 @@ class NotificationService:
                 update(ShareNotification)
                 .where(
                     ShareNotification.user_id == user_id,
-                    not ShareNotification.is_read,
+                    ~ShareNotification.is_read,
                 )
                 .values(is_read=True)
             )

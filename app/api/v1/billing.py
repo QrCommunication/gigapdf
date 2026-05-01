@@ -1014,7 +1014,7 @@ async def list_plans(
     """List all available subscription plans."""
     result = await db.execute(
         select(Plan)
-        .where(Plan.is_active, not Plan.is_tenant_plan)
+        .where(Plan.is_active, ~Plan.is_tenant_plan)
         .order_by(Plan.display_order)
     )
     plans = result.scalars().all()
