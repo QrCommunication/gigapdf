@@ -1006,7 +1006,7 @@ export function EditorCanvas({
     elements: Element[],
     fabricModule: typeof import("fabric")
   ): Promise<void> => {
-    const { Rect, Circle, Ellipse, Triangle, Line, IText, FabricImage } = fabricModule;
+    const { Rect, Circle, Ellipse, Triangle, Line, IText, FabricImage, Path: FabricPath, Polygon } = fabricModule;
 
     // Collect image-load promises to await them all before the final renderAll
     const imageLoadPromises: Promise<void>[] = [];
@@ -1145,8 +1145,42 @@ export function EditorCanvas({
             case "triangle":
               fabricObj = new Triangle({ ...shapeOptions, width: w, height: h });
               break;
-            default:
-              fabricObj = new Rect({ ...shapeOptions, width: w, height: h });
+            case "polygon": {
+              // fabric.Polygon needs an explicit points array. We have it on
+              // geometry.points (already in canvas coords).
+              const pts = shapeElement.geometry?.points ?? [];
+              if (pts.length >= 3) {
+                fabricObj = new Polygon(pts, shapeOptions);
+              } else {
+                fabricObj = new Rect({ ...shapeOptions, width: w, height: h });
+              }
+              break;
+            }
+            case "path":
+            default: {
+              // Render via SVG pathData when available — required for any
+              // shape with Bezier curves (logos, icons, complex outlines).
+              // Falling back to Rect would render a meaningless filled box.
+              const pathData = shapeElement.geometry?.pathData;
+              if (pathData) {
+                // Fabric.Path positions itself at the path's own bounding box
+                // top-left, then offsets via left/top. Pass the bounds origin
+                // explicitly so the path keeps its absolute canvas position.
+                fabricObj = new FabricPath(pathData, {
+                  ...shapeOptions,
+                  // Override bounds.{x,y} from baseOptions to use the path's
+                  // intrinsic bbox; otherwise the path is double-translated.
+                  left: shapeElement.bounds.x,
+                  top: shapeElement.bounds.y,
+                  originX: "left",
+                  originY: "top",
+                  // fabric.Path computes its own width/height from the path —
+                  // do not override.
+                });
+              } else {
+                fabricObj = new Rect({ ...shapeOptions, width: w, height: h });
+              }
+            }
           }
           if (fabricObj) {
             (fabricObj as FabricObjectWithData).data = {

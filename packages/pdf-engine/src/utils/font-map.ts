@@ -82,21 +82,25 @@ export function mapPdfFontToStandard(pdfFontName: string): {
   fontWeight: 'normal' | 'bold';
   fontStyle: 'normal' | 'italic';
 } {
-  const lower = pdfFontName.toLowerCase();
-
+  // Detect weight from name suffix or numeric tag. Medium/Semibold treated
+  // as not-bold for CSS fontWeight (the actual weight number is more useful
+  // but the editor doesn't currently surface it).
   const isBold =
-    lower.includes('bold') ||
-    lower.includes('heavy') ||
-    lower.includes('black') ||
-    /\bw[6-9]\d{2}\b/.test(lower); // e.g. W700, W800
-  const isItalic = lower.includes('italic') || lower.includes('oblique');
+    /\bbold\b/i.test(pdfFontName) ||
+    /\bheavy\b/i.test(pdfFontName) ||
+    /\bblack\b/i.test(pdfFontName) ||
+    /\bextrabold\b/i.test(pdfFontName) ||
+    /\bw[6-9]\d{2}\b/i.test(pdfFontName); // W700, W800, W900
+  const isItalic = /italic|oblique/i.test(pdfFontName);
 
   // Strip subset prefix ("AAAAAA+") and trailing weight/style suffixes so we
-  // can recognise the family even when pdfjs gave us "AAAAAA+Arial-BoldMT".
+  // can recognise the family even when pdfjs gave us "AAAAAA+Arial-BoldMT"
+  // or "JRIXYS+Gotham-Book". Keep the *first* hyphen separator so suffix
+  // detection still has the marker, but drop it from the family name.
   const stripped = pdfFontName
     .replace(/^[A-Z]{6}\+/, '')
-    .replace(/[-,]?\s*(MT|PS|Std)$/i, '')
-    .replace(/[-,]?\s*(Bold|Heavy|Black|Italic|Oblique|Regular|Medium|Light|Thin)\s*(Italic|Oblique)?$/i, '')
+    .replace(/[-,]?\s*(MT|PS|Std)\s*$/i, '')
+    .replace(/[-,]?\s*(Bold|Heavy|Black|ExtraBold|Italic|Oblique|Regular|Medium|SemiBold|DemiBold|Light|Thin|Book)\s*(Italic|Oblique)?\s*$/i, '')
     .replace(/\s+$/, '');
 
   // Known family roots, in priority order. The first hit wins so that
@@ -106,6 +110,7 @@ export function mapPdfFontToStandard(pdfFontName: string): {
     [/\btiro\b/i, 'Times New Roman'],
     [/courier/i, 'Courier New'],
     [/\bcour\b/i, 'Courier New'],
+    [/\bocrb/i, 'Courier New'],
     [/\bmono/i, 'Courier New'],
     [/calibri/i, 'Calibri'],
     [/cambria/i, 'Cambria'],
@@ -115,6 +120,8 @@ export function mapPdfFontToStandard(pdfFontName: string): {
     [/segoe/i, 'Segoe UI'],
     [/roboto/i, 'Roboto'],
     [/open\s*sans/i, 'Open Sans'],
+    [/gotham/i, 'Gotham'],
+    [/iliad/i, 'Iliad'],
     [/helvetica/i, 'Helvetica'],
     [/\bhelv\b/i, 'Helvetica'],
     [/arial/i, 'Arial'],
