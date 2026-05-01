@@ -11,6 +11,13 @@ pikepdf>=8.0.0
 pdfplumber>=0.10.0
 pdf2image>=1.16.0
 Pillow>=10.2.0
+# fontTools: repair subset TTFs extracted from PDFs before serving them to
+# the browser FontFace API. PDF subset fonts (Type0/CIDFontType2) often have
+# incomplete cmap/name/OS-2 tables that pikepdf preserves verbatim but
+# Chrome's OTS rejects ("hmtx: Failed to read side bearing"). Re-saving
+# through fontTools rebuilds the missing tables and produces a TTF that
+# every browser accepts.
+fonttools>=4.50.0
 
 # OCR
 pytesseract>=0.3.10
