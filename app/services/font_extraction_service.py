@@ -178,29 +178,49 @@ class FontExtractionService:
                     )
 
         font_bytes, font_file_key = self._extract_font_bytes(descriptor)
-        is_embedded = font_bytes is not None
+        font_present = font_bytes is not None
         detected_format = self.detect_format(font_bytes, subtype) if font_bytes else None
 
-        if is_embedded and font_bytes and not detected_format:
-            logger.warning(
-                "Could not determine format for embedded font '%s' (subtype=%s). "
-                "Returning data=None to avoid serving corrupted bytes.",
+        if font_present and font_bytes and not detected_format:
+            logger.info(
+                "Font '%s' (subtype=%s) has embedded program in unsupported "
+                "format — marking is_embedded=false so the frontend falls back "
+                "to the family name without a 404 round-trip.",
                 original_name,
                 subtype,
             )
             font_bytes = None
 
-        # Round-trip through fontTools to fix subset TTFs that Chrome OTS
-        # rejects ("hmtx: Failed to read side bearing"). This must run AFTER
-        # detect_format because the format determines whether we attempt
-        # repair (TTF/OTF) or pass through (CFF wrapped, raw bytes).
-        if font_bytes and detected_format:
+        # Round-trip TTF/OTF through fontTools to fix subset truncation
+        # that Chrome OTS rejects. CFF data needs separate handling (wrap
+        # into OTF container) — for now we simply mark it non-embedded so
+        # the frontend skips the download and falls back to the CSS family.
+        if font_bytes and detected_format in ("ttf", "otf"):
             repaired = self._repair_ttf_for_browser(
                 font_bytes, detected_format, postscript_name
             )
             if repaired is not None:
                 font_bytes = repaired
+        elif font_bytes and detected_format == "cff":
+            # Raw CFF cannot be loaded by browser FontFace as-is. Until we
+            # implement CFF→OTF wrapping, treat as non-embedded so the
+            # /fonts/{id}/{font_id} endpoint returns 404 once the metadata
+            # is filtered, never serves bytes the browser cannot decode.
+            logger.info(
+                "Font '%s' (subtype=%s) is raw CFF — marking is_embedded=false "
+                "until CFF→OTF wrapping is implemented; frontend will fall "
+                "back to '%s' family name.",
+                original_name,
+                subtype,
+                font_family or "default",
+            )
+            font_bytes = None
 
+        # is_embedded reflects whether we will actually serve binary data
+        # to the browser. The metadata still carries the original family/
+        # postscript names so the editor can map text runs to the right
+        # CSS fallback even when the bytes themselves are unavailable.
+        is_embedded = font_bytes is not None
         size_bytes = len(font_bytes) if font_bytes else None
 
         from app.schemas.fonts import ExtractedFontMetadata
