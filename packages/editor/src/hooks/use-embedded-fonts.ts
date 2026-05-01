@@ -193,8 +193,6 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
     documentId,
     enabled = true,
     getAuthToken,
-    fetchFontList = (id: string) => defaultFetchFontList(id, getAuthToken),
-    fetchFontData = (id: string, fid: string) => defaultFetchFontData(id, fid, getAuthToken),
     cache = defaultFontCache,
   } = opts;
 
@@ -206,6 +204,34 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
   const registeredFontFaces = useRef<FontFace[]>([]);
   // Signal object passed to async tasks so they can detect stale runs
   const abortRef = useRef<{ aborted: boolean }>({ aborted: false });
+  // Tracks documentIds that already failed — prevents retry storm on 503/429.
+  // Without this, every setError() retriggered the useEffect because
+  // `fetchFontList` was recomputed on each render (unstable reference).
+  const failedDocumentsRef = useRef<Set<string>>(new Set());
+
+  // Stable fetcher refs: callers may pass override fetchers, but we capture
+  // them once so React effects don't loop on identity changes.
+  const fetchListRef = useRef<typeof opts.fetchFontList>(opts.fetchFontList);
+  const fetchDataRef = useRef<typeof opts.fetchFontData>(opts.fetchFontData);
+  fetchListRef.current = opts.fetchFontList;
+  fetchDataRef.current = opts.fetchFontData;
+  const getAuthTokenRef = useRef(getAuthToken);
+  getAuthTokenRef.current = getAuthToken;
+
+  const fetchFontList = useCallback(
+    (id: string) =>
+      fetchListRef.current
+        ? fetchListRef.current(id)
+        : defaultFetchFontList(id, getAuthTokenRef.current),
+    [],
+  );
+  const fetchFontData = useCallback(
+    (id: string, fid: string) =>
+      fetchDataRef.current
+        ? fetchDataRef.current(id, fid)
+        : defaultFetchFontData(id, fid, getAuthTokenRef.current),
+    [],
+  );
 
   // ── Load a single font ────────────────────────────────────────────────────
 
@@ -308,6 +334,12 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
       return;
     }
 
+    // Hard-stop retry storms: if this document already failed once, do not
+    // re-attempt on this mount. Refresh the page or call retry() to retry.
+    if (failedDocumentsRef.current.has(documentId)) {
+      return;
+    }
+
     const signal = { aborted: false };
     abortRef.current = signal;
 
@@ -367,9 +399,15 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
         if (signal.aborted) return;
         const loadError =
           err instanceof Error ? err : new Error('Failed to load font metadata');
+        // Mark this document as failed so the effect cannot loop on hard
+        // errors (503 backend disabled, 429 rate-limited, network down).
+        // Without this guard, setError → re-render → effect re-fires → fetch
+        // → fail → setError → ... browsers eventually throw
+        // ERR_INSUFFICIENT_RESOURCES after thousands of requests.
+        failedDocumentsRef.current.add(documentId);
         setError(loadError);
 
-        logger.error('useEmbeddedFonts: failed to fetch font metadata', {
+        logger.warn('useEmbeddedFonts: font metadata unavailable, falling back to standard fonts', {
           documentId,
           error: loadError.message,
         });
@@ -408,6 +446,9 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
 
   const retry = useCallback(
     async (fontId: string): Promise<void> => {
+      // Manual retry implies the user wants to try again — clear the failure
+      // guard so a future mount/document change can re-attempt the metadata fetch.
+      failedDocumentsRef.current.delete(documentId);
       const target = fonts.find((f) => f.metadata.fontId === fontId);
       if (!target) return;
       // Clear stale cache so the font is re-downloaded
