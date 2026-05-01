@@ -29,7 +29,8 @@ const CSP_EMBED = [
   CONNECT_SRC,
   "img-src 'self' data: blob: https:",
   "style-src 'self' 'unsafe-inline'",
-  "font-src 'self' data:",
+  // blob: required for embedded PDF fonts loaded via FontFace.
+  "font-src 'self' data: blob:",
   "object-src 'none'",
   "base-uri 'self'",
 ].join("; ");
@@ -38,6 +39,10 @@ const CSP_EMBED = [
 // - script-src 'unsafe-eval' is required by the PDF.js worker (WASM eval).
 // - style-src 'unsafe-inline' is required by Tailwind CSS runtime and
 //   third-party UI libraries that inject inline styles.
+// - font-src includes blob: so the editor can register the PDF's embedded
+//   TTF/OTF programs as FontFace instances. Without it the browser blocks
+//   `new FontFace(name, blobUrl)` and every text run silently falls back
+//   to the system Helvetica/Arial.
 // - frame-ancestors 'none' blocks all embedding (clickjacking protection).
 // - form-action includes accounts.google.com for Google OAuth redirects.
 const CSP_DEFAULT = [
@@ -45,7 +50,7 @@ const CSP_DEFAULT = [
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
+  "font-src 'self' data: blob:",
   CONNECT_SRC,
   "frame-src 'none'",
   "frame-ancestors 'none'",
