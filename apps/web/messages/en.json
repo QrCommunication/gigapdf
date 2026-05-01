@@ -732,6 +732,7 @@
       "shape": "Shape",
       "draw": "Draw",
       "annotation": "Annotation",
+      "formField": "Form field",
       "pan": "Pan",
       "bold": "Bold",
       "italic": "Italic",

@@ -1,6 +1,20 @@
 /**
- * Document Store - Main document state management
- * Manages document metadata, pages, and elements
+ * Document Store - Main document state management.
+ *
+ * @deprecated As of 2026-05-01, the canonical scene graph for the web editor
+ * lives in `apps/web/src/hooks/use-document.ts` (a React useState-based hook)
+ * which talks directly to /api/pdf/parse-from-s3 and merges Redis backend
+ * elements at reload (see fix #1 Option C). This Zustand store and its
+ * selectors / actions / middleware are NOT consumed by any app today and
+ * exist as dead code awaiting a future unified state strategy.
+ *
+ * If you find yourself reaching for useDocumentStore, prefer:
+ *   - In apps/web: useDocument() from `@/hooks/use-document`
+ *   - For new shared logic: build it into use-document instead, OR migrate
+ *     use-document into this store in a single refactor PR (do NOT mirror
+ *     state across both — you'll get drift bugs that are very hard to debug).
+ *
+ * Manages document metadata, pages, and elements.
  */
 
 import { create, type StoreApi, type UseBoundStore } from "zustand";
