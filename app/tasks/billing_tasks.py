@@ -219,7 +219,7 @@ async def _process_overdue_payments_async() -> dict:
             select(UserQuota).where(
                 and_(
                     UserQuota.subscription_status == "past_due",
-                    not UserQuota.is_suspended,
+                    ~UserQuota.is_suspended,
                 )
             )
         )

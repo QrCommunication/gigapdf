@@ -202,7 +202,7 @@ async def list_plans(
         if not include_inactive:
             stmt = stmt.where(Plan.is_active)
         if not include_tenant_plans:
-            stmt = stmt.where(not Plan.is_tenant_plan)
+            stmt = stmt.where(~Plan.is_tenant_plan)
 
         # Filter private plans (linked_tenant_id)
         # By default, only show public plans (linked_tenant_id is NULL)

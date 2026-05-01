@@ -1008,7 +1008,7 @@ async def list_invitations(
     query = select(TenantInvitation).where(TenantInvitation.tenant_id == tenant_id)
 
     if not include_accepted:
-        query = query.where(not TenantInvitation.is_accepted)
+        query = query.where(~TenantInvitation.is_accepted)
 
     result = await db.execute(query.order_by(TenantInvitation.created_at.desc()))
     invitations = result.scalars().all()
@@ -1116,7 +1116,7 @@ async def create_invitation(
         select(TenantInvitation).where(
             TenantInvitation.tenant_id == tenant_id,
             TenantInvitation.email == data.email,
-            not TenantInvitation.is_accepted
+            ~TenantInvitation.is_accepted
         )
     )).scalar_one_or_none()
 
