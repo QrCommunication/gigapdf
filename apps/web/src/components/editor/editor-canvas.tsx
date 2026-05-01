@@ -1479,12 +1479,26 @@ export function EditorCanvas({
       deleteSelected: () => {
         if (!fabricRef.current) return;
         const activeObjects = fabricRef.current.getActiveObjects();
+        // Capture elementIds BEFORE remove() — Fabric drops .data on
+        // removed objects in some paths and the object:removed listener
+        // can miss them, leaving the scene graph + Redis with stale
+        // entries (and the doc never marked dirty).
+        const removedIds = activeObjects
+          .map((obj) => (obj as FabricObjectWithData).data?.elementId)
+          .filter((id): id is string => Boolean(id));
         activeObjects.forEach((obj) => {
           fabricRef.current?.remove(obj);
         });
         fabricRef.current.discardActiveObject();
         fabricRef.current.renderAll();
         saveHistory(fabricRef.current);
+        // Defense-in-depth: explicitly forward each elementId to the
+        // React side. The Fabric object:removed event also fires, but
+        // the parent handler is idempotent (it deselects + queues a
+        // delete; running twice is a no-op for already-removed ids).
+        for (const id of removedIds) {
+          onElementRemovedRef.current?.(id);
+        }
       },
       duplicateSelected: () => {
         if (!fabricRef.current) return;
