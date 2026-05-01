@@ -36,9 +36,13 @@ function getFontSet(): FontFaceSetWithMutation {
 
 // ─── Feature Flag ─────────────────────────────────────────────────────────────
 
+// Embedded font loading is the only way to render text with the original
+// PDF typography. When OFF, every text element falls back to "Helvetica"
+// regardless of what the source PDF actually used. We therefore default
+// the flag to ON and require an explicit opt-out via `NEXT_PUBLIC_FONT_DYNAMIC_LOAD=false`.
 function isFontDynamicLoadEnabled(): boolean {
-  if (typeof process === 'undefined') return false;
-  return process.env['NEXT_PUBLIC_FONT_DYNAMIC_LOAD'] === 'true';
+  if (typeof process === 'undefined') return true;
+  return process.env['NEXT_PUBLIC_FONT_DYNAMIC_LOAD'] !== 'false';
 }
 
 // ─── Embedded types ──────────────────────────────────────────────────────────
