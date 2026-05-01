@@ -7,14 +7,49 @@ import { rgbToHex } from '../utils';
 
 if (!pdfjsLib.GlobalWorkerOptions.workerSrc) { pdfjsLib.GlobalWorkerOptions.workerSrc = ''; }
 
+// pdfjs internal DrawOPS encoded inside constructPath's Float32Array stream.
+// Ref: pdfjs-dist legacy build, search for "moveTo: 0" inside the bundle.
+const DRAW_MOVE_TO = 0;
+const DRAW_LINE_TO = 1;
+const DRAW_CURVE_TO = 2;
+const DRAW_QUAD_CURVE_TO = 3;
+const DRAW_CLOSE_PATH = 4;
+
 interface DrawingState {
-  currentPath: Point[];
   fillColor: string | null;
   strokeColor: string | null;
   strokeWidth: number;
   dashArray: number[];
+  fillAlpha: number;
+  strokeAlpha: number;
   ctm: number[];
-  matrixStack: number[][];
+  matrixStack: Array<{
+    ctm: number[];
+    fillColor: string | null;
+    strokeColor: string | null;
+    strokeWidth: number;
+    fillAlpha: number;
+    strokeAlpha: number;
+    dashArray: number[];
+  }>;
+}
+
+function parsePdfjsColor(args: unknown[]): string | null {
+  if (args.length === 0) return null;
+  const first = args[0];
+  if (typeof first === 'string') {
+    // Already a hex string ("#rrggbb"). Modern pdfjs.
+    if (/^#[0-9a-f]{6}$/i.test(first)) return first.toLowerCase();
+    return null;
+  }
+  if (typeof first === 'number') {
+    // Older pdfjs: byte triple [r, g, b] in 0–255.
+    const r = Math.max(0, Math.min(255, Math.round(first)));
+    const g = Math.max(0, Math.min(255, Math.round((args[1] as number) ?? 0)));
+    const b = Math.max(0, Math.min(255, Math.round((args[2] as number) ?? 0)));
+    return rgbToHex(r, g, b);
+  }
+  return null;
 }
 
 function multiplyMatrices(m1: number[], m2: number[]): number[] {
@@ -35,80 +70,236 @@ function transformPoint(x: number, y: number, ctm: number[]): Point {
   };
 }
 
-function computeBounds(points: Point[]): { x: number; y: number; width: number; height: number } {
-  if (points.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
-  let minX = points[0]!.x;
-  let maxX = points[0]!.x;
-  let minY = points[0]!.y;
-  let maxY = points[0]!.y;
-  for (const p of points) {
-    if (p.x < minX) minX = p.x;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.y > maxY) maxY = p.y;
-  }
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+interface PathSegment {
+  /** SVG-like command in PDF user-space coords (post-CTM, pre-Y-flip) */
+  cmd: 'M' | 'L' | 'C' | 'Q' | 'Z';
+  points: Point[];
 }
 
-function detectShapeType(points: Point[]): ShapeType {
-  if (points.length === 2) return 'line';
-  if (points.length === 4 || points.length === 5) {
-    const [p0, p1, p2, p3] = points;
-    if (!p0 || !p1 || !p2 || !p3) return 'path';
-    const isRect =
-      Math.abs(p0.x - p3.x) < 1 &&
-      Math.abs(p0.y - p1.y) < 1 &&
-      Math.abs(p1.x - p2.x) < 1 &&
-      Math.abs(p2.y - p3.y) < 1;
-    if (isRect) return 'rectangle';
+/**
+ * Decode the inline opcode stream produced by pdfjs `constructPath`.
+ * Format: Float32Array with [op, ...coords, op, ...coords, ...] where:
+ *   op=0  moveTo            → 2 coords
+ *   op=1  lineTo            → 2 coords
+ *   op=2  curveTo (cubic)   → 6 coords (cp1 cp2 end)
+ *   op=3  quadraticCurveTo  → 4 coords (cp end)
+ *   op=4  closePath         → 0 coords
+ */
+function decodePathStream(buffer: Float32Array, ctm: number[]): PathSegment[] {
+  const segments: PathSegment[] = [];
+  let i = 0;
+  while (i < buffer.length) {
+    const op = buffer[i++]! | 0;
+    switch (op) {
+      case DRAW_MOVE_TO: {
+        if (i + 2 > buffer.length) return segments;
+        const p = transformPoint(buffer[i]!, buffer[i + 1]!, ctm);
+        i += 2;
+        segments.push({ cmd: 'M', points: [p] });
+        break;
+      }
+      case DRAW_LINE_TO: {
+        if (i + 2 > buffer.length) return segments;
+        const p = transformPoint(buffer[i]!, buffer[i + 1]!, ctm);
+        i += 2;
+        segments.push({ cmd: 'L', points: [p] });
+        break;
+      }
+      case DRAW_CURVE_TO: {
+        if (i + 6 > buffer.length) return segments;
+        const cp1 = transformPoint(buffer[i]!, buffer[i + 1]!, ctm);
+        const cp2 = transformPoint(buffer[i + 2]!, buffer[i + 3]!, ctm);
+        const end = transformPoint(buffer[i + 4]!, buffer[i + 5]!, ctm);
+        i += 6;
+        segments.push({ cmd: 'C', points: [cp1, cp2, end] });
+        break;
+      }
+      case DRAW_QUAD_CURVE_TO: {
+        if (i + 4 > buffer.length) return segments;
+        const cp = transformPoint(buffer[i]!, buffer[i + 1]!, ctm);
+        const end = transformPoint(buffer[i + 2]!, buffer[i + 3]!, ctm);
+        i += 4;
+        segments.push({ cmd: 'Q', points: [cp, end] });
+        break;
+      }
+      case DRAW_CLOSE_PATH:
+        segments.push({ cmd: 'Z', points: [] });
+        break;
+      default:
+        // Unknown opcode — abort gracefully rather than read junk
+        return segments;
+    }
   }
+  return segments;
+}
+
+function pathToSvgString(segments: PathSegment[], pageHeight: number): string {
+  let d = '';
+  for (const seg of segments) {
+    if (seg.cmd === 'Z') { d += 'Z '; continue; }
+    if (seg.cmd === 'M') {
+      const p = seg.points[0]!;
+      d += `M ${p.x.toFixed(3)} ${(pageHeight - p.y).toFixed(3)} `;
+    } else if (seg.cmd === 'L') {
+      const p = seg.points[0]!;
+      d += `L ${p.x.toFixed(3)} ${(pageHeight - p.y).toFixed(3)} `;
+    } else if (seg.cmd === 'C') {
+      const [cp1, cp2, end] = seg.points;
+      d += `C ${cp1!.x.toFixed(3)} ${(pageHeight - cp1!.y).toFixed(3)}, ${cp2!.x.toFixed(3)} ${(pageHeight - cp2!.y).toFixed(3)}, ${end!.x.toFixed(3)} ${(pageHeight - end!.y).toFixed(3)} `;
+    } else if (seg.cmd === 'Q') {
+      const [cp, end] = seg.points;
+      d += `Q ${cp!.x.toFixed(3)} ${(pageHeight - cp!.y).toFixed(3)}, ${end!.x.toFixed(3)} ${(pageHeight - end!.y).toFixed(3)} `;
+    }
+  }
+  return d.trim();
+}
+
+function flattenPoints(segments: PathSegment[], pageHeight: number): Point[] {
+  // Anchor points only (M/L/C end/Q end), suitable for downstream consumers
+  // that don't render Bezier curves natively.
+  const pts: Point[] = [];
+  for (const seg of segments) {
+    if (seg.cmd === 'Z' || seg.points.length === 0) continue;
+    const last = seg.points[seg.points.length - 1]!;
+    pts.push({ x: last.x, y: pageHeight - last.y });
+  }
+  return pts;
+}
+
+function detectShapeType(segments: PathSegment[], hasCurves: boolean): ShapeType {
+  if (segments.length === 0) return 'path';
+  const moves = segments.filter((s) => s.cmd === 'M').length;
+  const lines = segments.filter((s) => s.cmd === 'L').length;
+  const curves = segments.filter((s) => s.cmd === 'C' || s.cmd === 'Q').length;
+  const closes = segments.filter((s) => s.cmd === 'Z').length;
+
+  // Single straight line
+  if (moves === 1 && lines === 1 && curves === 0 && closes === 0) return 'line';
+
+  // Closed rectangle: 1 move + 3 lines + 1 close, with axis-aligned edges
+  if (moves === 1 && lines === 3 && closes >= 0 && curves === 0) {
+    return isAxisAlignedRect(segments) ? 'rectangle' : 'polygon';
+  }
+  if (moves === 1 && lines === 4 && curves === 0) {
+    return isAxisAlignedRect(segments) ? 'rectangle' : 'polygon';
+  }
+
+  if (hasCurves) return 'path';
+  if (closes > 0 && lines >= 2) return 'polygon';
   return 'path';
 }
 
-function buildPathData(points: Point[]): string {
-  if (points.length === 0) return '';
-  let d = `M ${points[0]!.x} ${points[0]!.y}`;
-  for (let i = 1; i < points.length; i++) {
-    d += ` L ${points[i]!.x} ${points[i]!.y}`;
+function isAxisAlignedRect(segments: PathSegment[]): boolean {
+  const pts: Point[] = [];
+  for (const seg of segments) {
+    if (seg.cmd === 'M' || seg.cmd === 'L') pts.push(seg.points[0]!);
   }
-  return d;
+  if (pts.length < 4) return false;
+  const [p0, p1, p2, p3] = pts;
+  return (
+    Math.abs(p0!.x - p3!.x) < 1 &&
+    Math.abs(p0!.y - p1!.y) < 1 &&
+    Math.abs(p1!.x - p2!.x) < 1 &&
+    Math.abs(p2!.y - p3!.y) < 1
+  );
 }
 
-function createShapeElement(
-  points: Point[],
+function emitShape(
+  segments: PathSegment[],
+  paintOp: number,
   pageHeight: number,
   state: DrawingState,
-  hasFill: boolean,
-  hasStroke: boolean,
+  minMax: Float32Array | number[] | undefined,
 ): ShapeElement | null {
-  if (points.length < 2) return null;
+  if (segments.length === 0) return null;
 
-  const webPoints = points.map((p) => ({ x: p.x, y: pageHeight - p.y }));
-  const rawBounds = computeBounds(webPoints);
-  if (rawBounds.width < 0.5 && rawBounds.height < 0.5) return null;
+  // Filter out invisible no-op paints (clip-only and endPath)
+  const isClip = paintOp === OPS.clip || paintOp === OPS.eoClip;
+  const isEndPath = paintOp === OPS.endPath;
+  if (isClip || isEndPath) return null;
 
-  const shapeType = detectShapeType(webPoints);
+  const isFill =
+    paintOp === OPS.fill ||
+    paintOp === OPS.eoFill ||
+    paintOp === OPS.fillStroke ||
+    paintOp === OPS.eoFillStroke ||
+    paintOp === OPS.closeFillStroke;
+  const isStroke =
+    paintOp === OPS.stroke ||
+    paintOp === OPS.closeStroke ||
+    paintOp === OPS.fillStroke ||
+    paintOp === OPS.eoFillStroke ||
+    paintOp === OPS.closeFillStroke;
+  if (!isFill && !isStroke) return null;
+
+  // Use pdfjs-provided minMax bbox when available — already in user-space.
+  // Layout: [minX, minY, maxX, maxY] in PDF coords (Y up).
+  let bounds: { x: number; y: number; width: number; height: number };
+  if (minMax && minMax.length === 4) {
+    const minX = minMax[0]!;
+    const minY = minMax[1]!;
+    const maxX = minMax[2]!;
+    const maxY = minMax[3]!;
+    // Apply CTM to bbox corners (cheap: 4 transforms)
+    const c0 = transformPoint(minX, minY, state.ctm);
+    const c1 = transformPoint(maxX, minY, state.ctm);
+    const c2 = transformPoint(maxX, maxY, state.ctm);
+    const c3 = transformPoint(minX, maxY, state.ctm);
+    const xs = [c0.x, c1.x, c2.x, c3.x];
+    const ys = [c0.y, c1.y, c2.y, c3.y];
+    const bbX = Math.min(...xs);
+    const bbY = Math.min(...ys);
+    bounds = {
+      x: bbX,
+      y: pageHeight - Math.max(...ys), // flip to Y-down
+      width: Math.max(...xs) - bbX,
+      height: Math.max(...ys) - bbY,
+    };
+  } else {
+    const flat = flattenPoints(segments, pageHeight);
+    if (flat.length < 2) return null;
+    let minX = flat[0]!.x;
+    let maxX = flat[0]!.x;
+    let minY = flat[0]!.y;
+    let maxY = flat[0]!.y;
+    for (const p of flat) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    bounds = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
+  // Drop hairlines and zero-area paths early — they bloat the scene graph
+  // without contributing to the visible rendering.
+  if (bounds.width < 0.5 && bounds.height < 0.5) return null;
+
+  const hasCurves = segments.some((s) => s.cmd === 'C' || s.cmd === 'Q');
+  const shapeType = detectShapeType(segments, hasCurves);
+  const points = flattenPoints(segments, pageHeight);
+  const pathData = pathToSvgString(segments, pageHeight);
 
   return {
     elementId: randomUUID(),
     type: 'shape',
-    bounds: rawBounds,
+    bounds,
     transform: { rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
     layerId: null,
     locked: false,
     visible: true,
     shapeType,
     geometry: {
-      points: webPoints,
-      pathData: shapeType === 'path' || shapeType === 'line' ? buildPathData(webPoints) : null,
+      points,
+      pathData,
       cornerRadius: 0,
     },
     style: {
-      fillColor: hasFill ? state.fillColor : null,
-      fillOpacity: hasFill ? 1 : 0,
-      strokeColor: hasStroke ? state.strokeColor : null,
-      strokeWidth: state.strokeWidth,
-      strokeOpacity: hasStroke ? 1 : 0,
+      fillColor: isFill ? state.fillColor : null,
+      fillOpacity: isFill ? state.fillAlpha : 0,
+      strokeColor: isStroke ? state.strokeColor : null,
+      strokeWidth: isStroke ? state.strokeWidth : 0,
+      strokeOpacity: isStroke ? state.strokeAlpha : 0,
       strokeDashArray: state.dashArray,
     },
   };
@@ -123,11 +314,12 @@ export async function extractDrawingElements(
   const shapes: ShapeElement[] = [];
 
   const state: DrawingState = {
-    currentPath: [],
     fillColor: '#000000',
     strokeColor: '#000000',
     strokeWidth: 1,
     dashArray: [],
+    fillAlpha: 1,
+    strokeAlpha: 1,
     ctm: [1, 0, 0, 1, 0, 0],
     matrixStack: [],
   };
@@ -141,12 +333,32 @@ export async function extractDrawingElements(
 
     switch (fn) {
       case OPS.save:
-        state.matrixStack.push([...state.ctm]);
+        state.matrixStack.push({
+          ctm: [...state.ctm],
+          fillColor: state.fillColor,
+          strokeColor: state.strokeColor,
+          strokeWidth: state.strokeWidth,
+          fillAlpha: state.fillAlpha,
+          strokeAlpha: state.strokeAlpha,
+          dashArray: [...state.dashArray],
+        });
         break;
 
-      case OPS.restore:
-        state.ctm = state.matrixStack.pop() ?? [1, 0, 0, 1, 0, 0];
+      case OPS.restore: {
+        const popped = state.matrixStack.pop();
+        if (popped) {
+          state.ctm = popped.ctm;
+          state.fillColor = popped.fillColor;
+          state.strokeColor = popped.strokeColor;
+          state.strokeWidth = popped.strokeWidth;
+          state.fillAlpha = popped.fillAlpha;
+          state.strokeAlpha = popped.strokeAlpha;
+          state.dashArray = popped.dashArray;
+        } else {
+          state.ctm = [1, 0, 0, 1, 0, 0];
+        }
         break;
+      }
 
       case OPS.transform: {
         const [a, b, c, d, e, f] = args as number[];
@@ -154,81 +366,54 @@ export async function extractDrawingElements(
         break;
       }
 
-      case OPS.moveTo: {
-        const [x, y] = args as number[];
-        state.currentPath = [transformPoint(x!, y!, state.ctm)];
-        break;
-      }
-
-      case OPS.lineTo: {
-        const [x, y] = args as number[];
-        state.currentPath.push(transformPoint(x!, y!, state.ctm));
-        break;
-      }
-
-      case OPS.curveTo:
-      case OPS.curveTo2:
-      case OPS.curveTo3: {
-        const coords = args as number[];
-        const last = coords.slice(-2);
-        if (last.length === 2) {
-          state.currentPath.push(transformPoint(last[0]!, last[1]!, state.ctm));
+      case OPS.constructPath: {
+        // Modern pdfjs batches every path operation through this op.
+        // Args layout: [paintOp: number, [Float32Array data], minMax?: Float32Array]
+        const paintOp = typeof args[0] === 'number' ? (args[0] as number) : 0;
+        const dataArg = args[1];
+        let buffer: Float32Array | null = null;
+        if (Array.isArray(dataArg) && dataArg.length > 0) {
+          const first = dataArg[0];
+          if (first instanceof Float32Array) buffer = first;
+          else if (first instanceof Array) buffer = Float32Array.from(first as number[]);
         }
+        if (!buffer) break;
+        const minMax = args[2] as Float32Array | number[] | undefined;
+        const segments = decodePathStream(buffer, state.ctm);
+        const shape = emitShape(segments, paintOp, pageHeight, state, minMax);
+        if (shape) shapes.push(shape);
         break;
       }
 
       case OPS.rectangle: {
         const [x, y, w, h] = args as number[];
-        const p0 = transformPoint(x!, y!, state.ctm);
-        const p1 = transformPoint(x! + w!, y!, state.ctm);
-        const p2 = transformPoint(x! + w!, y! + h!, state.ctm);
-        const p3 = transformPoint(x!, y! + h!, state.ctm);
-        state.currentPath = [p0, p1, p2, p3, p0];
-        break;
-      }
-
-      case OPS.closePath:
-        if (state.currentPath.length > 0) {
-          state.currentPath.push(state.currentPath[0]!);
-        }
-        break;
-
-      case OPS.stroke: {
-        const shape = createShapeElement(state.currentPath, pageHeight, state, false, true);
+        const segments: PathSegment[] = [
+          { cmd: 'M', points: [transformPoint(x!, y!, state.ctm)] },
+          { cmd: 'L', points: [transformPoint(x! + w!, y!, state.ctm)] },
+          { cmd: 'L', points: [transformPoint(x! + w!, y! + h!, state.ctm)] },
+          { cmd: 'L', points: [transformPoint(x!, y! + h!, state.ctm)] },
+          { cmd: 'Z', points: [] },
+        ];
+        // Rectangle alone doesn't paint until a subsequent fill/stroke op.
+        // Most generators batch this through constructPath. Safe to ignore
+        // here, the next paint op will materialise a path. But for robustness
+        // we capture rectangles as filled shapes by default since most
+        // standalone re ops with a fill follow.
+        const shape = emitShape(segments, OPS.fill, pageHeight, state, undefined);
         if (shape) shapes.push(shape);
-        state.currentPath = [];
         break;
       }
-
-      case OPS.fill:
-      case OPS.eoFill: {
-        const shape = createShapeElement(state.currentPath, pageHeight, state, true, false);
-        if (shape) shapes.push(shape);
-        state.currentPath = [];
-        break;
-      }
-
-      case OPS.fillStroke:
-      case OPS.eoFillStroke: {
-        const shape = createShapeElement(state.currentPath, pageHeight, state, true, true);
-        if (shape) shapes.push(shape);
-        state.currentPath = [];
-        break;
-      }
-
-      case OPS.endPath:
-        state.currentPath = [];
-        break;
 
       case OPS.setStrokeRGBColor: {
-        const [r, g, b] = args as number[];
-        state.strokeColor = rgbToHex(r!, g!, b!);
+        // pdfjs delivers the colour pre-resolved: a "#rrggbb" string in
+        // modern builds (since pdfjs 3.x), an [r,g,b] byte triple in older
+        // builds. Accept both.
+        state.strokeColor = parsePdfjsColor(args);
         break;
       }
 
       case OPS.setFillRGBColor: {
-        const [r, g, b] = args as number[];
-        state.fillColor = rgbToHex(r!, g!, b!);
+        state.fillColor = parsePdfjsColor(args);
         break;
       }
 
@@ -241,6 +426,20 @@ export async function extractDrawingElements(
       case OPS.setDash: {
         const [dashArray] = args as [number[]];
         state.dashArray = dashArray ?? [];
+        break;
+      }
+
+      case OPS.setGState: {
+        // Extract fill/stroke alpha from graphics state if present.
+        const gStateArgs = args[0] as Array<[string, unknown]> | undefined;
+        if (Array.isArray(gStateArgs)) {
+          for (const entry of gStateArgs) {
+            if (!Array.isArray(entry)) continue;
+            const [key, value] = entry;
+            if (key === 'ca' && typeof value === 'number') state.fillAlpha = value;
+            if (key === 'CA' && typeof value === 'number') state.strokeAlpha = value;
+          }
+        }
         break;
       }
     }
