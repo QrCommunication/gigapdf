@@ -139,6 +139,36 @@ function formatToMime(format: 'ttf' | 'otf' | 'cff'): string {
   return 'font/ttf';
 }
 
+// The Python backend serialises Pydantic models with snake_case keys
+// (`original_name`, `font_id`, `is_embedded`, …) while the editor consumes
+// camelCase (matching the rest of the TS API). Normalise once at the
+// network boundary so the rest of the hook can stay strongly-typed.
+type FontMetadataWire = {
+  font_id?: string; fontId?: string;
+  original_name?: string; originalName?: string;
+  postscript_name?: string | null; postscriptName?: string | null;
+  font_family?: string | null; fontFamily?: string | null;
+  subtype?: string;
+  is_embedded?: boolean; isEmbedded?: boolean;
+  is_subset?: boolean; isSubset?: boolean;
+  format?: 'ttf' | 'otf' | 'cff' | null;
+  size_bytes?: number | null; sizeBytes?: number | null;
+};
+
+function normaliseMetadata(raw: FontMetadataWire): ExtractedFontMetadata {
+  return {
+    fontId: raw.fontId ?? raw.font_id ?? '',
+    originalName: raw.originalName ?? raw.original_name ?? '',
+    postscriptName: raw.postscriptName ?? raw.postscript_name ?? null,
+    fontFamily: raw.fontFamily ?? raw.font_family ?? null,
+    subtype: raw.subtype ?? 'unknown',
+    isEmbedded: raw.isEmbedded ?? raw.is_embedded ?? false,
+    isSubset: raw.isSubset ?? raw.is_subset ?? false,
+    format: raw.format ?? null,
+    sizeBytes: raw.sizeBytes ?? raw.size_bytes ?? null,
+  };
+}
+
 async function defaultFetchFontList(
   documentId: string,
   getToken?: () => Promise<string | null> | string | null,
@@ -155,12 +185,19 @@ async function defaultFetchFontList(
   }
   const json = (await response.json()) as {
     success: boolean;
-    data?: { fonts: ExtractedFontMetadata[] };
+    data?: { fonts: FontMetadataWire[] };
     error?: string;
   };
   if (!json.success) throw new Error(json.error ?? 'Font list request failed');
-  return json.data!;
+  const wireFonts = json.data?.fonts ?? [];
+  return { fonts: wireFonts.map(normaliseMetadata) };
 }
+
+type FontDataWire = {
+  data_base64?: string; dataBase64?: string;
+  format: 'ttf' | 'otf' | 'cff';
+  mime_type?: string; mimeType?: string;
+};
 
 async function defaultFetchFontData(
   documentId: string,
@@ -179,11 +216,15 @@ async function defaultFetchFontData(
   }
   const json = (await response.json()) as {
     success: boolean;
-    data?: { dataBase64: string; format: 'ttf' | 'otf' | 'cff'; mimeType: string };
+    data?: FontDataWire;
     error?: string;
   };
-  if (!json.success) throw new Error(json.error ?? 'Font data request failed');
-  return json.data!;
+  if (!json.success || !json.data) throw new Error(json.error ?? 'Font data request failed');
+  return {
+    dataBase64: json.data.dataBase64 ?? json.data.data_base64 ?? '',
+    format: json.data.format,
+    mimeType: json.data.mimeType ?? json.data.mime_type ?? 'application/octet-stream',
+  };
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
