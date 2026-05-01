@@ -233,10 +233,16 @@ export function EditorCanvas({
         visible: obj.visible ?? true,
       };
 
-      // Check object type using constructor name
-      const typeName = obj.constructor.name;
+      // Check object type using Fabric's `type` property (stable string).
+      // We CANNOT use obj.constructor.name here — production bundlers minify
+      // class names (IText becomes "t" in Turbopack output), so any check
+      // against "IText"/"Rect"/etc. silently fails and fabricObjectToElement
+      // returns null. The Fabric `type` getter returns the same string in
+      // dev and prod ("i-text", "rect", "image", …) and is the canonical
+      // way to discriminate Fabric object types.
+      const typeName = (obj as FabricObject & { type?: string }).type ?? "";
 
-      if (typeName === "IText" || typeName === "FabricText" || typeName === "Text") {
+      if (typeName === "i-text" || typeName === "text" || typeName === "textbox") {
         const textObj = obj as FabricObjectWithData & {
           text?: string;
           fontSize?: number;
@@ -282,7 +288,7 @@ export function EditorCanvas({
         };
       }
 
-      if (typeName === "FabricImage" || typeName === "Image") {
+      if (typeName === "image") {
         const imgObj = obj as FabricObjectWithData & {
           getSrc?: () => string;
           width?: number;
@@ -345,12 +351,12 @@ export function EditorCanvas({
         } as AnnotationElement;
       }
 
-      if (["Rect", "Circle", "Triangle", "Ellipse", "Line"].includes(typeName)) {
+      if (["rect", "circle", "triangle", "ellipse", "line"].includes(typeName)) {
         let shapeTypeResult: ShapeType = "rectangle";
-        if (typeName === "Circle") shapeTypeResult = "circle";
-        if (typeName === "Ellipse") shapeTypeResult = "ellipse";
-        if (typeName === "Line") shapeTypeResult = "line";
-        if (typeName === "Triangle") shapeTypeResult = "triangle";
+        if (typeName === "circle") shapeTypeResult = "circle";
+        if (typeName === "ellipse") shapeTypeResult = "ellipse";
+        if (typeName === "line") shapeTypeResult = "line";
+        if (typeName === "triangle") shapeTypeResult = "triangle";
 
         return {
           ...baseElement,
@@ -375,7 +381,7 @@ export function EditorCanvas({
       // Form fields — Group with data.formFieldType set by mouse:down.
       // text/checkbox/radio/dropdown/signature all round-trip through the
       // same mapping so the backend can emit the right PDF AcroForm widget.
-      if (typeName === "Group" && obj.data?.formFieldType) {
+      if (typeName === "group" && obj.data?.formFieldType) {
         const ft = obj.data.formFieldType as FieldType;
         const isBooleanField = ft === "checkbox" || ft === "radio";
         const isListField = ft === "dropdown" || ft === "listbox";
@@ -429,9 +435,10 @@ export function EditorCanvas({
   const handleTextEditingEntered = useCallback((e: { target?: FabricObject }) => {
     if (!e.target) return;
     const obj = e.target as FabricObjectWithData;
-    const typeName = obj.constructor.name;
+    // Use Fabric `type` (stable across minification) — see fabricObjectToElement above.
+    const typeName = (obj as FabricObject & { type?: string }).type ?? "";
 
-    if (typeName === "IText" || typeName === "Textbox" || typeName === "FabricText") {
+    if (typeName === "i-text" || typeName === "textbox" || typeName === "text") {
       const elementId = obj.data?.elementId;
       const currentText = (obj as FabricObjectWithData & { text?: string }).text || "";
 
@@ -476,13 +483,14 @@ export function EditorCanvas({
       if (!e.target) return;
       const obj = e.target as FabricObjectWithData;
       const elementId = obj.data?.elementId;
-      const typeName = obj.constructor.name;
+      // Use Fabric `type` (stable across minification) — see fabricObjectToElement above.
+      const typeName = (obj as FabricObject & { type?: string }).type ?? "";
 
       // Detecter le TYPE de modification
       let modificationType: ModificationType = 'position';
 
       // Verifier si c'est un objet texte et si le contenu a change
-      if (typeName === "IText" || typeName === "Textbox" || typeName === "FabricText") {
+      if (typeName === "i-text" || typeName === "textbox" || typeName === "text") {
         const originalText = elementId ? originalContentRef.current.get(elementId) : undefined;
         const currentText = (obj as FabricObjectWithData & { text?: string }).text || "";
 
