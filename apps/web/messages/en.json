@@ -490,7 +490,9 @@
       "maxSize": "Maximum file size: {size}MB",
       "uploading": "Uploading...",
       "success": "Document uploaded successfully",
-      "error": "Failed to upload document"
+      "error": "Failed to upload document",
+      "dropTitle": "Drop your PDFs here",
+      "dropHint": "Uploading to the current folder"
     },
     "delete": {
       "title": "Delete Document",

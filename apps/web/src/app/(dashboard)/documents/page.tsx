@@ -312,6 +312,63 @@ export default function DocumentsPage() {
     return "/" + path;
   }, [currentFolderId, breadcrumbPath]);
 
+  // Drop multiple PDFs anywhere on the page (explorer-like UX). The
+  // overlay only shows when the user drags actual files from the OS;
+  // internal drag-and-drop (folder reorganization) doesn't trigger it
+  // because Radix DnD doesn't put `Files` in dataTransfer.types.
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const dragDepthRef = useRef(0);
+
+  const handleFilesDropped = useCallback(
+    async (files: FileList | File[]) => {
+      const pdfFiles = Array.from(files).filter((f) =>
+        f.name.toLowerCase().endsWith(".pdf"),
+      );
+      if (pdfFiles.length === 0) {
+        setError(t("errors.pdfOnly"));
+        return;
+      }
+      setUploading(true);
+      setError(null);
+      try {
+        // Upload sequentially — keeps backend pressure low and gives
+        // a more predictable progress UX. Future: parallel with
+        // Promise.allSettled for faster bulk import.
+        for (const file of pdfFiles) {
+          const uploadResult = await api.uploadDocument(file);
+          const { getAuthToken } = await import("@/lib/api");
+          const token = await getAuthToken();
+          const downloadRes = await fetch(
+            `/api/v1/documents/${uploadResult.document_id}/download`,
+            {
+              credentials: "include",
+              headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            },
+          );
+          if (!downloadRes.ok) {
+            throw new Error(`Failed to download PDF: ${downloadRes.status}`);
+          }
+          const pdfBlob = await downloadRes.blob();
+          await api.saveDocument({
+            file: pdfBlob,
+            name: file.name.replace(/\.pdf$/i, ""),
+            tags: [],
+            folderId: currentFolderId || undefined,
+          });
+        }
+        await loadDocuments();
+      } catch (err) {
+        clientLogger.error("documents.drop-upload-failed", err);
+        setError(
+          err instanceof Error ? err.message : t("errors.uploadFailed"),
+        );
+      } finally {
+        setUploading(false);
+      }
+    },
+    [currentFolderId, loadDocuments, t],
+  );
+
   // Filter documents for current folder when not searching
   const displayDocuments = debouncedSearch
     ? documents
@@ -325,7 +382,56 @@ export default function DocumentsPage() {
   const canGoForward = historyIndex < navigationHistory.length - 1;
 
   return (
-    <div className="space-y-4">
+    <div
+      className="space-y-4 relative min-h-[calc(100vh-4rem)]"
+      onDragEnter={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        dragDepthRef.current += 1;
+        setIsDraggingFiles(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        dragDepthRef.current -= 1;
+        if (dragDepthRef.current <= 0) {
+          dragDepthRef.current = 0;
+          setIsDraggingFiles(false);
+        }
+      }}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        dragDepthRef.current = 0;
+        setIsDraggingFiles(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          handleFilesDropped(e.dataTransfer.files);
+        }
+      }}
+    >
+      {/* Drop zone overlay — only visible while dragging external files */}
+      {isDraggingFiles && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-primary/10 backdrop-blur-sm border-4 border-dashed border-primary/60 pointer-events-none"
+          style={{ pointerEvents: "none" }}
+        >
+          <div className="bg-background rounded-lg shadow-2xl px-8 py-6 flex items-center gap-4">
+            <Upload className="h-12 w-12 text-primary" />
+            <div>
+              <p className="text-xl font-semibold">{t("upload.dropTitle")}</p>
+              <p className="text-sm text-muted-foreground">
+                {t("upload.dropHint")}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <input
         ref={fileInputRef}
         type="file"

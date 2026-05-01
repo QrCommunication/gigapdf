@@ -490,7 +490,9 @@
       "maxSize": "Taille maximale : {size} Mo",
       "uploading": "Import en cours...",
       "success": "Document importé avec succès",
-      "error": "Échec de l'import du document"
+      "error": "Échec de l'import du document",
+      "dropTitle": "Déposez vos PDF ici",
+      "dropHint": "Importation dans le dossier courant"
     },
     "delete": {
       "title": "Supprimer le document",
