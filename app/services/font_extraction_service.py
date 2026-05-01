@@ -3,6 +3,15 @@ Font extraction service for PDF documents.
 
 Extracts embedded font programs from PDF files using pikepdf,
 computing stable identifiers and detecting binary formats.
+
+Subset TTFs extracted directly from PDFs (Type0/CIDFontType2 wrappers)
+preserve only the minimal tables needed by pdf.js (which uses CIDToGIDMap
+to drive glyph selection). Chrome's OpenType Sanitiser (OTS) is stricter:
+it rejects fonts with missing cmap/name/OS-2 tables or inconsistent hmtx
+side-bearings, producing the runtime error
+  "OTS parsing error: hmtx: Failed to read side bearing"
+We round-trip every extracted TTF through fontTools so save() rebuilds
+the internal checksums and produces a TTF file the browser will accept.
 """
 
 import base64
@@ -14,6 +23,15 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import pikepdf
+
+try:
+    from fontTools.ttLib import TTFont, TTLibError  # type: ignore[import-not-found]
+
+    _FONTTOOLS_AVAILABLE = True
+except ImportError:  # pragma: no cover — runtime detection
+    TTFont = None  # type: ignore[assignment,misc]
+    TTLibError = Exception  # type: ignore[assignment,misc]
+    _FONTTOOLS_AVAILABLE = False
 
 if TYPE_CHECKING:
     from app.schemas.fonts import ExtractedFontMetadata
@@ -161,7 +179,6 @@ class FontExtractionService:
         font_bytes, font_file_key = self._extract_font_bytes(descriptor)
         is_embedded = font_bytes is not None
         detected_format = self.detect_format(font_bytes, subtype) if font_bytes else None
-        size_bytes = len(font_bytes) if font_bytes else None
 
         if is_embedded and font_bytes and not detected_format:
             logger.warning(
@@ -171,6 +188,19 @@ class FontExtractionService:
                 subtype,
             )
             font_bytes = None
+
+        # Round-trip through fontTools to fix subset TTFs that Chrome OTS
+        # rejects ("hmtx: Failed to read side bearing"). This must run AFTER
+        # detect_format because the format determines whether we attempt
+        # repair (TTF/OTF) or pass through (CFF wrapped, raw bytes).
+        if font_bytes and detected_format:
+            repaired = self._repair_ttf_for_browser(
+                font_bytes, detected_format, postscript_name
+            )
+            if repaired is not None:
+                font_bytes = repaired
+
+        size_bytes = len(font_bytes) if font_bytes else None
 
         from app.schemas.fonts import ExtractedFontMetadata
 
@@ -186,6 +216,81 @@ class FontExtractionService:
             size_bytes=size_bytes,
         )
         return ExtractedFont(metadata=metadata, data=font_bytes)
+
+    @staticmethod
+    def _repair_ttf_for_browser(
+        font_bytes: bytes, font_format: str | None, postscript_name: str | None
+    ) -> bytes | None:
+        """
+        Round-trip a font through fontTools to make it browser-OTS-compliant.
+
+        PDF-embedded subset TTFs typically lack the table integrity Chrome
+        requires (cmap, name, OS-2). fontTools' TTFont(...).save() regenerates
+        internal checksums and normalises the table layout, fixing the most
+        common rejection modes.
+
+        Returns None when the font cannot be loaded or saved; callers should
+        treat None as "not embeddable in browser" (the metadata stays
+        is_embedded=True so the editor can fall back to the family name).
+
+        Args:
+            font_bytes: Raw font program from the PDF FontFile* stream.
+            font_format: Detected format ("ttf", "otf", "cff") — only TTF/OTF
+                are repaired. CFF data is wrapped in OTF by upstream code,
+                which is already browser-friendly, so we round-trip it too.
+            postscript_name: Used only for logging.
+
+        Returns:
+            Repaired font bytes (typically larger than input due to padded
+            tables), or None when repair failed.
+        """
+        if not _FONTTOOLS_AVAILABLE:
+            # Without fontTools, we serve the raw subset bytes — Chrome OTS
+            # will reject most of them, but Firefox/Safari may accept some.
+            return font_bytes
+
+        if font_format not in ("ttf", "otf"):
+            return font_bytes
+
+        try:
+            # lazy=False forces all tables to load eagerly so save() catches
+            # malformed-table errors here rather than at write-time. This
+            # gives us a clean failure path: we know up-front the font is
+            # not repairable instead of producing half-corrupt output.
+            font = TTFont(io.BytesIO(font_bytes), lazy=False, recalcBBoxes=False)
+        except TTLibError as exc:
+            logger.info(
+                "fontTools cannot parse font '%s' (%s): %s — serving raw bytes",
+                postscript_name or "unknown",
+                font_format,
+                exc,
+            )
+            # Falling back to raw bytes is safer than dropping the font: some
+            # browsers (Firefox) tolerate the original subset and the editor
+            # already falls back to the family name when FontFace.load fails.
+            return font_bytes
+        except Exception as exc:  # noqa: BLE001 — third-party deserialiser
+            logger.warning(
+                "fontTools parse failed for font '%s': %s",
+                postscript_name or "unknown",
+                exc,
+            )
+            return font_bytes
+
+        try:
+            buf = io.BytesIO()
+            # reorderTables=False keeps the table physical order stable so
+            # the binary diff between the original and repaired file is
+            # minimised — easier to debug if a downstream consumer breaks.
+            font.save(buf, reorderTables=False)
+            return buf.getvalue()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "fontTools save failed for font '%s': %s — serving raw bytes",
+                postscript_name or "unknown",
+                exc,
+            )
+            return font_bytes
 
     def _extract_font_bytes(
         self, descriptor: pikepdf.Object | None
