@@ -217,9 +217,14 @@ async def save_document(
     """
     start_time = time.time()
 
+    # IMPORTANT: ne pas mettre "name" dans extra={} — c'est un attribut
+    # réservé de logging.LogRecord. Le passer cause :
+    #   KeyError: "Attempt to overwrite 'name' in LogRecord"
+    # qui transforme un upload OK en HTTP 500 silencieux. Renommer en
+    # "document_name" pour préserver l'info sans collision.
     _logger.info(
         "save_document: starting save",
-        extra={"name": name, "user_id": user.user_id},
+        extra={"document_name": name, "user_id": user.user_id},
     )
 
     # ── 1. Read + validate PDF bytes ────────────────────────────────────

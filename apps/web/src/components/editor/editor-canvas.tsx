@@ -10,6 +10,7 @@ import type {
   AnnotationType,
   AnnotationElement,
   FieldType,
+  Bounds,
 } from "@giga-pdf/types";
 import type { Canvas as FabricCanvas, FabricObject } from "fabric";
 import { clientLogger } from "@/lib/client-logger";
@@ -82,8 +83,10 @@ export interface EditorCanvasProps {
   strokeWidth?: number;
   /** Callback quand un élément est ajouté */
   onElementAdded?: (element: Element) => void;
-  /** Callback quand un élément est modifié */
-  onElementModified?: (element: Element) => void;
+  /** Callback quand un élément est modifié. oldBounds = bounds AVANT
+   *  cette modification (utilisé par apply-elements pour clear la zone
+   *  d'origine avant de redessiner — sinon le glyphe original reste). */
+  onElementModified?: (element: Element, oldBounds?: Bounds) => void;
   /** Callback quand un élément est supprimé */
   onElementRemoved?: (elementId: string) => void;
   /** Callback quand la sélection change */
@@ -188,6 +191,14 @@ export function EditorCanvas({
 
   // Ref pour tracker le contenu original des textes (pour detecter les vraies modifications)
   const originalContentRef = useRef<Map<string, string>>(new Map());
+  // Map des bounds connus PAR elementId AVANT chaque modification. Sans
+  // cette source, queueUpdate envoie les NOUVELLES bounds comme oldBounds
+  // → updateText() côté pdf-engine clear la mauvaise zone et l'ancien
+  // glyphe parsé du PDF reste visible (texte dupliqué). On capture les
+  // bounds initiaux à chaque load + à chaque création/modification, et
+  // on les passe au callback onElementModified pour qu'apply-elements
+  // ait la bonne zone à effacer.
+  const lastKnownBoundsRef = useRef<Map<string, Bounds>>(new Map());
 
   // Sauvegarder l'état dans l'historique
   // Utilise historyIndexRef pour éviter une closure stale (sinon saveHistory est
@@ -511,8 +522,13 @@ export function EditorCanvas({
       const element = fabricObjectToElement(obj);
       if (element) {
         clientLogger.debug("[EditorCanvas] Object modified:", element.elementId, element.type, "modification:", modificationType);
-        // Appeler le callback avec l'element (le type de modification peut etre utilise plus tard)
-        onElementModifiedRef.current?.(element);
+        // Récupère les bounds connues AVANT cette modification — c'est
+        // ces bounds qui doivent être passées à updateText pour clear
+        // la zone d'origine. Sans ça : doublon visuel post-bake.
+        const oldBounds = lastKnownBoundsRef.current.get(element.elementId);
+        // Mettre à jour pour la prochaine modification
+        lastKnownBoundsRef.current.set(element.elementId, element.bounds);
+        onElementModifiedRef.current?.(element, oldBounds);
       }
       if (fabricRef.current) {
         saveHistory(fabricRef.current);
@@ -530,6 +546,8 @@ export function EditorCanvas({
       const element = fabricObjectToElement(e.target as FabricObjectWithData);
       if (element) {
         clientLogger.debug("[EditorCanvas] Object added:", element.elementId, element.type);
+        // Mémoriser les bounds initiales (utilisé par handleObjectModified)
+        lastKnownBoundsRef.current.set(element.elementId, element.bounds);
         onElementAddedRef.current?.(element);
       }
     },
@@ -1355,6 +1373,15 @@ export function EditorCanvas({
       // attaches rich metadata to each Fabric object's .data property, and awaits async image loads
       // before the final canvas.renderAll() — so the canvas is fully populated in one shot.
       if (pageData.elements && pageData.elements.length > 0) {
+        // Capturer les bounds initiaux POUR CHAQUE élément. Sans ça
+        // la première modification d'un élément parsé efface la NOUVELLE
+        // zone (oldBounds undefined → fallback element.bounds) et le
+        // glyphe original reste visible.
+        for (const el of pageData.elements) {
+          if (el.elementId && el.bounds) {
+            lastKnownBoundsRef.current.set(el.elementId, el.bounds);
+          }
+        }
         await renderElementsOverlay(canvas, pageData.elements, fabricModule);
       } else {
         canvas.renderAll();
