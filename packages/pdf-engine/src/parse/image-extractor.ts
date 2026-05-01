@@ -185,6 +185,64 @@ function boundsFromCtm(
  *
  * Returns null if the object is not available (not yet loaded or not an image).
  */
+// pdfjs ImageKind values (from src/shared/util.js).
+// We must convert each kind to RGBA (4 bytes/pixel) for the canvas ImageData
+// constructor — feeding it raw RGB or 1bpp grayscale produces a corrupted
+// rendering with shifted pixels (the symptom: a noisy diagonal pattern that
+// has nothing to do with the source image).
+const PDFJS_IMAGE_KIND = {
+  GRAYSCALE_1BPP: 1,
+  RGB_24BPP: 2,
+  RGBA_32BPP: 3,
+} as const;
+
+function toRgbaPixels(
+  rawData: Uint8Array | Uint8ClampedArray,
+  width: number,
+  height: number,
+  kind: number | undefined,
+): Uint8ClampedArray {
+  const pixelCount = width * height;
+  const rgba = new Uint8ClampedArray(pixelCount * 4);
+
+  if (kind === PDFJS_IMAGE_KIND.RGBA_32BPP || rawData.length === pixelCount * 4) {
+    // Already RGBA — copy through as-is.
+    rgba.set(rawData);
+    return rgba;
+  }
+
+  if (kind === PDFJS_IMAGE_KIND.RGB_24BPP || rawData.length === pixelCount * 3) {
+    // RGB 24bpp → expand to RGBA with alpha=255.
+    for (let i = 0, j = 0; i < pixelCount; i++, j += 4) {
+      const src = i * 3;
+      rgba[j] = rawData[src]!;
+      rgba[j + 1] = rawData[src + 1]!;
+      rgba[j + 2] = rawData[src + 2]!;
+      rgba[j + 3] = 255;
+    }
+    return rgba;
+  }
+
+  if (kind === PDFJS_IMAGE_KIND.GRAYSCALE_1BPP || rawData.length === pixelCount) {
+    // 8bpp grayscale → replicate to RGB, alpha=255.
+    for (let i = 0, j = 0; i < pixelCount; i++, j += 4) {
+      const v = rawData[i]!;
+      rgba[j] = v;
+      rgba[j + 1] = v;
+      rgba[j + 2] = v;
+      rgba[j + 3] = 255;
+    }
+    return rgba;
+  }
+
+  // Unknown layout — best-effort: assume RGBA if exact, else fail open.
+  // Fail-open is preferable to corrupting random pixels.
+  if (rawData.length >= pixelCount * 4) {
+    rgba.set(rawData.subarray(0, pixelCount * 4));
+  }
+  return rgba;
+}
+
 async function resolveImageObj(
   page: PDFPageProxy,
   name: string,
@@ -219,16 +277,12 @@ async function resolveImageObj(
     const h = typeof obj['height'] === 'number' ? obj['height'] : null;
     if (!w || !h) return null;
 
-    // pdfjs stores decoded RGBA pixels as Uint8ClampedArray; some streamed
-    // images come as Uint8Array. Accept both — the canvas ImageData
-    // constructor will copy from either.
-    let data: Uint8ClampedArray | null = null;
     const rawData = obj['data'];
-    if (rawData instanceof Uint8ClampedArray) {
-      data = rawData;
-    } else if (rawData instanceof Uint8Array) {
-      data = new Uint8ClampedArray(rawData.buffer, rawData.byteOffset, rawData.byteLength);
+    if (!(rawData instanceof Uint8Array || rawData instanceof Uint8ClampedArray)) {
+      return { width: w, height: h, data: null };
     }
+    const kind = typeof obj['kind'] === 'number' ? (obj['kind'] as number) : undefined;
+    const data = toRgbaPixels(rawData, w, h, kind);
 
     return { width: w, height: h, data };
   } catch {
