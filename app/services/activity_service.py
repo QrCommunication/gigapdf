@@ -131,7 +131,7 @@ class ActivityService:
                     select(StoredDocument).where(
                         StoredDocument.id == document_id,
                         StoredDocument.owner_id == user_id,
-                        not StoredDocument.is_deleted,
+                        ~StoredDocument.is_deleted,
                     )
                 )
                 document = doc_result.scalar_one_or_none()

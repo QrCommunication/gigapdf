@@ -57,7 +57,7 @@ class PermissionService:
             doc_result = await session.execute(
                 select(StoredDocument).where(
                     StoredDocument.id == document_id,
-                    not StoredDocument.is_deleted,
+                    ~StoredDocument.is_deleted,
                 )
             )
             document = doc_result.scalar_one_or_none()

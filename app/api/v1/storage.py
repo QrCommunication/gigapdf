@@ -520,7 +520,7 @@ async def list_stored_documents(
     # Build base query
     base_query = select(StoredDocument).where(
         StoredDocument.owner_id == user.user_id,
-        not StoredDocument.is_deleted,
+        ~StoredDocument.is_deleted,
     )
 
     # Filter by folder
@@ -720,7 +720,7 @@ async def load_stored_document(
         select(StoredDocument).where(
             StoredDocument.id == stored_document_id,
             StoredDocument.owner_id == user.user_id,
-            not StoredDocument.is_deleted,
+            ~StoredDocument.is_deleted,
         )
     )
     stored_doc = result.scalar_one_or_none()
@@ -1365,7 +1365,7 @@ async def rename_stored_document(
         select(StoredDocument).where(
             StoredDocument.id == stored_document_id,
             StoredDocument.owner_id == user.user_id,
-            not StoredDocument.is_deleted,
+            ~StoredDocument.is_deleted,
         )
     )
     stored_doc = result.scalar_one_or_none()
@@ -1533,7 +1533,7 @@ async def delete_stored_document(
         select(StoredDocument).where(
             StoredDocument.id == stored_document_id,
             StoredDocument.owner_id == user.user_id,
-            not StoredDocument.is_deleted,
+            ~StoredDocument.is_deleted,
         )
     )
     stored_doc = result.scalar_one_or_none()
@@ -2106,7 +2106,7 @@ async def delete_folder(
     count_result = await db.execute(
         select(func.count()).select_from(StoredDocument).where(
             StoredDocument.folder_id == folder_id,
-            not StoredDocument.is_deleted,
+            ~StoredDocument.is_deleted,
         )
     )
     doc_count = count_result.scalar() or 0
@@ -2322,7 +2322,7 @@ async def move_document(
         select(StoredDocument).where(
             StoredDocument.id == stored_document_id,
             StoredDocument.owner_id == user.user_id,
-            not StoredDocument.is_deleted,
+            ~StoredDocument.is_deleted,
         )
     )
     document = result.scalar_one_or_none()
@@ -2776,7 +2776,7 @@ async def get_folder_stats(
         ).where(
             StoredDocument.owner_id == user.user_id,
             StoredDocument.folder_id.in_(folder_ids),
-            not StoredDocument.is_deleted,
+            ~StoredDocument.is_deleted,
         )
     )
     stats = stats_result.one()

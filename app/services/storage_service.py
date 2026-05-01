@@ -173,7 +173,7 @@ class StorageService:
             select(StoredDocument).where(
                 StoredDocument.id == stored_document_id,
                 StoredDocument.owner_id == user_id,
-                not StoredDocument.is_deleted,
+                ~StoredDocument.is_deleted,
             )
         )
         return result.scalar_one_or_none()

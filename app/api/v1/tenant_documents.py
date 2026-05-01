@@ -443,7 +443,7 @@ async def share_document_with_tenant(
         doc_stmt = select(StoredDocument).where(
             and_(
                 StoredDocument.id == request.document_id,
-                not StoredDocument.is_deleted,
+                ~StoredDocument.is_deleted,
             )
         )
         doc_result = await session.execute(doc_stmt)
@@ -828,7 +828,7 @@ async def check_document_access(
         doc_stmt = select(StoredDocument).where(
             and_(
                 StoredDocument.id == document_id,
-                not StoredDocument.is_deleted,
+                ~StoredDocument.is_deleted,
             )
         )
         doc_result = await session.execute(doc_stmt)

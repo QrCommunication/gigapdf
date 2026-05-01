@@ -159,7 +159,7 @@ async def get_dashboard_stats(
     # Get total documents
     docs_result = await db.execute(
         select(func.count()).select_from(StoredDocument).where(
-            not StoredDocument.is_deleted
+            ~StoredDocument.is_deleted
         )
     )
     total_documents = docs_result.scalar() or 0
@@ -340,7 +340,7 @@ async def get_usage_stats(
             select(func.count()).select_from(StoredDocument).where(
                 StoredDocument.created_at >= month_start,
                 StoredDocument.created_at < month_end,
-                not StoredDocument.is_deleted
+                ~StoredDocument.is_deleted
             )
         )
         doc_count = docs_result.scalar() or 0
@@ -349,7 +349,7 @@ async def get_usage_stats(
         storage_result = await db.execute(
             select(func.sum(StoredDocument.file_size_bytes)).where(
                 StoredDocument.created_at < month_end,
-                not StoredDocument.is_deleted
+                ~StoredDocument.is_deleted
             )
         )
         storage_bytes = storage_result.scalar() or 0
@@ -603,7 +603,7 @@ async def get_recent_activity(
     # Get recent documents
     docs_result = await db.execute(
         select(StoredDocument)
-        .where(not StoredDocument.is_deleted)
+        .where(~StoredDocument.is_deleted)
         .order_by(StoredDocument.created_at.desc())
         .limit(limit // 2)
     )

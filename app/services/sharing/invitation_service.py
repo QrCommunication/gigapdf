@@ -74,7 +74,7 @@ class InvitationService:
                 select(StoredDocument).where(
                     StoredDocument.id == document_id,
                     StoredDocument.owner_id == inviter_id,
-                    not StoredDocument.is_deleted,
+                    ~StoredDocument.is_deleted,
                 )
             )
             document = doc_result.scalar_one_or_none()
@@ -339,7 +339,7 @@ class InvitationService:
                     DocumentShareInvitation.invitee_email == user_email,
                     DocumentShareInvitation.status == InvitationStatus.PENDING,
                     DocumentShareInvitation.expires_at > now_utc(),
-                    not StoredDocument.is_deleted,
+                    ~StoredDocument.is_deleted,
                 )
                 .order_by(DocumentShareInvitation.created_at.desc())
             )

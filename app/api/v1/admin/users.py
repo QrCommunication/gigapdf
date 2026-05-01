@@ -710,7 +710,7 @@ async def get_user_documents(
     # Get documents
     query = select(StoredDocument).where(
         StoredDocument.owner_id == user_id,
-        not StoredDocument.is_deleted
+        ~StoredDocument.is_deleted
     )
 
     # Get total count

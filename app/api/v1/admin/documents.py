@@ -186,7 +186,7 @@ async def list_documents(
 
     # Apply filters
     if not include_deleted:
-        query = query.where(not StoredDocument.is_deleted)
+        query = query.where(~StoredDocument.is_deleted)
 
     if search:
         query = query.where(StoredDocument.name.ilike(f"%{search}%"))
@@ -334,7 +334,7 @@ async def get_document_stats(
     # Total documents
     total_result = await db.execute(
         select(func.count()).select_from(StoredDocument).where(
-            not StoredDocument.is_deleted
+            ~StoredDocument.is_deleted
         )
     )
     total_documents = total_result.scalar() or 0
@@ -342,7 +342,7 @@ async def get_document_stats(
     # Total size
     size_result = await db.execute(
         select(func.sum(StoredDocument.file_size_bytes)).where(
-            not StoredDocument.is_deleted
+            ~StoredDocument.is_deleted
         )
     )
     total_size_bytes = size_result.scalar() or 0
@@ -350,7 +350,7 @@ async def get_document_stats(
     # Average page count
     avg_result = await db.execute(
         select(func.avg(StoredDocument.page_count)).where(
-            not StoredDocument.is_deleted
+            ~StoredDocument.is_deleted
         )
     )
     avg_page_count = avg_result.scalar() or 0
@@ -369,7 +369,7 @@ async def get_document_stats(
             StoredDocument.mime_type,
             func.count().label("count")
         ).where(
-            not StoredDocument.is_deleted
+            ~StoredDocument.is_deleted
         ).group_by(StoredDocument.mime_type)
     )
     documents_by_type = {row.mime_type: row.count for row in mime_result.all()}
