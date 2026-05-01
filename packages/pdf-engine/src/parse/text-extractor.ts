@@ -364,6 +364,47 @@ async function buildColorMap(page: PDFPageProxy): Promise<Map<string, string>> {
 // extractTextElements — existing API, untouched
 // ---------------------------------------------------------------------------
 
+/**
+ * Resolve the *real* PostScript font name from a pdfjs internal id.
+ *
+ * `item.fontName` is the loadedName (e.g. "g_d0_f1") which pdfjs assigns
+ * to every font as it streams them in. The actual PostScript name
+ * (e.g. "AAAAAA+Arial-BoldMT") lives on the Font object stored in
+ * `page.commonObjs`. Without this lookup, every text run looks
+ * identically named to mapPdfFontToStandard, which then falls back to
+ * Helvetica and loses bold/italic variants.
+ */
+async function resolvePdfjsFontName(
+  page: PDFPageProxy,
+  loadedName: string,
+): Promise<string> {
+  if (!loadedName) return '';
+  try {
+    const commonObjs = (page as unknown as Record<string, unknown>)['commonObjs'];
+    if (!commonObjs) return loadedName;
+    const api = commonObjs as {
+      get: ((k: string) => unknown) & ((k: string, cb: (v: unknown) => void) => void);
+      has?: (k: string) => boolean;
+    };
+    if (typeof api.get !== 'function') return loadedName;
+
+    const fontObj = await new Promise<unknown>((resolve) => {
+      try {
+        (api.get as (k: string, cb: (v: unknown) => void) => void)(loadedName, resolve);
+      } catch {
+        resolve(null);
+      }
+    });
+    if (!fontObj || typeof fontObj !== 'object') return loadedName;
+
+    const obj = fontObj as Record<string, unknown>;
+    const realName = typeof obj['name'] === 'string' ? (obj['name'] as string) : '';
+    return realName || loadedName;
+  } catch {
+    return loadedName;
+  }
+}
+
 export async function extractTextElements(
   page: PDFPageProxy,
   _pageNumber: number,
@@ -374,6 +415,20 @@ export async function extractTextElements(
   // Get viewport at scale 1 to use its transform matrix for precise coord conversion.
   // viewport.transform composes: PDF→viewport (Y flip + MediaBox offset + rotation).
   const viewport = page.getViewport({ scale: 1 });
+
+  // Resolve all font names up-front. pdfjs streams font objects lazily; the
+  // first call to commonObjs.get(name) blocks until the font is decoded, so
+  // resolving them in parallel before iterating items avoids a serial wait.
+  const fontNameCache = new Map<string, string>();
+  const uniqueFontIds = new Set<string>();
+  for (const item of textContent.items) {
+    if (isTextItem(item) && item.fontName) uniqueFontIds.add(item.fontName);
+  }
+  await Promise.all(
+    [...uniqueFontIds].map(async (fid) => {
+      fontNameCache.set(fid, await resolvePdfjsFontName(page, fid));
+    }),
+  );
 
   for (const item of textContent.items) {
     if (!isTextItem(item)) continue;
@@ -416,7 +471,11 @@ export async function extractTextElements(
     // Unused but suppress warning
     void pageHeight;
 
-    const { fontFamily, fontWeight, fontStyle } = mapPdfFontToStandard(item.fontName ?? '');
+    // Use the real PostScript name (e.g. "Arial-BoldMT") instead of the
+    // pdfjs-internal loadedName (e.g. "g_d0_f1"), so mapPdfFontToStandard
+    // can detect Bold/Italic variants from the suffix.
+    const realFontName = fontNameCache.get(item.fontName ?? '') ?? item.fontName ?? '';
+    const { fontFamily, fontWeight, fontStyle } = mapPdfFontToStandard(realFontName);
 
     elements.push({
       elementId: randomUUID(),
@@ -442,7 +501,7 @@ export async function extractTextElements(
         strikethrough: false,
         backgroundColor: null,
         verticalAlign: 'baseline',
-        originalFont: item.fontName ?? null,
+        originalFont: realFontName || null,
       },
       ocrConfidence: null,
       linkUrl: null,
@@ -504,6 +563,20 @@ export async function extractTextBlocks(
       includeMarkedContent: true,
     });
 
+    // Resolve real PostScript font names from pdfjs internal loadedNames.
+    // See `resolvePdfjsFontName` for the rationale: without this, every run
+    // gets the same g_d0_fN id and we lose Bold/Italic detection.
+    const fontNameCache = new Map<string, string>();
+    const uniqueFontIds = new Set<string>();
+    for (const item of textContent.items) {
+      if (isTextItem(item) && item.fontName) uniqueFontIds.add(item.fontName);
+    }
+    await Promise.all(
+      [...uniqueFontIds].map(async (fid) => {
+        fontNameCache.set(fid, await resolvePdfjsFontName(page, fid));
+      }),
+    );
+
     // Convert pdfjs items to enriched TextRun objects
     const runs: TextRun[] = [];
 
@@ -546,7 +619,9 @@ export async function extractTextBlocks(
       const colorKey = pdfY.toFixed(1);
       const color = colorMap.get(colorKey) ?? '#000000';
 
-      const fontName = item.fontName ?? '';
+      const loadedName = item.fontName ?? '';
+      // Replace pdfjs internal id with the real PostScript name.
+      const fontName = fontNameCache.get(loadedName) ?? loadedName;
 
       runs.push({
         str: item.str,
