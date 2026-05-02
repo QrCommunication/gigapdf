@@ -1547,6 +1547,12 @@ export function EditorCanvas({
               // preserving 1:1 visual fidelity. Mask only kicks in once the
               // user enters edit mode on a specific text item.
               maskText: false,
+              // Surgically wipe out duplicate glyph runs left behind by prior
+              // save-loops (the Fabric IText overlays were baked back into
+              // the PDF on top of the native glyphs, producing a "shadowed"
+              // look on titles like "Facture Freebox"). Keeps the first
+              // occurrence of each (str, fontSize, position-cluster).
+              dedupeText: true,
             });
             renderer.dispose();
 
