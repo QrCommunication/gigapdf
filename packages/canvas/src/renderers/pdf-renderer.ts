@@ -183,9 +183,21 @@ async function maskDuplicateText(
       const isDuplicate = positions.some((p) => {
         const dx = Math.abs(p.x - here.x);
         const dy = Math.abs(p.y - here.y);
-        // shadowOverlap: stacked twin within 2px on both axes
-        // verticalStack: same column (≤3px X), any Y → save-loop dupe
-        return (dx <= 2 && dy <= 2) || dx <= 3;
+        // Two patterns to catch:
+        //   1. shadowOverlap: stacked twin within 2px on both axes
+        //      (vector outline + fallback trace at sub-pixel offset)
+        //   2. saveLoopStack: same column (≤2px X) AND close Y (≤fontSize)
+        //      (Fabric IText overlay baked back into the PDF on top of the
+        //      native glyph — typically offset by half a line height)
+        //
+        // We deliberately bound dy to roughly one line so that legitimate
+        // table values like "86,77€" / "101,95€" appearing on multiple rows
+        // (same X, Y separated by full row heights) are NOT collapsed.
+        const lineGuess = Math.max(fontSize * 1.6, 12);
+        return (
+          (dx <= 2 && dy <= 2) ||
+          (dx <= 2 && dy <= lineGuess)
+        );
       });
 
       if (!isDuplicate) {
