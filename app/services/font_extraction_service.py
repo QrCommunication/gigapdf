@@ -192,9 +192,7 @@ class FontExtractionService:
             font_bytes = None
 
         # Round-trip TTF/OTF through fontTools to fix subset truncation
-        # that Chrome OTS rejects. CFF data needs separate handling (wrap
-        # into OTF container) — for now we simply mark it non-embedded so
-        # the frontend skips the download and falls back to the CSS family.
+        # that Chrome OTS rejects.
         if font_bytes and detected_format in ("ttf", "otf"):
             repaired = self._repair_ttf_for_browser(
                 font_bytes, detected_format, postscript_name
@@ -202,19 +200,23 @@ class FontExtractionService:
             if repaired is not None:
                 font_bytes = repaired
         elif font_bytes and detected_format == "cff":
-            # Raw CFF cannot be loaded by browser FontFace as-is. Until we
-            # implement CFF→OTF wrapping, treat as non-embedded so the
-            # /fonts/{id}/{font_id} endpoint returns 404 once the metadata
-            # is filtered, never serves bytes the browser cannot decode.
-            logger.info(
-                "Font '%s' (subtype=%s) is raw CFF — marking is_embedded=false "
-                "until CFF→OTF wrapping is implemented; frontend will fall "
-                "back to '%s' family name.",
-                original_name,
-                subtype,
-                font_family or "default",
+            # Wrap raw CFF in an OTF (sfnt) container so the browser can
+            # load it as a FontFace. PDFs embed Type1C/CIDFontType0C
+            # fonts as bare CFF streams in FontFile3 — Chrome OTS only
+            # accepts CFF inside an OTF wrapper.
+            wrapped = self._wrap_cff_as_otf(
+                font_bytes, postscript_name, font_family
             )
-            font_bytes = None
+            if wrapped is not None:
+                font_bytes = wrapped
+                detected_format = "otf"  # served as OTF now
+            else:
+                logger.info(
+                    "Font '%s' could not be wrapped CFF→OTF — falling back to "
+                    "is_embedded=false so the editor uses the CSS family.",
+                    original_name,
+                )
+                font_bytes = None
 
         # is_embedded reflects whether we will actually serve binary data
         # to the browser. The metadata still carries the original family/
@@ -344,6 +346,225 @@ class FontExtractionService:
                 )
 
         return bytes(new_bytes)
+
+    @staticmethod
+    def _wrap_cff_as_otf(
+        cff_bytes: bytes,
+        postscript_name: str | None,
+        font_family: str | None,
+    ) -> bytes | None:
+        """
+        Wrap raw CFF font data in a minimal OTF (sfnt) container.
+
+        PDFs store Type1C / CIDFontType0C fonts as bare CFF streams.
+        Browsers' FontFace API rejects raw CFF — they need a full
+        OpenType wrapper with the standard required tables. This builder
+        creates a minimum-viable .otf:
+
+            sfntVersion = "OTTO"
+            tables: head, hhea, hmtx, maxp, name, OS/2, cmap, post, CFF
+
+        We use fontTools' CFFFontSet to parse the CFF, then synthesise
+        the wrapper tables from the CFF top DICT info (advanceWidth,
+        bbox, FontName, etc). cmap is built as identity from the CFF
+        charset so glyph N → unicode N (close enough for fallback
+        rendering in the editor).
+
+        Returns None when the CFF cannot be parsed or the wrapper
+        cannot be assembled. Caller treats None as "give up, fall
+        back to family name".
+        """
+        if not _FONTTOOLS_AVAILABLE:
+            return None
+
+        try:
+            from fontTools.cffLib import CFFFontSet  # type: ignore[import-not-found]
+            from fontTools.ttLib import newTable  # type: ignore[import-not-found]
+        except ImportError:
+            return None
+
+        try:
+            # Parse the CFF stream
+            cff = CFFFontSet()
+            cff.decompile(io.BytesIO(cff_bytes), None)
+            if len(cff.fontNames) == 0:
+                return None
+
+            top_dict = cff[cff.fontNames[0]]
+            # Glyph order is the CharStrings keys; size = number of glyphs.
+            glyph_order = list(top_dict.charset)
+            num_glyphs = len(glyph_order)
+            if num_glyphs == 0:
+                return None
+
+            # Compute advance widths from CFF Private DICT default + glyph
+            # widths. fontTools exposes hmtx-equivalent metrics via
+            # CharString operands; for the wrapper we use a uniform
+            # default width — the editor only uses these fonts for visual
+            # rendering of pre-positioned glyphs, so exact metrics aren't
+            # required (pdf.js rendered them with correct widths in the
+            # background bitmap; FontFace just needs to display the
+            # glyphs at the editor's positions).
+            default_width = int(getattr(top_dict.Private, "defaultWidthX", 500))
+
+            # Build the OTF wrapper using fontTools' empty TTFont.
+            from fontTools.ttLib import TTFont as _TTFont  # type: ignore[import-not-found]
+            font = _TTFont(sfntVersion="OTTO")
+            font.setGlyphOrder(glyph_order)
+
+            # ── head ────────────────────────────────────────────────
+            head = newTable("head")
+            head.tableVersion = 1.0
+            head.fontRevision = 1.0
+            head.checkSumAdjustment = 0
+            head.magicNumber = 0x5F0F3CF5
+            head.flags = 0
+            head.unitsPerEm = 1000
+            head.created = head.modified = 0
+            # Default bbox — pdf.js used the real one for the bg bitmap;
+            # the editor doesn't need it for glyph hit-testing.
+            head.xMin = head.yMin = 0
+            head.xMax = head.yMax = 1000
+            head.macStyle = 0
+            head.lowestRecPPEM = 6
+            head.fontDirectionHint = 2
+            head.indexToLocFormat = 0
+            head.glyphDataFormat = 0
+            font["head"] = head
+
+            # ── hhea ────────────────────────────────────────────────
+            hhea = newTable("hhea")
+            hhea.tableVersion = 0x00010000
+            hhea.ascent = 800
+            hhea.descent = -200
+            hhea.lineGap = 0
+            hhea.advanceWidthMax = default_width
+            hhea.minLeftSideBearing = 0
+            hhea.minRightSideBearing = 0
+            hhea.xMaxExtent = default_width
+            hhea.caretSlopeRise = 1
+            hhea.caretSlopeRun = 0
+            hhea.caretOffset = 0
+            hhea.reserved0 = 0
+            hhea.reserved1 = 0
+            hhea.reserved2 = 0
+            hhea.reserved3 = 0
+            hhea.metricDataFormat = 0
+            hhea.numberOfHMetrics = num_glyphs
+            font["hhea"] = hhea
+
+            # ── hmtx (uniform widths) ───────────────────────────────
+            hmtx = newTable("hmtx")
+            hmtx.metrics = {gn: (default_width, 0) for gn in glyph_order}
+            font["hmtx"] = hmtx
+
+            # ── maxp ────────────────────────────────────────────────
+            maxp = newTable("maxp")
+            maxp.tableVersion = 0x00005000  # CFF maxp
+            maxp.numGlyphs = num_glyphs
+            font["maxp"] = maxp
+
+            # ── name ────────────────────────────────────────────────
+            name_tbl = newTable("name")
+            name_tbl.names = []
+            display = font_family or postscript_name or "Embedded"
+            name_tbl.setName(display, 1, 3, 1, 0x409)  # Family
+            name_tbl.setName("Regular", 2, 3, 1, 0x409)  # Subfamily
+            name_tbl.setName(display, 4, 3, 1, 0x409)  # Full name
+            name_tbl.setName(postscript_name or display, 6, 3, 1, 0x409)  # PS name
+            font["name"] = name_tbl
+
+            # ── OS/2 ────────────────────────────────────────────────
+            os2 = newTable("OS/2")
+            os2.version = 4
+            os2.xAvgCharWidth = default_width
+            os2.usWeightClass = 400
+            os2.usWidthClass = 5
+            os2.fsType = 0
+            os2.ySubscriptXSize = 650
+            os2.ySubscriptYSize = 600
+            os2.ySubscriptXOffset = 0
+            os2.ySubscriptYOffset = 75
+            os2.ySuperscriptXSize = 650
+            os2.ySuperscriptYSize = 600
+            os2.ySuperscriptXOffset = 0
+            os2.ySuperscriptYOffset = 350
+            os2.yStrikeoutSize = 50
+            os2.yStrikeoutPosition = 250
+            os2.sFamilyClass = 0
+            os2.panose = type("Panose", (), {
+                "bFamilyType": 0, "bSerifStyle": 0, "bWeight": 0, "bProportion": 0,
+                "bContrast": 0, "bStrokeVariation": 0, "bArmStyle": 0,
+                "bLetterform": 0, "bMidline": 0, "bXHeight": 0,
+            })()
+            os2.ulUnicodeRange1 = 0xFFFFFFFF
+            os2.ulUnicodeRange2 = 0xFFFFFFFF
+            os2.ulUnicodeRange3 = 0xFFFFFFFF
+            os2.ulUnicodeRange4 = 0xFFFFFFFF
+            os2.achVendID = "    "
+            os2.fsSelection = 0x40  # Regular
+            os2.usFirstCharIndex = 0x20
+            os2.usLastCharIndex = 0xFFFF
+            os2.sTypoAscender = 800
+            os2.sTypoDescender = -200
+            os2.sTypoLineGap = 0
+            os2.usWinAscent = 800
+            os2.usWinDescent = 200
+            os2.ulCodePageRange1 = 0xFFFFFFFF
+            os2.ulCodePageRange2 = 0xFFFFFFFF
+            os2.sxHeight = 500
+            os2.sCapHeight = 700
+            os2.usDefaultChar = 0
+            os2.usBreakChar = 0x20
+            os2.usMaxContext = 0
+            font["OS/2"] = os2
+
+            # ── cmap (identity glyph→unicode mapping) ───────────────
+            from fontTools.ttLib.tables._c_m_a_p import CmapSubtable
+            cmap = newTable("cmap")
+            cmap.tableVersion = 0
+            sub = CmapSubtable.newSubtableClass(4)()
+            sub.platEncID = 1
+            sub.platformID = 3
+            sub.format = 4
+            sub.length = 0
+            sub.language = 0
+            # Identity mapping: glyph index N → unicode N (skipping .notdef).
+            # Sufficient for editor fallback rendering since pdf.js renders
+            # the original glyphs in the bg bitmap.
+            sub.cmap = {i: gn for i, gn in enumerate(glyph_order) if i > 0 and i < 0xFFFF}
+            cmap.tables = [sub]
+            font["cmap"] = cmap
+
+            # ── post ────────────────────────────────────────────────
+            post = newTable("post")
+            post.formatType = 3.0
+            post.italicAngle = 0
+            post.underlinePosition = -100
+            post.underlineThickness = 50
+            post.isFixedPitch = 0
+            post.minMemType42 = 0
+            post.maxMemType42 = 0
+            post.minMemType1 = 0
+            post.maxMemType1 = 0
+            font["post"] = post
+
+            # ── CFF ─────────────────────────────────────────────────
+            cff_table = newTable("CFF ")
+            cff_table.cff = cff
+            font["CFF "] = cff_table
+
+            # Save and return
+            buf = io.BytesIO()
+            font.save(buf)
+            return buf.getvalue()
+        except Exception as exc:  # noqa: BLE001 — many possible failure points
+            logger.info(
+                "CFF→OTF wrap failed for '%s': %s",
+                postscript_name or "unknown",
+                exc,
+            )
+            return None
 
     @staticmethod
     def _repair_ttf_for_browser(

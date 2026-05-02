@@ -110,12 +110,22 @@ async function maskTextLayer(
         if (px > maxPx) maxPx = px;
         if (py > maxPy) maxPy = py;
       }
-      // 1 px of padding on each side to catch anti-aliasing edges.
+      // Padding scales with font size to catch:
+      //   - anti-aliasing fringes (always)
+      //   - shadow/relief effects: PDFs that render the same glyph
+      //     multiple times with a small offset. textContent collapses
+      //     them to one item but the bg bitmap still shows the offset
+      //     copies. Mask 25% of the font size on the bottom and 10% on
+      //     other edges so a typical 24pt title (6 px shadow drop)
+      //     stays covered.
+      const padX = Math.max(1, fontSize * 0.1);
+      const padTop = Math.max(1, fontSize * 0.1);
+      const padBottom = Math.max(2, fontSize * 0.25);
       context.fillRect(
-        minPx - 1,
-        minPy - 1,
-        maxPx - minPx + 2,
-        maxPy - minPy + 2,
+        minPx - padX,
+        minPy - padTop,
+        maxPx - minPx + padX * 2,
+        maxPy - minPy + padTop + padBottom,
       );
     }
     context.restore();
