@@ -104,6 +104,35 @@ function generateId(): string {
   return `el_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
+// Bake an alpha value into a hex/rgb colour string. Used for shape fill/
+// stroke so a shape with mixed-alpha paint (fill 0.5 + stroke 1.0) keeps
+// both layers correct. Pass-through transparent / empty strings unchanged.
+function colorWithAlpha(color: string, alpha: number): string {
+  if (!color || color === "transparent" || color === "none") return "transparent";
+  const a = Math.max(0, Math.min(1, alpha ?? 1));
+  if (a >= 0.999) return color;
+  const hex = color.trim();
+  if (hex.startsWith("#")) {
+    let r = 0, g = 0, b = 0;
+    if (hex.length === 4) {
+      r = parseInt(hex[1]! + hex[1]!, 16);
+      g = parseInt(hex[2]! + hex[2]!, 16);
+      b = parseInt(hex[3]! + hex[3]!, 16);
+    } else if (hex.length === 7) {
+      r = parseInt(hex.slice(1, 3), 16);
+      g = parseInt(hex.slice(3, 5), 16);
+      b = parseInt(hex.slice(5, 7), 16);
+    } else {
+      return color;
+    }
+    return `rgba(${r}, ${g}, ${b}, ${a})`;
+  }
+  if (hex.startsWith("rgb(")) {
+    return hex.replace(/^rgb\(/, "rgba(").replace(/\)$/, `, ${a})`);
+  }
+  return color;
+}
+
 // Type helper for fabric objects with custom data
 interface FabricObjectWithData extends FabricObject {
   data?: { elementId?: string; [key: string]: unknown };
@@ -1039,22 +1068,29 @@ export function EditorCanvas({
     //
     //    The signature deliberately ignores fontFamily because the duplicate
     //    typically uses a different family (embedded outline vs Helvetica
-    //    fallback). Matching on content + rounded fontSize + position
-    //    proximity is enough.
-    const seenTextSignatures = new Map<string, { x: number; y: number }>();
+    //    fallback). Matching on content + rounded fontSize + tight position
+    //    (≤2px) is enough — wider tolerance kills legitimate repeats like
+    //    "RONY LICHA" appearing twice on a billing page (sender + recipient).
+    //    A real shadow/outline duplicate sits within sub-pixel of its twin;
+    //    if x or y differs by >2 px the layout intentionally placed two
+    //    runs and we must keep both.
+    const seenTextSignatures = new Map<string, Array<{ x: number; y: number }>>();
     const dedupedElements = sortedElements.filter((el) => {
       if (el.type !== "text") return true;
       const textElement = el as Extract<Element, { type: "text" }>;
       const sig = `${textElement.content}|${Math.round(textElement.style.fontSize)}`;
-      const seen = seenTextSignatures.get(sig);
-      if (!seen) {
-        seenTextSignatures.set(sig, { x: textElement.bounds.x, y: textElement.bounds.y });
+      const positions = seenTextSignatures.get(sig);
+      const here = { x: textElement.bounds.x, y: textElement.bounds.y };
+      if (!positions) {
+        seenTextSignatures.set(sig, [here]);
         return true;
       }
-      const dx = Math.abs(seen.x - textElement.bounds.x);
-      const dy = Math.abs(seen.y - textElement.bounds.y);
-      // Same text + same size + within 20px = shadow/relief/outline duplicate.
-      return !(dx <= 20 && dy <= 20);
+      const isStacked = positions.some(
+        (p) => Math.abs(p.x - here.x) <= 2 && Math.abs(p.y - here.y) <= 2,
+      );
+      if (isStacked) return false;
+      positions.push(here);
+      return true;
     });
 
     for (const element of dedupedElements) {
@@ -1158,12 +1194,24 @@ export function EditorCanvas({
         case "shape": {
           const shapeElement = element;
           const hasStroke = shapeElement.style.strokeColor && shapeElement.style.strokeWidth > 0;
+          const hasFill = !!shapeElement.style.fillColor;
+          // Bake fill/stroke alpha directly into the colour (rgba) instead of
+          // a single composite opacity. Stroke-only paths (table borders,
+          // hairline dividers) come with fillOpacity=0; using that as the
+          // shape's `opacity` would invisibilise the stroke too. Encoding
+          // alpha per channel lets fill+stroke shapes carry different alphas.
+          const fillCss = hasFill
+            ? colorWithAlpha(shapeElement.style.fillColor as string, shapeElement.style.fillOpacity ?? 1)
+            : "transparent";
+          const strokeCss = hasStroke
+            ? colorWithAlpha(shapeElement.style.strokeColor as string, shapeElement.style.strokeOpacity ?? 1)
+            : "transparent";
           const shapeOptions = {
             ...baseOptions,
-            fill: shapeElement.style.fillColor || "transparent",
-            stroke: hasStroke ? (shapeElement.style.strokeColor as string) : "transparent",
+            fill: fillCss,
+            stroke: strokeCss,
             strokeWidth: hasStroke ? shapeElement.style.strokeWidth : 0,
-            opacity: shapeElement.style.fillOpacity ?? 1,
+            opacity: 1,
           };
           const w = shapeElement.bounds.width;
           const h = shapeElement.bounds.height;
