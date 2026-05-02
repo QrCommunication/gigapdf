@@ -151,3 +151,7 @@ apps/mobile/android/
 # Local dev certs
 certs/
 deploy/backup-vps-config/
+
+# Debug screenshots from Playwright sessions (not for commit)
+/*.png
+/.playwright-mcp/
