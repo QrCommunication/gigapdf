@@ -158,55 +158,65 @@ async function maskDuplicateText(
   try {
     const textContent = await page.getTextContent();
     type Item = { str: string; transform: number[]; width?: number };
-    type Seen = { x: number; y: number };
-    const seen = new Map<string, Seen[]>();
+    type Slot = { x: number; y: number; idx: number };
 
-    context.save();
-    context.fillStyle = "#ffffff";
-    for (const raw of textContent.items as Item[]) {
-      if (!raw.str || !raw.transform) continue;
+    // Two-pass dedup. pdfjs textContent itera dans l'ordre du content
+    // stream PDF: les glyphs natifs (gris pâle pour les save-loop dupes)
+    // arrivent AVANT l'overlay save-loop noir gras posé par-dessus. Si on
+    // garde la première occurrence on garde la version invisible. On veut
+    // donc préserver la DERNIÈRE occurrence et masquer les précédentes.
+    const items = textContent.items as Item[];
+    const seen = new Map<string, Slot[]>();
+    const toMask = new Set<number>();
+
+    for (let idx = 0; idx < items.length; idx++) {
+      const raw = items[idx];
+      if (!raw || !raw.str || !raw.transform) continue;
       const tx = raw.transform[4] ?? 0;
       const ty = raw.transform[5] ?? 0;
       const fontSize = Math.sqrt(
         (raw.transform[0] ?? 1) * (raw.transform[0] ?? 1) +
           (raw.transform[1] ?? 0) * (raw.transform[1] ?? 0),
       );
+      // Bound dy to ~one line height so multi-row table values stay split
+      // (e.g. "86,77€" appearing in a Services / Total / Somme block).
+      const lineGuess = Math.max(fontSize * 1.6, 12);
       const sig = `${raw.str}|${Math.round(fontSize)}`;
       const positions = seen.get(sig);
-      const here: Seen = { x: tx, y: ty };
+      const here: Slot = { x: tx, y: ty, idx };
 
       if (!positions) {
         seen.set(sig, [here]);
         continue;
       }
 
-      const isDuplicate = positions.some((p) => {
+      const matchIdx = positions.findIndex((p) => {
         const dx = Math.abs(p.x - here.x);
         const dy = Math.abs(p.y - here.y);
-        // Two patterns to catch:
-        //   1. shadowOverlap: stacked twin within 2px on both axes
-        //      (vector outline + fallback trace at sub-pixel offset)
-        //   2. saveLoopStack: same column (≤2px X) AND close Y (≤fontSize)
-        //      (Fabric IText overlay baked back into the PDF on top of the
-        //      native glyph — typically offset by half a line height)
-        //
-        // We deliberately bound dy to roughly one line so that legitimate
-        // table values like "86,77€" / "101,95€" appearing on multiple rows
-        // (same X, Y separated by full row heights) are NOT collapsed.
-        const lineGuess = Math.max(fontSize * 1.6, 12);
-        return (
-          (dx <= 2 && dy <= 2) ||
-          (dx <= 2 && dy <= lineGuess)
-        );
+        return (dx <= 2 && dy <= 2) || (dx <= 2 && dy <= lineGuess);
       });
 
-      if (!isDuplicate) {
+      if (matchIdx === -1) {
         positions.push(here);
         continue;
       }
 
-      // Mask this duplicate. Reuse the same AABB-on-corners approach as
-      // maskTextLayer so rotated/transformed text is fully covered.
+      // Save-loop dupe found: mark the EARLIER occurrence for masking and
+      // promote the current item as the slot's representative. Subsequent
+      // duplicates will likewise displace this one. Net effect: only the
+      // last (= visually opaque) occurrence survives.
+      const previous = positions[matchIdx];
+      if (previous) toMask.add(previous.idx);
+      positions[matchIdx] = here;
+    }
+
+    if (toMask.size === 0) return;
+
+    context.save();
+    context.fillStyle = "#ffffff";
+    for (const idx of toMask) {
+      const raw = items[idx];
+      if (!raw || !raw.transform) continue;
       const combined = pdfjsLib.Util.transform(
         viewport.transform,
         raw.transform,
