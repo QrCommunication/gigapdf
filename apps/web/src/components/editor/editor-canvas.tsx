@@ -1074,11 +1074,19 @@ export function EditorCanvas({
     //    A real shadow/outline duplicate sits within sub-pixel of its twin;
     //    if x or y differs by >2 px the layout intentionally placed two
     //    runs and we must keep both.
+    // Signature includes COLOR so that two text items with the same content
+    // and position but different colours stay visible. Without this, a white
+    // "6,99€" sitting on a red banner gets killed by its black drop-shadow
+    // twin that appeared first in the parser output, leaving a black-on-red
+    // glyph (or nothing if the shadow is offset). Real shadow effects use
+    // the SAME colour with a tiny offset, so colour-aware dedupe still
+    // catches them.
     const seenTextSignatures = new Map<string, Array<{ x: number; y: number }>>();
     const dedupedElements = sortedElements.filter((el) => {
       if (el.type !== "text") return true;
       const textElement = el as Extract<Element, { type: "text" }>;
-      const sig = `${textElement.content}|${Math.round(textElement.style.fontSize)}`;
+      const colourKey = (textElement.style.color || "#000000").toLowerCase();
+      const sig = `${textElement.content}|${Math.round(textElement.style.fontSize)}|${colourKey}`;
       const positions = seenTextSignatures.get(sig);
       const here = { x: textElement.bounds.x, y: textElement.bounds.y };
       if (!positions) {
