@@ -1547,12 +1547,16 @@ export function EditorCanvas({
               // preserving 1:1 visual fidelity. Mask only kicks in once the
               // user enters edit mode on a specific text item.
               maskText: false,
-              // Surgically wipe out duplicate glyph runs left behind by prior
-              // save-loops (the Fabric IText overlays were baked back into
-              // the PDF on top of the native glyphs, producing a "shadowed"
-              // look on titles like "Facture Freebox"). Keeps the first
-              // occurrence of each (str, fontSize, position-cluster).
-              dedupeText: true,
+              // dedupeText left disabled : pdfjs text content order is not
+              // a reliable signal for which copy of a save-loop dupe is the
+              // visually dominant one (varies between PDFs). Either we keep
+              // the visible black overlay and erase the faded native trace,
+              // or vice-versa — and the heuristic produces the wrong choice
+              // often enough to drop legitimate content. A faint "shadow"
+              // around accumulated titles is better than missing characters.
+              // The proper long-term fix is a backend route that hands back
+              // the canonical pre-edit PDF on demand.
+              dedupeText: false,
             });
             renderer.dispose();
 
