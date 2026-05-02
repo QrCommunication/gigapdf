@@ -300,29 +300,51 @@ function detectAlignment(
 // Colour extraction via operator list
 // ---------------------------------------------------------------------------
 
-/** A single showText event with its colour and the character count emitted. */
+/** A showText event with its painted position in PDF user space. */
 interface ShowTextEvent {
   color: string;
-  /** Number of unicode characters the event painted (sum of glyph.unicode lengths). */
-  charCount: number;
+  /** Baseline X in PDF user space (TM[4] composed with CTM). */
+  x: number;
+  /** Baseline Y in PDF user space (TM[5] composed with CTM). */
+  y: number;
 }
 
 /**
- * Walk the operator list and record every showText event with its active
- * fill colour and the number of characters it painted.
- *
- * pdfjs splits textContent.items on font/style boundaries, so one showText
- * event in op-list often corresponds to MULTIPLE items in textContent.items.
- * To map colours correctly we walk both streams in parallel using character
- * count — one event of 14 chars consumes the next ~14 chars worth of
- * textContent items, regardless of how those split internally.
- *
- * Without this matching, the previous index-based zip drifted apart at the
- * first showText with multi-item glyph runs (typically table rows like
- * "TVA 10%: 2,18€" where pdfjs splits the label and value), and every
- * subsequent text in the page got the wrong colour.
+ * Multiply two 2D affine matrices [a, b, c, d, e, f] in row-major form.
+ *   m = [a c e]
+ *       [b d f]
+ *       [0 0 1]
  */
-async function buildShowTextSequence(page: PDFPageProxy): Promise<ShowTextEvent[]> {
+function matMul(m1: number[], m2: number[]): number[] {
+  return [
+    m1[0]! * m2[0]! + m1[2]! * m2[1]!,
+    m1[1]! * m2[0]! + m1[3]! * m2[1]!,
+    m1[0]! * m2[2]! + m1[2]! * m2[3]!,
+    m1[1]! * m2[2]! + m1[3]! * m2[3]!,
+    m1[0]! * m2[4]! + m1[2]! * m2[5]! + m1[4]!,
+    m1[1]! * m2[4]! + m1[3]! * m2[5]! + m1[5]!,
+  ];
+}
+
+/**
+ * Walk the operator list and record every showText event with the colour,
+ * CTM-composed baseline (x, y) — the same coordinates pdfjs reports in
+ * textContent.items[i].transform[4..5]. We can then key colours by exact
+ * baseline position and look them up from each text item by proximity.
+ *
+ * Why this is more reliable than index/char-count matching:
+ *   - pdfjs may split or merge a single showText into multiple
+ *     textContent items based on font/style boundaries.
+ *   - includeMarkedContent / disableNormalization don't always normalise
+ *     the split. Index matching drifts mid-page.
+ *   - But every showText event paints at a specific (x, y) baseline that
+ *     ALSO appears (within rounding) in the matching textContent item.
+ *     Position keying is deterministic.
+ *
+ * Tracks the full PDF text state machine (Tm / Td / TD / T* / Tj / Tj' /
+ * Tj" / cm) so we can compute the composed baseline at every paint.
+ */
+async function buildShowTextEvents(page: PDFPageProxy): Promise<ShowTextEvent[]> {
   const result: ShowTextEvent[] = [];
 
   let opList: Awaited<ReturnType<PDFPageProxy['getOperatorList']>>;
@@ -333,29 +355,67 @@ async function buildShowTextSequence(page: PDFPageProxy): Promise<ShowTextEvent[
   }
 
   const OPS = pdfjsLib.OPS as Record<string, number>;
-  const OP_setFillRGBColor = OPS['setFillRGBColor'];
-  const OP_setFillColor = OPS['setFillColor'];
-  const OP_setFillColorN = OPS['setFillColorN'];
-  const OP_setFillGray = OPS['setFillGray'];
-  const OP_showText = OPS['showText'];
-  const OP_showSpacedText = OPS['showSpacedText'];
-  const OP_nextLineShowText = OPS['nextLineShowText'];
-  const OP_nextLineSetSpacingShowText = OPS['nextLineSetSpacingShowText'];
 
   let currentColor = '#000000';
+  // CTM stack: graphics state save/restore (q/Q) snapshots the entire ctm.
+  let ctm: number[] = [1, 0, 0, 1, 0, 0];
+  const ctmStack: number[][] = [];
+  // Text Line Matrix and Text Matrix — both reset to identity by BT,
+  // then mutated by Tm/Td/TD/T*. T* moves TLM by leading; showText also
+  // advances TM but for our purposes TM[5] at paint time equals TLM[5]
+  // since glyph painting only advances horizontally.
+  let tlm: number[] = [1, 0, 0, 1, 0, 0];
+  let tm: number[] = [1, 0, 0, 1, 0, 0];
+  let leading = 0;
+
   const { fnArray, argsArray } = opList;
 
   for (let i = 0; i < fnArray.length; i++) {
     const fn = fnArray[i];
     const args = argsArray[i] as unknown[];
 
-    if (fn === OP_setFillRGBColor) {
+    if (fn === OPS.save) {
+      ctmStack.push([...ctm]);
+    } else if (fn === OPS.restore) {
+      ctm = ctmStack.pop() ?? [1, 0, 0, 1, 0, 0];
+    } else if (fn === OPS.transform) {
+      const [a, b, c, d, e, f] = args as number[];
+      ctm = matMul(ctm, [a!, b!, c!, d!, e!, f!]);
+    } else if (fn === OPS.beginText) {
+      tlm = [1, 0, 0, 1, 0, 0];
+      tm = [1, 0, 0, 1, 0, 0];
+    } else if (fn === OPS.setTextMatrix) {
+      // pdfjs delivers Tm as [Float32Array(6)] (nested), not as flat
+      // [a,b,c,d,e,f]. Earlier code read args[0..5] and produced NaN.
+      const matArg = args[0] as ArrayLike<number> | undefined;
+      if (matArg && typeof matArg[0] === 'number') {
+        tlm = [matArg[0]!, matArg[1]!, matArg[2]!, matArg[3]!, matArg[4]!, matArg[5]!];
+        tm = [...tlm];
+      }
+    } else if (fn === OPS.moveText) {
+      // Td: tx, ty
+      const [tx, ty] = args as number[];
+      tlm = matMul(tlm, [1, 0, 0, 1, tx!, ty!]);
+      tm = [...tlm];
+    } else if (fn === OPS.setLeadingMoveText) {
+      // TD: -ty becomes leading, then Td(tx, ty)
+      const [tx, ty] = args as number[];
+      leading = -(ty ?? 0);
+      tlm = matMul(tlm, [1, 0, 0, 1, tx!, ty!]);
+      tm = [...tlm];
+    } else if (fn === OPS.nextLine) {
+      // T* : equivalent to TD(0, -leading)
+      tlm = matMul(tlm, [1, 0, 0, 1, 0, -leading]);
+      tm = [...tlm];
+    } else if (fn === OPS.setLeading) {
+      leading = (args[0] as number) ?? 0;
+    } else if (fn === OPS.setFillRGBColor) {
       const c = parsePdfjsColorArgs(args);
       if (c) currentColor = c;
-    } else if (fn === OP_setFillGray) {
+    } else if (fn === OPS.setFillGray) {
       const g = (args[0] as number) ?? 0;
       currentColor = rgbArrayToHex([g, g, g]);
-    } else if (fn === OP_setFillColor || fn === OP_setFillColorN) {
+    } else if (fn === OPS.setFillColor || fn === OPS.setFillColorN) {
       const hex = parsePdfjsColorArgs(args);
       if (hex) {
         currentColor = hex;
@@ -367,32 +427,49 @@ async function buildShowTextSequence(page: PDFPageProxy): Promise<ShowTextEvent[
         currentColor = rgbArrayToHex([r, gg, bb]);
       }
     } else if (
-      fn === OP_showText ||
-      fn === OP_showSpacedText ||
-      fn === OP_nextLineShowText ||
-      fn === OP_nextLineSetSpacingShowText
+      fn === OPS.showText ||
+      fn === OPS.showSpacedText
     ) {
-      // args[0] is the glyphs array; each glyph has a `.unicode` field
-      // (1+ chars for ligatures). Spacing arrays in showSpacedText
-      // interleave numbers (whitespace adjustments) with glyph entries.
-      const glyphs = args[0];
-      let charCount = 0;
-      if (Array.isArray(glyphs)) {
-        for (const g of glyphs) {
-          if (typeof g === 'object' && g !== null) {
-            const uni = (g as { unicode?: string }).unicode;
-            if (typeof uni === 'string') charCount += uni.length;
-          } else if (typeof g === 'string') {
-            charCount += g.length;
-          }
-          // numeric entries (kerning) contribute 0 chars
-        }
-      }
-      result.push({ color: currentColor, charCount: Math.max(charCount, 1) });
+      // Compose CTM·TM to get baseline in user space.
+      const composed = matMul(ctm, tm);
+      result.push({ color: currentColor, x: composed[4]!, y: composed[5]! });
+    } else if (
+      fn === OPS.nextLineShowText ||
+      fn === OPS.nextLineSetSpacingShowText
+    ) {
+      // T' / T" implicitly do T* before the show.
+      tlm = matMul(tlm, [1, 0, 0, 1, 0, -leading]);
+      tm = [...tlm];
+      const composed = matMul(ctm, tm);
+      result.push({ color: currentColor, x: composed[4]!, y: composed[5]! });
     }
   }
 
   return result;
+}
+
+/**
+ * Find the showText event whose baseline best matches (x, y).
+ *
+ * pdfjs textContent.items[i].transform[4..5] gives the same composed
+ * baseline. Match by closest event within MATCH_TOLERANCE PDF points
+ * (typically 0.5 — anything bigger means the matching is unreliable).
+ */
+function findColorAtPosition(
+  events: ShowTextEvent[],
+  x: number,
+  y: number,
+): string {
+  const TOLERANCE = 0.6;
+  let best: { color: string; dist: number } | null = null;
+  for (const ev of events) {
+    const dx = ev.x - x;
+    const dy = ev.y - y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > TOLERANCE) continue;
+    if (!best || dist < best.dist) best = { color: ev.color, dist };
+  }
+  return best?.color ?? '#000000';
 }
 
 /**
@@ -535,12 +612,12 @@ export async function extractTextElements(
   const viewport = page.getViewport({ scale: 1 });
 
   // Walk the operator list to capture the fill colour at every showText
-  // event WITH its character count. textContent.items don't map 1:1 to
-  // showText events (pdfjs splits on font/style boundaries), so we
-  // distribute colours by character count instead of array index.
-  const showTextEvents = await buildShowTextSequence(page);
-  let eventCursor = 0;
-  let eventCharsRemaining = showTextEvents[0]?.charCount ?? 0;
+  // event together with its composed baseline (CTM·TM) in PDF user space.
+  // We then look up colours by spatial proximity — both showText events
+  // and textContent.items expose the same composed baseline, so closest-
+  // point matching is deterministic regardless of how pdfjs split the
+  // textContent stream.
+  const showTextEvents = await buildShowTextEvents(page);
 
   // Resolve all font names up-front. pdfjs streams font objects lazily; the
   // first call to commonObjs.get(name) blocks until the font is decoded, so
@@ -606,24 +683,12 @@ export async function extractTextElements(
     const realFontName = fontNameCache.get(item.fontName ?? '') ?? item.fontName ?? '';
     const { fontFamily, fontWeight, fontStyle } = mapPdfFontToStandard(realFontName);
 
-      // Distribute colours from showText events by character count.
-    // The current item consumes `item.str.length` characters from the
-    // current event's remaining budget. When the budget runs out we
-    // advance to the next event. This handles the case where one
-    // showText paints "TVA 10%: 2,18€" but pdfjs splits it into 3
-    // textContent items — all three inherit the event's colour.
-    const color = showTextEvents[eventCursor]?.color ?? '#000000';
-    let charsToConsume = item.str.length;
-    while (charsToConsume > 0 && eventCursor < showTextEvents.length) {
-      if (charsToConsume < eventCharsRemaining) {
-        eventCharsRemaining -= charsToConsume;
-        charsToConsume = 0;
-      } else {
-        charsToConsume -= eventCharsRemaining;
-        eventCursor++;
-        eventCharsRemaining = showTextEvents[eventCursor]?.charCount ?? 0;
-      }
-    }
+      // Look up the colour by matching the item's composed baseline against
+    // the showText events. Both use CTM·TM-composed PDF user space coords
+    // — the closest event within tolerance gives the painted colour.
+    const baselineX = (item.transform as number[])[4] ?? 0;
+    const baselineY = (item.transform as number[])[5] ?? 0;
+    const color = findColorAtPosition(showTextEvents, baselineX, baselineY);
     textIndex++;
 
     elements.push({
