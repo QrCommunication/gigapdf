@@ -717,6 +717,27 @@ class FontExtractionService:
         return hashlib.sha256(payload).hexdigest()[:16]
 
     @staticmethod
+    def _is_cff_magic(font_file_bytes: bytes) -> bool:
+        """
+        CFF v1 streams start with header [versionMajor=1, versionMinor,
+        hdrSize, offSize] where versionMajor must be 1 and hdrSize is
+        typically 4. The first byte 0x01 alone is too loose, so we
+        also require versionMinor < 16 and hdrSize >= 4.
+        """
+        if len(font_file_bytes) < 4:
+            return False
+        major = font_file_bytes[0]
+        minor = font_file_bytes[1]
+        hdr_size = font_file_bytes[2]
+        off_size = font_file_bytes[3]
+        return (
+            major == 1
+            and minor < 16
+            and 4 <= hdr_size < 32
+            and 1 <= off_size <= 4
+        )
+
+    @staticmethod
     def detect_format(font_file_bytes: bytes | None, subtype: str) -> str | None:
         """
         Detect the binary format of a font program.
@@ -743,7 +764,11 @@ class FontExtractionService:
         if font_file_bytes[:4] == b"OTTO":
             return "otf"
 
-        # CFF (raw Compact Font Format, not wrapped in OTF)
+        # CFF: detect by magic bytes OR explicit subtype hint. Many PDFs
+        # store CFF data under /Subtype /Type1 (not the spec-strict Type1C),
+        # so we cannot rely on subtype alone.
+        if FontExtractionService._is_cff_magic(font_file_bytes):
+            return "cff"
         if subtype in ("Type1C", "CIDFontType0C"):
             return "cff"
 
