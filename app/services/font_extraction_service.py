@@ -492,11 +492,25 @@ class FontExtractionService:
             os2.yStrikeoutSize = 50
             os2.yStrikeoutPosition = 250
             os2.sFamilyClass = 0
-            os2.panose = type("Panose", (), {
-                "bFamilyType": 0, "bSerifStyle": 0, "bWeight": 0, "bProportion": 0,
-                "bContrast": 0, "bStrokeVariation": 0, "bArmStyle": 0,
-                "bLetterform": 0, "bMidline": 0, "bXHeight": 0,
-            })()
+            # fontTools' OS2 expects a Panose object with named attributes,
+            # not a duck-typed shim. Import the proper class.
+            try:
+                from fontTools.ttLib.tables.O_S_2f_2 import Panose
+                panose = Panose()
+                panose.bFamilyType = 0
+                panose.bSerifStyle = 0
+                panose.bWeight = 0
+                panose.bProportion = 0
+                panose.bContrast = 0
+                panose.bStrokeVariation = 0
+                panose.bArmStyle = 0
+                panose.bLetterform = 0
+                panose.bMidline = 0
+                panose.bXHeight = 0
+                os2.panose = panose
+            except ImportError:
+                # Old fontTools — raw bytes work as a fallback.
+                os2.panose = b"\x00" * 10
             os2.ulUnicodeRange1 = 0xFFFFFFFF
             os2.ulUnicodeRange2 = 0xFFFFFFFF
             os2.ulUnicodeRange3 = 0xFFFFFFFF
