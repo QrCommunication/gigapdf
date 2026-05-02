@@ -638,7 +638,12 @@ export async function extractTextElements(
   let textIndex = 0;
   for (const item of textContent.items) {
     if (!isTextItem(item)) continue;
-    if (!item.str || item.str.trim() === '') continue;
+    if (!item.str) continue;
+    // Keep whitespace-only items when they carry positional width — pdfjs
+    // emits them between adjacent TJ runs ("BOULEVARD" + " " + "EUGENE") and
+    // dropping them collapses the gap, producing visual overlap. We still
+    // skip pure-empty strings (zero-width markers) to avoid noise.
+    if (item.str.trim() === '' && (item.width ?? 0) <= 0) continue;
 
     // Compose item.transform with viewport.transform to get absolute viewport coords.
     // Handles MediaBox offset, rotation, Y-flip in one matrix multiplication.
