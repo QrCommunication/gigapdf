@@ -300,24 +300,30 @@ function detectAlignment(
 // Colour extraction via operator list
 // ---------------------------------------------------------------------------
 
+/** A single showText event with its colour and the character count emitted. */
+interface ShowTextEvent {
+  color: string;
+  /** Number of unicode characters the event painted (sum of glyph.unicode lengths). */
+  charCount: number;
+}
+
 /**
- * Walk the operator list and record the fill colour active at every
- * showText / showSpacedText / nextLineShowText event, in document order.
+ * Walk the operator list and record every showText event with its active
+ * fill colour and the number of characters it painted.
  *
- * The returned array can be zipped against textContent.items by index:
- * pdfjs delivers one item per text-show event (whitespace splits are
- * handled by the marked-content option but the running counter still
- * aligns), so colorByShowTextIdx[N] is the colour of textContent.items[N].
+ * pdfjs splits textContent.items on font/style boundaries, so one showText
+ * event in op-list often corresponds to MULTIPLE items in textContent.items.
+ * To map colours correctly we walk both streams in parallel using character
+ * count — one event of 14 chars consumes the next ~14 chars worth of
+ * textContent items, regardless of how those split internally.
  *
- * This is more robust than keying by baseline Y because:
- * 1. setTextMatrix.args[5] is the TM translate, not the composed
- *    baseline. textContent.items[i].transform[5] *is* the composed
- *    baseline. They differ whenever Tm + Tlm + Td have all been used.
- * 2. Two text runs may share the same Y (multi-column layouts) —
- *    Y-keying flattens them to a single colour.
+ * Without this matching, the previous index-based zip drifted apart at the
+ * first showText with multi-item glyph runs (typically table rows like
+ * "TVA 10%: 2,18€" where pdfjs splits the label and value), and every
+ * subsequent text in the page got the wrong colour.
  */
-async function buildColorByShowTextSequence(page: PDFPageProxy): Promise<string[]> {
-  const result: string[] = [];
+async function buildShowTextSequence(page: PDFPageProxy): Promise<ShowTextEvent[]> {
+  const result: ShowTextEvent[] = [];
 
   let opList: Awaited<ReturnType<PDFPageProxy['getOperatorList']>>;
   try {
@@ -366,7 +372,23 @@ async function buildColorByShowTextSequence(page: PDFPageProxy): Promise<string[
       fn === OP_nextLineShowText ||
       fn === OP_nextLineSetSpacingShowText
     ) {
-      result.push(currentColor);
+      // args[0] is the glyphs array; each glyph has a `.unicode` field
+      // (1+ chars for ligatures). Spacing arrays in showSpacedText
+      // interleave numbers (whitespace adjustments) with glyph entries.
+      const glyphs = args[0];
+      let charCount = 0;
+      if (Array.isArray(glyphs)) {
+        for (const g of glyphs) {
+          if (typeof g === 'object' && g !== null) {
+            const uni = (g as { unicode?: string }).unicode;
+            if (typeof uni === 'string') charCount += uni.length;
+          } else if (typeof g === 'string') {
+            charCount += g.length;
+          }
+          // numeric entries (kerning) contribute 0 chars
+        }
+      }
+      result.push({ color: currentColor, charCount: Math.max(charCount, 1) });
     }
   }
 
@@ -512,15 +534,13 @@ export async function extractTextElements(
   // viewport.transform composes: PDF→viewport (Y flip + MediaBox offset + rotation).
   const viewport = page.getViewport({ scale: 1 });
 
-  // Walk the operator list to capture the fill colour active at each
-  // showText event, in document order. We can't key by baseline Y
-  // because setTextMatrix.args[5] tracks the TM translate, not the
-  // composed baseline that getTextContent reports — they only align by
-  // accident. Instead we zip the resulting array with textContent.items
-  // by index: pdfjs emits one entry in textContent.items per showText
-  // (modulo whitespace splits handled by includeMarkedContent), so the
-  // sequence aligns deterministically.
-  const colorByShowTextIdx = await buildColorByShowTextSequence(page);
+  // Walk the operator list to capture the fill colour at every showText
+  // event WITH its character count. textContent.items don't map 1:1 to
+  // showText events (pdfjs splits on font/style boundaries), so we
+  // distribute colours by character count instead of array index.
+  const showTextEvents = await buildShowTextSequence(page);
+  let eventCursor = 0;
+  let eventCharsRemaining = showTextEvents[0]?.charCount ?? 0;
 
   // Resolve all font names up-front. pdfjs streams font objects lazily; the
   // first call to commonObjs.get(name) blocks until the font is decoded, so
@@ -586,10 +606,24 @@ export async function extractTextElements(
     const realFontName = fontNameCache.get(item.fontName ?? '') ?? item.fontName ?? '';
     const { fontFamily, fontWeight, fontStyle } = mapPdfFontToStandard(realFontName);
 
-      // Index in textContent.items (filtered to text items above).
-    // colorByShowTextIdx is captured in document order during the
-    // operator-list walk, so [textIndex] yields the active fill colour.
-    const color = colorByShowTextIdx[textIndex] ?? '#000000';
+      // Distribute colours from showText events by character count.
+    // The current item consumes `item.str.length` characters from the
+    // current event's remaining budget. When the budget runs out we
+    // advance to the next event. This handles the case where one
+    // showText paints "TVA 10%: 2,18€" but pdfjs splits it into 3
+    // textContent items — all three inherit the event's colour.
+    const color = showTextEvents[eventCursor]?.color ?? '#000000';
+    let charsToConsume = item.str.length;
+    while (charsToConsume > 0 && eventCursor < showTextEvents.length) {
+      if (charsToConsume < eventCharsRemaining) {
+        eventCharsRemaining -= charsToConsume;
+        charsToConsume = 0;
+      } else {
+        charsToConsume -= eventCharsRemaining;
+        eventCursor++;
+        eventCharsRemaining = showTextEvents[eventCursor]?.charCount ?? 0;
+      }
+    }
     textIndex++;
 
     elements.push({

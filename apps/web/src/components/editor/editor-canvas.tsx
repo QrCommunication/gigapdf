@@ -1029,17 +1029,23 @@ export function EditorCanvas({
       return ra - rb;
     });
 
-    // 2. DEDUPLICATE near-identical text runs. Some PDFs render a title twice
-    //    with a small offset to fake a shadow/relief effect (e.g. "Facture
-    //    Freebox" rendered grey + black 13px down). Our parser extracts both,
-    //    leaving two stacked editable IText objects — the user sees a doubled
-    //    title and selecting one selects the wrong layer. Drop the second
-    //    occurrence when content + font match within 15px on either axis.
+    // 2. DEDUPLICATE near-identical text runs. PDFs sometimes render the
+    //    same string twice — generators do this for shadow/relief effects,
+    //    or because they layer a vector outline (custom font) above an
+    //    invisible selectable-text trace (system font fallback). Both
+    //    cases produce two stacked IText objects in our scene graph; the
+    //    user sees a doubled title and clicking one selects the wrong
+    //    layer.
+    //
+    //    The signature deliberately ignores fontFamily because the duplicate
+    //    typically uses a different family (embedded outline vs Helvetica
+    //    fallback). Matching on content + rounded fontSize + position
+    //    proximity is enough.
     const seenTextSignatures = new Map<string, { x: number; y: number }>();
     const dedupedElements = sortedElements.filter((el) => {
       if (el.type !== "text") return true;
       const textElement = el as Extract<Element, { type: "text" }>;
-      const sig = `${textElement.content}|${textElement.style.fontFamily}|${Math.round(textElement.style.fontSize)}`;
+      const sig = `${textElement.content}|${Math.round(textElement.style.fontSize)}`;
       const seen = seenTextSignatures.get(sig);
       if (!seen) {
         seenTextSignatures.set(sig, { x: textElement.bounds.x, y: textElement.bounds.y });
@@ -1047,8 +1053,8 @@ export function EditorCanvas({
       }
       const dx = Math.abs(seen.x - textElement.bounds.x);
       const dy = Math.abs(seen.y - textElement.bounds.y);
-      // Same text + same font + within 15px = shadow/relief duplicate.
-      return !(dx <= 15 && dy <= 15);
+      // Same text + same size + within 20px = shadow/relief/outline duplicate.
+      return !(dx <= 20 && dy <= 20);
     });
 
     for (const element of dedupedElements) {
