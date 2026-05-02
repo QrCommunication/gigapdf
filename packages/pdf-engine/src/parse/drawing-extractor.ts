@@ -271,9 +271,13 @@ function emitShape(
     bounds = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   }
 
-  // Drop hairlines and zero-area paths early — they bloat the scene graph
-  // without contributing to the visible rendering.
-  if (bounds.width < 0.5 && bounds.height < 0.5) return null;
+  // Drop hairlines, zero-area paths, and sub-pixel artefacts. PDFs
+  // generated from Type3 fonts (icon glyphs, OCR markers) can emit
+  // thousands of 1×1 px paths that pollute the scene graph and the
+  // editor's selection layer without contributing to the visible
+  // rendering. Threshold of 2px catches dust without dropping intentional
+  // hairlines (PDF stroke widths typically >= 0.25pt × CTM scale).
+  if (bounds.width < 2 && bounds.height < 2) return null;
 
   const hasCurves = segments.some((s) => s.cmd === 'C' || s.cmd === 'Q');
   const shapeType = detectShapeType(segments, hasCurves);

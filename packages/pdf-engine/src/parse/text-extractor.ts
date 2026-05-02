@@ -107,6 +107,27 @@ function rgbArrayToHex(rgb: number[] | undefined | null): string {
 }
 
 /**
+ * Resolve setFillRGBColor / setStrokeRGBColor args to a hex string.
+ *
+ * pdfjs 3.x+ pre-resolves colours to "#rrggbb" strings (the operator
+ * receives `["#cc0000"]`); older builds delivered `[r, g, b]` floats in
+ * the 0-1 range. We accept both — the previous code only handled the
+ * legacy float form, which is why every text element ended up #000000
+ * after the upstream change.
+ */
+function parsePdfjsColorArgs(args: unknown[]): string | null {
+  if (args.length === 0) return null;
+  const first = args[0];
+  if (typeof first === 'string') {
+    return /^#[0-9a-f]{6}$/i.test(first) ? first.toLowerCase() : null;
+  }
+  if (typeof first === 'number' && args.length >= 3) {
+    return rgbArrayToHex(args as number[]);
+  }
+  return null;
+}
+
+/**
  * Derive a stable UUID from the block content + position so the same text at
  * the same location always gets the same id (useful for diffing/editing).
  */
@@ -280,6 +301,79 @@ function detectAlignment(
 // ---------------------------------------------------------------------------
 
 /**
+ * Walk the operator list and record the fill colour active at every
+ * showText / showSpacedText / nextLineShowText event, in document order.
+ *
+ * The returned array can be zipped against textContent.items by index:
+ * pdfjs delivers one item per text-show event (whitespace splits are
+ * handled by the marked-content option but the running counter still
+ * aligns), so colorByShowTextIdx[N] is the colour of textContent.items[N].
+ *
+ * This is more robust than keying by baseline Y because:
+ * 1. setTextMatrix.args[5] is the TM translate, not the composed
+ *    baseline. textContent.items[i].transform[5] *is* the composed
+ *    baseline. They differ whenever Tm + Tlm + Td have all been used.
+ * 2. Two text runs may share the same Y (multi-column layouts) —
+ *    Y-keying flattens them to a single colour.
+ */
+async function buildColorByShowTextSequence(page: PDFPageProxy): Promise<string[]> {
+  const result: string[] = [];
+
+  let opList: Awaited<ReturnType<PDFPageProxy['getOperatorList']>>;
+  try {
+    opList = await page.getOperatorList();
+  } catch {
+    return result;
+  }
+
+  const OPS = pdfjsLib.OPS as Record<string, number>;
+  const OP_setFillRGBColor = OPS['setFillRGBColor'];
+  const OP_setFillColor = OPS['setFillColor'];
+  const OP_setFillColorN = OPS['setFillColorN'];
+  const OP_setFillGray = OPS['setFillGray'];
+  const OP_showText = OPS['showText'];
+  const OP_showSpacedText = OPS['showSpacedText'];
+  const OP_nextLineShowText = OPS['nextLineShowText'];
+  const OP_nextLineSetSpacingShowText = OPS['nextLineSetSpacingShowText'];
+
+  let currentColor = '#000000';
+  const { fnArray, argsArray } = opList;
+
+  for (let i = 0; i < fnArray.length; i++) {
+    const fn = fnArray[i];
+    const args = argsArray[i] as unknown[];
+
+    if (fn === OP_setFillRGBColor) {
+      const c = parsePdfjsColorArgs(args);
+      if (c) currentColor = c;
+    } else if (fn === OP_setFillGray) {
+      const g = (args[0] as number) ?? 0;
+      currentColor = rgbArrayToHex([g, g, g]);
+    } else if (fn === OP_setFillColor || fn === OP_setFillColorN) {
+      const hex = parsePdfjsColorArgs(args);
+      if (hex) {
+        currentColor = hex;
+      } else if (Array.isArray(args) && args.length === 4) {
+        const [c, m, y, k] = args as number[];
+        const r = 1 - Math.min(1, (c ?? 0) + (k ?? 0));
+        const gg = 1 - Math.min(1, (m ?? 0) + (k ?? 0));
+        const bb = 1 - Math.min(1, (y ?? 0) + (k ?? 0));
+        currentColor = rgbArrayToHex([r, gg, bb]);
+      }
+    } else if (
+      fn === OP_showText ||
+      fn === OP_showSpacedText ||
+      fn === OP_nextLineShowText ||
+      fn === OP_nextLineSetSpacingShowText
+    ) {
+      result.push(currentColor);
+    }
+  }
+
+  return result;
+}
+
+/**
  * Build a map from approximate PDF Y baseline position to fill colour.
  * We walk the operator list looking for setFillRGBColor / setFillColor
  * before text-showing operators (showText, showSpacedText).
@@ -321,14 +415,16 @@ async function buildColorMap(page: PDFPageProxy): Promise<Map<string, string>> {
     const args = argsArray[i] as unknown[];
 
     if (fn === OP_setFillRGBColor) {
-      currentColor = rgbArrayToHex(args as number[]);
+      const c = parsePdfjsColorArgs(args);
+      if (c) currentColor = c;
     } else if (fn === OP_setFillGray) {
       const g = (args[0] as number) ?? 0;
       currentColor = rgbArrayToHex([g, g, g]);
     } else if (fn === OP_setFillColor || fn === OP_setFillColorN) {
-      // Could be RGB or CMYK; handle RGB only (3 components)
-      if (Array.isArray(args) && args.length === 3) {
-        currentColor = rgbArrayToHex(args as number[]);
+      // Could be a pre-resolved hex string, an RGB triple, or CMYK quad.
+      const hex = parsePdfjsColorArgs(args);
+      if (hex) {
+        currentColor = hex;
       } else if (Array.isArray(args) && args.length === 4) {
         // CMYK → RGB approximation
         const [c, m, y, k] = args as number[];
@@ -416,6 +512,16 @@ export async function extractTextElements(
   // viewport.transform composes: PDF→viewport (Y flip + MediaBox offset + rotation).
   const viewport = page.getViewport({ scale: 1 });
 
+  // Walk the operator list to capture the fill colour active at each
+  // showText event, in document order. We can't key by baseline Y
+  // because setTextMatrix.args[5] tracks the TM translate, not the
+  // composed baseline that getTextContent reports — they only align by
+  // accident. Instead we zip the resulting array with textContent.items
+  // by index: pdfjs emits one entry in textContent.items per showText
+  // (modulo whitespace splits handled by includeMarkedContent), so the
+  // sequence aligns deterministically.
+  const colorByShowTextIdx = await buildColorByShowTextSequence(page);
+
   // Resolve all font names up-front. pdfjs streams font objects lazily; the
   // first call to commonObjs.get(name) blocks until the font is decoded, so
   // resolving them in parallel before iterating items avoids a serial wait.
@@ -430,6 +536,9 @@ export async function extractTextElements(
     }),
   );
 
+  // Index counter for matching against colorByShowTextIdx. Increments
+  // only on text items pdfjs delivered (skipping marked-content blocks).
+  let textIndex = 0;
   for (const item of textContent.items) {
     if (!isTextItem(item)) continue;
     if (!item.str || item.str.trim() === '') continue;
@@ -477,6 +586,12 @@ export async function extractTextElements(
     const realFontName = fontNameCache.get(item.fontName ?? '') ?? item.fontName ?? '';
     const { fontFamily, fontWeight, fontStyle } = mapPdfFontToStandard(realFontName);
 
+      // Index in textContent.items (filtered to text items above).
+    // colorByShowTextIdx is captured in document order during the
+    // operator-list walk, so [textIndex] yields the active fill colour.
+    const color = colorByShowTextIdx[textIndex] ?? '#000000';
+    textIndex++;
+
     elements.push({
       elementId: randomUUID(),
       type: 'text',
@@ -491,7 +606,7 @@ export async function extractTextElements(
         fontWeight,
         fontStyle,
         fontSize,
-        color: '#000000',
+        color,
         opacity: 1,
         textAlign: 'left',
         lineHeight: 1.2,
