@@ -1554,6 +1554,12 @@ export function EditorCanvas({
             bgImg.set({
               left: 0,
               top: 0,
+              // Fabric v6 defaults originX/Y to 'center'. Without forcing
+              // 'left'/'top' the image is centred on (0, 0) and only its
+              // bottom-right quadrant lands inside the canvas — producing
+              // the "PDF appears as fragments" visual bug.
+              originX: "left",
+              originY: "top",
               scaleX: 1 / renderScale,
               scaleY: 1 / renderScale,
               selectable: false,
@@ -1637,6 +1643,10 @@ export function EditorCanvas({
             img.set({
               left: 50,
               top: 50,
+              // Fabric v6 defaults originX/Y to 'center'; force 'left'/'top'
+              // so left/top reference the corner, not the centre.
+              originX: "left",
+              originY: "top",
               scaleX: Math.min(1, 400 / ((img as unknown as { width: number }).width || 400)),
               scaleY: Math.min(1, 400 / ((img as unknown as { height: number }).height || 400)),
             });
