@@ -46,6 +46,13 @@ chmod +x "$APP_DIR/scripts/rollback.sh" 2>/dev/null || true
 log_info "Fixing permissions..."
 sudo chown -R ubuntu:ubuntu /var/lib/gigapdf 2>/dev/null || true
 sudo chown -R ubuntu:ubuntu /var/log/gigapdf 2>/dev/null || true
+# Reclaim turbo / next caches written by the systemd service user. Without
+# this, the upcoming "rm -rf .turbo" fails with EPERM and `set -e` kills
+# the deploy mid-way (silent cause of "deploy didn't pick up my code").
+sudo chown -R ubuntu:ubuntu "$APP_DIR/.turbo" 2>/dev/null || true
+sudo find "$APP_DIR/packages" -maxdepth 2 -name '.turbo' -exec chown -R ubuntu:ubuntu {} + 2>/dev/null || true
+sudo find "$APP_DIR/apps" -maxdepth 2 -name '.turbo' -exec chown -R ubuntu:ubuntu {} + 2>/dev/null || true
+sudo find "$APP_DIR/apps" -maxdepth 2 -name '.next' -exec chown -R ubuntu:ubuntu {} + 2>/dev/null || true
 
 # =============================================================================
 # 1. Copy Production Environment if not exists
