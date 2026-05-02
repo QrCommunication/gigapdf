@@ -11,6 +11,7 @@ import json
 import logging
 import time
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
@@ -1225,6 +1226,209 @@ async def create_version(
             request_id=get_request_id(),
             timestamp=now_utc(),
             processing_time_ms=processing_time,
+        ),
+    )
+
+
+@router.post(
+    "/documents/{stored_document_id}/restore-original",
+    response_model=APIResponse[dict],
+    summary="Restore document to original version (v1)",
+    description="""
+Restore a stored document to its very first uploaded version (v1).
+
+A new version is created that is a binary-identical copy of v1 and
+becomes the new current version. The intermediate versions remain in
+the version history (soft, never deleted) so the restore operation is
+itself reversible by listing versions and copying any of them forward.
+
+## Why this exists
+Before the editor moved to a "PDF native + invisible Fabric overlay"
+pipeline (commit 3e13c33), every save baked the parsed Fabric IText
+overlays back into the PDF on top of the native glyphs. Successive
+saves accumulated duplicates that show up as "shadowed" titles. This
+endpoint resets the document to its pristine pre-edit state without
+losing version history.
+
+## Behavior
+- Downloads v1 binary from S3
+- Uploads it as version `current_version + 1` with auto-comment
+  "Restored from v1 (original)"
+- Sets `current_version = N+1` (existing versions kept intact)
+- Returns the new current version metadata
+""",
+    responses={
+        200: {"description": "Document restored to original (v1)"},
+        404: {"description": "Stored document or v1 file not found"},
+    },
+)
+async def restore_original(
+    stored_document_id: str,
+    user: AuthenticatedUser,
+) -> APIResponse[dict]:
+    """Restore stored document to v1 (original) by copying it forward."""
+    start_time = time.time()
+
+    # ── 1. Fetch stored doc + verify ownership ───────────────────────────
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(StoredDocument).where(
+                StoredDocument.id == stored_document_id,
+                StoredDocument.owner_id == user.user_id,
+                ~StoredDocument.is_deleted,
+            )
+        )
+        stored_doc = result.scalar_one_or_none()
+        if not stored_doc:
+            raise NotFoundError(f"Stored document not found: {stored_document_id}")
+
+        # If already on v1, no-op (still safe to call repeatedly).
+        if stored_doc.current_version == 1:
+            return APIResponse(
+                success=True,
+                data={
+                    "stored_document_id": stored_document_id,
+                    "current_version": 1,
+                    "restored_from": 1,
+                    "noop": True,
+                },
+                meta=MetaInfo(
+                    request_id=get_request_id(),
+                    timestamp=now_utc(),
+                    processing_time_ms=int((time.time() - start_time) * 1000),
+                ),
+            )
+
+    # ── 2. Download v1 binary from S3 ────────────────────────────────────
+    v1_key = s3_service.get_document_key(user.user_id, stored_document_id, 1)
+    try:
+        v1_bytes = s3_service.download_file(v1_key)
+    except Exception as exc:
+        raise NotFoundError(
+            f"Original (v1) file not found in storage: {exc}"
+        ) from exc
+
+    if not v1_bytes.startswith(b"%PDF-"):
+        raise InvalidOperationError("Stored v1 file is not a valid PDF")
+
+    file_hash = hashlib.sha256(v1_bytes).hexdigest()
+    file_size = len(v1_bytes)
+
+    # ── 3. Re-count pages on the v1 binary (defensive: stored_doc.page_count
+    #       may have drifted after edits that added/removed pages). ────────
+    try:
+        page_count = await asyncio.to_thread(_count_pdf_pages_sync, v1_bytes)
+    except Exception as exc:
+        raise InvalidOperationError(f"Cannot read v1 PDF structure: {exc}") from exc
+
+    # ── 4. Commit DB: bump current_version, insert version row ──────────
+    new_version_number: int
+    new_s3_key: str
+    new_version_created_at: datetime
+
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(StoredDocument).where(
+                StoredDocument.id == stored_document_id,
+                StoredDocument.owner_id == user.user_id,
+            )
+        )
+        stored_doc = result.scalar_one_or_none()
+        if not stored_doc:
+            raise NotFoundError(f"Stored document not found: {stored_document_id}")
+
+        new_version_number = stored_doc.current_version + 1
+        new_s3_key = s3_service.get_document_key(
+            user.user_id, stored_document_id, new_version_number
+        )
+
+        version = DocumentVersion(
+            document_id=stored_document_id,
+            version_number=new_version_number,
+            file_path=new_s3_key,
+            file_size_bytes=file_size,
+            file_hash=file_hash,
+            comment="Restored from v1 (original)",
+            created_by=user.user_id,
+        )
+        session.add(version)
+
+        stored_doc.current_version = new_version_number
+        stored_doc.page_count = page_count
+        stored_doc.file_size_bytes = file_size
+        await session.flush()
+        new_version_created_at = version.created_at
+
+    _logger.info(
+        "restore_original: DB committed (stored_doc_id=%s, new_version=%d)",
+        stored_document_id,
+        new_version_number,
+    )
+
+    # ── 5. Upload to S3 with compensation on failure ─────────────────────
+    try:
+        s3_service.upload_file(
+            file_data=v1_bytes,
+            key=new_s3_key,
+            content_type="application/pdf",
+            metadata={
+                "document_id": stored_document_id,
+                "user_id": user.user_id,
+                "version": str(new_version_number),
+                "restored_from": "1",
+            },
+        )
+    except Exception as exc:
+        _logger.error(
+            "restore_original: S3 upload failed — compensation: revert to v%d, "
+            "delete s3_key=%s",
+            new_version_number - 1,
+            new_s3_key,
+            exc_info=True,
+        )
+        s3_service.delete_file(new_s3_key)  # best-effort
+        try:
+            async with get_db_session() as rb:
+                rb_doc = (
+                    await rb.execute(
+                        select(StoredDocument).where(
+                            StoredDocument.id == stored_document_id
+                        )
+                    )
+                ).scalar_one_or_none()
+                if rb_doc:
+                    rb_doc.current_version = new_version_number - 1
+                orphan = (
+                    await rb.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == stored_document_id,
+                            DocumentVersion.version_number == new_version_number,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if orphan:
+                    await rb.delete(orphan)
+        except Exception as rb_exc:
+            _logger.error(
+                "restore_original: compensation rollback also failed: %s", rb_exc
+            )
+        raise InvalidOperationError(
+            f"Restore committed to DB but S3 upload failed: {exc}"
+        ) from exc
+
+    return APIResponse(
+        success=True,
+        data={
+            "stored_document_id": stored_document_id,
+            "current_version": new_version_number,
+            "restored_from": 1,
+            "created_at": new_version_created_at.isoformat(),
+            "page_count": page_count,
+        },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=int((time.time() - start_time) * 1000),
         ),
     )
 

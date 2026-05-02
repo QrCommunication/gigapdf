@@ -134,144 +134,6 @@ async function maskTextLayer(
   }
 }
 
-/**
- * Mask only DUPLICATE text runs on the rendered PDF, preserving the first
- * occurrence of each (content + fontSize + position-cluster). This is a
- * surgical version of maskTextLayer used when the PDF source contains
- * duplicates baked in by prior save-loops — e.g. Fabric IText overlays
- * re-injected on top of the native glyphs producing a "shadowed" look.
- *
- * Heuristic mirrors the scene-graph dedupe in editor-canvas.tsx
- * (renderElementsOverlay): two runs collapse into one when they share
- * content + rounded fontSize AND either:
- *   - sit within 2px on both axes (shadow/outline twin), OR
- *   - share the same X (≤3px) regardless of Y (save-loop vertical stack).
- *
- * Same-content runs that differ on X are kept (legitimate cross-line
- * repeats like "RONY LICHA" appearing twice on an address block).
- */
-async function maskDuplicateText(
-  page: PdfPageForMask,
-  context: CanvasRenderingContext2D,
-  viewport: { transform: number[]; height: number },
-): Promise<void> {
-  try {
-    const textContent = await page.getTextContent();
-    type Item = { str: string; transform: number[]; width?: number };
-    type Slot = { x: number; y: number; idx: number };
-
-    // Two-pass dedup. pdfjs textContent itera dans l'ordre du content
-    // stream PDF: les glyphs natifs (gris pâle pour les save-loop dupes)
-    // arrivent AVANT l'overlay save-loop noir gras posé par-dessus. Si on
-    // garde la première occurrence on garde la version invisible. On veut
-    // donc préserver la DERNIÈRE occurrence et masquer les précédentes.
-    const items = textContent.items as Item[];
-    const seen = new Map<string, Slot[]>();
-    const toMask = new Set<number>();
-
-    for (let idx = 0; idx < items.length; idx++) {
-      const raw = items[idx];
-      if (!raw || !raw.str || !raw.transform) continue;
-      const tx = raw.transform[4] ?? 0;
-      const ty = raw.transform[5] ?? 0;
-      const fontSize = Math.sqrt(
-        (raw.transform[0] ?? 1) * (raw.transform[0] ?? 1) +
-          (raw.transform[1] ?? 0) * (raw.transform[1] ?? 0),
-      );
-      // Bound dy to ~one line height so multi-row table values stay split
-      // (e.g. "86,77€" appearing in a Services / Total / Somme block).
-      const lineGuess = Math.max(fontSize * 1.6, 12);
-      const sig = `${raw.str}|${Math.round(fontSize)}`;
-      const positions = seen.get(sig);
-      const here: Slot = { x: tx, y: ty, idx };
-
-      if (!positions) {
-        seen.set(sig, [here]);
-        continue;
-      }
-
-      const matchIdx = positions.findIndex((p) => {
-        const dx = Math.abs(p.x - here.x);
-        const dy = Math.abs(p.y - here.y);
-        return (dx <= 2 && dy <= 2) || (dx <= 2 && dy <= lineGuess);
-      });
-
-      if (matchIdx === -1) {
-        positions.push(here);
-        continue;
-      }
-
-      // Save-loop dupe found: mark the EARLIER occurrence for masking and
-      // promote the current item as the slot's representative. Subsequent
-      // duplicates will likewise displace this one. Net effect: only the
-      // last (= visually opaque) occurrence survives.
-      const previous = positions[matchIdx];
-      if (previous) toMask.add(previous.idx);
-      positions[matchIdx] = here;
-    }
-
-    if (toMask.size === 0) return;
-
-    context.save();
-    context.fillStyle = "#ffffff";
-    for (const idx of toMask) {
-      const raw = items[idx];
-      if (!raw || !raw.transform) continue;
-      const combined = pdfjsLib.Util.transform(
-        viewport.transform,
-        raw.transform,
-      ) as number[];
-      const a = combined[0] ?? 1;
-      const b = combined[1] ?? 0;
-      const c = combined[2] ?? 0;
-      const d = combined[3] ?? 1;
-      const e = combined[4] ?? 0;
-      const f = combined[5] ?? 0;
-      const fs = Math.sqrt(a * a + b * b);
-      if (fs < 0.1) continue;
-      const itemWidth = (raw.width ?? 0) > 0
-        ? (raw.width as number)
-        : fs * (raw.str.length || 1) * 0.5;
-      const localWidth = itemWidth / fs;
-
-      const corners: Array<[number, number]> = [
-        [0, -0.85],
-        [localWidth, -0.85],
-        [localWidth, 0.85],
-        [0, 0.85],
-        [0, -0.3],
-        [localWidth, -0.3],
-        [localWidth, 0.3],
-        [0, 0.3],
-      ];
-      let minPx = Infinity;
-      let minPy = Infinity;
-      let maxPx = -Infinity;
-      let maxPy = -Infinity;
-      for (const [lx, ly] of corners) {
-        const px = a * lx + c * ly + e;
-        const py = b * lx + d * ly + f;
-        if (px < minPx) minPx = px;
-        if (py < minPy) minPy = py;
-        if (px > maxPx) maxPx = px;
-        if (py > maxPy) maxPy = py;
-      }
-      const padX = Math.max(1, fs * 0.1);
-      const padTop = Math.max(1, fs * 0.1);
-      const padBottom = Math.max(2, fs * 0.25);
-      context.fillRect(
-        minPx - padX,
-        minPy - padTop,
-        maxPx - minPx + padX * 2,
-        maxPy - minPy + padTop + padBottom,
-      );
-    }
-    context.restore();
-  } catch {
-    // If text extraction fails, leave the canvas as-is.
-  }
-}
-
 // ─── pdfjs worker for the main-thread fallback path ──────────────────────────
 
 // Configure PDF.js worker — use local copy served from /pdf-worker/
@@ -481,15 +343,6 @@ export interface PDFRenderOptions {
    * by an overlay (e.g. Fabric.js). Default: false.
    */
   maskText?: boolean;
-  /**
-   * When true, only DUPLICATE text runs are masked after rendering. The first
-   * occurrence of each (string, fontSize, position-cluster) is kept; subsequent
-   * stacked copies are painted over with white. This recovers the original
-   * 1:1 visual on PDFs that accumulated text duplicates from prior save-loops
-   * (where Fabric IText overlays were baked back into the PDF on top of the
-   * native glyphs). Cheap to compute (one getTextContent pass). Default: false.
-   */
-  dedupeText?: boolean;
 }
 
 export interface PDFDocumentProxy {
@@ -684,12 +537,12 @@ export class PDFRenderer {
     pageNumber: number,
     options: PDFRenderOptions = {}
   ): Promise<void> {
-    const { scale = 1, rotation, renderAnnotations = false, maskText = false, dedupeText = false } = options;
+    const { scale = 1, rotation, renderAnnotations = false, maskText = false } = options;
 
     if (this.workerLoaded) {
       await this._workerRenderPage(canvas, pageNumber, scale, rotation as 0 | 90 | 180 | 270 | undefined);
     } else {
-      await this._mainThreadRenderPage(canvas, pageNumber, scale, rotation as 0 | 90 | 180 | 270 | undefined, renderAnnotations, maskText, dedupeText);
+      await this._mainThreadRenderPage(canvas, pageNumber, scale, rotation as 0 | 90 | 180 | 270 | undefined, renderAnnotations, maskText);
     }
   }
 
@@ -755,7 +608,6 @@ export class PDFRenderer {
     rotation: 0 | 90 | 180 | 270 | undefined,
     renderAnnotations: boolean,
     maskText = false,
-    dedupeText = false,
   ): Promise<void> {
     const page = await this.getPage(pageNumber);
     // Passing `rotation: 0` to getViewport OVERRIDES the PDF's native /Rotate
@@ -788,13 +640,6 @@ export class PDFRenderer {
     // only visible text. Only used by the editor background; disabled for thumbnails.
     if (maskText) {
       await maskTextLayer(page, context, viewport);
-    } else if (dedupeText) {
-      // Surgical mask: paint over only DUPLICATE glyph runs accumulated by
-      // prior save-loops, preserving the original native rendering of
-      // unique text. Cheaper visually than full maskText (no need for Fabric
-      // overlays to be visible) and avoids the browser/PDF font rendering
-      // gap inherent to maskText: true.
-      await maskDuplicateText(page, context, viewport);
     }
   }
 
@@ -852,7 +697,6 @@ export class PDFRenderer {
       rotation as 0 | 90 | 180 | 270,
       options.renderAnnotations ?? false,
       options.maskText ?? false,
-      options.dedupeText ?? false,
     );
     return canvas.toDataURL("image/png");
   }

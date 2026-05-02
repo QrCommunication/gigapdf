@@ -97,6 +97,33 @@ export const storageService = {
     return response.data;
   },
 
+  /**
+   * Restore document to its original (v1) version.
+   * Creates a new version that is a binary-identical copy of v1 and sets
+   * it as current. Existing intermediate versions are kept in history.
+   * Backend: POST /storage/documents/{id}/restore-original
+   */
+  restoreOriginal: async (
+    id: string
+  ): Promise<{
+    stored_document_id: string;
+    current_version: number;
+    restored_from: number;
+    noop?: boolean;
+    page_count?: number;
+    created_at?: string;
+  }> => {
+    const response = await apiClient.post<{
+      stored_document_id: string;
+      current_version: number;
+      restored_from: number;
+      noop?: boolean;
+      page_count?: number;
+      created_at?: string;
+    }>(`/storage/documents/${id}/restore-original`);
+    return response.data;
+  },
+
   // ─── Folders ──────────────────────────────────────────────────────────────
 
   /**
