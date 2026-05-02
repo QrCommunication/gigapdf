@@ -520,10 +520,19 @@ class FontExtractionService:
             font["OS/2"] = os2
 
             # ── cmap (identity glyph→unicode mapping) ───────────────
+            # fontTools exposes CmapSubtable.getSubtableClass(format) in
+            # current versions; older code used newSubtableClass which
+            # was removed.
             from fontTools.ttLib.tables._c_m_a_p import CmapSubtable
             cmap = newTable("cmap")
             cmap.tableVersion = 0
-            sub = CmapSubtable.newSubtableClass(4)()
+            try:
+                sub_class = CmapSubtable.getSubtableClass(4)
+            except AttributeError:
+                # Fallback for very old fontTools — direct import.
+                from fontTools.ttLib.tables import _c_m_a_p as cmap_mod
+                sub_class = cmap_mod.cmap_format_4
+            sub = sub_class()
             sub.platEncID = 1
             sub.platformID = 3
             sub.format = 4
