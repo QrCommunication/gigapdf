@@ -1074,13 +1074,19 @@ export function EditorCanvas({
     //    A real shadow/outline duplicate sits within sub-pixel of its twin;
     //    if x or y differs by >2 px the layout intentionally placed two
     //    runs and we must keep both.
-    // Signature includes COLOR so that two text items with the same content
-    // and position but different colours stay visible. Without this, a white
-    // "6,99€" sitting on a red banner gets killed by its black drop-shadow
-    // twin that appeared first in the parser output, leaving a black-on-red
-    // glyph (or nothing if the shadow is offset). Real shadow effects use
-    // the SAME colour with a tiny offset, so colour-aware dedupe still
-    // catches them.
+    // Two-tier dedupe heuristic:
+    //   1. Same content + same colour + within 2px both axes  → shadow/outline
+    //      (drop the second occurrence)
+    //   2. Same content + same colour + same X (≤3px) + ANY Y → save-loop
+    //      duplicate (form re-renders that bake the overlay back into the
+    //      PDF and re-parse it). Drop the second occurrence too.
+    //   Otherwise (same content, different X) it is a legitimate cross-line
+    //   repeat such as "RONY LICHA" appearing on two address lines, both
+    //   on the same y but offset horizontally — keep both.
+    //
+    //   Colour is part of the signature so a white "6,99€" on a red banner
+    //   does not get killed by a black drop-shadow twin that appeared first
+    //   in the parser stream.
     const seenTextSignatures = new Map<string, Array<{ x: number; y: number }>>();
     const dedupedElements = sortedElements.filter((el) => {
       if (el.type !== "text") return true;
@@ -1093,10 +1099,14 @@ export function EditorCanvas({
         seenTextSignatures.set(sig, [here]);
         return true;
       }
-      const isStacked = positions.some(
-        (p) => Math.abs(p.x - here.x) <= 2 && Math.abs(p.y - here.y) <= 2,
-      );
-      if (isStacked) return false;
+      const isDuplicate = positions.some((p) => {
+        const dx = Math.abs(p.x - here.x);
+        const dy = Math.abs(p.y - here.y);
+        const shadowOverlap = dx <= 2 && dy <= 2;
+        const verticalStack = dx <= 3; // same column, ANY Y → save-loop dupe
+        return shadowOverlap || verticalStack;
+      });
+      if (isDuplicate) return false;
       positions.push(here);
       return true;
     });
