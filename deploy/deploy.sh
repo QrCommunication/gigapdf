@@ -67,7 +67,10 @@ fi
 # 1.5 Clean turbo cache to avoid build issues
 # =============================================================================
 log_info "Cleaning turbo cache..."
-rm -rf .turbo packages/*/.turbo apps/*/.turbo
+# Use sudo because previous deploys ran the build under the gigapdf service
+# user, leaving cache files owned by that user. Without sudo, rm fails with
+# EPERM and (set -e) silently kills the deploy.
+sudo rm -rf .turbo packages/*/.turbo apps/*/.turbo
 
 # =============================================================================
 # 1.6 Create .env symlinks for apps
