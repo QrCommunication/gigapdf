@@ -471,11 +471,16 @@ export function EditorCanvas({
   // Type de modification pour distinguer position/contenu/style
   type ModificationType = 'position' | 'content' | 'style';
 
-  // Handler appele quand un texte entre en mode edition
+  // Handler appele quand un texte entre en mode edition.
+  // 1:1 fidelity mode: text overlay is invisible by default (PDF native text
+  // shows through). On edit-enter we must:
+  //   - cover the underlying PDF glyph with a white rect so it doesn't
+  //     show through the editable text we're about to paint
+  //   - restore the real fill colour so the user sees what they're typing
+  // On edit-exit we revert both.
   const handleTextEditingEntered = useCallback((e: { target?: FabricObject }) => {
     if (!e.target) return;
     const obj = e.target as FabricObjectWithData;
-    // Use Fabric `type` (stable across minification) — see fabricObjectToElement above.
     const typeName = (obj as FabricObject & { type?: string }).type ?? "";
 
     if (typeName === "i-text" || typeName === "textbox" || typeName === "text") {
@@ -483,10 +488,21 @@ export function EditorCanvas({
       const currentText = (obj as FabricObjectWithData & { text?: string }).text || "";
 
       if (elementId) {
-        // Sauvegarder le contenu original avant edition
         originalContentRef.current.set(elementId, currentText);
-        clientLogger.debug("[EditorCanvas] Text editing started, saved original content:", elementId, `"${currentText}"`);
       }
+
+      const realFill = obj.data?.originalFill || "#000000";
+      const realBg = obj.data?.originalBgColor || "#ffffff";
+      // Mask the PDF native glyph behind us with a solid background equal to
+      // the surrounding paper colour (or the parsed text background). This
+      // prevents the PDF text from ghosting through during edit.
+      (obj as FabricObject & { set: (...args: unknown[]) => void }).set({
+        fill: realFill,
+        textBackgroundColor: realBg,
+        borderColor: "rgba(0, 100, 200, 0.6)",
+      });
+      const canvas = (obj as FabricObject & { canvas?: { requestRenderAll?: () => void } }).canvas;
+      canvas?.requestRenderAll?.();
     }
   }, []);
 
@@ -500,22 +516,37 @@ export function EditorCanvas({
     clientLogger.debug("[EditorCanvas] Text changed in real-time:", elementId, `"${currentText}"`);
   }, []);
 
-  // Handler appele quand un texte sort du mode edition
+  // Handler appele quand un texte sort du mode edition.
+  // 1:1 mode: revert overlay back to invisible IF the user did not change
+  // the content. If they DID change it, keep the new text visible (with
+  // its solid background) since the PDF native text underneath is now stale.
   const handleTextEditingExited = useCallback((e: { target?: FabricObject }) => {
     if (!e.target) return;
     const obj = e.target as FabricObjectWithData;
     const elementId = obj.data?.elementId;
     const currentText = (obj as FabricObjectWithData & { text?: string }).text || "";
     const originalText = elementId ? originalContentRef.current.get(elementId) : undefined;
+    const contentChanged = originalText !== undefined && originalText !== currentText;
 
-    if (originalText !== undefined && originalText !== currentText) {
-      clientLogger.debug(`[EditorCanvas] Text editing exited with CONTENT CHANGE: "${originalText}" -> "${currentText}"`);
+    const set = (obj as FabricObject & { set: (...args: unknown[]) => void }).set;
+    if (contentChanged) {
+      // User edited the text. Keep it visible with white-out background so
+      // the stale PDF glyph underneath stays hidden.
+      set.call(obj, {
+        fill: obj.data?.originalFill || "#000000",
+        textBackgroundColor: obj.data?.originalBgColor || "#ffffff",
+        borderColor: "rgba(0, 100, 200, 0)",
+      });
     } else {
-      clientLogger.debug("[EditorCanvas] Text editing exited (no content change)");
+      // No change — restore the invisible-overlay state for 1:1 fidelity.
+      set.call(obj, {
+        fill: "rgba(0,0,0,0)",
+        textBackgroundColor: "",
+        borderColor: "rgba(0, 100, 200, 0)",
+      });
     }
-
-    // Note: On ne supprime pas du map ici car object:modified peut etre appele apres
-    // Le map sera nettoye au prochain text:editing:entered pour le meme element
+    const canvas = (obj as FabricObject & { canvas?: { requestRenderAll?: () => void } }).canvas;
+    canvas?.requestRenderAll?.();
   }, []);
 
   const handleObjectModified = useCallback(
@@ -1136,37 +1167,51 @@ export function EditorCanvas({
       switch (element.type) {
         case "text": {
           const textElement = element;
+          // Resolved colour (kept on .data so edit mode can restore it)
+          const textColour = textElement.style.color || "#000000";
           const textObj = new IText(textElement.content || "", {
             ...baseOptions,
             width: textElement.bounds.width,
             fontSize: textElement.style.fontSize ?? 12,
             fontFamily: (() => {
               const orig = textElement.style.originalFont;
-              // If we have a dynamically-loaded FontFace registered for this orig name,
-              // use it (browser will render with the exact PDF embedded font).
               if (orig && getFontFaceName) {
                 const registered = getFontFaceName(orig);
                 if (registered) return registered;
               }
-              // Otherwise fallback to the mapped standard font (Helvetica/Times/Courier).
-              // Never use raw pdfjs internal names (like 'g_d0_f1') — browser has no glyphs for those.
               return textElement.style.fontFamily || "Helvetica";
             })(),
             fontWeight: textElement.style.fontWeight || "normal",
             fontStyle: textElement.style.fontStyle || "normal",
-            fill: textElement.style.color || "#000000",
-            opacity: textElement.style.opacity ?? 1,
+            // 1:1 fidelity mode: text is INVISIBLE in view (PDF native text shows
+            // through), but kept selectable as a click hit-target for editing.
+            // We stash the real colour in data.originalFill so on edit-enter we
+            // can show the editor cursor + a faint highlight, and on edit-exit
+            // restore back to invisible.
+            fill: "rgba(0,0,0,0)",
+            opacity: 1,
             textAlign: textElement.style.textAlign || "left",
             lineHeight: textElement.style.lineHeight || 1.2,
             charSpacing: (textElement.style.letterSpacing || 0) * 10,
             underline: textElement.style.underline || false,
             linethrough: textElement.style.strikethrough || false,
-            textBackgroundColor: textElement.style.backgroundColor || "",
+            textBackgroundColor: "",
+            cursorColor: textColour,
+            cursorWidth: 1,
+            // Selection visuals stay subtle so we don't pollute the page
+            selectionColor: "rgba(0, 100, 200, 0.18)",
+            // No control corners by default (avoid clutter on every glyph run)
+            hasControls: false,
+            hasBorders: true,
+            borderColor: "rgba(0, 100, 200, 0)", // transparent until hovered
+            borderScaleFactor: 0.8,
           });
           (textObj as FabricObjectWithData).data = {
             elementId: textElement.elementId,
             type: "text",
             originalFont: textElement.style.originalFont,
+            originalFill: textColour,
+            originalBgColor: textElement.style.backgroundColor || "",
             linkUrl: textElement.linkUrl,
             linkPage: textElement.linkPage,
           };
@@ -1213,11 +1258,10 @@ export function EditorCanvas({
           const shapeElement = element;
           const hasStroke = shapeElement.style.strokeColor && shapeElement.style.strokeWidth > 0;
           const hasFill = !!shapeElement.style.fillColor;
-          // Bake fill/stroke alpha directly into the colour (rgba) instead of
-          // a single composite opacity. Stroke-only paths (table borders,
-          // hairline dividers) come with fillOpacity=0; using that as the
-          // shape's `opacity` would invisibilise the stroke too. Encoding
-          // alpha per channel lets fill+stroke shapes carry different alphas.
+          // 1:1 fidelity mode: shapes from the source PDF are visible via the
+          // pdfjs-rendered background image. The Fabric overlay only needs to
+          // exist as a click hit-target. Stash original styling on .data so
+          // the properties panel + edit mode can restore them.
           const fillCss = hasFill
             ? colorWithAlpha(shapeElement.style.fillColor as string, shapeElement.style.fillOpacity ?? 1)
             : "transparent";
@@ -1226,11 +1270,16 @@ export function EditorCanvas({
             : "transparent";
           const shapeOptions = {
             ...baseOptions,
-            fill: fillCss,
-            stroke: strokeCss,
-            strokeWidth: hasStroke ? shapeElement.style.strokeWidth : 0,
+            // Transparent in view; data.* keeps the real values for editing.
+            fill: "transparent",
+            stroke: "transparent",
+            strokeWidth: 0,
             opacity: 1,
+            hasControls: false,
+            hasBorders: false,
           };
+          // Eslint-keep references — used when entering edit mode
+          void fillCss; void strokeCss;
           const w = shapeElement.bounds.width;
           const h = shapeElement.bounds.height;
 
@@ -1298,6 +1347,9 @@ export function EditorCanvas({
             (fabricObj as FabricObjectWithData).data = {
               elementId: shapeElement.elementId,
               type: "shape",
+              originalFill: hasFill ? fillCss : null,
+              originalStroke: hasStroke ? strokeCss : null,
+              originalStrokeWidth: hasStroke ? shapeElement.style.strokeWidth : 0,
             };
           }
           break;
@@ -1490,8 +1542,11 @@ export function EditorCanvas({
             const renderScale = Math.min(window.devicePixelRatio || 2, 3);
             const dataUrl = await renderer.renderPageToDataURL(pageData.pageNumber, {
               scale: renderScale,
-              // Hide PDF text — Fabric overlay is the single source of editable text
-              maskText: true,
+              // Render PDF natively (text + paths). The Fabric overlay above
+              // is rendered TRANSPARENT so it acts as a click hit-target only,
+              // preserving 1:1 visual fidelity. Mask only kicks in once the
+              // user enters edit mode on a specific text item.
+              maskText: false,
             });
             renderer.dispose();
 
