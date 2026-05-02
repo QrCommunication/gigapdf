@@ -271,13 +271,14 @@ function emitShape(
     bounds = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   }
 
-  // Drop hairlines, zero-area paths, and sub-pixel artefacts. PDFs
-  // generated from Type3 fonts (icon glyphs, OCR markers) can emit
-  // thousands of 1×1 px paths that pollute the scene graph and the
-  // editor's selection layer without contributing to the visible
-  // rendering. Threshold of 2px catches dust without dropping intentional
-  // hairlines (PDF stroke widths typically >= 0.25pt × CTM scale).
-  if (bounds.width < 2 && bounds.height < 2) return null;
+  // Drop only TRULY zero-area paths. A previous geometric threshold of
+  // 2 px killed every QR code cell (~1.5 px squares), dotted patterns,
+  // hairline borders, and similar fine-grained content the user actually
+  // needs. Trade-off:
+  //   - zero-area paths: ALWAYS drop (rendering no-ops)
+  //   - 1×1 noise from Type3 glyph rendering: filtered separately at the
+  //     extractor entry point (see ignoreType3Cluster heuristic below)
+  if (bounds.width <= 0 || bounds.height <= 0) return null;
 
   const hasCurves = segments.some((s) => s.cmd === 'C' || s.cmd === 'Q');
   const shapeType = detectShapeType(segments, hasCurves);
