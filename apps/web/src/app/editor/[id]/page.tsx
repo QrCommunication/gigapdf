@@ -25,7 +25,17 @@ import {
   Pencil,
   Check,
   X,
+  MoreVertical,
+  RotateCcw,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@giga-pdf/ui";
+import { storageService } from "@giga-pdf/api";
 
 import { useDocument } from "@/hooks/use-document";
 import { useDocumentSave } from "@/hooks/use-document-save";
@@ -892,6 +902,47 @@ export default function EditorPage() {
     }
   }, [currentPdfFile, currentPage, currentPageIndex, contentModifications, applyElements, name, documentId]);
 
+  // Restore the document to its original (v1) PDF binary by asking the
+  // backend to copy v1 forward as a new current version. This is the
+  // canonical way to wipe duplicates accumulated by pre-3e13c33 saves
+  // (Fabric IText overlays baked into the PDF on top of native glyphs).
+  // The intermediate versions stay in version history — restore is non-
+  // destructive. After the call we navigate the user to the same editor
+  // route, which triggers a fresh /load that picks up the new current
+  // version and re-parses the scene graph from scratch.
+  const [restoring, setRestoring] = useState(false);
+  const handleRestoreOriginal = useCallback(async () => {
+    if (!storedDocumentId) {
+      clientLogger.warn("[editor] Restore-original requires a storedDocumentId");
+      return;
+    }
+    if (
+      !confirm(
+        "Restaurer la version originale (v1) du document ? " +
+          "Vos modifications actuelles seront archivées dans l'historique " +
+          "des versions et le document repartira de l'état d'origine."
+      )
+    ) {
+      return;
+    }
+    setRestoring(true);
+    try {
+      const result = await storageService.restoreOriginal(storedDocumentId);
+      clientLogger.info("[editor] Document restored to v1:", result);
+      // Hard reload so /load is called fresh against the new current
+      // version. Soft router.refresh() would keep the in-memory session
+      // PDF and elements stale.
+      window.location.reload();
+    } catch (err) {
+      clientLogger.error("[editor] Restore-original failed:", err);
+      alert(
+        "Échec de la restauration. Vérifiez que le document a bien une " +
+          "version d'origine accessible."
+      );
+      setRestoring(false);
+    }
+  }, [storedDocumentId]);
+
   const handleFlattenPdf = async () => {
     if (!currentPdfFile) return;
     try {
@@ -1432,6 +1483,53 @@ export default function EditorPage() {
             )}
             <span className="hidden sm:inline">{t("save")}</span>
           </Button>
+
+          {/* Document actions menu — keeps the header clean while exposing
+              destructive/restorative ops behind an explicit affordance. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                aria-label="Actions document"
+                disabled={restoring}
+              >
+                {restoring ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <MoreVertical className="h-4 w-4" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem
+                onClick={handleRestoreOriginal}
+                disabled={!storedDocumentId || restoring}
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                <div className="flex flex-col">
+                  <span>Restaurer l&apos;original (v1)</span>
+                  <span className="text-xs text-muted-foreground">
+                    Repart du PDF d&apos;origine, archive les modifications
+                  </span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={handleFlattenPdf}
+                disabled={!currentPdfFile}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                <div className="flex flex-col">
+                  <span>Aplatir et télécharger</span>
+                  <span className="text-xs text-muted-foreground">
+                    Fusionne les calques en une couche unique
+                  </span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
