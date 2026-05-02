@@ -573,15 +573,36 @@ async function resolvePdfjsFontName(
   page: PDFPageProxy,
   loadedName: string,
 ): Promise<string> {
-  if (!loadedName) return '';
+  const info = await resolvePdfjsFontInfo(page, loadedName);
+  return info.name;
+}
+
+interface PdfFontInfo {
+  name: string;
+  /**
+   * True for Type 3 fonts — fonts whose glyphs are defined as PDF content
+   * streams (paths/operators) instead of standard outlines. Used by Free,
+   * Adobe etc. to embed barcodes and ornament glyphs. They have no Unicode
+   * mapping, so pdfjs surfaces them as opaque control chars; we filter
+   * them out of the text layer because the same content stream emits real
+   * `constructPath` ops which the drawing-extractor already captures.
+   */
+  isType3Font: boolean;
+}
+
+async function resolvePdfjsFontInfo(
+  page: PDFPageProxy,
+  loadedName: string,
+): Promise<PdfFontInfo> {
+  if (!loadedName) return { name: '', isType3Font: false };
   try {
     const commonObjs = (page as unknown as Record<string, unknown>)['commonObjs'];
-    if (!commonObjs) return loadedName;
+    if (!commonObjs) return { name: loadedName, isType3Font: false };
     const api = commonObjs as {
       get: ((k: string) => unknown) & ((k: string, cb: (v: unknown) => void) => void);
       has?: (k: string) => boolean;
     };
-    if (typeof api.get !== 'function') return loadedName;
+    if (typeof api.get !== 'function') return { name: loadedName, isType3Font: false };
 
     const fontObj = await new Promise<unknown>((resolve) => {
       try {
@@ -590,13 +611,20 @@ async function resolvePdfjsFontName(
         resolve(null);
       }
     });
-    if (!fontObj || typeof fontObj !== 'object') return loadedName;
+    if (!fontObj || typeof fontObj !== 'object') {
+      return { name: loadedName, isType3Font: false };
+    }
 
     const obj = fontObj as Record<string, unknown>;
     const realName = typeof obj['name'] === 'string' ? (obj['name'] as string) : '';
-    return realName || loadedName;
+    const isType3Font =
+      obj['isType3Font'] === true ||
+      // Some pdfjs builds expose only `type` (string) or `data.type`.
+      obj['type'] === 'Type3' ||
+      ((obj['data'] as Record<string, unknown> | undefined)?.['isType3Font'] === true);
+    return { name: realName || loadedName, isType3Font };
   } catch {
-    return loadedName;
+    return { name: loadedName, isType3Font: false };
   }
 }
 
@@ -623,13 +651,16 @@ export async function extractTextElements(
   // first call to commonObjs.get(name) blocks until the font is decoded, so
   // resolving them in parallel before iterating items avoids a serial wait.
   const fontNameCache = new Map<string, string>();
+  const fontType3Cache = new Map<string, boolean>();
   const uniqueFontIds = new Set<string>();
   for (const item of textContent.items) {
     if (isTextItem(item) && item.fontName) uniqueFontIds.add(item.fontName);
   }
   await Promise.all(
     [...uniqueFontIds].map(async (fid) => {
-      fontNameCache.set(fid, await resolvePdfjsFontName(page, fid));
+      const info = await resolvePdfjsFontInfo(page, fid);
+      fontNameCache.set(fid, info.name);
+      fontType3Cache.set(fid, info.isType3Font);
     }),
   );
 
@@ -644,6 +675,16 @@ export async function extractTextElements(
     // dropping them collapses the gap, producing visual overlap. We still
     // skip pure-empty strings (zero-width markers) to avoid noise.
     if (item.str.trim() === '' && (item.width ?? 0) <= 0) continue;
+    // Type3 fonts encode glyphs as PDF content streams (paths). pdfjs reports
+    // the codepoint as text but the character has no Unicode mapping — it
+    // would render as garbage like "*[3887|437]*" in the substitute font.
+    // The same glyph stream emits real path operators which the drawing
+    // extractor captures, so dropping the text version keeps the visual
+    // intent (barcode bars, ornaments) intact and removes the noise.
+    if (fontType3Cache.get(item.fontName ?? '') === true) {
+      textIndex++;
+      continue;
+    }
 
     // Compose item.transform with viewport.transform to get absolute viewport coords.
     // Handles MediaBox offset, rotation, Y-flip in one matrix multiplication.
