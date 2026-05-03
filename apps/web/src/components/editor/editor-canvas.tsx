@@ -479,7 +479,10 @@ export function EditorCanvas({
   // all four sides so the glyph itself never contaminates the sample.
   // Returns rgb() string, or null if the canvas is unreadable (cross-
   // origin tainted, scaled to 0, etc.).
-  const sampleBackgroundUnder = useCallback((obj: FabricObject): string | null => {
+  const sampleBackgroundUnder = useCallback((
+    obj: FabricObject,
+    textRgb?: [number, number, number] | null,
+  ): string | null => {
     const o = obj as unknown as {
       left?: number;
       top?: number;
@@ -498,15 +501,32 @@ export function EditorCanvas({
     const width = o.width ?? 0;
     const height = o.height ?? 0;
     // For text we use originY='bottom' (top = baseline). Translate to a
-    // top-left bbox so all four "outside" probes land in the right places.
+    // top-left bbox so the probes land in the right places.
     const topLeftY = o.originY === "bottom" ? top - height : top;
-    const margin = 4;
-    const probes: Array<[number, number]> = [
-      [left + width / 2, topLeftY - margin],
-      [left + width / 2, topLeftY + height + margin],
-      [left - margin, topLeftY + height / 2],
-      [left + width + margin, topLeftY + height / 2],
-    ];
+
+    // Probe a fan of points spread across:
+    //   - the inside of the bbox (between glyphs we mostly hit the background)
+    //   - the immediate edge (1-2 px out of the glyph but still inside any
+    //     thin coloured band, e.g. the red "Somme à payer" banner)
+    //   - the wider edge (4-6 px out, captures larger uniform areas)
+    // We then drop pixels that match the text colour (so the glyph itself
+    // doesn't contaminate the result) and pick the dominant remaining shade.
+    const probes: Array<[number, number]> = [];
+    // Inside bbox sweep
+    for (let f = 0.1; f <= 0.9; f += 0.1) {
+      probes.push([left + width * f, topLeftY + height * 0.5]);
+    }
+    // Top / bottom edges (just inside, then 2px and 5px outside)
+    for (const dy of [-5, -2, 1, height - 1, height + 2, height + 5]) {
+      probes.push([left + width * 0.5, topLeftY + dy]);
+      probes.push([left + width * 0.25, topLeftY + dy]);
+      probes.push([left + width * 0.75, topLeftY + dy]);
+    }
+    // Left / right edges
+    for (const dx of [-5, -2, width + 2, width + 5]) {
+      probes.push([left + dx, topLeftY + height * 0.5]);
+    }
+
     const counts = new Map<string, number>();
     for (const [cx, cy] of probes) {
       const px = Math.round(cx * zoom);
@@ -518,7 +538,22 @@ export function EditorCanvas({
       } catch {
         return null; // tainted canvas (CORS) — cannot read
       }
-      const key = `${pixel[0]},${pixel[1]},${pixel[2]}`;
+      const r = pixel[0]!;
+      const g = pixel[1]!;
+      const b = pixel[2]!;
+      // Skip pixels that match the text colour within ±20 — they are
+      // glyph fragments, not background.
+      if (textRgb) {
+        const dr = Math.abs(r - textRgb[0]);
+        const dg = Math.abs(g - textRgb[1]);
+        const db = Math.abs(b - textRgb[2]);
+        if (dr < 20 && dg < 20 && db < 20) continue;
+      }
+      // Quantize to 8-step buckets so anti-aliasing fringes vote together.
+      const qr = Math.round(r / 8) * 8;
+      const qg = Math.round(g / 8) * 8;
+      const qb = Math.round(b / 8) * 8;
+      const key = `${qr},${qg},${qb}`;
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     if (counts.size === 0) return null;
@@ -526,6 +561,37 @@ export function EditorCanvas({
     const [r, g, b] = winner.split(",").map((n) => Number(n));
     return `rgb(${r}, ${g}, ${b})`;
   }, []);
+
+  // Parse a CSS colour string like '#ffffff' or 'rgb(255, 0, 0)' into rgb tuple.
+  // Returns null for unsupported formats — caller skips text-colour filtering.
+  const parseColorToRgb = useCallback(
+    (color: string | undefined | null): [number, number, number] | null => {
+      if (!color) return null;
+      const c = color.trim().toLowerCase();
+      if (c.startsWith("#")) {
+        const hex = c.slice(1);
+        if (hex.length === 3) {
+          return [
+            parseInt(hex[0]! + hex[0]!, 16),
+            parseInt(hex[1]! + hex[1]!, 16),
+            parseInt(hex[2]! + hex[2]!, 16),
+          ];
+        }
+        if (hex.length === 6) {
+          return [
+            parseInt(hex.slice(0, 2), 16),
+            parseInt(hex.slice(2, 4), 16),
+            parseInt(hex.slice(4, 6), 16),
+          ];
+        }
+        return null;
+      }
+      const m = c.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+      if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
+      return null;
+    },
+    [],
+  );
 
   // Handler appele quand un texte entre en mode edition.
   // 1:1 fidelity mode: text overlay is invisible by default (PDF native text
@@ -548,7 +614,7 @@ export function EditorCanvas({
         originalContentRef.current.set(elementId, currentText);
       }
 
-      const realFill = obj.data?.originalFill || "#000000";
+      const realFill = (obj.data?.originalFill as string | undefined) || "#000000";
       // Order of preference for the masking colour:
       //   1. the parser-extracted background (style.backgroundColor) if
       //      present — most accurate when the PDF has an explicit text bg
@@ -557,7 +623,10 @@ export function EditorCanvas({
       //      real-world PDFs
       //   3. fall back to white only if the canvas is unreadable
       const parsedBg = obj.data?.originalBgColor;
-      const sampledBg = sampleBackgroundUnder(obj as FabricObject);
+      const sampledBg = sampleBackgroundUnder(
+        obj as FabricObject,
+        parseColorToRgb(realFill),
+      );
       const realBg =
         (parsedBg && parsedBg !== "" && parsedBg !== "transparent" && parsedBg)
         || sampledBg
@@ -570,7 +639,7 @@ export function EditorCanvas({
       const canvas = (obj as FabricObject & { canvas?: { requestRenderAll?: () => void } }).canvas;
       canvas?.requestRenderAll?.();
     }
-  }, [sampleBackgroundUnder]);
+  }, [sampleBackgroundUnder, parseColorToRgb]);
 
   // Handler appele quand le texte change en temps reel
   const handleTextChanged = useCallback((e: { target?: FabricObject }) => {
@@ -601,7 +670,10 @@ export function EditorCanvas({
       // native glyph stays hidden without slapping a white box on coloured
       // banners. Same priority order as edit-enter.
       const parsedBg = obj.data?.originalBgColor;
-      const sampledBg = sampleBackgroundUnder(obj as FabricObject);
+      const sampledBg = sampleBackgroundUnder(
+        obj as FabricObject,
+        parseColorToRgb((obj.data?.originalFill as string | undefined) ?? "#000000"),
+      );
       const matchingBg =
         (parsedBg && parsedBg !== "" && parsedBg !== "transparent" && parsedBg)
         || sampledBg
@@ -624,7 +696,7 @@ export function EditorCanvas({
     }
     const canvas = (obj as FabricObject & { canvas?: { requestRenderAll?: () => void } }).canvas;
     canvas?.requestRenderAll?.();
-  }, [sampleBackgroundUnder]);
+  }, [sampleBackgroundUnder, parseColorToRgb]);
 
   const handleObjectModified = useCallback(
     (e: { target?: FabricObject }) => {
