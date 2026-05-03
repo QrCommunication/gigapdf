@@ -49,12 +49,32 @@ function getPage(handle: PDFDocumentHandle, pageNumber: number) {
  *
  * @returns Les bytes bruts du programme de police, ou null si introuvable.
  */
+/**
+ * Normalise un nom de police pour le matching :
+ *   - retire le préfixe subset "ABCDEF+"
+ *   - retire les suffixes de variante usuels ("-Regular", "MT", "PS", etc.)
+ *   - lowercase + strip non-alphanumeric
+ *
+ * Exemples :
+ *   "HXBDOG+OCRB10PitchBT-Regular" → "ocrb10pitchbt"
+ *   "Arial-BoldMT"                  → "arialbold"
+ *   "/HelveticaNeue-Bold"           → "helveticaneuebold"
+ */
+function normalizeFontName(raw: string): string {
+  return raw
+    .replace(/^\//, '')
+    .replace(/^[A-Z]{6}\+/, '')
+    .replace(/(-?Regular|-?Roman|-?Book|MT|PS)$/i, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
 function extractFontBytesFromSource(
   handle: PDFDocumentHandle,
   targetFontName: string,
 ): Uint8Array | null {
-  // Normaliser le nom cible : retirer le préfixe de sous-ensemble "ABCDEF+"
-  const normalizedTarget = targetFontName.replace(/^[A-Z]{6}\+/, '').toLowerCase();
+  const normalizedTarget = normalizeFontName(targetFontName);
+  if (!normalizedTarget) return null;
 
   const pages = handle._pdfDoc.getPages();
   for (const page of pages) {
@@ -69,13 +89,18 @@ function extractFontBytesFromSource(
       if (!fontObj || typeof (fontObj as unknown as { get?: unknown }).get !== 'function') continue;
 
       const baseFontRef = (fontObj as unknown as { get(k: unknown): unknown }).get(PDFName.of('BaseFont'));
-      const baseFontName: string = baseFontRef
-        ? String(baseFontRef).replace(/^\//, '').replace(/^[A-Z]{6}\+/, '')
-        : '';
+      const candidateName = baseFontRef ? String(baseFontRef) : '';
+      const normalizedCandidate = normalizeFontName(candidateName);
+      if (!normalizedCandidate) continue;
 
-      if (!baseFontName.toLowerCase().includes(normalizedTarget)) continue;
+      // Two-direction substring match (handles subset prefixes, suffix
+      // variants, and pdfjs's loadedName trimming differently from pdf-lib).
+      const matches =
+        normalizedCandidate === normalizedTarget ||
+        normalizedCandidate.includes(normalizedTarget) ||
+        normalizedTarget.includes(normalizedCandidate);
+      if (!matches) continue;
 
-      // Police trouvée — tenter d'extraire les bytes via FontDescriptor
       const bytes = extractFontProgramBytes(handle, fontObj as unknown as { get(k: unknown): unknown });
       if (bytes) return bytes;
     }
@@ -268,6 +293,40 @@ export async function addText(
   markDirty(handle._pdfDoc);
 }
 
+/**
+ * Parse "rgb(r, g, b)" or "#rrggbb" into a pdf-lib RGB tuple. Returns null
+ * for unsupported formats so the caller can default to white.
+ */
+function parseStyleColorToRgb(
+  raw: string | null | undefined,
+): { r: number; g: number; b: number } | null {
+  if (!raw) return null;
+  const c = raw.trim().toLowerCase();
+  if (c.startsWith('#')) {
+    const hex = c.slice(1);
+    if (hex.length === 3) {
+      return {
+        r: parseInt(hex[0]! + hex[0]!, 16) / 255,
+        g: parseInt(hex[1]! + hex[1]!, 16) / 255,
+        b: parseInt(hex[2]! + hex[2]!, 16) / 255,
+      };
+    }
+    if (hex.length === 6) {
+      return {
+        r: parseInt(hex.slice(0, 2), 16) / 255,
+        g: parseInt(hex.slice(2, 4), 16) / 255,
+        b: parseInt(hex.slice(4, 6), 16) / 255,
+      };
+    }
+    return null;
+  }
+  const m = c.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (m) {
+    return { r: Number(m[1]) / 255, g: Number(m[2]) / 255, b: Number(m[3]) / 255 };
+  }
+  return null;
+}
+
 export async function updateText(
   handle: PDFDocumentHandle,
   pageNumber: number,
@@ -279,12 +338,21 @@ export async function updateText(
   const pageH = page.getHeight();
   const oldPdf = webToPdf(oldBounds.x, oldBounds.y, oldBounds.width, oldBounds.height, pageH);
 
+  // The clear rectangle MUST match the real PDF background colour at the
+  // glyph location, otherwise editing text on a coloured banner (red
+  // "Somme à payer", blue card, etc.) leaves a visible white box. The
+  // client samples the rendered bitmap and forwards the result via
+  // element.style.backgroundColor — fall back to white only when the
+  // client could not read the canvas.
+  const clearRgb =
+    parseStyleColorToRgb(element.style.backgroundColor) ?? { r: 1, g: 1, b: 1 };
+
   page.drawRectangle({
     x: oldPdf.x,
     y: oldPdf.y,
     width: oldPdf.width,
     height: oldPdf.height,
-    color: rgb(1, 1, 1),
+    color: rgb(clearRgb.r, clearRgb.g, clearRgb.b),
     opacity: 1,
   });
 
