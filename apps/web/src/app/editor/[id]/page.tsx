@@ -35,7 +35,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@giga-pdf/ui";
-import { storageService } from "@giga-pdf/api";
 
 import { useDocument } from "@/hooks/use-document";
 import { useDocumentSave } from "@/hooks/use-document-save";
@@ -927,7 +926,7 @@ export default function EditorPage() {
     }
     setRestoring(true);
     try {
-      const result = await storageService.restoreOriginal(storedDocumentId);
+      const result = await api.restoreOriginalDocument(storedDocumentId);
       clientLogger.info("[editor] Document restored to v1:", result);
       // Hard reload so /load is called fresh against the new current
       // version. Soft router.refresh() would keep the in-memory session

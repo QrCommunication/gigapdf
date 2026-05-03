@@ -490,6 +490,36 @@ class APIClient {
   }
 
   /**
+   * Restore a stored document to its original (v1) version. Creates a new
+   * version that is a binary-identical copy of v1 and sets it as current.
+   * Existing intermediate versions stay in history (non-destructive).
+   */
+  async restoreOriginalDocument(
+    storedDocumentId: string
+  ): Promise<{
+    stored_document_id: string;
+    current_version: number;
+    restored_from: number;
+    noop?: boolean;
+    page_count?: number;
+    created_at?: string;
+  }> {
+    const response = await this.request<
+      APIResponse<{
+        stored_document_id: string;
+        current_version: number;
+        restored_from: number;
+        noop?: boolean;
+        page_count?: number;
+        created_at?: string;
+      }>
+    >(`/api/v1/storage/documents/${storedDocumentId}/restore-original`, {
+      method: "POST",
+    });
+    return response.data;
+  }
+
+  /**
    * Get all elements on a page.
    */
   async getPageElements(
