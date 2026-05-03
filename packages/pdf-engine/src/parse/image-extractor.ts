@@ -617,7 +617,6 @@ export async function extractImages(
     const loadingTask = pdfjsLib.getDocument({
       data,
       useWorkerFetch: false,
-      isEvalSupported: false,
       useSystemFonts: true,
     });
     pdfDoc = await loadingTask.promise;

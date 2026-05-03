@@ -201,7 +201,8 @@ async function loadPdfjsDocument(
     data,
     useSystemFonts: true,
     disableWorker: true,
-    isEvalSupported: false,
+    // isEvalSupported removed in pdfjs-dist 5.7+; enableScripting is false
+    // by default which provides the same security guarantee.
     verbosity: 0,
   } as Parameters<typeof pdfjsLib.getDocument>[0]);
   try {

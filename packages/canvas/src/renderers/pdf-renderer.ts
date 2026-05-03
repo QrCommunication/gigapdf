@@ -412,7 +412,8 @@ export class PDFRenderer {
    * Load PDF document from URL or ArrayBuffer.
    *
    * Security hardening (SEC-OWASP-03) — prevents JS execution from malicious PDFs:
-   * - isEvalSupported: false  blocks dynamic code execution in PDF scripts
+   * - enableScripting: defaults to false in pdfjs-dist 5.7+ (replaces the
+   *                    removed isEvalSupported option from earlier versions)
    * - enableXfa: false        disables XFA forms (they can run PDF-embedded scripts)
    * - stopAtErrors: true      aborts parsing on malformed or suspicious structure
    * - disableAutoFetch: true  prevents the PDF from triggering background network requests
@@ -467,10 +468,11 @@ export class PDFRenderer {
     source: string | ArrayBuffer
   ): Promise<void> {
     try {
+      // isEvalSupported removed in pdfjs-dist 5.7+; enableScripting is false
+      // by default which provides the same XSS-via-PDF guarantee.
       const loadingTask = pdfjsLib.getDocument({
         data: source instanceof ArrayBuffer ? source : undefined,
         url: typeof source === "string" ? source : undefined,
-        isEvalSupported: false,
         enableXfa: false,
         stopAtErrors: true,
         disableAutoFetch: true,

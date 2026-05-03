@@ -3,6 +3,9 @@ name: Security Audit
 on:
   push:
     branches: [main]
+  pull_request:
+    # Block PRs introducing high+ CVEs before they reach main.
+    branches: [main]
   schedule:
     # Chaque lundi à 06:00 UTC
     - cron: '0 6 * * 1'
@@ -40,6 +43,18 @@ jobs:
 
       - name: Run pnpm audit (high+ severity)
         run: pnpm audit --audit-level=high
+
+      - name: Snapshot full audit report (artifact)
+        if: always()
+        run: pnpm audit --json > audit-report.json || true
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pnpm-audit-${{ github.run_id }}
+          path: audit-report.json
+          retention-days: 30
 
   # ─────────────────────────────────────────────
   # Audit Python — pip-audit
