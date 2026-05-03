@@ -119,10 +119,12 @@ export async function POST(request: Request): Promise<Response> {
     const handle = await openDocument(buffer);
 
     // ── Apply each operation in order ──────────────────────────────────────────
-    for (const op of operations) {
+    for (let opIndex = 0; opIndex < operations.length; opIndex++) {
+      const op = operations[opIndex]!;
       const { action, pageNumber, element, oldBounds } = op;
       const elementType = element['type'] as string | undefined;
 
+      try {
       if (action === 'add') {
         switch (elementType) {
           case 'text': {
@@ -200,6 +202,14 @@ export async function POST(request: Request): Promise<Response> {
         if (bounds) {
           deleteElementArea(handle, pageNumber, bounds);
         }
+      }
+      } catch (opError) {
+        const elementId = element['elementId'] ?? element['id'];
+        const annotated = new Error(
+          `apply-elements op[${opIndex}] failed (action=${action}, type=${elementType ?? 'unknown'}, page=${pageNumber}, elementId=${elementId ?? 'n/a'}): ${opError instanceof Error ? opError.message : String(opError)}`,
+        );
+        if (opError instanceof Error) (annotated as Error & { cause?: unknown }).cause = opError;
+        throw annotated;
       }
     }
 
