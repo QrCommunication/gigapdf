@@ -1,0 +1,81 @@
+# Dependabot configuration — automated dependency PRs
+#
+# - Security updates: instant PRs for any new advisory affecting our deps.
+# - Version updates: weekly PRs grouped by ecosystem to avoid PR flood.
+#
+# We've intentionally kept the grouping coarse (one PR per ecosystem per week
+# for non-security updates) because the monorepo has ~1800 transitive deps.
+# Critical security patches still ship as individual PRs the moment GHSA
+# alerts fire.
+#
+# Override the defaults via labels:
+#   - "deps" + "security" — fast-track
+#   - "deps" + "patch"    — auto-merge candidate
+#
+# Docs: https://docs.github.com/en/code-security/dependabot
+
+version: 2
+updates:
+  # ── npm / pnpm monorepo (root + apps + packages) ─────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 10
+    labels:
+      - "deps"
+      - "javascript"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      # Patch + minor bumps for runtime deps — safe to bundle.
+      runtime-minor:
+        patterns: ["*"]
+        exclude-patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "@prisma/*"
+          - "prisma"
+          - "expo"
+          - "react-native"
+          - "@expo/*"
+          - "@react-native/*"
+          - "better-auth"
+          - "@better-auth/*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Type-only dev deps — extremely safe.
+      types:
+        patterns: ["@types/*"]
+    ignore:
+      # Major bumps stay manual — too much breakage risk on the React /
+      # Next / Expo trio. Dependabot still surfaces security advisories
+      # for these regardless of `ignore`.
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "expo"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-native"
+        update-types: ["version-update:semver-major"]
+
+  # ── GitHub Actions ───────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "deps"
+      - "ci"
+    commit-message:
+      prefix: "ci(actions)"

@@ -88,7 +88,6 @@ describe('REPRO bake on Free invoice v1.pdf', () => {
       const doc = await pdfjsLib.getDocument({
         data,
         disableWorker: true,
-        isEvalSupported: false,
       }).promise;
       const page = await doc.getPage(1);
       const tc = await page.getTextContent();

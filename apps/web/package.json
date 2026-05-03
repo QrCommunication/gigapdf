@@ -20,7 +20,7 @@
     "postinstall": "prisma generate || true && node -e \"const{cpSync,mkdirSync}=require('fs');mkdirSync('public/pdf-worker',{recursive:true});cpSync(require.resolve('pdfjs-dist/build/pdf.worker.min.mjs'),'public/pdf-worker/pdf.worker.min.mjs');\""
   },
   "dependencies": {
-    "@better-auth/expo": "^1.4.13",
+    "@better-auth/expo": "^1.6.9",
     "@giga-pdf/api": "workspace:*",
     "@giga-pdf/canvas": "workspace:*",
     "@giga-pdf/editor": "workspace:*",
@@ -31,7 +31,7 @@
     "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.2.0",
     "@sentry/nextjs": "^9.0.0",
-    "better-auth": "^1.4.13",
+    "better-auth": "^1.6.9",
     "clsx": "^2.1.1",
     "fabric": "^7.1.0",
     "jose": "^6.1.3",

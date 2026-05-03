@@ -152,11 +152,12 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         docCache.delete(req.docKey);
       }
 
-      // Security hardening — identical to the main-thread PDFRenderer config
+      // Security hardening — identical to the main-thread PDFRenderer config.
+      // isEvalSupported removed in pdfjs-dist 5.7+; enableScripting is false
+      // by default which provides the same XSS-via-PDF guarantee.
       const loadingTask = pdfjsLib.getDocument({
         data: req.source instanceof ArrayBuffer ? req.source : undefined,
         url: typeof req.source === "string" ? req.source : undefined,
-        isEvalSupported: false,
         enableXfa: false,
         stopAtErrors: true,
         disableAutoFetch: true,

@@ -796,9 +796,10 @@ export async function extractTextBlocks(
 ): Promise<TextBlock[]> {
   const loadingTask = pdfjsLib.getDocument({
     data: pdfBytes instanceof ArrayBuffer ? new Uint8Array(pdfBytes) : pdfBytes,
-    // Disable worker in Node.js environment
+    // Disable worker in Node.js environment. enableScripting defaults to
+    // false in pdfjs-dist 5.7+, so we no longer need isEvalSupported (it
+    // was removed from DocumentInitParameters in that release).
     useWorkerFetch: false,
-    isEvalSupported: false,
     useSystemFonts: true,
   });
 
