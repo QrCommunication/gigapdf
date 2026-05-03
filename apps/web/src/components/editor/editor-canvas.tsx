@@ -1174,6 +1174,15 @@ export function EditorCanvas({
           const textColour = textElement.style.color || "#000000";
           const textObj = new IText(textElement.content || "", {
             ...baseOptions,
+            // pdf-engine text-extractor stores bounds.{x,y} at the PDF
+            // BASELINE START (vpE/vpF post viewport·item.transform), not at
+            // the top-left of the glyph bbox. Using originY='top' here would
+            // place the IText one full glyph height BELOW where the native
+            // PDF text actually renders — clicking the visible title selects
+            // nothing, the editable hit-target sits underneath. Switching to
+            // originY='bottom' aligns the IText baseline with (left, top) so
+            // the overlay sits exactly on top of the native rendering.
+            originY: "bottom" as const,
             width: textElement.bounds.width,
             fontSize: textElement.style.fontSize ?? 12,
             fontFamily: (() => {
