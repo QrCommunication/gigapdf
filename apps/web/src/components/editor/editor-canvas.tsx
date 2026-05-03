@@ -220,6 +220,14 @@ export function EditorCanvas({
 
   // Ref pour tracker le contenu original des textes (pour detecter les vraies modifications)
   const originalContentRef = useRef<Map<string, string>>(new Map());
+  // Tracks elementIds for which text:editing:exited just fired and forwarded
+  // an update. Fabric v6 also fires object:modified right after exitEditing()
+  // (because exitEditing() mutates the object's fill/textBackgroundColor),
+  // and without this guard the same edit gets queued twice — visible in the
+  // baked PDF as two superposed glyphs in different fonts (g_d0_f7 + g_d0_f8
+  // captured in v32 of fe6cd5d3-1f7f-42e3-b3c3-3d04a9d07abd).
+  const recentlyForwardedTextEditRef = useRef<Map<string, number>>(new Map());
+  const TEXT_EDIT_DEDUPE_WINDOW_MS = 250;
   // Map des bounds connus PAR elementId AVANT chaque modification. Sans
   // cette source, queueUpdate envoie les NOUVELLES bounds comme oldBounds
   // → updateText() côté pdf-engine clear la mauvaise zone et l'ancien
@@ -313,6 +321,19 @@ export function EditorCanvas({
         const isOriginYBottom = textObj.originY === "bottom";
         const descenderOffset = isOriginYBottom ? fontSize * 0.22 : 0;
         const baselineY = (obj.top || 0) - descenderOffset;
+        // pdf-engine uses bounds in browser top-left convention (Y down,
+        // top of bbox at bounds.y, height extending downward). The mask
+        // rectangle and addText() both rely on this. Storing the baseline
+        // in bounds.y instead of the glyph top puts the mask exactly one
+        // fontSize below the original glyph: confirmed via mutool show on
+        // a baked v32 — the mask's PDF y was 676 while the original text
+        // baseline was at PDF y=686, so the rectangle covered the empty
+        // strip below the line and never hid the original glyph (visible
+        // doublon "LICHALICHA2"). Translating bounds.y up by one fontSize
+        // (≈ glyph top, since cap height ≈ fontSize for the OCRB / Helvetica
+        // metrics used in invoices) puts the mask back over the glyph and
+        // the new text exactly on the original baseline.
+        const topOfGlyphY = baselineY - fontSize;
 
         // Preserve the parser-extracted PDF font name so the bake side
         // (apply-elements -> updateText -> font lookup) can re-use the
@@ -326,11 +347,12 @@ export function EditorCanvas({
 
         return {
           ...baseElement,
-          // Override bounds with the corrected baseline + intrinsic font
-          // height (not Fabric's line-height-inflated obj.height).
+          // Top-left corner of the glyph bbox in browser coords. height = fontSize
+          // covers approximately ascender+descender — close enough to mask the
+          // glyph cleanly without bleeding into the line above/below.
           bounds: {
             x: obj.left || 0,
-            y: baselineY,
+            y: topOfGlyphY,
             width: (obj.width || 100) * scaleX,
             height: fontSize,
           },
@@ -758,6 +780,10 @@ export function EditorCanvas({
         // Refresh tracking with the post-edit bounds so the next edit on
         // the same element clears the right area.
         lastKnownBoundsRef.current.set(elementId, updatedElement.bounds);
+        // Mark this elementId so the object:modified that Fabric fires
+        // immediately after exitEditing() (because we mutate fill/bg here)
+        // does NOT re-queue the same edit a second time.
+        recentlyForwardedTextEditRef.current.set(elementId, Date.now());
         onElementModifiedRef.current?.(updatedElement, oldBounds);
       }
     }
@@ -770,6 +796,23 @@ export function EditorCanvas({
       const elementId = obj.data?.elementId;
       // Use Fabric `type` (stable across minification) — see fabricObjectToElement above.
       const typeName = (obj as FabricObject & { type?: string }).type ?? "";
+
+      // Skip the duplicate fired by Fabric immediately after exitEditing()
+      // mutates the IText (we set fill/textBackgroundColor in
+      // handleTextEditingExited and that triggers another object:modified
+      // for the same edit). Without this guard apply-elements bakes the
+      // same text twice in two different fontFaces.
+      if (elementId && (typeName === "i-text" || typeName === "textbox" || typeName === "text")) {
+        const lastEditAt = recentlyForwardedTextEditRef.current.get(elementId);
+        if (lastEditAt && Date.now() - lastEditAt < TEXT_EDIT_DEDUPE_WINDOW_MS) {
+          recentlyForwardedTextEditRef.current.delete(elementId);
+          clientLogger.debug(
+            "[EditorCanvas] Skip object:modified (just forwarded via text:editing:exited)",
+            elementId,
+          );
+          return;
+        }
+      }
 
       // Detecter le TYPE de modification
       let modificationType: ModificationType = 'position';

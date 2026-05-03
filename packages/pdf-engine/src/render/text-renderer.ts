@@ -1,11 +1,11 @@
-import { rgb, degrees, StandardFonts, PDFName } from 'pdf-lib';
+import { rgb, degrees, PDFName } from 'pdf-lib';
 import type { PDFFont } from 'pdf-lib';
 import type { PDFDocumentHandle } from '../engine/document-handle';
 import { markDirty } from '../engine/document-handle';
 import type { TextElement, Bounds } from '@giga-pdf/types';
 import { hexToRgb } from '../utils/color';
 import { webToPdf } from '../utils/coordinates';
-import { resolveStandardFont } from '../utils/font-map';
+import { resolveStandardFont, pickFallbackStandardFont } from '../utils/font-map';
 import { engineLogger } from '../utils/logger';
 import { PDFPageOutOfRangeError } from '../errors';
 
@@ -76,34 +76,42 @@ function extractFontBytesFromSource(
   const normalizedTarget = normalizeFontName(targetFontName);
   if (!normalizedTarget) return null;
 
-  const pages = handle._pdfDoc.getPages();
-  for (const page of pages) {
-    const resources = page.node.Resources();
-    if (!resources) continue;
+  const ctx = handle._pdfDoc.context;
 
-    const fontDict = resources.get(PDFName.of('Font'));
-    if (!fontDict || typeof (fontDict as { entries?: unknown }).entries !== 'function') continue;
+  // Walk EVERY indirect object in the PDF context, not just the page-level
+  // Resources. Many PDFs (Free invoices, Word/LibreOffice exports, generated
+  // reports) put the Font dict on the /Pages root and have the leaf pages
+  // inherit it via the /Parent chain — page.node.Resources() then returns
+  // null and the page-only walk silently finds zero fonts. Scanning every
+  // indirect object catches every Font regardless of how it's referenced.
+  const indirectObjects = ctx.enumerateIndirectObjects();
+  for (const [, obj] of indirectObjects) {
+    if (!obj || typeof (obj as { get?: unknown }).get !== 'function') continue;
 
-    for (const [, val] of (fontDict as unknown as { entries(): Iterable<[unknown, unknown]> }).entries()) {
-      const fontObj = handle._pdfDoc.context.lookup(val as Parameters<typeof handle._pdfDoc.context.lookup>[0]);
-      if (!fontObj || typeof (fontObj as unknown as { get?: unknown }).get !== 'function') continue;
+    // A Font dict is identified by /Type=/Font (with /Subtype telling us
+    // Type0 / TrueType / Type1). Skip anything else.
+    const objAsDict = obj as unknown as { get(k: unknown): unknown };
+    const typeName = objAsDict.get(PDFName.of('Type'));
+    if (!typeName || String(typeName) !== '/Font') continue;
 
-      const baseFontRef = (fontObj as unknown as { get(k: unknown): unknown }).get(PDFName.of('BaseFont'));
-      const candidateName = baseFontRef ? String(baseFontRef) : '';
-      const normalizedCandidate = normalizeFontName(candidateName);
-      if (!normalizedCandidate) continue;
+    const baseFontRef = objAsDict.get(PDFName.of('BaseFont'));
+    const candidateName = baseFontRef ? String(baseFontRef) : '';
+    const normalizedCandidate = normalizeFontName(candidateName);
+    if (!normalizedCandidate) continue;
 
-      // Two-direction substring match (handles subset prefixes, suffix
-      // variants, and pdfjs's loadedName trimming differently from pdf-lib).
-      const matches =
-        normalizedCandidate === normalizedTarget ||
-        normalizedCandidate.includes(normalizedTarget) ||
-        normalizedTarget.includes(normalizedCandidate);
-      if (!matches) continue;
+    // Two-direction substring match (handles subset prefixes, suffix
+    // variants, and pdfjs's loadedName trimming differently from pdf-lib).
+    const matches =
+      normalizedCandidate === normalizedTarget ||
+      normalizedCandidate.includes(normalizedTarget) ||
+      normalizedTarget.includes(normalizedCandidate);
+    if (!matches) continue;
 
-      const bytes = extractFontProgramBytes(handle, fontObj as unknown as { get(k: unknown): unknown });
-      if (bytes) return bytes;
-    }
+    const bytes = extractFontProgramBytes(
+      handle,
+      obj as unknown as { get(k: unknown): unknown },
+    );
+    if (bytes) return bytes;
   }
 
   return null;
@@ -243,18 +251,30 @@ async function resolveFont(
     return handle._pdfDoc.embedFont(standardFont);
   }
 
-  // Stratégie 4 : fallback Helvetica avec avertissement explicite (jamais silencieux)
+  // Stratégie 4 : fallback intelligent (heuristic) — pour OCRB / Courier-like
+  // sources on évite le fallback Helvetica qui change la largeur des glyphes
+  // et crée un texte dupliqué visuellement (l'ancien glyphe dépasse à droite
+  // du nouveau plus étroit, mask vs new-text width mismatch). Courier garde
+  // la métrique monospace, ce qui aligne suffisamment pour que le mask couvre
+  // l'ancien glyphe et que le texte ne déborde pas. Pour les serif on tape
+  // Times, sinon Helvetica.
+  const fallback = pickFallbackStandardFont(
+    originalFont ?? fontFamily,
+    element.style.fontWeight,
+    element.style.fontStyle,
+  );
   engineLogger.warn(
-    'Police non reconnue comme Standard Font et aucun byte custom fourni, fallback Helvetica',
+    'Police custom non embedable, fallback heuristique vers une StandardFont',
     {
       fontFamily,
       originalFont: originalFont ?? undefined,
+      fallback,
       documentId: handle.id,
-      hint: 'Activer FONT_EMBED_CUSTOM_ENABLED et passer fontBytes pour préserver la police',
+      hint: 'fontkit ne supporte pas le format de cette police (souvent Type1). Heuristic monospace/serif/sans-serif appliquée pour garder une métrique cohérente.',
     },
   );
 
-  return handle._pdfDoc.embedFont(StandardFonts.Helvetica);
+  return handle._pdfDoc.embedFont(fallback);
 }
 
 // ─── API Publique ─────────────────────────────────────────────────────────────

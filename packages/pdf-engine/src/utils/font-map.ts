@@ -67,6 +67,51 @@ export function isStandardFont(fontName: string): boolean {
 }
 
 /**
+ * Heuristic fallback when the original font cannot be embedded (e.g. Type1
+ * binaries that fontkit refuses with "Unknown font format"). Picks the
+ * StandardFont closest in metrics so the bake doesn't collapse to Helvetica
+ * for a monospaced source like OCRB — the visible LICHALICHA2 doublon comes
+ * partially from the width mismatch (Helvetica is narrower, so the new text
+ * ends BEFORE the old glyph's right edge and the original stays visible).
+ *
+ * Order: monospace markers first (OCR/Courier/Mono/Pitch), then serif
+ * markers (Times/Garamond/Serif/Roman/Iliad), default sans-serif.
+ */
+export function pickFallbackStandardFont(
+  fontName: string | null | undefined,
+  weight?: string,
+  style?: string,
+): StandardFonts {
+  const name = (fontName ?? '').toLowerCase();
+  const isBold = weight === 'bold' || /\bbold\b/.test(name);
+  const isItalic =
+    style === 'italic' || /italic|oblique/.test(name);
+
+  const isMono =
+    /ocr|courier|mono|pitch|typewriter|consolas|menlo/.test(name);
+  if (isMono) {
+    if (isBold && isItalic) return StandardFonts.CourierBoldOblique;
+    if (isBold) return StandardFonts.CourierBold;
+    if (isItalic) return StandardFonts.CourierOblique;
+    return StandardFonts.Courier;
+  }
+
+  const isSerif =
+    /times|garamond|serif|roman|iliad|georgia|caslon|palatino|book/.test(name);
+  if (isSerif) {
+    if (isBold && isItalic) return StandardFonts.TimesRomanBoldItalic;
+    if (isBold) return StandardFonts.TimesRomanBold;
+    if (isItalic) return StandardFonts.TimesRomanItalic;
+    return StandardFonts.TimesRoman;
+  }
+
+  if (isBold && isItalic) return StandardFonts.HelveticaBoldOblique;
+  if (isBold) return StandardFonts.HelveticaBold;
+  if (isItalic) return StandardFonts.HelveticaOblique;
+  return StandardFonts.Helvetica;
+}
+
+/**
  * Map a PDF internal font name (from pdfjs-dist) to a readable family + weight + style.
  *
  * The family name we return is the CSS `font-family` used as a *fallback*
