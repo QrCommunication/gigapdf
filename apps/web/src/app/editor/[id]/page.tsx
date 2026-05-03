@@ -27,6 +27,9 @@ import {
   X,
   MoreVertical,
   RotateCcw,
+  FileText,
+  Sheet,
+  Presentation,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -970,6 +973,49 @@ export default function EditorPage() {
     }
   };
 
+  // Export Office (DOCX/PPTX via libreoffice headless, XLSX via extraction custom).
+  // Sauvegarde d'abord le document courant pour exporter l'état le plus récent
+  // côté serveur, puis appelle /api/office/export qui retourne le binaire Office.
+  const [exportingOfficeFormat, setExportingOfficeFormat] = useState<
+    "docx" | "xlsx" | "pptx" | null
+  >(null);
+  const handleExportOffice = useCallback(
+    async (format: "docx" | "xlsx" | "pptx") => {
+      if (!documentId || exportingOfficeFormat) return;
+      setExportingOfficeFormat(format);
+      try {
+        // Garantit que la version exportée reflète l'état courant
+        if (isDirty) await save();
+        const token = await getAuthToken();
+        const res = await fetch("/api/office/export", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ documentId, format }),
+        });
+        if (!res.ok) {
+          throw new Error(`Export ${format} failed: HTTP ${res.status}`);
+        }
+        const blob = await res.blob();
+        // Filename depuis Content-Disposition si présent, sinon fallback
+        const cd = res.headers.get("Content-Disposition") ?? "";
+        const cdMatch = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+        const filename = cdMatch?.[1]
+          ? decodeURIComponent(cdMatch[1].replace(/"/g, ""))
+          : `document.${format}`;
+        downloadBlob(blob, filename);
+      } catch (err) {
+        clientLogger.error(`[editor] Office export ${format} failed:`, err);
+      } finally {
+        setExportingOfficeFormat(null);
+      }
+    },
+    [documentId, exportingOfficeFormat, isDirty, save],
+  );
+
   // Re-parse the PDF binary to refresh the scene graph after a page op.
   // After rotate/add/delete/move, the text items keep their original
   // coordinates in the parse output — but the page dimensions / rotation
@@ -1544,6 +1590,40 @@ export default function EditorPage() {
                     Fusionne les calques en une couche unique
                   </span>
                 </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => handleExportOffice("docx")}
+                disabled={!documentId || exportingOfficeFormat !== null}
+              >
+                {exportingOfficeFormat === "docx" ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileText className="mr-2 h-4 w-4" />
+                )}
+                <span>{t("office.exportWord")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleExportOffice("xlsx")}
+                disabled={!documentId || exportingOfficeFormat !== null}
+              >
+                {exportingOfficeFormat === "xlsx" ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sheet className="mr-2 h-4 w-4" />
+                )}
+                <span>{t("office.exportExcel")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleExportOffice("pptx")}
+                disabled={!documentId || exportingOfficeFormat !== null}
+              >
+                {exportingOfficeFormat === "pptx" ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Presentation className="mr-2 h-4 w-4" />
+                )}
+                <span>{t("office.exportPowerPoint")}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

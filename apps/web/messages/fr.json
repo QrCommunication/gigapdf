@@ -494,6 +494,20 @@
       "dropTitle": "Déposez vos PDF ici",
       "dropHint": "Importation dans le dossier courant"
     },
+    "office": {
+      "import": "Importer Office",
+      "importing": "Conversion Office...",
+      "importErrorFormat": "Format non supporté. Utilisez .docx, .xlsx ou .pptx",
+      "importErrorSize": "Fichier trop volumineux (max 25 Mo)",
+      "importErrorConvert": "Échec de la conversion du document Office",
+      "importErrorService": "Service de conversion indisponible. Réessayez plus tard.",
+      "exportWord": "Exporter en Word (.docx)",
+      "exportExcel": "Exporter en Excel (.xlsx)",
+      "exportPowerPoint": "Exporter en PowerPoint (.pptx)",
+      "exporting": "Export en cours...",
+      "exportSuccess": "Export Office réussi",
+      "exportError": "Échec de l'export Office"
+    },
     "delete": {
       "title": "Supprimer le document",
       "confirm": "Êtes-vous sûr de vouloir supprimer « {name} » ? Cette action est irréversible.",

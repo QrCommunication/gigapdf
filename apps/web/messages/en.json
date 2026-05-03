@@ -494,6 +494,20 @@
       "dropTitle": "Drop your PDFs here",
       "dropHint": "Uploading to the current folder"
     },
+    "office": {
+      "import": "Import Office",
+      "importing": "Converting Office...",
+      "importErrorFormat": "Unsupported format. Use .docx, .xlsx or .pptx",
+      "importErrorSize": "File too large (max 25 MB)",
+      "importErrorConvert": "Failed to convert Office document",
+      "importErrorService": "Conversion service unavailable. Try again later.",
+      "exportWord": "Export as Word (.docx)",
+      "exportExcel": "Export as Excel (.xlsx)",
+      "exportPowerPoint": "Export as PowerPoint (.pptx)",
+      "exporting": "Exporting...",
+      "exportSuccess": "Office export successful",
+      "exportError": "Office export failed"
+    },
     "delete": {
       "title": "Delete Document",
       "confirm": "Are you sure you want to delete \"{name}\"? This action cannot be undone.",
