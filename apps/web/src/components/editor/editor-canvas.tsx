@@ -535,14 +535,17 @@ export function EditorCanvas({
       set.call(obj, {
         fill: obj.data?.originalFill || "#000000",
         textBackgroundColor: obj.data?.originalBgColor || "#ffffff",
-        borderColor: "rgba(0, 100, 200, 0)",
+        borderColor: "rgba(0, 100, 200, 0.75)",
       });
     } else {
       // No change — restore the invisible-overlay state for 1:1 fidelity.
+      // Border stays visible while the object remains the active target so
+      // the user keeps the visual selection feedback (Fabric only paints
+      // the border on the active object anyway, so other glyphs are clean).
       set.call(obj, {
         fill: "rgba(0,0,0,0)",
         textBackgroundColor: "",
-        borderColor: "rgba(0, 100, 200, 0)",
+        borderColor: "rgba(0, 100, 200, 0.75)",
       });
     }
     const canvas = (obj as FabricObject & { canvas?: { requestRenderAll?: () => void } }).canvas;
@@ -1200,11 +1203,19 @@ export function EditorCanvas({
             cursorWidth: 1,
             // Selection visuals stay subtle so we don't pollute the page
             selectionColor: "rgba(0, 100, 200, 0.18)",
-            // No control corners by default (avoid clutter on every glyph run)
-            hasControls: false,
+            // Selected state must be visually obvious — without a visible
+            // border + controls the user clicks the title and sees nothing
+            // change, then concludes "the editor is broken". Fabric only
+            // draws border/controls when the object is the active target,
+            // so this stays clean for the unselected glyphs.
+            hasControls: true,
             hasBorders: true,
-            borderColor: "rgba(0, 100, 200, 0)", // transparent until hovered
-            borderScaleFactor: 0.8,
+            borderColor: "rgba(0, 100, 200, 0.75)",
+            borderScaleFactor: 1,
+            cornerColor: "rgb(0, 100, 200)",
+            cornerStrokeColor: "#ffffff",
+            cornerSize: 8,
+            transparentCorners: false,
           });
           (textObj as FabricObjectWithData).data = {
             elementId: textElement.elementId,
@@ -1275,8 +1286,14 @@ export function EditorCanvas({
             stroke: "transparent",
             strokeWidth: 0,
             opacity: 1,
-            hasControls: false,
-            hasBorders: false,
+            // Make the selected state obvious — same rationale as text overlays.
+            hasControls: true,
+            hasBorders: true,
+            borderColor: "rgba(0, 100, 200, 0.75)",
+            cornerColor: "rgb(0, 100, 200)",
+            cornerStrokeColor: "#ffffff",
+            cornerSize: 8,
+            transparentCorners: false,
           };
           // Eslint-keep references — used when entering edit mode
           void fillCss; void strokeCss;
