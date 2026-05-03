@@ -5,7 +5,13 @@
 
 import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { immer } from "zustand/middleware/immer";
+import { enableMapSet } from "immer";
 import type { UUID } from "@giga-pdf/types";
+
+// Idempotent — safe even if selection-store was already imported. Without
+// it, Immer 10+ throws error #0 the moment any Map.set/delete runs in a
+// produce() callback.
+enableMapSet();
 import type {
   CollaborationState,
   OnlineUser,

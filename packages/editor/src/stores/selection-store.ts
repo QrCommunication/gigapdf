@@ -5,8 +5,16 @@
 
 import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { immer } from "zustand/middleware/immer";
+import { enableMapSet } from "immer";
 import type { UUID } from "@giga-pdf/types";
 import type { SelectionState } from "../types";
+
+// Immer 10+ does NOT make Map/Set draftable by default. Without this opt-in
+// every set((state) => state.selectedElementIds.delete(id)) throws
+// "[Immer] minified error nr: 0" — the error the user saw on every text
+// element delete and on every Fabric onDeselect. Idempotent: safe to call
+// multiple times if other stores import it too.
+enableMapSet();
 
 export interface SelectionStore extends SelectionState {
   // Actions
