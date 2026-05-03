@@ -27,12 +27,16 @@ export function addShape(
 ): void {
   const page = getPage(handle, pageNumber);
   const pageH = page.getHeight();
+  const pageW = page.getWidth();
+  const rotation = page.getRotation().angle as 0 | 90 | 180 | 270;
   const pdfRect = webToPdf(
     element.bounds.x,
     element.bounds.y,
     element.bounds.width,
     element.bounds.height,
     pageH,
+    pageW,
+    rotation,
   );
 
   const fillColor = element.style.fillColor ? hexToRgb(element.style.fillColor) : undefined;
@@ -80,8 +84,8 @@ export function addShape(
       const points = element.geometry.points;
       const start = points[0] ?? { x: pdfRect.x, y: pdfRect.y };
       const end = points[1] ?? { x: pdfRect.x + pdfRect.width, y: pdfRect.y + pdfRect.height };
-      const startPdf = webToPdf(start.x, start.y, 0, 0, pageH);
-      const endPdf = webToPdf(end.x, end.y, 0, 0, pageH);
+      const startPdf = webToPdf(start.x, start.y, 0, 0, pageH, pageW, rotation);
+      const endPdf = webToPdf(end.x, end.y, 0, 0, pageH, pageW, rotation);
       page.drawLine({
         start: { x: startPdf.x, y: startPdf.y },
         end: { x: endPdf.x, y: endPdf.y },
