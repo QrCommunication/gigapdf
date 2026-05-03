@@ -147,6 +147,25 @@ if [ -f "\$VPS_PATH/.env" ] && ! sudo grep -q '^PLAYWRIGHT_BROWSERS_PATH=' "\$VP
   echo "  added PLAYWRIGHT_BROWSERS_PATH to .env"
 fi
 
+# ── 2.4c Sync Prisma schema to the database ──────────────────────────────
+# Idempotent: db push diff-applies the schema. Adds new tables/columns
+# without prompting; never drops anything destructive (we don't pass
+# --accept-data-loss). Safe to run on every deploy. Required so a new
+# model added in this commit (e.g. font_cache) lands in prod automatically.
+section "Syncing Prisma schema (db push)"
+if [ -f "\$VPS_PATH/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "\$VPS_PATH/.env"
+  set +a
+fi
+if [ -n "\${DATABASE_URL:-}" ]; then
+  ( cd "\$VPS_PATH/apps/web" && pnpm exec prisma db push --skip-generate 2>&1 | tail -5 ) || \\
+    echo "  [warn] prisma db push failed — new tables/columns may be missing in prod"
+else
+  echo "  [warn] DATABASE_URL not set, skipping prisma db push"
+fi
+
 # ── 2.5 Build all workspace packages (force — no cache) ──────────────────
 section "Building workspace packages (--force)"
 NODE_OPTIONS='--max-old-space-size=1536' pnpm turbo run build \\
