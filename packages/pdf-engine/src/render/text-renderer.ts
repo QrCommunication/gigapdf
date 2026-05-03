@@ -294,9 +294,21 @@ export async function addText(
 }
 
 /**
- * Parse "rgb(r, g, b)" or "#rrggbb" into a pdf-lib RGB tuple. Returns null
- * for unsupported formats so the caller can default to white.
+ * Parse "rgb(r, g, b)" or "#rrggbb" into a pdf-lib RGB tuple in [0, 1].
+ *
+ * pdf-lib's `rgb()` constructor throws when any channel is outside [0, 1]
+ * (the error message is misleading: "`red` must be at least 0 and at most
+ * 1, but was actually 1.0039..."). The client sometimes forwards 256 due
+ * to anti-aliasing quantization rounding; clamp defensively so a single
+ * out-of-range channel never aborts a whole apply-elements batch.
  */
+function clamp01(n: number): number {
+  if (Number.isNaN(n)) return 0;
+  if (n < 0) return 0;
+  if (n > 1) return 1;
+  return n;
+}
+
 function parseStyleColorToRgb(
   raw: string | null | undefined,
 ): { r: number; g: number; b: number } | null {
@@ -306,23 +318,27 @@ function parseStyleColorToRgb(
     const hex = c.slice(1);
     if (hex.length === 3) {
       return {
-        r: parseInt(hex[0]! + hex[0]!, 16) / 255,
-        g: parseInt(hex[1]! + hex[1]!, 16) / 255,
-        b: parseInt(hex[2]! + hex[2]!, 16) / 255,
+        r: clamp01(parseInt(hex[0]! + hex[0]!, 16) / 255),
+        g: clamp01(parseInt(hex[1]! + hex[1]!, 16) / 255),
+        b: clamp01(parseInt(hex[2]! + hex[2]!, 16) / 255),
       };
     }
     if (hex.length === 6) {
       return {
-        r: parseInt(hex.slice(0, 2), 16) / 255,
-        g: parseInt(hex.slice(2, 4), 16) / 255,
-        b: parseInt(hex.slice(4, 6), 16) / 255,
+        r: clamp01(parseInt(hex.slice(0, 2), 16) / 255),
+        g: clamp01(parseInt(hex.slice(2, 4), 16) / 255),
+        b: clamp01(parseInt(hex.slice(4, 6), 16) / 255),
       };
     }
     return null;
   }
   const m = c.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
   if (m) {
-    return { r: Number(m[1]) / 255, g: Number(m[2]) / 255, b: Number(m[3]) / 255 };
+    return {
+      r: clamp01(Number(m[1]) / 255),
+      g: clamp01(Number(m[2]) / 255),
+      b: clamp01(Number(m[3]) / 255),
+    };
   }
   return null;
 }

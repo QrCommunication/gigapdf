@@ -589,9 +589,12 @@ export function EditorCanvas({
         if (dr < 20 && dg < 20 && db < 20) continue;
       }
       // Quantize to 8-step buckets so anti-aliasing fringes vote together.
-      const qr = Math.round(r / 8) * 8;
-      const qg = Math.round(g / 8) * 8;
-      const qb = Math.round(b / 8) * 8;
+      // Math.round(255/8)*8 = 256 — clamp back into [0, 255] so the rgb()
+      // string we forward to apply-elements stays in pdf-lib's valid range
+      // (it rejects red/green/blue > 1.0 with a misleading 500).
+      const qr = Math.min(255, Math.round(r / 8) * 8);
+      const qg = Math.min(255, Math.round(g / 8) * 8);
+      const qb = Math.min(255, Math.round(b / 8) * 8);
       const key = `${qr},${qg},${qb}`;
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
