@@ -69,6 +69,16 @@ export type { ConvertOptions, UrlToPDFSafeOptions } from './convert';
 // Utils
 export { parsePageRange, type PageRange } from './utils';
 
+// Font cache port — the apps/web layer plugs a Prisma-backed adapter so that
+// converted Type1/CFF→TTF bytes survive across requests. The engine itself
+// stays free of any DB dependency.
+export {
+  setFontCacheForHandle,
+  type FontCachePort,
+  type FontCacheMeta,
+  type FontCacheSource,
+} from './utils/font-cache-port';
+
 // Errors
 export {
   PDFEngineError,

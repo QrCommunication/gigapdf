@@ -478,3 +478,31 @@ enum tenantstatus {
   trial
   cancelled
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Font cache — process-shared TTF cache for Type1/CFF→TTF conversions
+//
+// The PDF editor's bake pipeline often hits the same embedded font across
+// many documents (an OCRB pulled from one Free invoice is identical to the
+// one in any other Free invoice — same subset, same hash). Converting Type1
+// or CFF programs via fontforge costs ~50-150 ms per call; we therefore
+// memoise the result by SHA-256 of the source font program bytes.
+//
+// `bytes` holds the converted TTF. Typical sizes are 2–10 KB so storing
+// in-row (bytea) is cheaper than putting them on S3.
+// `source` records what the original was, for diagnostics only.
+// ─────────────────────────────────────────────────────────────────────────────
+model font_cache {
+  id              String   @id @default(cuid())
+  sha256          String   @unique @db.VarChar(64)
+  family          String?  @db.VarChar(255)
+  postscript_name String?  @db.VarChar(255)
+  source          String   @db.VarChar(32)
+  bytes           Bytes
+  byte_size       Int
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  last_used_at    DateTime @default(now()) @db.Timestamptz(6)
+  hit_count       Int      @default(0)
+
+  @@index([last_used_at], map: "idx_font_cache_last_used")
+}

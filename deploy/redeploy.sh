@@ -113,6 +113,21 @@ if ! \$SKIP_INSTALL; then
   pnpm install --frozen-lockfile --prefer-offline
 fi
 
+# ── 2.4a Ensure fontforge is installed (Type1/CFF→TTF font conversion) ──
+# Idempotent: apt-get install no-ops if already at latest. Required so the
+# pdf-engine bake pipeline can fall back to a fontforge subprocess for Type1
+# / CFF embedded fonts that fontkit cannot ingest natively. Without this the
+# bake silently downgrades edited text to a bundled OFL font instead of
+# preserving the source typography.
+section "Ensuring fontforge is installed"
+if ! command -v fontforge >/dev/null 2>&1; then
+  sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y fontforge 2>&1 | tail -3
+  echo "  fontforge installed: \$(fontforge --version 2>&1 | head -1)"
+else
+  echo "  fontforge already present: \$(fontforge --version 2>&1 | head -1)"
+fi
+
 # ── 2.4b Ensure Playwright Chromium is installed (HTML→PDF conversion) ──
 # Idempotent: playwright install only downloads if the version isn't present.
 # We install under \$VPS_PATH/.cache so the service user can read it without

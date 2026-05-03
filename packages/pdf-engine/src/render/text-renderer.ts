@@ -1,5 +1,6 @@
-import { rgb, degrees, PDFName } from 'pdf-lib';
+import { rgb, degrees, PDFName, decodePDFRawStream } from 'pdf-lib';
 import type { PDFFont } from 'pdf-lib';
+import { createHash } from 'node:crypto';
 import type { PDFDocumentHandle } from '../engine/document-handle';
 import { markDirty } from '../engine/document-handle';
 import type { TextElement, Bounds } from '@giga-pdf/types';
@@ -13,6 +14,11 @@ import {
 } from '../utils/bundled-fonts';
 import { engineLogger } from '../utils/logger';
 import { PDFPageOutOfRangeError } from '../errors';
+import { getFontCacheForHandle } from '../utils/font-cache-port';
+import {
+  convertFontToTtf,
+  FontForgeUnavailableError,
+} from '../utils/convert-font-to-ttf';
 
 // ─── Feature Flag ──────────────────────────────────────────────────────────────
 
@@ -74,10 +80,24 @@ function normalizeFontName(raw: string): string {
     .replace(/[^a-z0-9]/g, '');
 }
 
+/**
+ * Format of the font program embedded in a PDF FontDescriptor.
+ *  - truetype : `/FontFile2` — fontkit ingests directly
+ *  - cff      : `/FontFile3` (Subtype `/Type1C` or `/CIDFontType0C`) — raw CFF,
+ *               needs fontforge to be turned into a TTF fontkit can use
+ *  - type1    : legacy `/FontFile` — Adobe Type1 binary, same: needs fontforge
+ */
+export type ExtractedFontFormat = 'truetype' | 'cff' | 'type1';
+
+export interface ExtractedFontProgram {
+  bytes: Uint8Array;
+  format: ExtractedFontFormat;
+}
+
 function extractFontBytesFromSource(
   handle: PDFDocumentHandle,
   targetFontName: string,
-): Uint8Array | null {
+): ExtractedFontProgram | null {
   const normalizedTarget = normalizeFontName(targetFontName);
   if (!normalizedTarget) return null;
 
@@ -129,7 +149,7 @@ function extractFontBytesFromSource(
 function extractFontProgramBytes(
   handle: PDFDocumentHandle,
   fontObj: { get(k: unknown): unknown },
-): Uint8Array | null {
+): ExtractedFontProgram | null {
   const ctx = handle._pdfDoc.context;
 
   // Type0 (composite) : DescendantFonts → CIDFont → FontDescriptor
@@ -140,8 +160,8 @@ function extractFontProgramBytes(
       const cidFontRef = (descArr as unknown as { get(k: unknown): unknown }).get(0);
       const cidFont = cidFontRef ? ctx.lookup(cidFontRef as Parameters<typeof ctx.lookup>[0]) : null;
       if (cidFont && typeof (cidFont as unknown as { get?: unknown }).get === 'function') {
-        const bytes = resolveDescriptorFontFile(handle, cidFont as unknown as { get(k: unknown): unknown });
-        if (bytes) return bytes;
+        const found = resolveDescriptorFontFile(handle, cidFont as unknown as { get(k: unknown): unknown });
+        if (found) return found;
       }
     }
   }
@@ -151,12 +171,16 @@ function extractFontProgramBytes(
 }
 
 /**
- * Résout un FontDescriptor et retourne les bytes du flux FontFile2 ou FontFile3.
+ * Résout un FontDescriptor et retourne les bytes DÉCODÉS du flux de police,
+ * accompagnés du format détecté à partir du tag PDF (FontFile / FontFile2 /
+ * FontFile3). Le format guide ensuite la stratégie d'embed :
+ *   - truetype → fontkit accepte directement
+ *   - cff / type1 → conversion fontforge requise
  */
 function resolveDescriptorFontFile(
   handle: PDFDocumentHandle,
   fontOrDescHolder: { get(k: unknown): unknown },
-): Uint8Array | null {
+): ExtractedFontProgram | null {
   const ctx = handle._pdfDoc.context;
 
   const descriptorRef = fontOrDescHolder.get(PDFName.of('FontDescriptor'));
@@ -166,17 +190,132 @@ function resolveDescriptorFontFile(
   if (!descriptor || typeof (descriptor as unknown as { get?: unknown }).get !== 'function') return null;
 
   const desc = descriptor as unknown as { get(k: unknown): unknown };
-  const fileRef =
-    desc.get(PDFName.of('FontFile2')) ??
-    desc.get(PDFName.of('FontFile3')) ??
-    desc.get(PDFName.of('FontFile'));
 
-  if (!fileRef) return null;
+  // Order matters: FontFile2 (TrueType) is the most embeddable, try first.
+  // FontFile3 (CFF/OpenType-CFF) and FontFile (Type1) both need conversion,
+  // but they expose enough format info for downstream code to decide.
+  const ff2 = desc.get(PDFName.of('FontFile2'));
+  const ff3 = desc.get(PDFName.of('FontFile3'));
+  const ff = desc.get(PDFName.of('FontFile'));
+
+  let fileRef: unknown;
+  let format: ExtractedFontFormat;
+  if (ff2) {
+    fileRef = ff2;
+    format = 'truetype';
+  } else if (ff3) {
+    fileRef = ff3;
+    format = 'cff';
+  } else if (ff) {
+    fileRef = ff;
+    format = 'type1';
+  } else {
+    return null;
+  }
 
   const stream = ctx.lookup(fileRef as Parameters<typeof ctx.lookup>[0]);
-  if (!stream || typeof (stream as unknown as { getContents?: unknown }).getContents !== 'function') return null;
+  if (!stream) return null;
 
-  return (stream as unknown as { getContents(): Uint8Array }).getContents();
+  // Streams in PDFs are typically /FlateDecode-compressed. `getContents()`
+  // returns the encoded bytes (raw zlib for the OCRB Type1C in Free's
+  // invoices). We MUST decode them before handing to fontkit / fontforge,
+  // otherwise the converter sees zlib magic and fails.
+  let bytes: Uint8Array | null = null;
+  try {
+    bytes = decodePDFRawStream(stream as Parameters<typeof decodePDFRawStream>[0]).decode();
+  } catch {
+    // Fall back to raw bytes for unencoded streams (rare).
+    if (typeof (stream as unknown as { getContents?: unknown }).getContents === 'function') {
+      bytes = (stream as unknown as { getContents(): Uint8Array }).getContents();
+    }
+  }
+  if (!bytes || bytes.byteLength === 0) return null;
+
+  return { bytes, format };
+}
+
+/**
+ * Convert Type1/CFF source bytes to TTF, going through the FontCachePort
+ * (typically the Prisma `font_cache` table) so that the same source font
+ * never gets converted twice on the same VPS.
+ *
+ * Returns null only if no fallback is possible — fontforge missing AND
+ * no cached entry. Caller falls through to the bundled OFL family.
+ */
+async function convertWithCache(
+  handle: PDFDocumentHandle,
+  sourceBytes: Uint8Array,
+  sourceFormat: ExtractedFontFormat,
+  originalFont: string,
+): Promise<Uint8Array | null> {
+  const sha256 = createHash('sha256').update(sourceBytes).digest('hex');
+  const cache = getFontCacheForHandle(handle);
+
+  if (cache) {
+    try {
+      const hit = await cache.get(sha256);
+      if (hit && hit.byteLength > 0) {
+        engineLogger.info('Font cache HIT (DB)', {
+          originalFont,
+          sha256: sha256.slice(0, 12),
+          documentId: handle.id,
+        });
+        return hit;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      engineLogger.warn('Font cache lookup failed, on continue sans', {
+        originalFont,
+        sha256: sha256.slice(0, 12),
+        documentId: handle.id,
+        error: message,
+      });
+    }
+  }
+
+  let ttf: Uint8Array;
+  try {
+    ttf = await convertFontToTtf(
+      sourceBytes,
+      sourceFormat === 'truetype' ? 'unknown' : sourceFormat,
+    );
+  } catch (err) {
+    if (err instanceof FontForgeUnavailableError) {
+      engineLogger.warn(
+        'fontforge non installé, conversion impossible — fallback bundled OFL',
+        { originalFont, documentId: handle.id },
+      );
+    } else {
+      const message = err instanceof Error ? err.message : String(err);
+      engineLogger.warn('Conversion fontforge échouée — fallback bundled OFL', {
+        originalFont,
+        sourceFormat,
+        documentId: handle.id,
+        error: message,
+      });
+    }
+    return null;
+  }
+
+  if (cache) {
+    try {
+      await cache.set(sha256, ttf, {
+        family: originalFont.replace(/^[A-Z]{6}\+/, '').split(/[-,]/)[0] ?? originalFont,
+        postscriptName: originalFont,
+        source: sourceFormat === 'cff' ? 'converted-cff' : 'converted-type1',
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      engineLogger.warn('Font cache write failed (best-effort)', {
+        originalFont,
+        sha256: sha256.slice(0, 12),
+        documentId: handle.id,
+        error: message,
+      });
+    }
+  }
+
+  return ttf;
 }
 
 /**
@@ -222,19 +361,50 @@ async function resolveFont(
     const cached = embeddedFontCache.get(cacheKey);
     if (cached) return cached;
 
-    const extractedBytes = extractFontBytesFromSource(handle, originalFont);
-    if (extractedBytes) {
-      try {
-        const embedded = await handle._pdfDoc.embedFont(extractedBytes, { subset: false });
-        embeddedFontCache.set(cacheKey, embedded);
-        return embedded;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        engineLogger.warn('Impossible d\'embed la police extraite du source, fallback StandardFont', {
-          originalFont,
-          documentId: handle.id,
-          error: message,
-        });
+    const extracted = extractFontBytesFromSource(handle, originalFont);
+    if (extracted) {
+      // Stratégie 2.a : TrueType — fontkit l'avale tel quel.
+      if (extracted.format === 'truetype') {
+        try {
+          const embedded = await handle._pdfDoc.embedFont(extracted.bytes, { subset: false });
+          embeddedFontCache.set(cacheKey, embedded);
+          return embedded;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          engineLogger.warn(
+            'Impossible d\'embed le TrueType extrait du source, on tente la conversion fontforge',
+            { originalFont, documentId: handle.id, error: message },
+          );
+        }
+      }
+
+      // Stratégie 2.b : Type1 ou CFF — fontkit refuse, on passe par fontforge.
+      // Le résultat est cacheable par hash SHA-256 du programme source : la
+      // même police extraite d'un autre PDF donnera le même TTF, donc le
+      // cache DB économise un spawn de subprocess à chaque bake.
+      const converted = await convertWithCache(
+        handle,
+        extracted.bytes,
+        extracted.format,
+        originalFont,
+      );
+      if (converted) {
+        try {
+          const embedded = await handle._pdfDoc.embedFont(converted, { subset: false });
+          embeddedFontCache.set(cacheKey, embedded);
+          engineLogger.info('Police custom embed via conversion fontforge', {
+            originalFont,
+            sourceFormat: extracted.format,
+            documentId: handle.id,
+          });
+          return embedded;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          engineLogger.warn(
+            'TTF converti rejeté par fontkit, fallback bundled OFL',
+            { originalFont, documentId: handle.id, error: message },
+          );
+        }
       }
     } else {
       // Police déclarée dans originalFont mais non trouvée dans le PDF source

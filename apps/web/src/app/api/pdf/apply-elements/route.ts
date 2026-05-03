@@ -34,8 +34,10 @@ import {
   addAnnotation,
   addFormField,
   deleteElementArea,
+  setFontCacheForHandle,
 } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError, PDFPageOutOfRangeError } from '@giga-pdf/pdf-engine';
+import { createFontCacheDbAdapter } from '@/lib/font-cache-db';
 import type { TextElement, ImageElement, ShapeElement, AnnotationElement, FormFieldElement, Bounds } from '@giga-pdf/types';
 import { requireSession } from '@/lib/auth-helpers';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
@@ -117,6 +119,10 @@ export async function POST(request: Request): Promise<Response> {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const handle = await openDocument(buffer);
+    // Plug the Prisma-backed font cache so Type1/CFF→TTF conversions done
+    // by fontforge inside the engine are memoised across requests. The
+    // engine itself stays free of any DB import — it just sees a port.
+    setFontCacheForHandle(handle, createFontCacheDbAdapter());
 
     // ── Apply each operation in order ──────────────────────────────────────────
     for (let opIndex = 0; opIndex < operations.length; opIndex++) {
