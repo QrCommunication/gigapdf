@@ -367,13 +367,21 @@ export function EditorCanvas({
           scaleX?: number;
           scaleY?: number;
         };
+        const rawSrc = imgObj.getSrc?.() ?? "";
+        // Sniff the actual mimetype from the data URL prefix so the backend
+        // can pick the right embed path (pdf-lib only handles PNG and JPEG;
+        // anything else must be flagged here, not silently mislabelled "png"
+        // and re-detected by header bytes downstream).
+        const mimeMatch = rawSrc.match(/^data:image\/(png|jpe?g|webp|gif|avif);base64,/i);
+        const detected = mimeMatch?.[1]?.toLowerCase().replace("jpeg", "jpg");
+        const originalFormat: string = detected ?? "png";
         return {
           ...baseElement,
           type: "image" as const,
           source: {
             type: "embedded" as const,
-            dataUrl: imgObj.getSrc?.() || "",
-            originalFormat: "png",
+            dataUrl: rawSrc,
+            originalFormat,
             originalDimensions: {
               width: imgObj.width || 100,
               height: imgObj.height || 100,
