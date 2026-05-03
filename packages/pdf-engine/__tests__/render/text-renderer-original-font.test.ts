@@ -123,8 +123,9 @@ describe('addText — police non-standard sans originalFont (régression RT-02)'
    * Il PASSE après fix Wave 2 (comportement explicite implémenté).
    */
   it('fontFamily="Calibri" sans originalFont : comportement explicite attendu (pas de fallback silencieux)', async () => {
-    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const handle = await openDocument(fixtureBuffer(SIMPLE_PDF));
     const element = makeTextElementWithFont('Calibri', null, 'Calibri text without originalFont');
@@ -137,19 +138,23 @@ describe('addText — police non-standard sans originalFont (régression RT-02)'
       threwExplicitError = true;
     }
 
-    const warnCalled = consoleSpy.mock.calls.length > 0 || consoleErrorSpy.mock.calls.length > 0;
-    consoleSpy.mockRestore();
+    // After Wave 4 the fallback is no longer "silent Helvetica". resolveFont
+    // logs an info-level "Police custom remplacée par bundled OFL" and embeds
+    // a Liberation Sans / Serif / Mono / CourierPrime TTF so the bake gets
+    // a real metric-compatible font. Acceptable signals: any console.* call,
+    // or an explicit throw.
+    const anyLogCalled =
+      consoleWarnSpy.mock.calls.length > 0 ||
+      consoleErrorSpy.mock.calls.length > 0 ||
+      consoleLogSpy.mock.calls.length > 0;
+    consoleWarnSpy.mockRestore();
     consoleErrorSpy.mockRestore();
+    consoleLogSpy.mockRestore();
 
-    // APRÈS FIX Wave 2 : soit une erreur est levée, soit un warning est émis
-    // La régression est l'absence TOTALE de signal (ni erreur, ni warning)
-    //
-    // Ce test ÉCHOUE sur main actuel car addText ne lève pas d'erreur ET n'émet pas de warning
-    // pour une police custom inconnue.
     expect(
-      threwExplicitError || warnCalled,
+      threwExplicitError || anyLogCalled,
       'RÉGRESSION RT-02 : police non-standard sans originalFont acceptée silencieusement ' +
-      '(ni erreur, ni warning). Le fallback silencieux sur Helvetica masque la perte de police.',
+      '(ni erreur, ni info, ni warning). Le fallback doit toujours émettre un signal traçable.',
     ).toBe(true);
   });
 });

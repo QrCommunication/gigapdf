@@ -714,12 +714,15 @@ export async function extractTextElements(
     const height = item.height > 0 ? item.height : fontSize;
 
     // vpE, vpF = BASELINE START in canvas (Y-down, top-left origin).
-    // For horizontal text, top-of-box = baseline - ascender. For rotated
-    // text we keep (x, y) = baseline start and rely on rotation to
-    // orient the rectangle. Callers (Fabric renderer) place the IText
-    // at (x, y) with originY='bottom' so the baseline aligns.
+    // bounds.{x,y} is stored as the TOP-LEFT corner of the glyph bbox so
+    // it matches the convention used by webToPdf() and apply-elements
+    // (mask rectangle + addText assume top-left). Approximating ascender
+    // as fontSize is good enough for the kind of fonts we encounter
+    // (cap-height ≈ fontSize for OCRB / Helvetica / Gotham / Iliad). The
+    // Fabric renderer compensates by setting top = bounds.y + fontSize
+    // with originY='bottom', so the visible baseline still lands on vpF.
     const x = vpE ?? 0;
-    const y = vpF ?? 0;
+    const y = (vpF ?? 0) - fontSize;
     // Unused but suppress warning
     void pageHeight;
 
