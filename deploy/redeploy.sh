@@ -113,6 +113,20 @@ if ! \$SKIP_INSTALL; then
   pnpm install --frozen-lockfile --prefer-offline
 fi
 
+# ── 2.4-pre Ensure libreoffice is installed (Office <-> PDF conversion) ──
+# Idempotent: apt-get install no-ops if already at latest. Required for the
+# convertOfficeToPdf / convertPdfToOffice functions in pdf-engine. The four
+# packages cover Writer (docx), Calc (xlsx) and Impress (pptx). The headless
+# mode needs no display server.
+section "Ensuring libreoffice is installed"
+if ! command -v soffice >/dev/null 2>&1; then
+  sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y libreoffice-core libreoffice-writer libreoffice-calc libreoffice-impress 2>&1 | tail -3
+  echo "  libreoffice installed: \$(soffice --version 2>&1 | head -1)"
+else
+  echo "  libreoffice already present: \$(soffice --version 2>&1 | head -1)"
+fi
+
 # ── 2.4a Ensure fontforge is installed (Type1/CFF→TTF font conversion) ──
 # Idempotent: apt-get install no-ops if already at latest. Required so the
 # pdf-engine bake pipeline can fall back to a fontforge subprocess for Type1

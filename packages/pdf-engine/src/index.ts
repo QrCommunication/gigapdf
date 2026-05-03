@@ -79,6 +79,18 @@ export {
   type FontCacheSource,
 } from './utils/font-cache-port';
 
+// Office ↔ PDF conversion via LibreOffice headless
+export {
+  convertOfficeToPdf,
+  convertPdfToOffice,
+  LibreOfficeUnavailableError,
+  LibreOfficeConversionError,
+} from './convert/office-headless';
+
+// PDF → XLSX (custom extraction, libreoffice ne supporte pas)
+export { convertPdfToXlsx } from './convert/pdf-to-xlsx';
+export type { ConvertPdfToXlsxOptions } from './convert/pdf-to-xlsx';
+
 // Errors
 export {
   PDFEngineError,

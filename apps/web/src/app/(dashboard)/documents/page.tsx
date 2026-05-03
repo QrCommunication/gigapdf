@@ -43,6 +43,7 @@ export default function DocumentsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const officeFileInputRef = useRef<HTMLInputElement>(null);
 
   // Get current folder from URL
   const currentFolderId = searchParams?.get("folder") || null;
@@ -187,6 +188,91 @@ export default function DocumentsPage() {
 
   const handleNewDocument = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleNewOfficeDocument = () => {
+    officeFileInputRef.current?.click();
+  };
+
+  // Importe un fichier Office (.docx/.xlsx/.pptx) en passant par le pipeline :
+  // 1) POST /api/office/upload -> retourne le PDF binaire converti
+  // 2) Re-injecte le PDF dans le pipeline standard via api.uploadDocument + saveDocument
+  // Ainsi un fichier Office devient un document éditable comme un PDF natif.
+  const handleOfficeFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const lower = file.name.toLowerCase();
+    const isOffice = lower.endsWith(".docx") || lower.endsWith(".xlsx") || lower.endsWith(".pptx");
+    if (!isOffice) {
+      setError(t("office.importErrorFormat"));
+      if (officeFileInputRef.current) officeFileInputRef.current.value = "";
+      return;
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      setError(t("office.importErrorSize"));
+      if (officeFileInputRef.current) officeFileInputRef.current.value = "";
+      return;
+    }
+
+    try {
+      setUploading(true);
+      setError(null);
+
+      // 1) Conversion Office -> PDF côté serveur
+      const formData = new FormData();
+      formData.append("file", file);
+      const convertRes = await fetch("/api/office/upload", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      if (!convertRes.ok) {
+        const msg =
+          convertRes.status === 503
+            ? t("office.importErrorService")
+            : convertRes.status === 413
+              ? t("office.importErrorSize")
+              : t("office.importErrorConvert");
+        throw new Error(msg);
+      }
+      const pdfBlob = await convertRes.blob();
+      const baseName = file.name.replace(/\.(docx|xlsx|pptx)$/i, "");
+      const pdfFile = new File([pdfBlob], `${baseName}.pdf`, {
+        type: "application/pdf",
+      });
+
+      // 2) Pipeline standard PDF identique à handleFileUpload
+      const uploadResult = await api.uploadDocument(pdfFile);
+      const { getAuthToken } = await import("@/lib/api");
+      const token = await getAuthToken();
+      const downloadRes = await fetch(
+        `/api/v1/documents/${uploadResult.document_id}/download`,
+        {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        },
+      );
+      if (!downloadRes.ok) {
+        throw new Error(`Failed to download PDF: ${downloadRes.status}`);
+      }
+      const finalPdfBlob = await downloadRes.blob();
+      await api.saveDocument({
+        file: finalPdfBlob,
+        name: baseName,
+        tags: [],
+        folderId: currentFolderId || undefined,
+      });
+      await loadDocuments();
+    } catch (err) {
+      clientLogger.error("documents.office-upload-failed", err);
+      setError(err instanceof Error ? err.message : t("office.importErrorConvert"));
+    } finally {
+      setUploading(false);
+      if (officeFileInputRef.current) officeFileInputRef.current.value = "";
+    }
   };
 
   const handleFileUpload = async (
@@ -439,6 +525,13 @@ export default function DocumentsPage() {
         className="hidden"
         onChange={handleFileUpload}
       />
+      <input
+        ref={officeFileInputRef}
+        type="file"
+        accept=".docx,.xlsx,.pptx"
+        className="hidden"
+        onChange={handleOfficeFileUpload}
+      />
 
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -448,23 +541,34 @@ export default function DocumentsPage() {
             {total > 0 ? t("totalCount", { count: total }) : t("subtitle")}
           </p>
         </div>
-        <Button
-          className="gap-2"
-          onClick={handleNewDocument}
-          disabled={uploading}
-        >
-          {uploading ? (
-            <>
-              <Upload className="h-4 w-4 animate-pulse" />
-              {t("upload.uploading")}
-            </>
-          ) : (
-            <>
-              <Plus className="h-4 w-4" />
-              {t("newDocument")}
-            </>
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleNewOfficeDocument}
+            disabled={uploading}
+          >
+            <Upload className="h-4 w-4" />
+            {t("office.import")}
+          </Button>
+          <Button
+            className="gap-2"
+            onClick={handleNewDocument}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <>
+                <Upload className="h-4 w-4 animate-pulse" />
+                {t("upload.uploading")}
+              </>
+            ) : (
+              <>
+                <Plus className="h-4 w-4" />
+                {t("newDocument")}
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Navigation Bar - File Explorer Style */}
