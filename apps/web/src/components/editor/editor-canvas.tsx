@@ -686,6 +686,13 @@ export function EditorCanvas({
   // 1:1 mode: revert overlay back to invisible IF the user did not change
   // the content. If they DID change it, keep the new text visible (with
   // its solid background) since the PDF native text underneath is now stale.
+  //
+  // CRITICAL: when the content changed, we MUST also notify the parent
+  // (onElementModified) so the new text gets queued for the PDF bake.
+  // Fabric does NOT emit `object:modified` after an inline text edit
+  // (only `text:editing:exited` + `text:changed`), so without this
+  // explicit forward the edit never reaches apply-elements and the
+  // modification is silently lost on reload.
   const handleTextEditingExited = useCallback((e: { target?: FabricObject }) => {
     if (!e.target) return;
     const obj = e.target as FabricObjectWithData;
@@ -727,7 +734,23 @@ export function EditorCanvas({
     }
     const canvas = (obj as FabricObject & { canvas?: { requestRenderAll?: () => void } }).canvas;
     canvas?.requestRenderAll?.();
-  }, [sampleBackgroundUnder, parseColorToRgb]);
+
+    // Forward the edit to the parent so it can be queued for the PDF bake.
+    // Without this, an inline text edit produces no `object:modified` event
+    // (Fabric only fires `text:editing:exited`), and the change vanishes on
+    // reload. We pass the OLD bounds tracked since the last render so the
+    // bake can clear the original glyph zone before painting the new text.
+    if (contentChanged && elementId) {
+      const updatedElement = fabricObjectToElement(obj);
+      if (updatedElement) {
+        const oldBounds = lastKnownBoundsRef.current.get(elementId);
+        // Refresh tracking with the post-edit bounds so the next edit on
+        // the same element clears the right area.
+        lastKnownBoundsRef.current.set(elementId, updatedElement.bounds);
+        onElementModifiedRef.current?.(updatedElement, oldBounds);
+      }
+    }
+  }, [sampleBackgroundUnder, parseColorToRgb, fabricObjectToElement]);
 
   const handleObjectModified = useCallback(
     (e: { target?: FabricObject }) => {
