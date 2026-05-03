@@ -689,26 +689,44 @@ export default function EditorPage() {
       // Émettre via WebSocket pour la collaboration
       emitElementUpdate(element.elementId, element);
 
-      // Mettre à jour l'élément dans le backend avec retry exponentiel
+      // Mettre à jour l'élément dans le backend avec retry exponentiel.
+      //
+      // Note: parsed-only elements (read straight from the PDF, never
+      // persisted Redis-side) return 404 here. That's expected and
+      // non-fatal — the change still persists via the PDF bake on save.
+      // The retry helper short-circuits 404 thanks to the .status attached
+      // by api.request, and the catch logs at debug level for that case so
+      // the console stays readable.
       if (documentId) {
         const updates = convertToApiElement(element);
         try {
           await withRetry(
             () => api.updateElement(documentId, element.elementId, updates),
             {
-              onAttemptFailed: (attempt, err) =>
+              onAttemptFailed: (attempt, err) => {
+                const status = (err as { status?: number })?.status;
+                if (status === 404) return; // expected for parsed elements
                 clientLogger.warn(
                   `[API] updateElement attempt ${attempt} failed:`,
                   err,
-                ),
+                );
+              },
             },
           );
           clientLogger.debug("[API] Element updated in backend:", element.elementId);
         } catch (error) {
-          clientLogger.error(
-            "[API] updateElement failed after retries — change will persist via PDF bake:",
-            error,
-          );
+          const status = (error as { status?: number })?.status;
+          if (status === 404) {
+            clientLogger.debug(
+              "[API] updateElement: parsed element not in Redis — will persist via PDF bake",
+              element.elementId,
+            );
+          } else {
+            clientLogger.error(
+              "[API] updateElement failed after retries — change will persist via PDF bake:",
+              error,
+            );
+          }
         }
       }
 

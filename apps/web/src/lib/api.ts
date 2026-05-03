@@ -153,7 +153,16 @@ class APIClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.detail || error.message || `HTTP ${response.status}`);
+      // Attach status to the Error so withRetry's NON_RETRYABLE_STATUSES
+      // check can short-circuit 4xx (especially 404 spam from updateElement
+      // on parsed-only elements that have no Redis row). Without this, the
+      // retry helper falls back to "treat as transient" and triples the
+      // console noise on every text edit.
+      const err = new Error(
+        error.detail || error.message || `HTTP ${response.status}`,
+      ) as Error & { status: number };
+      err.status = response.status;
+      throw err;
     }
 
     // Handle empty responses (204 No Content)

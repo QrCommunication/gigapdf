@@ -487,12 +487,43 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
 
   // ── getFontFaceName ───────────────────────────────────────────────────────
 
+  // pdfjs strips the 6-letter subset prefix and "-Regular"/"-Bold"/MT/PS
+  // suffixes inconsistently between the parser used to build the scene graph
+  // and the backend Python parser used to extract font metadata. A strict
+  // equality check therefore misses ~every match for subsetted PDF fonts
+  // ("HXBDOG+OCRB10PitchBT-Regular" vs "OCRB10PitchBT-Regular" vs "OCRB10PitchBT").
+  // Normalise both sides the same way and accept a two-direction substring
+  // match so the embedded font is actually picked up at render time.
+  function normaliseFontName(raw: string): string {
+    return raw
+      .replace(/^\//, '')
+      .replace(/^[A-Z]{6}\+/, '')
+      .replace(/(-?Regular|-?Roman|-?Book|MT|PS)$/i, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+  }
+
   const getFontFaceName = useCallback(
     (originalName: string): string | null => {
       if (!originalName) return null;
-      const found = fonts.find(
-        (f) => f.metadata.originalName === originalName && f.status === 'loaded',
-      );
+      const target = normaliseFontName(originalName);
+      if (!target) return null;
+      const found = fonts.find((f) => {
+        if (f.status !== 'loaded') return false;
+        const candidates = [
+          f.metadata.originalName,
+          f.metadata.postscriptName,
+          f.metadata.fontFamily,
+        ].filter((s): s is string => Boolean(s));
+        for (const candidate of candidates) {
+          const norm = normaliseFontName(candidate);
+          if (!norm) continue;
+          if (norm === target || norm.includes(target) || target.includes(norm)) {
+            return true;
+          }
+        }
+        return false;
+      });
       return found?.fontFaceName ?? null;
     },
     [fonts],
