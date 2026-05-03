@@ -1,4 +1,5 @@
 import { PDFDocument, PDFName } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { DocumentMetadata, DocumentPermissions } from '@giga-pdf/types';
@@ -55,6 +56,14 @@ export async function openDocument(
       ignoreEncryption: true,
       updateMetadata: false,
     });
+
+    // Register fontkit so embedFont() can accept custom font bytes
+    // extracted from the PDF source (extractFontBytesFromSource path).
+    // Without this, every updateText() / addText() call that finds a
+    // matching embedded font in the source ends up throwing internally
+    // and falls back to StandardFonts.Helvetica — producing the
+    // "perte de la font d'origine" the user reports on edited text.
+    pdfDoc.registerFontkit(fontkit);
 
     // pdf-lib loads encrypted PDFs silently with ignoreEncryption: true.
     // We detect encryption via the /Encrypt entry in the trailer dictionary.
