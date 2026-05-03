@@ -293,6 +293,7 @@ export function EditorCanvas({
           textAlign?: string;
           lineHeight?: number;
           charSpacing?: number;
+          originY?: string;
         };
         const textObjWithStyles = textObj as typeof textObj & {
           underline?: boolean;
@@ -300,13 +301,44 @@ export function EditorCanvas({
           textBackgroundColor?: string;
         };
         const data = (obj as FabricObjectWithData).data;
+        const fontSize = textObj.fontSize || 16;
+
+        // Critical: parsed text overlays use originY='bottom' with a small
+        // top += descender offset (~22% of fontSize) so that Fabric's
+        // baseline aligns with the PDF baseline. When we round-trip the
+        // overlay back to an Element for apply-elements to bake, we MUST
+        // undo that offset — otherwise updateText() in pdf-engine writes
+        // the new text one descender below the original glyph and the
+        // visible position drifts every time the user edits.
+        const isOriginYBottom = textObj.originY === "bottom";
+        const descenderOffset = isOriginYBottom ? fontSize * 0.22 : 0;
+        const baselineY = (obj.top || 0) - descenderOffset;
+
+        // Preserve the parser-extracted PDF font name so the bake side
+        // (apply-elements -> updateText -> font lookup) can re-use the
+        // SAME font as the original glyph instead of falling back to a
+        // generic Arial. The Fabric fontFamily ("gigapdf-…") is only valid
+        // in the browser FontFace registry, never on the server-side
+        // pdf-engine, so we must hand back originalFont separately.
+        const originalFont = (data?.originalFont as string | null) ?? null;
+        const fontFamilyForRoundTrip =
+          originalFont || textObj.fontFamily || "Arial";
+
         return {
           ...baseElement,
+          // Override bounds with the corrected baseline + intrinsic font
+          // height (not Fabric's line-height-inflated obj.height).
+          bounds: {
+            x: obj.left || 0,
+            y: baselineY,
+            width: (obj.width || 100) * scaleX,
+            height: fontSize,
+          },
           type: "text" as const,
           content: textObj.text || "",
           style: {
-            fontFamily: textObj.fontFamily || "Arial",
-            fontSize: textObj.fontSize || 16,
+            fontFamily: fontFamilyForRoundTrip,
+            fontSize,
             fontWeight: textObj.fontWeight === "bold" ? "bold" : "normal",
             fontStyle: textObj.fontStyle === "italic" ? "italic" : "normal",
             color: (textObj.fill as string) || "#000000",
@@ -315,12 +347,11 @@ export function EditorCanvas({
             lineHeight: textObj.lineHeight || 1.2,
             letterSpacing: textObj.charSpacing || 0,
             writingMode: "horizontal-tb" as const,
-            // New text decorations
             underline: textObjWithStyles.underline || false,
             strikethrough: textObjWithStyles.linethrough || false,
             backgroundColor: textObjWithStyles.textBackgroundColor || null,
             verticalAlign: "baseline" as const,
-            originalFont: null,
+            originalFont,
           },
           ocrConfidence: null,
           linkUrl: (data?.linkUrl as string) || null,
