@@ -147,23 +147,33 @@ if [ -f "\$VPS_PATH/.env" ] && ! sudo grep -q '^PLAYWRIGHT_BROWSERS_PATH=' "\$VP
   echo "  added PLAYWRIGHT_BROWSERS_PATH to .env"
 fi
 
-# ── 2.4c Sync Prisma schema to the database ──────────────────────────────
-# Idempotent: db push diff-applies the schema. Adds new tables/columns
-# without prompting; never drops anything destructive (we don't pass
-# --accept-data-loss). Safe to run on every deploy. Required so a new
-# model added in this commit (e.g. font_cache) lands in prod automatically.
-section "Syncing Prisma schema (db push)"
+# ── 2.4c Apply manual SQL migrations ─────────────────────────────────────
+# We don't run \`prisma db push\` here because Prisma's introspection has
+# diverged from production for several legacy tables (PK changes on
+# users/sessions/jwks/user_quotas, the old alembic_version from the
+# Python era…). Pushing would either prompt for --accept-data-loss and
+# silently break auth, or refuse to run.
+#
+# Instead we apply hand-written, idempotent CREATE TABLE IF NOT EXISTS
+# scripts from apps/web/prisma/manual-migrations/. Each file is safe to
+# re-run on every deploy. Order is alphabetical (00X_ prefix).
+section "Applying manual SQL migrations"
 if [ -f "\$VPS_PATH/.env" ]; then
   set -a
   # shellcheck disable=SC1091
-  source "\$VPS_PATH/.env"
+  sudo cat "\$VPS_PATH/.env" > /tmp/gigapdf-env.\$\$ && source /tmp/gigapdf-env.\$\$ && rm -f /tmp/gigapdf-env.\$\$
   set +a
 fi
-if [ -n "\${DATABASE_URL:-}" ]; then
-  ( cd "\$VPS_PATH/apps/web" && pnpm exec prisma db push --skip-generate 2>&1 | tail -5 ) || \\
-    echo "  [warn] prisma db push failed — new tables/columns may be missing in prod"
+MIG_DIR="\$VPS_PATH/apps/web/prisma/manual-migrations"
+if [ -d "\$MIG_DIR" ] && [ -n "\${DATABASE_URL:-}" ]; then
+  for sql in "\$MIG_DIR"/*.sql; do
+    [ -f "\$sql" ] || continue
+    echo "  applying \$(basename "\$sql")"
+    psql "\$DATABASE_URL" -v ON_ERROR_STOP=1 -f "\$sql" 2>&1 | tail -3 || \\
+      echo "  [warn] \$(basename "\$sql") failed — check schema drift"
+  done
 else
-  echo "  [warn] DATABASE_URL not set, skipping prisma db push"
+  echo "  no migrations dir or DATABASE_URL not set, skipping"
 fi
 
 # ── 2.5 Build all workspace packages (force — no cache) ──────────────────
