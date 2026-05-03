@@ -88,6 +88,14 @@ const nextConfig: NextConfig = {
       "../../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
       "../../node_modules/pdfjs-dist/legacy/build/pdf.mjs",
     ],
+    // Bundled OFL fallback fonts for apply-elements text bake. Without this
+    // include, the .ttf files live in packages/pdf-engine/fonts/ at dev time
+    // but never make it into the standalone bundle, and resolveFont() falls
+    // back to StandardFonts.Helvetica (which has none of the OCRB / Iliad /
+    // Gotham metrics the user sees in the source PDF).
+    "/api/pdf/apply-elements": [
+      "../../packages/pdf-engine/fonts/*.ttf",
+    ],
   },
   // Disable static generation for error pages
   experimental: {

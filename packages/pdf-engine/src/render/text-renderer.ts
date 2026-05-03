@@ -6,6 +6,11 @@ import type { TextElement, Bounds } from '@giga-pdf/types';
 import { hexToRgb } from '../utils/color';
 import { webToPdf } from '../utils/coordinates';
 import { resolveStandardFont, pickFallbackStandardFont } from '../utils/font-map';
+import {
+  loadBundledFontBytes,
+  pickBundledFamily,
+  pickBundledStyle,
+} from '../utils/bundled-fonts';
 import { engineLogger } from '../utils/logger';
 import { PDFPageOutOfRangeError } from '../errors';
 
@@ -251,30 +256,62 @@ async function resolveFont(
     return handle._pdfDoc.embedFont(standardFont);
   }
 
-  // Stratégie 4 : fallback intelligent (heuristic) — pour OCRB / Courier-like
-  // sources on évite le fallback Helvetica qui change la largeur des glyphes
-  // et crée un texte dupliqué visuellement (l'ancien glyphe dépasse à droite
-  // du nouveau plus étroit, mask vs new-text width mismatch). Courier garde
-  // la métrique monospace, ce qui aligne suffisamment pour que le mask couvre
-  // l'ancien glyphe et que le texte ne déborde pas. Pour les serif on tape
-  // Times, sinon Helvetica.
-  const fallback = pickFallbackStandardFont(
-    originalFont ?? fontFamily,
+  // Stratégie 4 : fallback bundled OFL (Liberation / CourierPrime).
+  //
+  // We ship four real TTF families with the engine — sans (Liberation Sans
+  // ≈ Arial), serif (Liberation Serif ≈ Times), mono (Liberation Mono ≈
+  // Courier New) and ocr (Courier Prime, closest free OCR-style font).
+  // pdf-lib + fontkit can embed those reliably (TrueType is fontkit's native
+  // input), so the bake gets a font with the right metric family AND with
+  // full Latin Unicode coverage. This is dramatically closer to OCRB / Calibri
+  // / Gotham than the StandardFonts.Helvetica fallback ever was.
+  //
+  // We try bundled embedding first. If reading the bundled file or the
+  // embedFont call fails for any reason (read-only fs, corrupted file, etc.),
+  // we fall back to the metric-picked StandardFont so the bake never crashes
+  // mid-batch.
+  const bundledFamily = pickBundledFamily(originalFont ?? fontFamily);
+  const bundledStyle = pickBundledStyle(
     element.style.fontWeight,
     element.style.fontStyle,
+    originalFont ?? fontFamily,
   );
-  engineLogger.warn(
-    'Police custom non embedable, fallback heuristique vers une StandardFont',
-    {
+  const bundledKey = `${handle.id}::bundled::${bundledFamily}::${bundledStyle}`;
+  const cachedBundled = embeddedFontCache.get(bundledKey);
+  if (cachedBundled) return cachedBundled;
+  try {
+    const bytes = loadBundledFontBytes(bundledFamily, bundledStyle);
+    const embedded = await handle._pdfDoc.embedFont(bytes, { subset: true });
+    embeddedFontCache.set(bundledKey, embedded);
+    engineLogger.info('Police custom remplacée par bundled OFL', {
       fontFamily,
       originalFont: originalFont ?? undefined,
-      fallback,
+      bundledFamily,
+      bundledStyle,
       documentId: handle.id,
-      hint: 'fontkit ne supporte pas le format de cette police (souvent Type1). Heuristic monospace/serif/sans-serif appliquée pour garder une métrique cohérente.',
-    },
-  );
-
-  return handle._pdfDoc.embedFont(fallback);
+    });
+    return embedded;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const fallback = pickFallbackStandardFont(
+      originalFont ?? fontFamily,
+      element.style.fontWeight,
+      element.style.fontStyle,
+    );
+    engineLogger.warn(
+      'Bundled OFL non disponible, dernier recours StandardFont',
+      {
+        fontFamily,
+        originalFont: originalFont ?? undefined,
+        fallback,
+        bundledFamily,
+        bundledStyle,
+        error: message,
+        documentId: handle.id,
+      },
+    );
+    return handle._pdfDoc.embedFont(fallback);
+  }
 }
 
 // ─── API Publique ─────────────────────────────────────────────────────────────
@@ -298,6 +335,15 @@ export async function addText(
   const font = await resolveFont(handle, element, fontBytes);
   const color = hexToRgb(element.style.color);
 
+  // Intentionally NO maxWidth: the bounds.width recorded for parsed text
+  // matches the original glyph run, but as soon as the user types extra
+  // characters the new content is wider. If we constrained drawText to the
+  // original width pdf-lib would WRAP the new content, splitting "LICHA 2"
+  // into "LICHA " on one line and "2" on the next — which is exactly the
+  // missing-text symptom seen on the Free invoice repro test (pdfjs found
+  // the trailing "2" on a separate line and the visible bake looked like
+  // just "LICHA"). For long edits the user can resize the IText overlay
+  // afterwards if needed; for typical inline edits the natural width wins.
   page.drawText(element.content, {
     x: pdfRect.x,
     y: pdfRect.y + pdfRect.height - element.style.fontSize,
@@ -306,7 +352,6 @@ export async function addText(
     color,
     opacity: element.style.opacity,
     rotate: degrees(element.transform.rotation),
-    maxWidth: pdfRect.width,
     lineHeight: element.style.fontSize * element.style.lineHeight,
   });
 

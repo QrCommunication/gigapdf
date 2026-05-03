@@ -311,29 +311,17 @@ export function EditorCanvas({
         const data = (obj as FabricObjectWithData).data;
         const fontSize = textObj.fontSize || 16;
 
-        // Critical: parsed text overlays use originY='bottom' with a small
-        // top += descender offset (~22% of fontSize) so that Fabric's
-        // baseline aligns with the PDF baseline. When we round-trip the
-        // overlay back to an Element for apply-elements to bake, we MUST
-        // undo that offset — otherwise updateText() in pdf-engine writes
-        // the new text one descender below the original glyph and the
-        // visible position drifts every time the user edits.
+        // Inverse of the renderer transform: Fabric IText was created with
+        //   top = bounds.y + fontSize + descenderOffset, originY = 'bottom'
+        // so the PDF baseline = top - descenderOffset = bounds.y + fontSize.
+        // To recover the original bounds.y (= top of glyph in browser coords)
+        // we therefore subtract (fontSize + descenderOffset) from obj.top.
+        // Storing bounds.y as the baseline (the previous behaviour) put the
+        // mask 1 fontSize below the glyph — confirmed via mutool show on a
+        // baked v32 of the Free invoice — and produced the LICHALICHA2 doublon.
         const isOriginYBottom = textObj.originY === "bottom";
         const descenderOffset = isOriginYBottom ? fontSize * 0.22 : 0;
-        const baselineY = (obj.top || 0) - descenderOffset;
-        // pdf-engine uses bounds in browser top-left convention (Y down,
-        // top of bbox at bounds.y, height extending downward). The mask
-        // rectangle and addText() both rely on this. Storing the baseline
-        // in bounds.y instead of the glyph top puts the mask exactly one
-        // fontSize below the original glyph: confirmed via mutool show on
-        // a baked v32 — the mask's PDF y was 676 while the original text
-        // baseline was at PDF y=686, so the rectangle covered the empty
-        // strip below the line and never hid the original glyph (visible
-        // doublon "LICHALICHA2"). Translating bounds.y up by one fontSize
-        // (≈ glyph top, since cap height ≈ fontSize for the OCRB / Helvetica
-        // metrics used in invoices) puts the mask back over the glyph and
-        // the new text exactly on the original baseline.
-        const topOfGlyphY = baselineY - fontSize;
+        const topOfGlyphY = (obj.top || 0) - descenderOffset - fontSize;
 
         // Preserve the parser-extracted PDF font name so the bake side
         // (apply-elements -> updateText -> font lookup) can re-use the
@@ -1426,25 +1414,20 @@ export function EditorCanvas({
           const textElement = element;
           // Resolved colour (kept on .data so edit mode can restore it)
           const textColour = textElement.style.color || "#000000";
-          // pdf-engine text-extractor stores bounds.{x,y} at the PDF
-          // BASELINE START (vpE/vpF post viewport·item.transform), not at
-          // the top-left of the glyph bbox. Using originY='top' here would
-          // place the IText one full glyph height BELOW where the native
-          // PDF text actually renders — clicking the visible title selects
-          // nothing, the editable hit-target sits underneath. Switching to
-          // originY='bottom' aligns the IText bottom edge with (left, top).
-          //
-          // Fabric's bbox bottom = baseline + descender, so to put the
-          // Fabric baseline at (left, top) (= the PDF baseline) we need
-          // to shift top down by the font's descender (~22% of fontSize for
-          // most Latin fonts). Without this shift the overlay sits a few
-          // px above the native rendering — visible as a "léger décalage
-          // vers le haut" when edit mode kicks the masking band on.
+          // pdf-engine text-extractor stores bounds.{x,y} at the TOP-LEFT
+          // of the glyph bbox (= baseline - fontSize approximated as ascender).
+          // For Fabric's baseline to land on the PDF baseline (= bounds.y +
+          // fontSize), use originY='bottom' with top = bounds.y + fontSize +
+          // descender. Without the descender (~22% of fontSize), Fabric
+          // would put its bbox bottom (= baseline + descender) at the PDF
+          // baseline, overshooting by descender — visible as a "léger
+          // décalage vers le bas" of the editable overlay.
           const _fontSize = textElement.style.fontSize ?? 12;
           const _descenderOffset = _fontSize * 0.22;
+          const _baselineY = textElement.bounds.y + _fontSize;
           const textObj = new IText(textElement.content || "", {
             ...baseOptions,
-            top: textElement.bounds.y + _descenderOffset,
+            top: _baselineY + _descenderOffset,
             originY: "bottom" as const,
             width: textElement.bounds.width,
             fontSize: _fontSize,
