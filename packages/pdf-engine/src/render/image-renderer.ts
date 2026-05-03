@@ -58,12 +58,16 @@ export async function addImage(
 ): Promise<void> {
   const page = getPage(handle, pageNumber);
   const pageH = page.getHeight();
+  const pageW = page.getWidth();
+  const rotation = page.getRotation().angle as 0 | 90 | 180 | 270;
   const pdfRect = webToPdf(
     element.bounds.x,
     element.bounds.y,
     element.bounds.width,
     element.bounds.height,
     pageH,
+    pageW,
+    rotation,
   );
 
   let format = detectImageFormat(imageData);
@@ -121,7 +125,9 @@ export async function updateImage(
 ): Promise<void> {
   const page = getPage(handle, pageNumber);
   const pageH = page.getHeight();
-  const oldPdf = webToPdf(oldBounds.x, oldBounds.y, oldBounds.width, oldBounds.height, pageH);
+  const pageW = page.getWidth();
+  const rotation = page.getRotation().angle as 0 | 90 | 180 | 270;
+  const oldPdf = webToPdf(oldBounds.x, oldBounds.y, oldBounds.width, oldBounds.height, pageH, pageW, rotation);
 
   // Use the element's recorded background colour for erasure.  If the image sits
   // on a red banner, a white rectangle would leave an ugly patch.  The client
