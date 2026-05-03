@@ -471,11 +471,68 @@ export function EditorCanvas({
   // Type de modification pour distinguer position/contenu/style
   type ModificationType = 'position' | 'content' | 'style';
 
+  // Sample the actual paper / band colour beneath a text overlay, so that
+  // when the user enters edit mode we can mask the underlying PDF glyph
+  // with a SOLID matching the real background (e.g. the red banner under
+  // "Somme à payer le 04 Juin 2025"), instead of a hardcoded white block
+  // that would cover the design. Reads pixels just OUTSIDE the bbox on
+  // all four sides so the glyph itself never contaminates the sample.
+  // Returns rgb() string, or null if the canvas is unreadable (cross-
+  // origin tainted, scaled to 0, etc.).
+  const sampleBackgroundUnder = useCallback((obj: FabricObject): string | null => {
+    const o = obj as unknown as {
+      left?: number;
+      top?: number;
+      width?: number;
+      height?: number;
+      originY?: string;
+      canvas?: { lowerCanvasEl?: HTMLCanvasElement; getZoom?: () => number };
+    };
+    const lower = o.canvas?.lowerCanvasEl;
+    if (!lower) return null;
+    const ctx = lower.getContext("2d");
+    if (!ctx) return null;
+    const zoom = o.canvas?.getZoom?.() ?? 1;
+    const left = o.left ?? 0;
+    const top = o.top ?? 0;
+    const width = o.width ?? 0;
+    const height = o.height ?? 0;
+    // For text we use originY='bottom' (top = baseline). Translate to a
+    // top-left bbox so all four "outside" probes land in the right places.
+    const topLeftY = o.originY === "bottom" ? top - height : top;
+    const margin = 4;
+    const probes: Array<[number, number]> = [
+      [left + width / 2, topLeftY - margin],
+      [left + width / 2, topLeftY + height + margin],
+      [left - margin, topLeftY + height / 2],
+      [left + width + margin, topLeftY + height / 2],
+    ];
+    const counts = new Map<string, number>();
+    for (const [cx, cy] of probes) {
+      const px = Math.round(cx * zoom);
+      const py = Math.round(cy * zoom);
+      if (px < 0 || py < 0 || px >= lower.width || py >= lower.height) continue;
+      let pixel: Uint8ClampedArray;
+      try {
+        pixel = ctx.getImageData(px, py, 1, 1).data;
+      } catch {
+        return null; // tainted canvas (CORS) — cannot read
+      }
+      const key = `${pixel[0]},${pixel[1]},${pixel[2]}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    if (counts.size === 0) return null;
+    const [winner] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]!;
+    const [r, g, b] = winner.split(",").map((n) => Number(n));
+    return `rgb(${r}, ${g}, ${b})`;
+  }, []);
+
   // Handler appele quand un texte entre en mode edition.
   // 1:1 fidelity mode: text overlay is invisible by default (PDF native text
   // shows through). On edit-enter we must:
-  //   - cover the underlying PDF glyph with a white rect so it doesn't
-  //     show through the editable text we're about to paint
+  //   - cover the underlying PDF glyph with a solid matching the REAL
+  //     background colour (sampled from the rendered PDF bitmap) so the
+  //     mask blends in instead of slapping a white box over the design
   //   - restore the real fill colour so the user sees what they're typing
   // On edit-exit we revert both.
   const handleTextEditingEntered = useCallback((e: { target?: FabricObject }) => {
@@ -492,10 +549,19 @@ export function EditorCanvas({
       }
 
       const realFill = obj.data?.originalFill || "#000000";
-      const realBg = obj.data?.originalBgColor || "#ffffff";
-      // Mask the PDF native glyph behind us with a solid background equal to
-      // the surrounding paper colour (or the parsed text background). This
-      // prevents the PDF text from ghosting through during edit.
+      // Order of preference for the masking colour:
+      //   1. the parser-extracted background (style.backgroundColor) if
+      //      present — most accurate when the PDF has an explicit text bg
+      //   2. the live pixel sample around the glyph (handles red banners,
+      //      coloured cards, gradients) — works for the vast majority of
+      //      real-world PDFs
+      //   3. fall back to white only if the canvas is unreadable
+      const parsedBg = obj.data?.originalBgColor;
+      const sampledBg = sampleBackgroundUnder(obj as FabricObject);
+      const realBg =
+        (parsedBg && parsedBg !== "" && parsedBg !== "transparent" && parsedBg)
+        || sampledBg
+        || "#ffffff";
       (obj as FabricObject & { set: (...args: unknown[]) => void }).set({
         fill: realFill,
         textBackgroundColor: realBg,
@@ -504,7 +570,7 @@ export function EditorCanvas({
       const canvas = (obj as FabricObject & { canvas?: { requestRenderAll?: () => void } }).canvas;
       canvas?.requestRenderAll?.();
     }
-  }, []);
+  }, [sampleBackgroundUnder]);
 
   // Handler appele quand le texte change en temps reel
   const handleTextChanged = useCallback((e: { target?: FabricObject }) => {
@@ -530,11 +596,19 @@ export function EditorCanvas({
 
     const set = (obj as FabricObject & { set: (...args: unknown[]) => void }).set;
     if (contentChanged) {
-      // User edited the text. Keep it visible with white-out background so
-      // the stale PDF glyph underneath stays hidden.
+      // User edited the text. Keep it visible with a SOLID background that
+      // matches the real PDF colour beneath (sampled live), so the stale
+      // native glyph stays hidden without slapping a white box on coloured
+      // banners. Same priority order as edit-enter.
+      const parsedBg = obj.data?.originalBgColor;
+      const sampledBg = sampleBackgroundUnder(obj as FabricObject);
+      const matchingBg =
+        (parsedBg && parsedBg !== "" && parsedBg !== "transparent" && parsedBg)
+        || sampledBg
+        || "#ffffff";
       set.call(obj, {
         fill: obj.data?.originalFill || "#000000",
-        textBackgroundColor: obj.data?.originalBgColor || "#ffffff",
+        textBackgroundColor: matchingBg,
         borderColor: "rgba(0, 100, 200, 0.75)",
       });
     } else {
@@ -550,7 +624,7 @@ export function EditorCanvas({
     }
     const canvas = (obj as FabricObject & { canvas?: { requestRenderAll?: () => void } }).canvas;
     canvas?.requestRenderAll?.();
-  }, []);
+  }, [sampleBackgroundUnder]);
 
   const handleObjectModified = useCallback(
     (e: { target?: FabricObject }) => {
@@ -1172,19 +1246,28 @@ export function EditorCanvas({
           const textElement = element;
           // Resolved colour (kept on .data so edit mode can restore it)
           const textColour = textElement.style.color || "#000000";
+          // pdf-engine text-extractor stores bounds.{x,y} at the PDF
+          // BASELINE START (vpE/vpF post viewport·item.transform), not at
+          // the top-left of the glyph bbox. Using originY='top' here would
+          // place the IText one full glyph height BELOW where the native
+          // PDF text actually renders — clicking the visible title selects
+          // nothing, the editable hit-target sits underneath. Switching to
+          // originY='bottom' aligns the IText bottom edge with (left, top).
+          //
+          // Fabric's bbox bottom = baseline + descender, so to put the
+          // Fabric baseline at (left, top) (= the PDF baseline) we need
+          // to shift top down by the font's descender (~22% of fontSize for
+          // most Latin fonts). Without this shift the overlay sits a few
+          // px above the native rendering — visible as a "léger décalage
+          // vers le haut" when edit mode kicks the masking band on.
+          const _fontSize = textElement.style.fontSize ?? 12;
+          const _descenderOffset = _fontSize * 0.22;
           const textObj = new IText(textElement.content || "", {
             ...baseOptions,
-            // pdf-engine text-extractor stores bounds.{x,y} at the PDF
-            // BASELINE START (vpE/vpF post viewport·item.transform), not at
-            // the top-left of the glyph bbox. Using originY='top' here would
-            // place the IText one full glyph height BELOW where the native
-            // PDF text actually renders — clicking the visible title selects
-            // nothing, the editable hit-target sits underneath. Switching to
-            // originY='bottom' aligns the IText baseline with (left, top) so
-            // the overlay sits exactly on top of the native rendering.
+            top: textElement.bounds.y + _descenderOffset,
             originY: "bottom" as const,
             width: textElement.bounds.width,
-            fontSize: textElement.style.fontSize ?? 12,
+            fontSize: _fontSize,
             fontFamily: (() => {
               const orig = textElement.style.originalFont;
               if (orig && getFontFaceName) {
