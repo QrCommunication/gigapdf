@@ -1,5 +1,5 @@
 import { PDFEngineError } from '../errors';
-import { acquireBrowser } from './pool';
+import { acquirePage } from './pool';
 
 export interface ConvertOptions {
   format?: 'A4' | 'Letter' | 'Legal' | 'Tabloid';
@@ -45,11 +45,8 @@ function toPlaywrightPdfOptions(options: ConvertOptions = {}) {
 }
 
 export async function htmlToPDF(html: string, options?: ConvertOptions): Promise<Buffer> {
-  const { browser, release } = await acquireBrowser();
+  const { page, release } = await acquirePage();
   try {
-    const context = await browser.newContext();
-    const page = await context.newPage();
-
     await page.setContent(html, {
       waitUntil: options?.waitForNetworkIdle !== false ? 'networkidle' : 'load',
       timeout: options?.timeout ?? 30000,
@@ -60,11 +57,9 @@ export async function htmlToPDF(html: string, options?: ConvertOptions): Promise
     }
 
     const pdfBuffer = await page.pdf(toPlaywrightPdfOptions(options));
-
-    await context.close();
     return Buffer.from(pdfBuffer);
   } finally {
-    release();
+    await release();
   }
 }
 
@@ -77,11 +72,8 @@ export async function urlToPDF(url: string, options?: ConvertOptions): Promise<B
     );
   }
 
-  const { browser, release } = await acquireBrowser();
+  const { page, release } = await acquirePage();
   try {
-    const context = await browser.newContext();
-    const page = await context.newPage();
-
     if (options?.headers) {
       await page.setExtraHTTPHeaders(options.headers);
     }
@@ -103,10 +95,9 @@ export async function urlToPDF(url: string, options?: ConvertOptions): Promise<B
     }
 
     const pdfBuffer = await page.pdf(toPlaywrightPdfOptions(options));
-    await context.close();
     return Buffer.from(pdfBuffer);
   } finally {
-    release();
+    await release();
   }
 }
 
@@ -137,11 +128,8 @@ export async function urlToPDFSafe(url: string, options?: UrlToPDFSafeOptions): 
     );
   }
 
-  const { browser, release } = await acquireBrowser();
+  const { page, release } = await acquirePage();
   try {
-    const context = await browser.newContext();
-    const page = await context.newPage();
-
     // Request interception: block any request (including mid-flight redirects)
     // that the caller's `shouldBlockRequest` predicate identifies as disallowed.
     if (options?.shouldBlockRequest) {
@@ -176,9 +164,8 @@ export async function urlToPDFSafe(url: string, options?: UrlToPDFSafeOptions): 
     }
 
     const pdfBuffer = await page.pdf(toPlaywrightPdfOptions(options));
-    await context.close();
     return Buffer.from(pdfBuffer);
   } finally {
-    release();
+    await release();
   }
 }

@@ -3,7 +3,9 @@ import type { PDFDocumentHandle } from '../engine/document-handle';
 import { markDirty } from '../engine/document-handle';
 import type { ImageElement, Bounds } from '@giga-pdf/types';
 import { webToPdf } from '../utils/coordinates';
+import { hexToRgb } from '../utils/color';
 import { PDFPageOutOfRangeError } from '../errors';
+import sharp from 'sharp';
 
 function getPage(handle: PDFDocumentHandle, pageNumber: number) {
   if (pageNumber < 1 || pageNumber > handle.pageCount) {
@@ -64,19 +66,33 @@ export async function addImage(
     pageH,
   );
 
-  const format = detectImageFormat(imageData);
+  let format = detectImageFormat(imageData);
 
-  // pdf-lib only supports PNG and JPEG natively. Falling through to embedJpg
-  // with non-JPEG bytes would throw a misleading error deep inside pdf-lib.
-  // Surface a clear error so the caller can warn the user and we don't crash
-  // the whole apply-elements batch with an opaque 500.
+  // Auto-convert modern formats (WebP, AVIF, GIF) to PNG so pdf-lib can embed them.
+  // sharp is already a dependency; this avoids forcing the caller to pre-convert.
+  if (format && format !== 'png' && format !== 'jpeg') {
+    try {
+      imageData = await sharp(imageData).png().toBuffer();
+      format = 'png';
+    } catch (err) {
+      const headerHex = Array.from(imageData.slice(0, 8))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join(' ');
+      throw new Error(
+        `addImage: failed to convert ${format} to PNG (header=${headerHex}): ${err instanceof Error ? err.message : String(err)}. ` +
+        `Please provide a PNG or JPEG image.`,
+      );
+    }
+  }
+
+  // pdf-lib only supports PNG and JPEG natively.
   if (format !== 'png' && format !== 'jpeg') {
     const headerHex = Array.from(imageData.slice(0, 8))
       .map((b) => b.toString(16).padStart(2, '0'))
       .join(' ');
     throw new Error(
       `addImage: unsupported image format (detected=${format ?? 'unknown'}, header=${headerHex}). ` +
-      `pdf-lib supports only PNG and JPEG; convert ${format ?? 'the source'} to PNG before embedding.`,
+      `pdf-lib supports only PNG and JPEG.`,
     );
   }
 
@@ -107,12 +123,25 @@ export async function updateImage(
   const pageH = page.getHeight();
   const oldPdf = webToPdf(oldBounds.x, oldBounds.y, oldBounds.width, oldBounds.height, pageH);
 
+  // Use the element's recorded background colour for erasure.  If the image sits
+  // on a red banner, a white rectangle would leave an ugly patch.  The client
+  // samples the rendered bitmap and forwards the sampled colour via
+  // element.style.backgroundColor — fall back to white only when unavailable.
+  let clearColor = rgb(1, 1, 1);
+  if (element.style.backgroundColor) {
+    try {
+      clearColor = hexToRgb(element.style.backgroundColor);
+    } catch {
+      // keep white if the forwarded colour is malformed
+    }
+  }
+
   page.drawRectangle({
     x: oldPdf.x,
     y: oldPdf.y,
     width: oldPdf.width,
     height: oldPdf.height,
-    color: rgb(1, 1, 1),
+    color: clearColor,
     opacity: 1,
   });
 
