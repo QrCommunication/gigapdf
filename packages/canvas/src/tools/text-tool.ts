@@ -69,28 +69,72 @@ export class TextTool {
   private onMouseDown = (e: fabric.IEvent): void => {
     if (!this.isActive) return;
 
+    // Check if we clicked on an existing text object to avoid creating a new one on top
+    if (e.target && (e.target instanceof fabric.Textbox || e.target instanceof fabric.Text)) {
+      this.editText(e.target);
+      return;
+    }
+
     const pointer = this.canvas.getPointer(e.e);
-    this.createTextBox(pointer.x, pointer.y);
+    
+    // Find closest text object to inherit style
+    const objects = this.canvas.getObjects().filter(o => o instanceof fabric.Textbox || o instanceof fabric.Text);
+    let closestObject = null;
+    let minDistance = 100; // Look within a 100px radius
+    
+    for (const obj of objects) {
+      if (obj.left === undefined || obj.top === undefined) continue;
+      const dx = obj.left - pointer.x;
+      const dy = obj.top - pointer.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestObject = obj;
+      }
+    }
+
+    this.createTextBox(pointer.x, pointer.y, "", closestObject);
   };
 
   /**
    * Create text box at position
    */
-  createTextBox(x: number, y: number, text: string = ""): PDFText {
+  createTextBox(x: number, y: number, text: string = "", referenceObject?: fabric.Object | null): PDFText {
     const defaultStyle = this.options.defaultStyle || {};
+    
+    let fontSize = defaultStyle.fontSize || 16;
+    let fontFamily = defaultStyle.fontFamily || "Arial";
+    let fontWeight = defaultStyle.fontWeight || "normal";
+    let fontStyle = defaultStyle.fontStyle || "normal";
+    let fill = defaultStyle.color || "#000000";
+    let textAlign = defaultStyle.textAlign || "left";
+    let lineHeight = defaultStyle.lineHeight || 1.16;
+    let charSpacing = defaultStyle.letterSpacing || 0;
+
+    if (referenceObject && (referenceObject instanceof fabric.Textbox || referenceObject instanceof fabric.Text)) {
+      fontSize = referenceObject.fontSize || fontSize;
+      fontFamily = referenceObject.fontFamily || fontFamily;
+      fontWeight = referenceObject.fontWeight || fontWeight;
+      fontStyle = referenceObject.fontStyle || fontStyle;
+      fill = (referenceObject.fill as string) || fill;
+      textAlign = referenceObject.textAlign || textAlign;
+      lineHeight = referenceObject.lineHeight || lineHeight;
+      charSpacing = referenceObject.charSpacing || charSpacing;
+    }
 
     const textBox = new PDFText(text, {
       left: x,
       top: y,
       width: 200,
-      fontSize: defaultStyle.fontSize || 16,
-      fontFamily: defaultStyle.fontFamily || "Arial",
-      fontWeight: defaultStyle.fontWeight || "normal",
-      fontStyle: defaultStyle.fontStyle || "normal",
-      fill: defaultStyle.color || "#000000",
-      textAlign: defaultStyle.textAlign || "left",
-      lineHeight: defaultStyle.lineHeight || 1.16,
-      charSpacing: defaultStyle.letterSpacing || 0,
+      fontSize,
+      fontFamily,
+      fontWeight,
+      fontStyle,
+      fill,
+      textAlign,
+      lineHeight,
+      charSpacing,
+      lockUniScaling: true, // Prevent non-uniform scaling which breaks PDF text export
     });
 
     this.canvas.add(textBox);
@@ -125,6 +169,7 @@ export class TextTool {
       lineHeight: mergedStyle.lineHeight || 1.16,
       charSpacing: mergedStyle.letterSpacing || 0,
       opacity: mergedStyle.opacity || 1,
+      lockUniScaling: true, // Prevent non-uniform scaling
     });
 
     this.canvas.add(textBox);

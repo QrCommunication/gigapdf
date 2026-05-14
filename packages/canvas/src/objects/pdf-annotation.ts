@@ -57,6 +57,7 @@ export class PDFAnnotation extends fabric.Group {
           {
             stroke: element.style.color,
             strokeWidth: 2,
+            strokeUniform: true,
             opacity: element.style.opacity,
             selectable: false,
           }
@@ -76,6 +77,7 @@ export class PDFAnnotation extends fabric.Group {
           {
             stroke: element.style.color,
             strokeWidth: 2,
+            strokeUniform: true,
             opacity: element.style.opacity,
             selectable: false,
           }
@@ -90,6 +92,7 @@ export class PDFAnnotation extends fabric.Group {
         const squiggly = new fabric.Path(path, {
           stroke: element.style.color,
           strokeWidth: 1,
+          strokeUniform: true,
           fill: undefined,
           opacity: element.style.opacity,
           selectable: false,
@@ -125,6 +128,7 @@ export class PDFAnnotation extends fabric.Group {
           fill: "#ffffff",
           stroke: element.style.color,
           strokeWidth: 1,
+          strokeUniform: true,
           opacity: element.style.opacity,
           selectable: false,
         });
@@ -147,6 +151,7 @@ export class PDFAnnotation extends fabric.Group {
           fill: "transparent",
           stroke: element.style.color,
           strokeWidth: 2,
+          strokeUniform: true,
           opacity: element.style.opacity,
           selectable: false,
         });
@@ -171,6 +176,7 @@ export class PDFAnnotation extends fabric.Group {
           fill: "transparent",
           stroke: "#0000FF",
           strokeWidth: 1,
+          strokeUniform: true,
           strokeDashArray: [5, 5],
           opacity: 0.5,
           selectable: false,

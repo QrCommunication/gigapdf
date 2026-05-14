@@ -63,6 +63,19 @@ docker compose up -d
 > `apps/web/.env.local` for LCEN compliance. The web app refuses to start in
 > production mode without them. See `apps/web/.env.example`.
 
+### System Dependencies
+
+If you are running the project directly on a host (outside of Docker), ensure the following system packages are installed for document conversion and rasterization to work:
+
+- **`libreoffice-core`** (or `libreoffice`): Required for DOCX, PPTX ↔ PDF conversions.
+- **`poppler-utils`**: Required for PDF to JPG/PNG conversions (provides `pdftocairo`).
+
+On Ubuntu/Debian:
+```bash
+sudo apt-get update
+sudo apt-get install libreoffice-core poppler-utils
+```
+
 ## Cloud vs Self-hosting
 
 | | Cloud (giga-pdf.com) | Self-hosted |

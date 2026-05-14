@@ -578,6 +578,25 @@ function parseStyleColorToRgb(
   return null;
 }
 
+/**
+ * Tentative de suppression du texte directement dans le flux (Content Stream)
+ * pour éviter de peindre un rectangle blanc destructeur.
+ * Note: L'implémentation complète nécessite l'analyse de la matrice de transformation (Tm, cm).
+ */
+async function removeTextFromStream(page: any, bounds: { x: number, y: number, width: number, height: number }): Promise<boolean> {
+  try {
+    // Boilerplate for future complete stream editing
+    // const { PDFRawStream, decodePDFRawStream } = require('pdf-lib');
+    // const contents = page.node.Contents();
+    // if (!contents) return false;
+    // ... logic to parse operators and strip Tj/TJ within bounds ...
+    // return true if successful
+    return false; // Currently false, fallback to drawRectangle
+  } catch (e) {
+    return false;
+  }
+}
+
 export async function updateText(
   handle: PDFDocumentHandle,
   pageNumber: number,
@@ -589,23 +608,25 @@ export async function updateText(
   const pageH = page.getHeight();
   const oldPdf = webToPdf(oldBounds.x, oldBounds.y, oldBounds.width, oldBounds.height, pageH);
 
-  // The clear rectangle MUST match the real PDF background colour at the
-  // glyph location, otherwise editing text on a coloured banner (red
-  // "Somme à payer", blue card, etc.) leaves a visible white box. The
-  // client samples the rendered bitmap and forwards the result via
-  // element.style.backgroundColor — fall back to white only when the
-  // client could not read the canvas.
-  const clearRgb =
-    parseStyleColorToRgb(element.style.backgroundColor) ?? { r: 1, g: 1, b: 1 };
+  // Tentative de suppression propre via le Content Stream
+  const streamRedacted = await removeTextFromStream(page, oldPdf);
 
-  page.drawRectangle({
-    x: oldPdf.x,
-    y: oldPdf.y,
-    width: oldPdf.width,
-    height: oldPdf.height,
-    color: rgb(clearRgb.r, clearRgb.g, clearRgb.b),
-    opacity: 1,
-  });
+  if (!streamRedacted) {
+    // The clear rectangle MUST match the real PDF background colour at the
+    // glyph location, otherwise editing text on a coloured banner (red
+    // "Somme à payer", blue card, etc.) leaves a visible white box.
+    const clearRgb =
+      parseStyleColorToRgb(element.style.backgroundColor) ?? { r: 1, g: 1, b: 1 };
+
+    page.drawRectangle({
+      x: oldPdf.x,
+      y: oldPdf.y,
+      width: oldPdf.width,
+      height: oldPdf.height,
+      color: rgb(clearRgb.r, clearRgb.g, clearRgb.b),
+      opacity: 1,
+    });
+  }
 
   return addText(handle, pageNumber, element, fontBytes);
 }

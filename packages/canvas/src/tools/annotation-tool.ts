@@ -122,6 +122,7 @@ export class AnnotationTool {
         return new fabric.Line([x, y, x + width, y], {
           stroke: this.options.color,
           strokeWidth: 2,
+          strokeUniform: true,
           opacity: this.options.opacity,
           selectable: true,
         });
@@ -130,6 +131,7 @@ export class AnnotationTool {
         return new fabric.Line([x, y, x + width, y], {
           stroke: this.options.color,
           strokeWidth: 2,
+          strokeUniform: true,
           opacity: this.options.opacity,
           selectable: true,
         });
@@ -213,6 +215,7 @@ export class AnnotationTool {
       fill: "#FFFFFF",
       stroke: this.options.color,
       strokeWidth: 1,
+      strokeUniform: true,
       left: 0,
       top: 0,
     });
@@ -242,6 +245,7 @@ export class AnnotationTool {
       fill: "transparent",
       stroke: this.options.color,
       strokeWidth: 2,
+      strokeUniform: true,
       left: 0,
       top: 0,
     });

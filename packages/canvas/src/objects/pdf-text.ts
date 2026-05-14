@@ -23,6 +23,7 @@ export class PDFText extends fabric.Textbox {
       ...options,
       editable: true,
       splitByGrapheme: true,
+      lockUniScaling: true,
     });
 
     this.elementId = options.elementId;
@@ -57,6 +58,7 @@ export class PDFText extends fabric.Textbox {
       lockRotation: element.locked,
       lockScalingX: element.locked,
       lockScalingY: element.locked,
+      lockUniScaling: true,
     });
   }
 

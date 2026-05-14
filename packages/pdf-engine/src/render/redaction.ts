@@ -12,23 +12,40 @@ function getPage(handle: PDFDocumentHandle, pageNumber: number) {
   return handle._pdfDoc.getPage(pageNumber - 1);
 }
 
-export function deleteElementArea(
+/**
+ * Tentative de suppression du texte directement dans le flux (Content Stream)
+ * pour éviter de peindre un rectangle blanc destructeur.
+ * Note: L'implémentation complète nécessite l'analyse de la matrice de transformation (Tm, cm).
+ */
+async function removeTextFromStream(page: any, bounds: { x: number, y: number, width: number, height: number }): Promise<boolean> {
+  try {
+    return false; // Currently false, fallback to drawRectangle
+  } catch (e) {
+    return false;
+  }
+}
+
+export async function deleteElementArea(
   handle: PDFDocumentHandle,
   pageNumber: number,
   bounds: Bounds,
-): void {
+): Promise<void> {
   const page = getPage(handle, pageNumber);
   const pageH = page.getHeight();
   const pdfRect = webToPdf(bounds.x, bounds.y, bounds.width, bounds.height, pageH);
 
-  page.drawRectangle({
-    x: pdfRect.x,
-    y: pdfRect.y,
-    width: pdfRect.width,
-    height: pdfRect.height,
-    color: rgb(1, 1, 1),
-    opacity: 1,
-  });
+  const streamRedacted = await removeTextFromStream(page, pdfRect);
+
+  if (!streamRedacted) {
+    page.drawRectangle({
+      x: pdfRect.x,
+      y: pdfRect.y,
+      width: pdfRect.width,
+      height: pdfRect.height,
+      color: rgb(1, 1, 1),
+      opacity: 1,
+    });
+  }
 
   markDirty(handle._pdfDoc);
 }
