@@ -38,6 +38,7 @@ import {
 } from 'pdf-lib';
 import { PDFParseError, PDFPageOutOfRangeError } from '../errors';
 import type { PageRange } from '../utils/page-range';
+import { extractOutlines, buildOutlines } from '../utils/outlines';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -475,6 +476,15 @@ export async function splitPDF(buffer: Buffer, ranges: PageRange[]): Promise<Buf
 
     // Fix 3 — Remapper les named destinations /Dests du catalog
     remapNamedDests(sourceDoc, doc, copiedPageRefs, srcObjNumToChunkIdx);
+
+    // Fix 4 — Reconstruire les Outlines (Sommaire) du document
+    const sourceOutlines = extractOutlines(sourceDoc);
+    if (sourceOutlines.length > 0) {
+      buildOutlines(doc, sourceOutlines, (oldObjNum) => {
+        const chunkIdx = srcObjNumToChunkIdx.get(oldObjNum);
+        return chunkIdx !== undefined ? copiedPageRefs[chunkIdx] : undefined;
+      });
+    }
 
     const bytes = await doc.save({ useObjectStreams: true });
     results.push(Buffer.from(bytes));

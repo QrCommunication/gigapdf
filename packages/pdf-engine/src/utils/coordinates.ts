@@ -126,3 +126,18 @@ export function scaleRect(
     height: bounds.height * scale,
   };
 }
+
+/**
+ * Convert CSS pixels (usually 96 DPI) to PDF points (72 DPI).
+ * 1 inch = 96px = 72pt. Therefore, 1px = 0.75pt.
+ */
+export function webPixelsToPdfPoints(pixels: number, dpi: number = 96): number {
+  return pixels * (72 / dpi);
+}
+
+/**
+ * Convert PDF points (72 DPI) to CSS pixels (usually 96 DPI).
+ */
+export function pdfPointsToWebPixels(points: number, dpi: number = 96): number {
+  return points * (dpi / 72);
+}

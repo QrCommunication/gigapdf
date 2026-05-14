@@ -1,0 +1,357 @@
+name: "gigapdf-quality-audit-refactor-XL"
+description: |
+  Workflow custom TIER_3 combinant 4 skills qualité + refactoring et 10+ agents
+  spécialisés. Audit complet post-migration Python→TS, priorisation de la dette,
+  exécution ciblée des refactorings P0+P1 avec protection anti-régression.
+
+context:
+  trigger: post-migration XL Python→TS (phases A-H, 15 agents, -1225 lignes)
+  scope_allowlist:
+    - apps/web/src/
+    - apps/admin/src/
+    - apps/mobile/src/
+    - packages/pdf-engine/src/
+    - packages/api/src/
+    - packages/editor/src/
+    - app/services/
+    - app/api/v1/
+    - app/core/
+    - app/tasks/
+  excluded:
+    - node_modules/, .next/, dist/, __pycache__/, venv/
+    - tests fixtures générés (pdfs)
+  signals_environnement:
+    - 46 dependabot vulnerabilities (1 critical, 31 high)
+    - bug fraîchement fixé (LegacyDocumentProxy subscript) → tests mockés insuffisants
+    - pdf_engine.py, preview.py conservés comme shims legacy après migration
+    - 0 tests d'intégration FastAPI TestClient côté Python
+  time_budget: 45-60 min
+
+protection:
+  before: impact-analyzer
+  after: regression-guard
+
+skills_global:
+  - clean-code
+  - quality-audit-workflow
+  - tech-debt-analyzer
+  - code-refactoring-tech-debt
+  - workflow-clean-code
+  - workflow-review-code
+
+# ═══════════════════════════════════════════════════════════════════════
+# PHASE 1 — INVENTAIRE (parallèle, read-only, 4 agents, ~5 min)
+# ═══════════════════════════════════════════════════════════════════════
+phase_1_inventory:
+  mode: parallel
+  max_concurrent: 4
+  steps:
+    - name: "1A-tech-debt-markers"
+      agent: developer-kit:general-code-explorer
+      skills: [tech-debt-analyzer]
+      task: |
+        Scan du projet pour tous les marqueurs de dette:
+          - `as any`, `@ts-ignore`, `@ts-expect-error` (TS)
+          - `type: ignore`, `# type: ignore` (Python)
+          - `TODO|FIXME|XXX|HACK|DEPRECATED` (tous)
+          - `@deprecated` JSDoc
+          - commentaires `# DEPRECATED` Python
+          - fichiers avec > 500 lignes (candidats God class)
+          - fonctions avec > 50 lignes (grep approximatif)
+        Zones: scope_allowlist. Exclure excluded.
+      output: .claude/SESSION/reports/01_tech_debt_markers.md
+      max_turns: 10
+
+    - name: "1B-security-vulns"
+      agent: security-auditor
+      skills: [tech-debt-analyzer]
+      task: |
+        Inventaire sécurité:
+          - pnpm audit --json | jq par package (les 46 Dependabot: 1 critical, 31 high)
+          - pip list + pip-audit (si dispo) pour Python
+          - grep secrets accidentels: NEXT_PUBLIC_*SECRET*, hardcoded tokens
+          - fichiers .env committed par erreur
+          - CORS mal configuré (origin: *)
+          - routes sans auth dans apps/web/src/app/api/
+        Prioriser par CVSS et par exploitability.
+      output: .claude/SESSION/reports/02_security.md
+      max_turns: 15
+
+    - name: "1C-dead-code"
+      agent: developer-kit:general-code-explorer
+      skills: [tech-debt-analyzer]
+      task: |
+        Scan de code mort post-migration:
+          - imports orphelins (grep symbol n'apparaissant qu'une fois)
+          - fichiers .ts/.tsx/.py avec 0 import incoming
+          - exports jamais consommés
+          - fonctions/classes dans app/core/ et packages/pdf-engine/src/ sans callers
+          - routes API définies mais jamais appelées par le frontend
+          - variables env déclarées mais jamais lues
+        Focus spécial: pdf_engine.py, preview.py (candidats suppression finale).
+      output: .claude/SESSION/reports/03_dead_code.md
+      max_turns: 10
+
+    - name: "1D-test-coverage-gaps"
+      agent: qa-testing
+      skills: [tech-debt-analyzer]
+      task: |
+        Gaps de couverture de tests:
+          - Fichiers source dans packages/pdf-engine/src/ sans __tests__ associé
+          - Routes /api/pdf/*/route.ts sans test d'intégration
+          - Services app/services/*.py sans test unit
+          - Endpoints FastAPI sans TestClient test
+          - Tests qui utilisent MagicMock excessivement (indicateur test théâtre)
+          - Absence de round-trip tests côté Python
+        Bug récent LegacyDocumentProxy subscript: quel test aurait dû l'attraper?
+      output: .claude/SESSION/reports/04_test_gaps.md
+      max_turns: 10
+
+# ═══════════════════════════════════════════════════════════════════════
+# PHASE 2 — AUDIT QUALITÉ CIBLÉ (parallèle batché 2×3, ~15 min)
+# ═══════════════════════════════════════════════════════════════════════
+phase_2_audit:
+  mode: parallel_batched
+  max_concurrent: 3
+  batches:
+    batch_A:
+      - name: "2A-python-code-review"
+        agent: developer-kit-python:python-code-review-expert
+        skills: [quality-audit-workflow, clean-code]
+        task: |
+          Review approfondi de app/services/, app/api/v1/, app/core/, app/tasks/:
+            - Violations PEP 8/257
+            - Mauvais usage FastAPI (async manquant, dépendances injectées en direct)
+            - Gestion d'erreurs: try/except Exception trop larges
+            - Type hints manquants
+            - Pattern anti-async (appels bloquants dans async def)
+            - Couplage fort: pdf_engine.py encore importé par N fichiers?
+          Sortie: top-20 problèmes avec fichier:ligne + correction proposée.
+        output: .claude/SESSION/reports/10_python_review.md
+        max_turns: 15
+
+      - name: "2B-ts-pdf-engine-review"
+        agent: developer-kit-typescript:typescript-refactor-expert
+        skills: [quality-audit-workflow, clean-code]
+        task: |
+          Review packages/pdf-engine/src/ (code fraîchement écrit phases A-F):
+            - `as any` dans parse/, render/, engine/
+            - Types retournés incohérents (ex: pageCount: null dans split)
+            - Gestion async/await et Promise.all
+            - Leak de Buffer/ArrayBuffer (cf. test RT-11: detached ArrayBuffer)
+            - Fonctions trop longues (>50 lignes)
+            - Duplication entre parse/text-extractor.ts et parse/parser.ts
+          Sortie: top-15 problèmes ordonnés par risque.
+        output: .claude/SESSION/reports/11_ts_pdf_engine.md
+        max_turns: 15
+
+      - name: "2C-react-editor-review"
+        agent: developer-kit-typescript:react-software-architect-review
+        skills: [quality-audit-workflow, clean-code]
+        task: |
+          Review apps/web/src/components/editor/ + apps/web/src/hooks/:
+            - Composants > 300 lignes (editor-canvas.tsx)
+            - useEffect avec deps manquantes ou effets sauvages
+            - Appels fetch/axios directs dans JSX (anti-pattern)
+            - React 19 patterns: ref comme prop, useActionState, useOptimistic
+            - Next.js 16 patterns: "use cache", proxy.ts vs middleware.ts
+            - Hydration mismatches potentiels (cf. React #418 déjà observé)
+          Sortie: top-15 avec fichier:ligne et refactoring proposé.
+        output: .claude/SESSION/reports/12_react_editor.md
+        max_turns: 15
+
+    batch_B:
+      - name: "2D-ts-routes-review"
+        agent: developer-kit-typescript:typescript-software-architect-review
+        skills: [quality-audit-workflow, clean-code]
+        task: |
+          Review apps/web/src/app/api/pdf/*/route.ts (6+ routes TS créées):
+            - Validation Zod cohérente sur toutes les routes
+            - Gestion Better Auth uniforme
+            - Codes HTTP corrects (200/400/401/403/404/413/422/500/502)
+            - Messages d'erreur homogènes (pas de leak d'info interne)
+            - Logging structuré (pas de console.log)
+            - Rate limiting appliqué
+          Sortie: checklist par route + divergences.
+        output: .claude/SESSION/reports/13_ts_routes.md
+        max_turns: 12
+
+      - name: "2E-config-safety"
+        agent: config-safety-reviewer
+        skills: [quality-audit-workflow]
+        task: |
+          Audit config production:
+            - /etc/systemd/system/gigapdf-*.service (limits, restart policy)
+            - nginx sites-enabled/ (timeouts, body limits, HSTS, CSP)
+            - /opt/gigapdf/.env (secrets non commités)
+            - redis/postgresql connection pool sizes
+            - Celery worker concurrency
+            - Pool sizes Next.js (standalone)
+          Sortie: top-10 risques config production.
+        output: .claude/SESSION/reports/14_config.md
+        max_turns: 10
+
+      - name: "2F-security-deep"
+        agent: developer-kit-typescript:typescript-security-expert
+        skills: [quality-audit-workflow]
+        task: |
+          Audit sécurité profond spécifique TS/Next.js:
+            - Routes API sans verifySession/better-auth
+            - Server Actions sans revalidation d'auth
+            - Pattern IDOR: verifier que chaque resource verifie ownership
+            - CORS + CSP headers dans proxy.ts
+            - Exposition secrets via NEXT_PUBLIC_*
+            - Token JWT expiration/rotation/storage
+          Sortie: top-10 avec CVE-like scoring.
+        output: .claude/SESSION/reports/15_security_deep.md
+        max_turns: 15
+
+# ═══════════════════════════════════════════════════════════════════════
+# PHASE 3 — SYNTHÈSE & PRIORISATION (séquentiel, 1 agent, ~5 min)
+# ═══════════════════════════════════════════════════════════════════════
+phase_3_synthesis:
+  mode: sequential
+  steps:
+    - name: "3A-aggregate-priorize"
+      agent: tech-lead
+      skills: [tech-debt-analyzer, code-refactoring-tech-debt]
+      task: |
+        Agréger les 9 rapports phases 1-2:
+          1. Dédupliquer les findings (chaque skill trouve des choses similaires)
+          2. Prioriser par:
+             - Impact × Urgence (P0/P1/P2/P3)
+             - Coût de correction (XS/S/M/L/XL)
+             - ROI = impact / cost
+          3. Produire:
+             - TECH_DEBT_REPORT.md : tableau complet avec 50-100 lignes de findings
+             - REFACTORING_ROADMAP.md : top-15 P0/P1 à exécuter maintenant
+             - FUTURE_BACKLOG.md : P2/P3 pour plus tard
+          4. Pour chaque top-15, spécifier:
+             - fichier:ligne
+             - description précise
+             - agent suggéré pour le fix
+             - estimation turns
+             - zone de fichiers touchés (pour orchestration parallèle)
+      output:
+        - .claude/SESSION/TECH_DEBT_REPORT.md
+        - .claude/SESSION/REFACTORING_ROADMAP.md
+        - .claude/SESSION/FUTURE_BACKLOG.md
+      max_turns: 20
+
+# ═══════════════════════════════════════════════════════════════════════
+# VALIDATION GATE 2 — approbation roadmap (AskUserQuestion)
+# ═══════════════════════════════════════════════════════════════════════
+validation_gate_2:
+  mode: human
+  action: AskUserQuestion
+  question: "Roadmap de refactoring générée. Exécuter les top-15 P0+P1 ?"
+  options:
+    - "Oui, exécuter top-15"
+    - "Oui, mais limiter aux P0 critiques (sécurité + bugs)"
+    - "Non, rapport seulement"
+    - "Modifier la sélection"
+
+# ═══════════════════════════════════════════════════════════════════════
+# PHASE 4 — IMPACT ANALYSIS (séquentiel, 1 agent, ~3 min)
+# ═══════════════════════════════════════════════════════════════════════
+phase_4_impact:
+  mode: sequential
+  steps:
+    - name: "4A-impact-before-refactor"
+      agent: impact-analyzer
+      task: |
+        Pour chaque refactoring du top-15 approuvé:
+          - Identifier les callers touchés
+          - Vérifier les contrats API publics
+          - Flagger les risques de régression
+          - Proposer ordre d'exécution pour minimiser conflits
+      output: .claude/SESSION/reports/20_impact.md
+      max_turns: 10
+
+# ═══════════════════════════════════════════════════════════════════════
+# PHASE 5 — REFACTORING (parallèle contrôlée 4 agents × 4 batches, ~25 min)
+# ═══════════════════════════════════════════════════════════════════════
+phase_5_refactor:
+  mode: parallel_batched
+  max_concurrent: 4
+  strategy: zones_disjointes
+  steps:
+    # Chaque agent = 1 fichier = 1 action atomique
+    # Réparti selon la roadmap générée en phase 3
+    - name: "5-batch-python-refactor"
+      agents_pool:
+        - developer-kit-python:python-refactor-expert
+        - developer-kit-python:python-security-expert
+      skills: [code-refactoring-tech-debt, clean-code]
+      max_turns_per_task: 12
+
+    - name: "5-batch-ts-refactor"
+      agents_pool:
+        - developer-kit-typescript:typescript-refactor-expert
+        - developer-kit-typescript:typescript-security-expert
+      skills: [code-refactoring-tech-debt, clean-code]
+      max_turns_per_task: 12
+
+    - name: "5-batch-react-refactor"
+      agents_pool:
+        - frontend-react
+        - refactor-expert
+      skills: [code-refactoring-tech-debt, clean-code]
+      max_turns_per_task: 12
+
+    - name: "5-batch-security-fixes"
+      agents_pool:
+        - security-specialist
+        - security-auditor
+      skills: [code-refactoring-tech-debt]
+      max_turns_per_task: 15
+
+# ═══════════════════════════════════════════════════════════════════════
+# PHASE 6 — VALIDATION FINALE (séquentiel, ~10 min)
+# ═══════════════════════════════════════════════════════════════════════
+phase_6_validate:
+  mode: sequential
+  steps:
+    - name: "6A-type-check"
+      command: cd /home/rony/Projets/gigapdf && pnpm type-check 2>&1 | tail -30
+      gate: exit_code == 0
+
+    - name: "6B-python-tests"
+      command: cd /home/rony/Projets/gigapdf && python3 -m pytest tests/unit/ -x --no-cov -q 2>&1 | tail -20
+      gate: delta_failures == 0
+
+    - name: "6C-ts-tests"
+      command: cd /home/rony/Projets/gigapdf/packages/pdf-engine && pnpm test 2>&1 | tail -15
+      gate: delta_failures == 0
+
+    - name: "6D-regression-guard"
+      agent: regression-guard
+      task: |
+        Valider non-régression vs état avant Phase 5:
+          - Type-check TS/Python
+          - Tests unitaires + intégration
+          - Pas de nouveaux imports orphelins
+          - Pas de nouveaux `as any` / `type: ignore`
+      max_turns: 10
+      gate: SAFE_TO_COMMIT
+
+    - name: "6E-commit-push"
+      command: |
+        cd /home/rony/Projets/gigapdf && \
+        git add -A && \
+        git commit -m "refactor: quality audit + tech debt reduction (top-15 P0+P1)" && \
+        git push origin main
+
+    - name: "6F-document"
+      agent: technical-writer
+      task: |
+        Mettre à jour CHANGELOG.md et produire
+        .claude/SESSION/FINAL_REPORT.md avec:
+          - Métriques avant/après (LOC, as any, TODO, vulns)
+          - Liste des refactorings appliqués
+          - Backlog restant (P2/P3)
+      max_turns: 8
+
+rollback_strategy:
+  on_phase_5_failure: git reset --hard HEAD~N (N = commits depuis début phase 5)
+  on_phase_6_failure: rollback individuel par refactoring échoué

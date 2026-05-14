@@ -112,6 +112,7 @@ export class ShapeTool {
       fill: this.options.fillColor,
       stroke: this.options.strokeColor,
       strokeWidth: this.options.strokeWidth,
+      strokeUniform: true,
       selectable: true,
     };
 
@@ -241,6 +242,7 @@ export class ShapeTool {
       fill: this.options.fillColor,
       stroke: this.options.strokeColor,
       strokeWidth: this.options.strokeWidth,
+      strokeUniform: true,
     });
 
     this.canvas.add(rect);
@@ -260,6 +262,7 @@ export class ShapeTool {
       fill: this.options.fillColor,
       stroke: this.options.strokeColor,
       strokeWidth: this.options.strokeWidth,
+      strokeUniform: true,
     });
 
     this.canvas.add(ellipse);
@@ -278,6 +281,7 @@ export class ShapeTool {
       fill: this.options.fillColor,
       stroke: this.options.strokeColor,
       strokeWidth: this.options.strokeWidth,
+      strokeUniform: true,
     });
 
     this.canvas.add(circle);
@@ -292,6 +296,7 @@ export class ShapeTool {
     const line = new fabric.Line([x1, y1, x2, y2], {
       stroke: this.options.strokeColor,
       strokeWidth: this.options.strokeWidth,
+      strokeUniform: true,
     });
 
     this.canvas.add(line);

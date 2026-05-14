@@ -65,6 +65,12 @@ export type { RenderOptions, ThumbnailOptions, PreviewFormat } from './preview';
 // Convert
 export { htmlToPDF, urlToPDFSafe } from './convert';
 export type { ConvertOptions, UrlToPDFSafeOptions } from './convert';
+export {
+  convertPdfToImages,
+  PopplerUnavailableError,
+  PopplerConversionError,
+} from './convert/pdf-to-image';
+export type { ConvertPdfToImageOptions } from './convert/pdf-to-image';
 
 // Utils
 export { parsePageRange, type PageRange } from './utils';

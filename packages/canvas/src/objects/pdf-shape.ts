@@ -40,6 +40,7 @@ export class PDFShape extends fabric.Object {
       opacity: element.style.fillOpacity,
       stroke: element.style.strokeColor || undefined,
       strokeWidth: element.style.strokeWidth,
+      strokeUniform: true,
       strokeDashArray: element.style.strokeDashArray.length > 0 ? element.style.strokeDashArray : undefined,
       selectable: !element.locked,
       visible: element.visible,

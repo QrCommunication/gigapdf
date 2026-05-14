@@ -52,6 +52,7 @@ export interface FabricCanvasRef {
   zoomOut: () => void;
   zoomToFit: () => void;
   resetZoom: () => void;
+  loadCustomFont: (fontFamily: string, fontData: string | ArrayBuffer) => Promise<void>;
 }
 
 /**
@@ -293,6 +294,21 @@ export function FabricCanvas({
     }
   };
 
+  // Load custom font to DOM for 1:1 Rendering
+  const loadCustomFont = async (fontFamily: string, fontData: string | ArrayBuffer): Promise<void> => {
+    try {
+      const font = new FontFace(fontFamily, fontData instanceof ArrayBuffer ? fontData : `url(${fontData})`);
+      await font.load();
+      document.fonts.add(font);
+      // Re-render canvas to apply font if any text is using it
+      if (canvas) {
+        canvas.renderAll();
+      }
+    } catch (error) {
+      console.error(`Failed to load custom font ${fontFamily}:`, error);
+    }
+  };
+
   // Expose methods via ref (React 19: useImperativeHandle accepts ref as plain prop)
   useImperativeHandle(ref, () => ({
     canvas,
@@ -312,6 +328,7 @@ export function FabricCanvas({
     zoomOut: zoomOutHook,
     zoomToFit: zoomToFitHook,
     resetZoom: resetZoomHook,
+    loadCustomFont,
   }));
 
   return (
