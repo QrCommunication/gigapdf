@@ -1,9 +1,7 @@
-import { rgb, type Color } from 'pdf-lib';
 import type { PDFDocumentHandle } from '../engine/document-handle';
 import { markDirty } from '../engine/document-handle';
-import type { ImageElement, Bounds } from '@giga-pdf/types';
+import type { ImageElement } from '@giga-pdf/types';
 import { webToPdf } from '../utils/coordinates';
-import { hexToRgb } from '../utils/color';
 import { PDFPageOutOfRangeError } from '../errors';
 import sharp from 'sharp';
 
@@ -116,53 +114,3 @@ export async function addImage(
   markDirty(handle._pdfDoc);
 }
 
-/**
- * @deprecated Legacy mask-based image update. The hot edit pipeline
- * (`/api/pdf/apply-elements`) now does real content-stream redaction via
- * MuPDF in a separate post-pass. Kept for backward compat with the legacy
- * `/api/pdf/image` route (whose React hook `usePdfImageOperation` is no
- * longer wired into the editor UI). When that route is removed, this
- * function can be deleted.
- */
-export async function updateImage(
-  handle: PDFDocumentHandle,
-  pageNumber: number,
-  oldBounds: Bounds,
-  element: ImageElement,
-  imageData?: Uint8Array,
-): Promise<void> {
-  const page = getPage(handle, pageNumber);
-  const pageH = page.getHeight();
-  const pageW = page.getWidth();
-  const rotation = page.getRotation().angle as 0 | 90 | 180 | 270;
-  const oldPdf = webToPdf(oldBounds.x, oldBounds.y, oldBounds.width, oldBounds.height, pageH, pageW, rotation);
-
-  // Use the element's recorded background colour for erasure.  If the image sits
-  // on a red banner, a white rectangle would leave an ugly patch.  The client
-  // samples the rendered bitmap and forwards the sampled colour via
-  // element.style.backgroundColor — fall back to white only when unavailable.
-  let clearColor: Color = rgb(1, 1, 1);
-  if (element.style.backgroundColor) {
-    try {
-      clearColor = hexToRgb(element.style.backgroundColor);
-    } catch {
-      // keep white if the forwarded colour is malformed
-    }
-  }
-
-  page.drawRectangle({
-    x: oldPdf.x,
-    y: oldPdf.y,
-    width: oldPdf.width,
-    height: oldPdf.height,
-    color: clearColor,
-    opacity: 1,
-  });
-
-  if (!imageData) {
-    markDirty(handle._pdfDoc);
-    return;
-  }
-
-  return addImage(handle, pageNumber, element, imageData);
-}
