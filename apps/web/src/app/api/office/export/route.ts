@@ -39,6 +39,10 @@ import {
   convertPdfToOffice,
   LibreOfficeUnavailableError,
   LibreOfficeConversionError,
+  openDocument,
+  saveDocument,
+  flattenForms,
+  flattenAnnotations,
 } from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
 import { serverLogger } from '@/lib/server-logger';
@@ -184,6 +188,31 @@ export async function POST(request: NextRequest): Promise<Response> {
       error: err instanceof Error ? err.message : String(err),
     });
     return jsonError('Failed to connect to backend.', 504);
+  }
+
+  // ── 3.5 Flatten interactive widgets + annotations BEFORE handing the
+  //        PDF to LibreOffice / pdfjs. Without this, libreoffice can render
+  //        an editable AcroForm widget AND its baked appearance, producing
+  //        duplicated cells / labels in the resulting docx/pptx; for xlsx,
+  //        pdfjs would emit two text items at the same position.
+  try {
+    const handle = await openDocument(Buffer.from(pdfBytes));
+    flattenForms(handle);
+    flattenAnnotations(handle);
+    const flattened = await saveDocument(handle);
+    pdfBytes = new Uint8Array(flattened);
+    serverLogger.info('[api/office/export] PDF flattened before conversion', {
+      documentId,
+      flattenedSizeBytes: pdfBytes.byteLength,
+    });
+  } catch (err: unknown) {
+    // Non-fatal: degraded export still works on the unflattened bytes,
+    // duplication may reappear but the user gets a file. Log so we notice
+    // recurring failures.
+    serverLogger.warn('[api/office/export] Flatten step failed, exporting raw PDF', {
+      documentId,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   // ── 4. Convert PDF to the requested Office format ────────────────────────────

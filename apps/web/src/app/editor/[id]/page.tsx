@@ -889,15 +889,15 @@ export default function EditorPage() {
     try {
       let fileToExport: File | Blob = currentPdfFile;
 
-      // If there are canvas elements on the current page, gather them as add operations
+      // 1. Apply pending canvas operations (text/shape/image overlays) so
+      //    the binary contains the final scene-graph state, not just the
+      //    parsed original.
       const canvasElements = currentPage?.elements ?? [];
       const canvasOps = canvasElements.map((el) => ({
         action: 'add' as const,
         pageNumber: currentPageIndex + 1,
         element: el as unknown as Record<string, unknown>,
       }));
-
-      // Combine canvas element ops with content edit modifications
       const allOperations = [...canvasOps, ...contentModifications.map((mod) => ({
         ...mod,
         pageNumber: mod.pageNumber + 1, // content-edit-layer uses 0-indexed, API uses 1-indexed
@@ -911,8 +911,21 @@ export default function EditorPage() {
         fileToExport = modifiedBlob;
       }
 
-      downloadBlob(fileToExport instanceof Blob ? fileToExport : new Blob([fileToExport]),
-        `${name || 'document'}.pdf`);
+      // 2. Flatten before export: bakes form fields + annotations into the
+      //    page content so the exported PDF is self-contained. Avoids the
+      //    "doublon d'élément" issue when interactive widgets, native PDF
+      //    annotations and freshly baked overlays would otherwise coexist
+      //    in the downloaded file.
+      const blobToFlatten =
+        fileToExport instanceof Blob ? fileToExport : new Blob([fileToExport]);
+      const fileForFlatten = new File(
+        [blobToFlatten],
+        `${name || 'document'}.pdf`,
+        { type: 'application/pdf' },
+      );
+      const flattenedBlob = await flattenPdf.mutateAsync({ file: fileForFlatten });
+
+      downloadBlob(flattenedBlob, `${name || 'document'}.pdf`);
     } catch (err) {
       clientLogger.error('[editor] Export failed:', err);
       // Fall back to server download
@@ -920,7 +933,7 @@ export default function EditorPage() {
         window.open(api.getDocumentDownloadUrl(documentId), "_blank");
       }
     }
-  }, [currentPdfFile, currentPage, currentPageIndex, contentModifications, applyElements, name, documentId]);
+  }, [currentPdfFile, currentPage, currentPageIndex, contentModifications, applyElements, flattenPdf, name, documentId]);
 
   // Restore the document to its original (v1) PDF binary by asking the
   // backend to copy v1 forward as a new current version. This is the
