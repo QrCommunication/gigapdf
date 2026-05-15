@@ -1,9 +1,9 @@
-import { rgb, degrees, PDFName, decodePDFRawStream } from 'pdf-lib';
+import { degrees, PDFName, decodePDFRawStream } from 'pdf-lib';
 import type { PDFFont } from 'pdf-lib';
 import { createHash } from 'node:crypto';
 import type { PDFDocumentHandle } from '../engine/document-handle';
 import { markDirty } from '../engine/document-handle';
-import type { TextElement, Bounds } from '@giga-pdf/types';
+import type { TextElement } from '@giga-pdf/types';
 import { hexToRgb } from '../utils/color';
 import { webToPdf } from '../utils/coordinates';
 import { resolveStandardFont, pickFallbackStandardFont } from '../utils/font-map';
@@ -528,119 +528,4 @@ export async function addText(
   markDirty(handle._pdfDoc);
 }
 
-/**
- * Parse "rgb(r, g, b)" or "#rrggbb" into a pdf-lib RGB tuple in [0, 1].
- *
- * pdf-lib's `rgb()` constructor throws when any channel is outside [0, 1]
- * (the error message is misleading: "`red` must be at least 0 and at most
- * 1, but was actually 1.0039..."). The client sometimes forwards 256 due
- * to anti-aliasing quantization rounding; clamp defensively so a single
- * out-of-range channel never aborts a whole apply-elements batch.
- */
-function clamp01(n: number): number {
-  if (Number.isNaN(n)) return 0;
-  if (n < 0) return 0;
-  if (n > 1) return 1;
-  return n;
-}
 
-function parseStyleColorToRgb(
-  raw: string | null | undefined,
-): { r: number; g: number; b: number } | null {
-  if (!raw) return null;
-  const c = raw.trim().toLowerCase();
-  if (c.startsWith('#')) {
-    const hex = c.slice(1);
-    if (hex.length === 3) {
-      return {
-        r: clamp01(parseInt(hex[0]! + hex[0]!, 16) / 255),
-        g: clamp01(parseInt(hex[1]! + hex[1]!, 16) / 255),
-        b: clamp01(parseInt(hex[2]! + hex[2]!, 16) / 255),
-      };
-    }
-    if (hex.length === 6) {
-      return {
-        r: clamp01(parseInt(hex.slice(0, 2), 16) / 255),
-        g: clamp01(parseInt(hex.slice(2, 4), 16) / 255),
-        b: clamp01(parseInt(hex.slice(4, 6), 16) / 255),
-      };
-    }
-    return null;
-  }
-  const m = c.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-  if (m) {
-    return {
-      r: clamp01(Number(m[1]) / 255),
-      g: clamp01(Number(m[2]) / 255),
-      b: clamp01(Number(m[3]) / 255),
-    };
-  }
-  return null;
-}
-
-/**
- * Tentative de suppression du texte directement dans le flux (Content Stream)
- * pour éviter de peindre un rectangle blanc destructeur.
- * Note: L'implémentation complète nécessite l'analyse de la matrice de transformation (Tm, cm).
- */
-async function removeTextFromStream(_page: unknown, _bounds: { x: number, y: number, width: number, height: number }): Promise<boolean> {
-  try {
-    // Boilerplate for future complete stream editing
-    // const { PDFRawStream, decodePDFRawStream } = require('pdf-lib');
-    // const contents = page.node.Contents();
-    // if (!contents) return false;
-    // ... logic to parse operators and strip Tj/TJ within bounds ...
-    // return true if successful
-    return false; // Currently false, fallback to drawRectangle
-  } catch {
-    return false;
-  }
-}
-
-/**
- * @deprecated Legacy mask-based update path. The hot edit pipeline
- * (`/api/pdf/apply-elements`) now does real content-stream redaction via
- * MuPDF in a separate post-pass — see `applyRedactions` in mupdf-redact.ts.
- * This function is kept ONLY for backward compatibility with the legacy
- * `/api/pdf/text` route (whose React hook `usePdfTextOperation` is no
- * longer wired into the editor UI). When that route is removed, this
- * function and its `removeTextFromStream` helper can go too.
- *
- * Behaviour: paints a coloured rectangle at `oldBounds` (visual mask only —
- * original glyphs stay in the content stream and remain copy-paste-able)
- * then draws the new text at `element.bounds`. Produces the "frame" border
- * artefact the modern apply-elements pipeline avoids.
- */
-export async function updateText(
-  handle: PDFDocumentHandle,
-  pageNumber: number,
-  oldBounds: Bounds,
-  element: TextElement,
-  fontBytes?: Uint8Array,
-): Promise<void> {
-  const page = getPage(handle, pageNumber);
-  const pageH = page.getHeight();
-  const oldPdf = webToPdf(oldBounds.x, oldBounds.y, oldBounds.width, oldBounds.height, pageH);
-
-  // Tentative de suppression propre via le Content Stream
-  const streamRedacted = await removeTextFromStream(page, oldPdf);
-
-  if (!streamRedacted) {
-    // The clear rectangle MUST match the real PDF background colour at the
-    // glyph location, otherwise editing text on a coloured banner (red
-    // "Somme à payer", blue card, etc.) leaves a visible white box.
-    const clearRgb =
-      parseStyleColorToRgb(element.style.backgroundColor) ?? { r: 1, g: 1, b: 1 };
-
-    page.drawRectangle({
-      x: oldPdf.x,
-      y: oldPdf.y,
-      width: oldPdf.width,
-      height: oldPdf.height,
-      color: rgb(clearRgb.r, clearRgb.g, clearRgb.b),
-      opacity: 1,
-    });
-  }
-
-  return addText(handle, pageNumber, element, fontBytes);
-}

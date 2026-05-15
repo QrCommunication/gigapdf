@@ -1,5 +1,5 @@
 /**
- * PDF Image Element route
+ * PDF Image Element route — single-element wrapper around applyOperations.
  *
  * POST /api/pdf/image
  * Embeds or updates an image element on a PDF page.
@@ -12,18 +12,17 @@
  *   element     — JSON ImageElement object (required)
  *   oldBounds   — JSON Bounds object (required for "update")
  *
- * ImageElement schema (subset of @giga-pdf/types):
- * {
- *   bounds: { x, y, width, height },
- *   style: { opacity },
- *   transform: { rotation, scaleX, scaleY }
- * }
+ * Implementation delegates to applyOperations (pdf-engine), wiring the
+ * uploaded imageFile bytes through a custom extractImageData closure so
+ * the helper picks them up at Phase 2. The 2-pass pipeline replaces the
+ * legacy mask + updateImage path.
  *
  * Returns the modified PDF as application/pdf binary.
  */
 
 import { NextResponse } from 'next/server';
-import { openDocument, saveDocument, addImage, updateImage } from '@giga-pdf/pdf-engine';
+import { applyOperations } from '@giga-pdf/pdf-engine';
+import type { ElementOperation } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError, PDFPageOutOfRangeError } from '@giga-pdf/pdf-engine';
 import type { ImageElement, Bounds } from '@giga-pdf/types';
 import { requireSession } from '@/lib/auth-helpers';
@@ -77,18 +76,24 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const handle = await openDocument(buffer);
-
+    // ── Extract imageFile bytes ─────────────────────────────────────────────
+    // 'add': image is required. 'update': image is optional (may be a pure
+    // bounds/style update on an existing image).
+    let imageBytes: Uint8Array | undefined;
     if (operation === 'add') {
       const imageFileValidation = validateImageFile(formData.get('imageFile'));
       if (!imageFileValidation.ok) return imageFileValidation.response;
-      const imageFile = imageFileValidation.file;
-      const imageArrayBuffer = await imageFile.arrayBuffer();
-      const imageData = new Uint8Array(imageArrayBuffer);
-      await addImage(handle, pageNumber, element, imageData);
+      imageBytes = new Uint8Array(await imageFileValidation.file.arrayBuffer());
     } else {
+      const imageFile = formData.get('imageFile');
+      if (imageFile instanceof File) {
+        imageBytes = new Uint8Array(await imageFile.arrayBuffer());
+      }
+    }
+
+    // ── oldBounds for update ────────────────────────────────────────────────
+    let oldBounds: Bounds | undefined;
+    if (operation === 'update') {
       const oldBoundsRaw = formData.get('oldBounds') as string | null;
       if (!oldBoundsRaw) {
         return NextResponse.json(
@@ -96,7 +101,6 @@ export async function POST(request: Request): Promise<Response> {
           { status: 400 },
         );
       }
-      let oldBounds: Bounds;
       try {
         oldBounds = JSON.parse(oldBoundsRaw) as Bounds;
       } catch {
@@ -105,25 +109,31 @@ export async function POST(request: Request): Promise<Response> {
           { status: 400 },
         );
       }
-
-      // For update, a new image file is optional
-      const imageFile = formData.get('imageFile');
-      let imageData: Uint8Array | undefined;
-      if (imageFile instanceof File) {
-        imageData = new Uint8Array(await imageFile.arrayBuffer());
-      }
-
-      await updateImage(handle, pageNumber, oldBounds, element, imageData);
     }
 
-    const savedBytes = await saveDocument(handle);
+    const op: ElementOperation = {
+      action: operation,
+      pageNumber,
+      element: element as unknown as Record<string, unknown>,
+      oldBounds,
+    };
 
-    return new Response(new Uint8Array(savedBytes), {
+    const arrayBuffer = await file.arrayBuffer();
+    const inputBuffer = Buffer.from(arrayBuffer);
+
+    // Inject imageBytes into the pipeline via the extractImageData closure.
+    // For 'update' without a new image, return undefined — Phase 2 will then
+    // not call addImage (the visual cell stays empty after Phase 1 redaction).
+    const result = await applyOperations(inputBuffer, [op], {
+      extractImageData: () => imageBytes,
+    });
+
+    return new Response(Buffer.from(result.bytes), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': sanitizeContentDisposition(file.name),
-        'Content-Length': String(savedBytes.byteLength),
+        'Content-Length': String(result.bytes.byteLength),
       },
     });
   } catch (error: unknown) {

@@ -34,19 +34,23 @@ export type { FormField, FormFieldType } from './parse/form-extractor';
 // Render
 export {
   addText,
-  updateText,
   addImage,
-  updateImage,
   addShape,
   addAnnotation,
   addFormField,
   updateFormFieldValue,
-  deleteElementArea,
   flattenAnnotations,
   flattenForms,
   applyRedactions,
+  applyOperations,
 } from './render';
-export type { RedactionTarget, ApplyRedactionsResult } from './render';
+export type {
+  RedactionTarget,
+  ApplyRedactionsResult,
+  ElementOperation,
+  ApplyOperationsOptions,
+  ApplyOperationsResult,
+} from './render';
 
 // Merge/Split
 export { mergePDFs, splitPDF, splitAt } from './merge-split';

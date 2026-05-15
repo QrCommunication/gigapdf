@@ -1,5 +1,5 @@
 /**
- * PDF Text Element route
+ * PDF Text route — single-element wrapper around applyOperations.
  *
  * POST /api/pdf/text
  * Adds or updates a text element on a PDF page and returns the modified PDF.
@@ -11,19 +11,17 @@
  *   element    — JSON TextElement object (required)
  *   oldBounds  — JSON Bounds object (required only for "update")
  *
- * TextElement schema (subset of @giga-pdf/types):
- * {
- *   content: string,
- *   bounds: { x, y, width, height },
- *   style: { fontFamily, fontSize, color, opacity, lineHeight },
- *   transform: { rotation }
- * }
+ * Implementation delegates to applyOperations (pdf-engine) so this route
+ * benefits from the same 2-pass pipeline as /api/pdf/apply-elements:
+ * MuPDF redaction on input → pdf-lib addText on the redacted bytes.
+ * No white-rectangle masking.
  *
  * Returns the modified PDF as application/pdf binary.
  */
 
 import { NextResponse } from 'next/server';
-import { openDocument, saveDocument, addText, updateText } from '@giga-pdf/pdf-engine';
+import { applyOperations } from '@giga-pdf/pdf-engine';
+import type { ElementOperation } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError, PDFPageOutOfRangeError } from '@giga-pdf/pdf-engine';
 import type { TextElement, Bounds } from '@giga-pdf/types';
 import { requireSession } from '@/lib/auth-helpers';
@@ -77,13 +75,8 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const handle = await openDocument(buffer);
-
-    if (operation === 'add') {
-      await addText(handle, pageNumber, element);
-    } else {
+    let oldBounds: Bounds | undefined;
+    if (operation === 'update') {
       const oldBoundsRaw = formData.get('oldBounds') as string | null;
       if (!oldBoundsRaw) {
         return NextResponse.json(
@@ -91,7 +84,6 @@ export async function POST(request: Request): Promise<Response> {
           { status: 400 },
         );
       }
-      let oldBounds: Bounds;
       try {
         oldBounds = JSON.parse(oldBoundsRaw) as Bounds;
       } catch {
@@ -100,17 +92,25 @@ export async function POST(request: Request): Promise<Response> {
           { status: 400 },
         );
       }
-      await updateText(handle, pageNumber, oldBounds, element);
     }
 
-    const savedBytes = await saveDocument(handle);
+    const op: ElementOperation = {
+      action: operation,
+      pageNumber,
+      element: element as unknown as Record<string, unknown>,
+      oldBounds,
+    };
 
-    return new Response(new Uint8Array(savedBytes), {
+    const arrayBuffer = await file.arrayBuffer();
+    const inputBuffer = Buffer.from(arrayBuffer);
+    const result = await applyOperations(inputBuffer, [op]);
+
+    return new Response(Buffer.from(result.bytes), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': sanitizeContentDisposition(file.name),
-        'Content-Length': String(savedBytes.byteLength),
+        'Content-Length': String(result.bytes.byteLength),
       },
     });
   } catch (error: unknown) {
