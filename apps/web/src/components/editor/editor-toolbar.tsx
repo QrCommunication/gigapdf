@@ -41,12 +41,20 @@ import {
   FileSearch,
   FileCode,
   SquareDashedMousePointer,
+  Search,
+  Droplet,
+  ScanText,
+  FileCheck2,
 } from "lucide-react";
 import { MergeDialog } from "./merge-dialog";
 import { SplitDialog } from "./split-dialog";
 import { EncryptDialog } from "./encrypt-dialog";
 import { MetadataDialog } from "./metadata-dialog";
 import { ConvertDialog } from "./convert-dialog";
+import { SearchDialog } from "./search-dialog";
+import { WatermarkDialog } from "./watermark-dialog";
+import { OcrDialog } from "./ocr-dialog";
+import { PdfADialog } from "./pdfa-dialog";
 
 export interface EditorToolbarProps {
   /** Outil actuellement sélectionné */
@@ -123,6 +131,15 @@ export interface EditorToolbarProps {
   isContentEditActive?: boolean;
   /** Callback to toggle content edit mode */
   onToggleContentEdit?: () => void;
+  /** Callback when a search hit is clicked — caller scrolls to the target page. */
+  onSearchGoToPage?: (
+    pageNumber: number,
+    hit: {
+      pageNumber: number;
+      matchIndex: number;
+      bbox: [number, number, number, number];
+    },
+  ) => void;
 }
 
 interface ToolButtonProps {
@@ -342,6 +359,7 @@ export function EditorToolbar({
   onFlattenPdf,
   isContentEditActive,
   onToggleContentEdit,
+  onSearchGoToPage,
 }: EditorToolbarProps) {
   const t = useTranslations("editor.toolbar");
   const tProperties = useTranslations("editor.properties.text");
@@ -354,6 +372,10 @@ export function EditorToolbar({
   const [showEncryptDialog, setShowEncryptDialog] = useState(false);
   const [showMetadataDialog, setShowMetadataDialog] = useState(false);
   const [showConvertDialog, setShowConvertDialog] = useState(false);
+  const [showSearchDialog, setShowSearchDialog] = useState(false);
+  const [showWatermarkDialog, setShowWatermarkDialog] = useState(false);
+  const [showOcrDialog, setShowOcrDialog] = useState(false);
+  const [showPdfADialog, setShowPdfADialog] = useState(false);
 
   // Font states for text elements
   const [selectedFontValue, setSelectedFontValue] = useState("arial");
@@ -823,6 +845,26 @@ export function EditorToolbar({
         label={t("flatten")}
         onClick={() => onFlattenPdf?.()}
       />
+      <ToolButton
+        icon={<Search size={20} />}
+        label="Rechercher"
+        onClick={() => setShowSearchDialog(true)}
+      />
+      <ToolButton
+        icon={<Droplet size={20} />}
+        label="Filigrane"
+        onClick={() => setShowWatermarkDialog(true)}
+      />
+      <ToolButton
+        icon={<ScanText size={20} />}
+        label="OCR"
+        onClick={() => setShowOcrDialog(true)}
+      />
+      <ToolButton
+        icon={<FileCheck2 size={20} />}
+        label="PDF/A"
+        onClick={() => setShowPdfADialog(true)}
+      />
 
       {/* PDF operation dialogs */}
       <MergeDialog
@@ -847,6 +889,32 @@ export function EditorToolbar({
       <ConvertDialog
         isOpen={showConvertDialog}
         onClose={() => setShowConvertDialog(false)}
+      />
+      <SearchDialog
+        open={showSearchDialog}
+        onClose={() => setShowSearchDialog(false)}
+        currentFile={currentFile ?? null}
+        onGoToPage={(pageNumber, hit) => {
+          onSearchGoToPage?.(pageNumber, hit);
+        }}
+      />
+      <WatermarkDialog
+        open={showWatermarkDialog}
+        onClose={() => setShowWatermarkDialog(false)}
+        currentFile={currentFile ?? null}
+        baseFilename={currentFile?.name}
+      />
+      <OcrDialog
+        open={showOcrDialog}
+        onClose={() => setShowOcrDialog(false)}
+        currentFile={currentFile ?? null}
+        baseFilename={currentFile?.name}
+      />
+      <PdfADialog
+        open={showPdfADialog}
+        onClose={() => setShowPdfADialog(false)}
+        currentFile={currentFile ?? null}
+        baseFilename={currentFile?.name}
       />
     </div>
   );
