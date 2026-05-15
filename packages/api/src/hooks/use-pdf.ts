@@ -12,7 +12,6 @@ import type {
   EncryptOptions,
   PermissionsResult,
   FormFieldsResult,
-  ElementOperationOptions,
   ConvertOptions,
   MetadataResult,
   FlattenOptions,
@@ -204,46 +203,13 @@ export const useAddFormField = () => {
 };
 
 // ─── Element Operations ──────────────────────────────────────────────────────
-
-/**
- * Hook for text operations on a PDF
- */
-export const usePdfTextOperation = () => {
-  return useMutation({
-    mutationFn: ({ file, options }: { file: File | Blob; options: ElementOperationOptions }) =>
-      pdfService.textOperation(file, options),
-  });
-};
-
-/**
- * Hook for image operations on a PDF
- */
-export const usePdfImageOperation = () => {
-  return useMutation({
-    mutationFn: ({ file, options }: { file: File | Blob; options: ElementOperationOptions }) =>
-      pdfService.imageOperation(file, options),
-  });
-};
-
-/**
- * Hook for shape operations on a PDF
- */
-export const usePdfShapeOperation = () => {
-  return useMutation({
-    mutationFn: ({ file, options }: { file: File | Blob; options: ElementOperationOptions }) =>
-      pdfService.shapeOperation(file, options),
-  });
-};
-
-/**
- * Hook for annotation operations on a PDF
- */
-export const usePdfAnnotationOperation = () => {
-  return useMutation({
-    mutationFn: ({ file, options }: { file: File | Blob; options: ElementOperationOptions }) =>
-      pdfService.annotationOperation(file, options),
-  });
-};
+//
+// The legacy single-element hooks (usePdfTextOperation, usePdfImageOperation,
+// usePdfShapeOperation, usePdfAnnotationOperation) were removed: the editor
+// now batches every add/update/delete through useApplyElements which goes
+// through the canonical 2-pass pipeline (MuPDF redact → pdf-lib add). The
+// underlying /api/pdf/text and /api/pdf/image routes still exist for external
+// integrations and have been migrated to call applyOperations internally too.
 
 // ─── Pages ───────────────────────────────────────────────────────────────────
 
@@ -327,6 +293,69 @@ export const useApplyElements = () => {
   });
 };
 
+// ─── MuPDF-powered features (search, watermark, OCR, PDF/A) ──────────────────
+
+/** Full-text search in a PDF — returns hits with PDF user-space quads. */
+export const useSearchPdf = () => {
+  return useMutation({
+    mutationFn: ({
+      file,
+      needle,
+      options,
+    }: {
+      file: File | Blob;
+      needle: string;
+      options?: { pages?: number[]; maxHitsPerPage?: number };
+    }) => pdfService.searchPdf(file, needle, options),
+  });
+};
+
+/** Stamp a watermark on every page (or selected pages). */
+export const useAddWatermark = () => {
+  return useMutation({
+    mutationFn: ({
+      file,
+      options,
+    }: {
+      file: File | Blob;
+      options: Parameters<typeof pdfService.addWatermark>[1];
+    }) => pdfService.addWatermark(file, options),
+  });
+};
+
+/** Run Tesseract OCR on each page of a PDF. */
+export const useOcrPdf = () => {
+  return useMutation({
+    mutationFn: ({
+      file,
+      options,
+    }: {
+      file: File | Blob;
+      options?: Parameters<typeof pdfService.ocrPdf>[1];
+    }) => pdfService.ocrPdf(file, options),
+  });
+};
+
+/** Check if the server can run OCR (tesseract installed). */
+export const useIsOcrAvailable = () => {
+  return useMutation({
+    mutationFn: () => pdfService.isOcrAvailable(),
+  });
+};
+
+/** Convert a PDF to PDF/A (archival format). */
+export const useConvertToPdfA = () => {
+  return useMutation({
+    mutationFn: ({
+      file,
+      variant,
+    }: {
+      file: File | Blob;
+      variant?: Parameters<typeof pdfService.convertToPdfA>[1];
+    }) => pdfService.convertToPdfA(file, variant),
+  });
+};
+
 // ─── Download Helper ─────────────────────────────────────────────────────────
 
 /**
@@ -356,7 +385,6 @@ export type {
   EncryptOptions,
   PermissionsResult,
   FormFieldsResult,
-  ElementOperationOptions,
   ConvertOptions,
   MetadataResult,
   FlattenOptions,

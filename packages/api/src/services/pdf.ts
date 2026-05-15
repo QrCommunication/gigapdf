@@ -693,6 +693,156 @@ export const pdfService = {
 
     return handleBlobResponse(response);
   },
+
+  /**
+   * Full-text search in a PDF via MuPDF. Returns a list of hits with
+   * PDF user-space quads ready for frontend highlighting.
+   */
+  searchPdf: async (
+    file: File | Blob,
+    needle: string,
+    options: { pages?: number[]; maxHitsPerPage?: number } = {},
+  ): Promise<{
+    needle: string;
+    totalHits: number;
+    pagesSearched: number;
+    hits: Array<{
+      pageNumber: number;
+      matchIndex: number;
+      quads: number[][];
+      bbox: [number, number, number, number];
+    }>;
+  }> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+    form.append('needle', needle);
+    if (options.pages) form.append('pages', JSON.stringify(options.pages));
+    if (options.maxHitsPerPage !== undefined) {
+      form.append('maxHitsPerPage', String(options.maxHitsPerPage));
+    }
+
+    const response = await fetch('/api/pdf/search', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+
+    if (!response.ok) {
+      const err = await response.text().catch(() => '');
+      throw new Error(`Search failed: HTTP ${response.status} ${err}`);
+    }
+    return response.json();
+  },
+
+  /**
+   * Stamp a watermark on every page (or selected pages) of a PDF.
+   */
+  addWatermark: async (
+    file: File | Blob,
+    options: {
+      text: string;
+      position?:
+        | 'center-diagonal'
+        | 'top-left'
+        | 'top-right'
+        | 'bottom-left'
+        | 'bottom-right'
+        | 'header'
+        | 'footer'
+        | 'custom';
+      pages?: number[];
+      fontSize?: number;
+      color?: [number, number, number];
+      opacity?: number;
+      custom?: { x: number; y: number; rotation: number };
+    },
+  ): Promise<Blob> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+    form.append('text', options.text);
+    if (options.position) form.append('position', options.position);
+    if (options.pages) form.append('pages', JSON.stringify(options.pages));
+    if (options.fontSize !== undefined) form.append('fontSize', String(options.fontSize));
+    if (options.color) form.append('color', JSON.stringify(options.color));
+    if (options.opacity !== undefined) form.append('opacity', String(options.opacity));
+    if (options.custom) form.append('custom', JSON.stringify(options.custom));
+
+    const response = await fetch('/api/pdf/watermark', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+    return handleBlobResponse(response);
+  },
+
+  /**
+   * Run Tesseract OCR on each rasterised page. Requires `tesseract` to be
+   * installed on the server (verified by GET /api/pdf/ocr).
+   */
+  ocrPdf: async (
+    file: File | Blob,
+    options: {
+      pages?: number[];
+      lang?: string;
+      dpi?: 144 | 200 | 300;
+      format?: 'text' | 'hocr';
+    } = {},
+  ): Promise<{
+    pages: Array<{ pageNumber: number; text: string; hocr?: string }>;
+    fullText: string;
+  }> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+    if (options.pages) form.append('pages', JSON.stringify(options.pages));
+    if (options.lang) form.append('lang', options.lang);
+    if (options.dpi) form.append('dpi', String(options.dpi));
+    if (options.format) form.append('format', options.format);
+
+    const response = await fetch('/api/pdf/ocr', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+
+    if (!response.ok) {
+      const err = await response.text().catch(() => '');
+      throw new Error(`OCR failed: HTTP ${response.status} ${err}`);
+    }
+    return response.json();
+  },
+
+  /**
+   * Check if Tesseract OCR is available on the server. Used by the UI to
+   * enable/disable the OCR button.
+   */
+  isOcrAvailable: async (): Promise<boolean> => {
+    const response = await fetch('/api/pdf/ocr', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) return false;
+    const data = await response.json();
+    return Boolean(data?.available);
+  },
+
+  /**
+   * Convert a PDF to PDF/A (archival format).
+   */
+  convertToPdfA: async (
+    file: File | Blob,
+    variant: 'pdfa-1b' | 'pdfa-1a' | 'pdfa-2b' | 'pdfa-2u' | 'pdfa-3b' = 'pdfa-2u',
+  ): Promise<Blob> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+    form.append('variant', variant);
+
+    const response = await fetch('/api/pdf/pdfa', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+    return handleBlobResponse(response);
+  },
 };
 
 /**

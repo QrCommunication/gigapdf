@@ -43,6 +43,13 @@ export {
   flattenForms,
   applyRedactions,
   applyOperations,
+  optimizeAndSave,
+  convertToPdfA,
+  PdfAConversionError,
+  addNativeAnnotations,
+  mupdfRenderPage,
+  mupdfRenderPages,
+  addWatermark,
 } from './render';
 export type {
   RedactionTarget,
@@ -50,7 +57,44 @@ export type {
   ElementOperation,
   ApplyOperationsOptions,
   ApplyOperationsResult,
+  OptimizeSaveOptions,
+  OptimizeSaveResult,
+  PdfAVariant,
+  PdfAConversionResult,
+  NativeAnnotationType,
+  NativeAnnotationSpec,
+  AddNativeAnnotationsResult,
+  MupdfRenderPageOptions,
+  MupdfRenderedPage,
+  MupdfBatchRenderOptions,
+  WatermarkOptions,
+  WatermarkPosition,
+  WatermarkResult,
 } from './render';
+
+// Parse — MuPDF-powered extractors
+export {
+  extractStructuredText,
+  extractPlainText,
+  searchPdf,
+  getMetadataRobust,
+  ocrPdf,
+  isTesseractAvailable,
+  TesseractNotInstalledError,
+} from './parse';
+export type {
+  StructuredChar,
+  StructuredLine,
+  StructuredBlock,
+  StructuredPage,
+  ExtractStructuredTextOptions,
+  SearchHit,
+  SearchOptions,
+  SearchResult,
+  OcrOptions,
+  OcrPageResult,
+  OcrResult,
+} from './parse';
 
 // Merge/Split
 export { mergePDFs, splitPDF, splitAt } from './merge-split';

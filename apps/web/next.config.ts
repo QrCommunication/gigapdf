@@ -114,6 +114,27 @@ const nextConfig: NextConfig = {
       "../../node_modules/mupdf/dist/mupdf-wasm.js",
       "../../node_modules/mupdf/dist/mupdf.js",
     ],
+    "/api/pdf/search": [
+      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
+      "../../node_modules/mupdf/dist/mupdf-wasm.js",
+      "../../node_modules/mupdf/dist/mupdf.js",
+    ],
+    "/api/pdf/watermark": [
+      "../../packages/pdf-engine/fonts/*.ttf",
+      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
+      "../../node_modules/mupdf/dist/mupdf-wasm.js",
+      "../../node_modules/mupdf/dist/mupdf.js",
+    ],
+    "/api/pdf/ocr": [
+      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
+      "../../node_modules/mupdf/dist/mupdf-wasm.js",
+      "../../node_modules/mupdf/dist/mupdf.js",
+    ],
+    "/api/pdf/pdfa": [
+      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
+      "../../node_modules/mupdf/dist/mupdf-wasm.js",
+      "../../node_modules/mupdf/dist/mupdf.js",
+    ],
   },
   // Disable static generation for error pages
   experimental: {

@@ -191,6 +191,22 @@ export function EditorCanvas({
   const strokeWidthRef = useRef(strokeWidth);
   const zoomRef = useRef(zoom);
 
+  // Zoom + pan refs:
+  //   zoomFromWheelRef = true  → the [zoom] useEffect must skip its own
+  //                              zoomToPoint call because the wheel handler
+  //                              already applied it (cursor-centered).
+  //   isSpaceDownRef           → tracks the Space key for "hold-to-pan" UX.
+  //   isPanningRef + panStart  → tracks an in-progress pan drag.
+  const zoomFromWheelRef = useRef(false);
+  const isSpaceDownRef = useRef(false);
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef<{
+    clientX: number;
+    clientY: number;
+    scrollLeft: number;
+    scrollTop: number;
+  } | null>(null);
+
   // Update refs when props change
   useEffect(() => {
     documentIdRef.current = documentId;
@@ -1251,16 +1267,104 @@ export function EditorCanvas({
         }
       });
 
-      // Mouse wheel for zoom - using refs
+      // Mouse wheel for zoom - centered on the cursor (Fabric idiom).
+      // The screen-position of the pointer is preserved across zoom levels:
+      //   1. Fabric's zoomToPoint translates viewportTransform around the
+      //      pointer so the canvas content stays under the cursor.
+      //   2. The wrapper scroll is then adjusted by the zoom ratio so that,
+      //      now that the canvas DOM grew/shrank, the same pixel still sits
+      //      under the user's cursor.
+      // Without (2), the canvas DOM growth would shift content visually
+      // even though Fabric did the right thing internally.
       canvas.on("mouse:wheel", (opt) => {
         const event = opt.e as WheelEvent;
-        if (event.ctrlKey || event.metaKey) {
-          event.preventDefault();
-          const delta = event.deltaY > 0 ? -0.1 : 0.1;
-          const newZoom = Math.min(4, Math.max(0.25, zoomRef.current + delta));
-          onZoomChangedRef.current?.(newZoom);
+        if (!event.ctrlKey && !event.metaKey) return;
+        event.preventDefault();
+        event.stopPropagation();
+
+        const currentZoom = canvas.getZoom();
+        const delta = event.deltaY > 0 ? -0.1 : 0.1;
+        const newZoom = Math.min(4, Math.max(0.25, currentZoom + delta));
+        if (newZoom === currentZoom) return;
+
+        // Fabric v6 renamed getPointer(e, ignoreVptTransform) into the
+        // explicit getScenePoint() (transformed) / getViewportPoint() pair.
+        // We want the SCENE coordinate so zoomToPoint anchors on the
+        // logical pixel under the cursor, regardless of the current vpt.
+        const pointer = canvas.getScenePoint(event);
+        canvas.zoomToPoint(pointer, newZoom);
+        zoomFromWheelRef.current = true;
+        onZoomChangedRef.current?.(newZoom);
+
+        // Adjust wrapper scroll so the cursor still hovers over the same
+        // logical pixel. canvas.upperCanvasEl is wrapped inside a
+        // .canvas-container div which itself is inside .editor-canvas-wrapper.
+        const wrapper =
+          canvas.upperCanvasEl?.parentElement?.parentElement ?? null;
+        if (wrapper) {
+          const ratio = newZoom / currentZoom;
+          wrapper.scrollLeft =
+            wrapper.scrollLeft * ratio + pointer.x * (ratio - 1);
+          wrapper.scrollTop =
+            wrapper.scrollTop * ratio + pointer.y * (ratio - 1);
         }
       });
+
+      // Pan handlers — activated by:
+      //   - the "hand" tool from the toolbar (toolRef.current === 'hand')
+      //   - holding Space (any tool)
+      //   - middle-click drag (any tool)
+      // Drives the wrapper scroll directly so the existing overflow:auto
+      // behaviour stays consistent (scrollbars visible, keyboard arrows still
+      // work for fine adjustment).
+      canvas.on("mouse:down", (opt) => {
+        const e = opt.e as MouseEvent;
+        const shouldPan =
+          e.button === 1 || // middle-click
+          isSpaceDownRef.current ||
+          toolRef.current === "hand";
+        if (!shouldPan) return;
+        const wrapper =
+          canvas.upperCanvasEl?.parentElement?.parentElement ?? null;
+        isPanningRef.current = true;
+        panStartRef.current = {
+          clientX: e.clientX,
+          clientY: e.clientY,
+          scrollLeft: wrapper?.scrollLeft ?? 0,
+          scrollTop: wrapper?.scrollTop ?? 0,
+        };
+        canvas.defaultCursor = "grabbing";
+        canvas.selection = false;
+        e.preventDefault();
+      });
+
+      canvas.on("mouse:move", (opt) => {
+        if (!isPanningRef.current || !panStartRef.current) return;
+        const e = opt.e as MouseEvent;
+        const wrapper =
+          canvas.upperCanvasEl?.parentElement?.parentElement ?? null;
+        if (!wrapper) return;
+        wrapper.scrollLeft =
+          panStartRef.current.scrollLeft - (e.clientX - panStartRef.current.clientX);
+        wrapper.scrollTop =
+          panStartRef.current.scrollTop - (e.clientY - panStartRef.current.clientY);
+      });
+
+      const endPan = () => {
+        if (!isPanningRef.current) return;
+        isPanningRef.current = false;
+        panStartRef.current = null;
+        const tool = toolRef.current;
+        canvas.defaultCursor =
+          isSpaceDownRef.current || tool === "hand"
+            ? "grab"
+            : tool === "select"
+              ? "default"
+              : "crosshair";
+        canvas.selection = tool === "select";
+      };
+      canvas.on("mouse:up", endPan);
+      canvas.on("mouse:out", endPan);
 
       // Double-click for hyperlinks - using refs
       canvas.on("mouse:dblclick", (e) => {
@@ -1883,15 +1987,34 @@ export function EditorCanvas({
   }, [page, loadPage]);
 
   // Mettre à jour le zoom
+  //
+  // - When the change comes from the wheel handler (zoomFromWheelRef=true),
+  //   Fabric's viewportTransform was already updated by zoomToPoint — only
+  //   resize the canvas DOM dimensions so scrollbars reflect the new content
+  //   size, and reset the flag for the next cycle.
+  // - When the change comes from the toolbar (+/-, fit-to-width, reset),
+  //   apply zoomToPoint around the visible viewport center so the user's
+  //   focal point is preserved instead of jumping to (0,0).
   useEffect(() => {
     if (!fabricRef.current || !page) return;
     const canvas = fabricRef.current;
-    canvas.setZoom(zoom);
+    if (!zoomFromWheelRef.current) {
+      // Toolbar +/- : anchor on the visible viewport center so the focal
+      // point doesn't jump to (0,0). Fabric v6 types zoomToPoint as
+      // (Point, value) but the runtime accepts any { x, y } literal —
+      // we cast to satisfy the type without importing Point dynamically.
+      const center = {
+        x: canvas.getWidth() / 2,
+        y: canvas.getHeight() / 2,
+      } as Parameters<typeof canvas.zoomToPoint>[0];
+      canvas.zoomToPoint(center, zoom);
+    }
     canvas.setDimensions({
       width: (page.dimensions?.width || width) * zoom,
       height: (page.dimensions?.height || height) * zoom,
     });
     canvas.renderAll();
+    zoomFromWheelRef.current = false;
   }, [zoom, page, width, height]);
 
   // Mettre à jour les options de l'outil
@@ -1902,6 +2025,54 @@ export function EditorCanvas({
       tool === "hand" ? "grab" : tool === "select" ? "default" : "crosshair";
     fabricRef.current.renderAll();
   }, [tool]);
+
+  // Hold-Space-to-pan : track Space key globally so the user can grab the
+  // page from any tool without switching. We ignore the keystroke when an
+  // editable element is focused (typing inside an IText overlay, a form
+  // field, the search bar, etc.) so the user can still type spaces.
+  useEffect(() => {
+    const isTextInputFocused = (): boolean => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (el.isContentEditable) return true;
+      // Fabric's IText editing creates a hidden textarea — guard against it.
+      if (el.classList?.contains("upper-canvas")) return false;
+      return false;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== "Space") return;
+      if (isTextInputFocused()) return;
+      if (isSpaceDownRef.current) return;
+      isSpaceDownRef.current = true;
+      const canvas = fabricRef.current;
+      if (canvas) {
+        canvas.defaultCursor = "grab";
+        canvas.selection = false;
+      }
+      e.preventDefault();
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code !== "Space") return;
+      isSpaceDownRef.current = false;
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const t = toolRef.current;
+      canvas.defaultCursor =
+        t === "hand" ? "grab" : t === "select" ? "default" : "crosshair";
+      canvas.selection = t === "select";
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
 
   // Exposer les méthodes via callback
   useEffect(() => {

@@ -13,3 +13,28 @@ export type {
   ApplyOperationsOptions,
   ApplyOperationsResult,
 } from './apply-operations';
+export { optimizeAndSave } from './optimize-save';
+export type { OptimizeSaveOptions, OptimizeSaveResult } from './optimize-save';
+export { convertToPdfA, PdfAConversionError } from './pdfa-convert';
+export type { PdfAVariant, PdfAConversionResult } from './pdfa-convert';
+export { addNativeAnnotations } from './native-annotations';
+export type {
+  NativeAnnotationType,
+  NativeAnnotationSpec,
+  AddNativeAnnotationsResult,
+} from './native-annotations';
+export {
+  renderPages as mupdfRenderPages,
+  renderPage as mupdfRenderPage,
+} from './mupdf-render';
+export type {
+  RenderPageOptions as MupdfRenderPageOptions,
+  RenderedPage as MupdfRenderedPage,
+  BatchRenderOptions as MupdfBatchRenderOptions,
+} from './mupdf-render';
+export { addWatermark } from './watermark';
+export type {
+  WatermarkOptions,
+  WatermarkPosition,
+  WatermarkResult,
+} from './watermark';
