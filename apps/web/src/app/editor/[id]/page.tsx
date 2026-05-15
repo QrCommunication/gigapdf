@@ -1675,6 +1675,10 @@ export default function EditorPage() {
         onFlattenPdf={handleFlattenPdf}
         isContentEditActive={isContentEditActive}
         onToggleContentEdit={handleToggleContentEdit}
+        onSearchGoToPage={(pageNumber) => {
+          // Search returns 1-based page numbers; goToPage expects 0-based.
+          goToPage(pageNumber - 1);
+        }}
       />
 
       {/* Main content */}

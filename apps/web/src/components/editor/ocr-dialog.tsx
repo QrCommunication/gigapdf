@@ -1,0 +1,235 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { X, Loader2, ScanText, Download, AlertCircle } from "lucide-react";
+import { useOcrPdf, useIsOcrAvailable, downloadBlob } from "@giga-pdf/api";
+
+export interface OcrDialogProps {
+  open: boolean;
+  onClose: () => void;
+  currentFile: File | null;
+  baseFilename?: string;
+}
+
+type Lang = "fra+eng" | "fra" | "eng";
+type Dpi = 144 | 200 | 300;
+
+const LANGS: { value: Lang; label: string }[] = [
+  { value: "fra+eng", label: "Français + Anglais" },
+  { value: "fra", label: "Français" },
+  { value: "eng", label: "Anglais" },
+];
+
+/**
+ * OcrDialog — run Tesseract OCR on every page (or selected pages) of the
+ * current PDF. Output is shown inline so the user can review/copy it,
+ * with a "Télécharger en .txt" button for persistence. Higher DPI (200/
+ * 300) take longer but recover text from low-resolution scans better.
+ */
+export function OcrDialog({
+  open,
+  onClose,
+  currentFile,
+  baseFilename = "document",
+}: OcrDialogProps) {
+  const [lang, setLang] = useState<Lang>("fra+eng");
+  const [dpi, setDpi] = useState<Dpi>(144);
+  const [pagesInput, setPagesInput] = useState("");
+
+  const ocr = useOcrPdf();
+  const availabilityCheck = useIsOcrAvailable();
+  const [available, setAvailable] = useState<boolean | null>(null);
+
+  // Probe availability once per opening.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    availabilityCheck.mutateAsync().then((ok) => {
+      if (!cancelled) setAvailable(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) ocr.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const parsePages = (raw: string): number[] | undefined => {
+    const trimmed = raw.trim();
+    if (!trimmed) return undefined;
+    const out = new Set<number>();
+    for (const part of trimmed.split(",")) {
+      const seg = part.trim();
+      const range = seg.match(/^(\d+)\s*-\s*(\d+)$/);
+      if (range) {
+        for (let i = Number(range[1]); i <= Number(range[2]); i++) out.add(i);
+      } else if (/^\d+$/.test(seg)) {
+        out.add(Number(seg));
+      }
+    }
+    return out.size > 0 ? Array.from(out).sort((a, b) => a - b) : undefined;
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentFile || available === false) return;
+    await ocr.mutateAsync({
+      file: currentFile,
+      options: {
+        lang,
+        dpi,
+        format: "text",
+        pages: parsePages(pagesInput),
+      },
+    });
+  };
+
+  const downloadTxt = () => {
+    if (!ocr.data) return;
+    const blob = new Blob([ocr.data.fullText], { type: "text/plain;charset=utf-8" });
+    downloadBlob(blob, baseFilename.replace(/\.pdf$/i, "") + ".ocr.txt");
+  };
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ocr-dialog-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="relative w-full max-w-2xl max-h-[90vh] rounded-xl border border-border bg-background shadow-2xl flex flex-col">
+        <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <ScanText size={18} className="text-muted-foreground" />
+            <h2
+              id="ocr-dialog-title"
+              className="text-lg font-semibold text-foreground"
+            >
+              Reconnaissance de texte (OCR)
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fermer"
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {available === false ? (
+          <div className="px-6 py-6 flex items-start gap-3 text-sm">
+            <AlertCircle size={18} className="text-destructive shrink-0 mt-0.5" />
+            <p className="text-muted-foreground">
+              Tesseract n'est pas installé sur ce serveur. L'OCR n'est pas
+              disponible. Contactez l'administrateur pour l'activer (paquets
+              <code className="px-1 mx-1 rounded bg-muted">tesseract-ocr</code>
+              <code className="px-1 mx-0.5 rounded bg-muted">tesseract-ocr-fra</code>
+              <code className="px-1 mx-0.5 rounded bg-muted">tesseract-ocr-eng</code>
+              ).
+            </p>
+          </div>
+        ) : (
+          <form
+            onSubmit={submit}
+            className="px-6 pb-4 pt-2 space-y-3 shrink-0 grid grid-cols-3 gap-3"
+          >
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">
+                Langue(s)
+              </label>
+              <select
+                value={lang}
+                onChange={(e) => setLang(e.target.value as Lang)}
+                className="w-full px-2 py-1.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {LANGS.map((l) => (
+                  <option key={l.value} value={l.value}>
+                    {l.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">
+                Qualité (DPI)
+              </label>
+              <select
+                value={dpi}
+                onChange={(e) => setDpi(Number(e.target.value) as Dpi)}
+                className="w-full px-2 py-1.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value={144}>144 (rapide)</option>
+                <option value={200}>200 (équilibré)</option>
+                <option value={300}>300 (haute qualité)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">
+                Pages
+              </label>
+              <input
+                value={pagesInput}
+                onChange={(e) => setPagesInput(e.target.value)}
+                placeholder="1-3, 5"
+                className="w-full px-2 py-1.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="col-span-3 flex justify-end gap-2">
+              <button
+                type="submit"
+                disabled={!currentFile || ocr.isPending}
+                className="px-4 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+              >
+                {ocr.isPending && <Loader2 size={14} className="animate-spin" />}
+                Lancer l'OCR
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Results */}
+        <div className="px-6 pb-6 flex-1 overflow-y-auto min-h-0">
+          {ocr.isError && (
+            <p className="text-sm text-destructive">
+              {(ocr.error as Error)?.message ?? "L'OCR a échoué."}
+            </p>
+          )}
+          {ocr.data && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  {ocr.data.pages.length} page(s) traitée(s) —{" "}
+                  {ocr.data.fullText.length} caractères extraits
+                </p>
+                <button
+                  type="button"
+                  onClick={downloadTxt}
+                  className="px-3 py-1.5 text-xs rounded-md border border-input hover:bg-muted flex items-center gap-1.5"
+                >
+                  <Download size={12} />
+                  Télécharger .txt
+                </button>
+              </div>
+              <textarea
+                value={ocr.data.fullText}
+                readOnly
+                className="w-full h-64 px-3 py-2 rounded-md border border-input bg-muted/30 text-xs font-mono"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
