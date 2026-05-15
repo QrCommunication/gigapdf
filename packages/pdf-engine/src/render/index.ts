@@ -6,3 +6,5 @@ export { addFormField, updateFormFieldValue } from './form-renderer';
 export { deleteElementArea } from './redaction';
 export { flattenAnnotations, flattenForms } from './flatten';
 export type { FlattenAnnotationsResult } from './flatten';
+export { applyRedactions } from './mupdf-redact';
+export type { RedactionTarget, ApplyRedactionsResult } from './mupdf-redact';

@@ -73,6 +73,9 @@ const nextConfig: NextConfig = {
     // Keep pdfjs-dist external so Node resolves pdf.worker.mjs correctly
     // (Turbopack bundling breaks import.meta.url → createRequire resolution)
     "pdfjs-dist",
+    // mupdf ships a wasm blob (mupdf-wasm.wasm) that must be co-located
+    // with mupdf.js at runtime. Bundling it would lose the .wasm sibling.
+    "mupdf",
   ],
   // Force dynamic rendering to avoid SSG issues with client components
   output: "standalone",
@@ -95,6 +98,21 @@ const nextConfig: NextConfig = {
     // Gotham metrics the user sees in the source PDF).
     "/api/pdf/apply-elements": [
       "../../packages/pdf-engine/fonts/*.ttf",
+      // MuPDF wasm runtime — the .wasm and its .js loader must be present
+      // in the standalone bundle for the redaction post-pass to work.
+      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
+      "../../node_modules/mupdf/dist/mupdf-wasm.js",
+      "../../node_modules/mupdf/dist/mupdf.js",
+    ],
+    "/api/office/export": [
+      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
+      "../../node_modules/mupdf/dist/mupdf-wasm.js",
+      "../../node_modules/mupdf/dist/mupdf.js",
+    ],
+    "/api/pdf/flatten": [
+      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
+      "../../node_modules/mupdf/dist/mupdf-wasm.js",
+      "../../node_modules/mupdf/dist/mupdf.js",
     ],
   },
   // Disable static generation for error pages
