@@ -597,6 +597,20 @@ async function removeTextFromStream(_page: unknown, _bounds: { x: number, y: num
   }
 }
 
+/**
+ * @deprecated Legacy mask-based update path. The hot edit pipeline
+ * (`/api/pdf/apply-elements`) now does real content-stream redaction via
+ * MuPDF in a separate post-pass — see `applyRedactions` in mupdf-redact.ts.
+ * This function is kept ONLY for backward compatibility with the legacy
+ * `/api/pdf/text` route (whose React hook `usePdfTextOperation` is no
+ * longer wired into the editor UI). When that route is removed, this
+ * function and its `removeTextFromStream` helper can go too.
+ *
+ * Behaviour: paints a coloured rectangle at `oldBounds` (visual mask only —
+ * original glyphs stay in the content stream and remain copy-paste-able)
+ * then draws the new text at `element.bounds`. Produces the "frame" border
+ * artefact the modern apply-elements pipeline avoids.
+ */
 export async function updateText(
   handle: PDFDocumentHandle,
   pageNumber: number,

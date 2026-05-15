@@ -25,6 +25,15 @@ async function removeTextFromStream(_page: unknown, _bounds: { x: number, y: num
   }
 }
 
+/**
+ * @deprecated Legacy mask-based deletion. The hot edit pipeline
+ * (`/api/pdf/apply-elements`) now does real content-stream redaction via
+ * MuPDF in a separate post-pass — see `applyRedactions` in mupdf-redact.ts.
+ * This function is kept ONLY because some legacy code paths might still
+ * call it; it draws a white rectangle over the area which HIDES the original
+ * content but leaves it copy-paste-able. Prefer `applyRedactions` for any
+ * new code.
+ */
 export async function deleteElementArea(
   handle: PDFDocumentHandle,
   pageNumber: number,
