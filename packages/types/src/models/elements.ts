@@ -64,6 +64,12 @@ export interface ImageSource {
 export interface ImageStyle {
   opacity: number;
   blendMode: "normal" | "multiply" | "screen" | "overlay" | "darken" | "lighten";
+  /**
+   * Sampled background colour (hex, e.g. "#ffffff") under the image, captured
+   * by the client when the image is placed. Used by the renderer to erase the
+   * old image area without leaving a white patch on coloured backgrounds.
+   */
+  backgroundColor?: string;
 }
 
 export interface ImageCrop {

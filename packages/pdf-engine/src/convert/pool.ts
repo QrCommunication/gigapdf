@@ -148,24 +148,30 @@ export async function acquirePage(): Promise<PooledPage> {
     slot = newSlot;
   }
 
-  const index = slot!.inUse;
-  slot!.inUse++;
   const capturedSlot = slot!;
+  const index = capturedSlot.inUse;
+  capturedSlot.inUse++;
+
+  // The slot guarantees pages[index] and contexts[index] exist (we control
+  // both the inUse counter and the array length), so the non-null assertions
+  // are safe. Capturing into locals also lets release() rebind on failure.
+  const capturedContext = capturedSlot.contexts[index]!;
+  const capturedPage = capturedSlot.pages[index]!;
 
   return {
-    page: capturedSlot.pages[index],
-    context: capturedSlot.contexts[index],
+    page: capturedPage,
+    context: capturedContext,
     browser: capturedSlot.browser,
     release: async () => {
       try {
-        await capturedSlot.contexts[index].clearCookies();
-        await capturedSlot.pages[index].unroute('**/*').catch(() => {});
-        await capturedSlot.pages[index].goto('about:blank');
+        await capturedContext.clearCookies();
+        await capturedPage.unroute('**/*').catch(() => {});
+        await capturedPage.goto('about:blank');
       } catch {
         // Page or context died — recreate the page so the slot stays usable.
         try {
-          const newPage = await capturedSlot.contexts[index].newPage();
-          await capturedSlot.pages[index].close().catch(() => {});
+          const newPage = await capturedContext.newPage();
+          await capturedPage.close().catch(() => {});
           capturedSlot.pages[index] = newPage;
         } catch {
           // Context is dead; it will be replaced on next acquire.

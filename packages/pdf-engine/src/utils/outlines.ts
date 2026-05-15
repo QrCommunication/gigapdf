@@ -1,4 +1,4 @@
-import { PDFDocument, PDFName, PDFDict, PDFArray, PDFRef, PDFString, PDFHexString } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFNumber, PDFDict, PDFArray, PDFRef, PDFString, PDFHexString } from 'pdf-lib';
 
 export interface OutlineItem {
   title: string | PDFString | PDFHexString;
@@ -138,9 +138,9 @@ export function buildOutlines(
       if (children.length > 0) {
         (dict as any)._children = children; // temp prop
         if (node.isExpanded) {
-          dict.set(PDFName.of('Count'), children.length);
+          dict.set(PDFName.of('Count'), PDFNumber.of(children.length));
         } else {
-          dict.set(PDFName.of('Count'), -children.length);
+          dict.set(PDFName.of('Count'), PDFNumber.of(-children.length));
         }
       }
 
@@ -154,28 +154,27 @@ export function buildOutlines(
 
   // 2. Link the nodes (Parent, Prev, Next, First, Last)
   const linkNodes = (nodes: PDFDict[], parentRef: PDFRef) => {
-    let prevRef: PDFRef | undefined;
-    
-    // Create refs for all nodes first
+    // Create refs for all nodes first. nodes.map preserves length so refs[i]
+    // is always defined for valid i — captured via non-null assertions below.
     const refs = nodes.map(n => doc.context.register(n));
-    
+
     for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i];
-      const ref = refs[i];
-      
+      const node = nodes[i]!;
+      const ref = refs[i]!;
+
       node.set(PDFName.of('Parent'), parentRef);
-      
+
       if (i > 0) {
-        node.set(PDFName.of('Prev'), refs[i - 1]);
+        node.set(PDFName.of('Prev'), refs[i - 1]!);
       }
       if (i < nodes.length - 1) {
-        node.set(PDFName.of('Next'), refs[i + 1]);
+        node.set(PDFName.of('Next'), refs[i + 1]!);
       }
-      
-      const children = (node as any)._children as PDFDict[];
+
+      const children = (node as any)._children as PDFDict[] | undefined;
       if (children && children.length > 0) {
-        node.set(PDFName.of('First'), doc.context.register(children[0]));
-        node.set(PDFName.of('Last'), doc.context.register(children[children.length - 1]));
+        node.set(PDFName.of('First'), doc.context.register(children[0]!));
+        node.set(PDFName.of('Last'), doc.context.register(children[children.length - 1]!));
         linkNodes(children, ref);
         delete (node as any)._children;
       }
@@ -186,11 +185,12 @@ export function buildOutlines(
     Type: PDFName.of('Outlines'),
     Count: validNodes.length
   });
-  
+
   const outlinesRef = doc.context.register(outlinesDict);
-  
-  outlinesDict.set(PDFName.of('First'), doc.context.register(validNodes[0]));
-  outlinesDict.set(PDFName.of('Last'), doc.context.register(validNodes[validNodes.length - 1]));
+
+  // validNodes.length > 0 was checked above, so first/last are defined.
+  outlinesDict.set(PDFName.of('First'), doc.context.register(validNodes[0]!));
+  outlinesDict.set(PDFName.of('Last'), doc.context.register(validNodes[validNodes.length - 1]!));
   
   linkNodes(validNodes, outlinesRef);
 

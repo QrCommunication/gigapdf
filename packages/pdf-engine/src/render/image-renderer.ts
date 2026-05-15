@@ -1,4 +1,4 @@
-import { rgb } from 'pdf-lib';
+import { rgb, type Color } from 'pdf-lib';
 import type { PDFDocumentHandle } from '../engine/document-handle';
 import { markDirty } from '../engine/document-handle';
 import type { ImageElement, Bounds } from '@giga-pdf/types';
@@ -133,7 +133,7 @@ export async function updateImage(
   // on a red banner, a white rectangle would leave an ugly patch.  The client
   // samples the rendered bitmap and forwards the sampled colour via
   // element.style.backgroundColor — fall back to white only when unavailable.
-  let clearColor = rgb(1, 1, 1);
+  let clearColor: Color = rgb(1, 1, 1);
   if (element.style.backgroundColor) {
     try {
       clearColor = hexToRgb(element.style.backgroundColor);
