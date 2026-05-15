@@ -27,13 +27,10 @@ import {
   openDocument,
   saveDocument,
   addText,
-  updateText,
   addImage,
-  updateImage,
   addShape,
   addAnnotation,
   addFormField,
-  deleteElementArea,
   setFontCacheForHandle,
   applyRedactions,
   webToPdf,
@@ -118,30 +115,21 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    // ── Open document ──────────────────────────────────────────────────────────
+    // ── Open input document (Phase 0: classify + extract page metadata) ──────
+    // We open pdf-lib once on the input bytes so we can convert each
+    // op's web-coord oldBounds into PDF user-space bounds for MuPDF.
+    // No mutations happen on this handle — it's discarded after metadata
+    // extraction so MuPDF can run on the pristine input bytes.
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const handle = await openDocument(buffer);
-    // Plug the Prisma-backed font cache so Type1/CFF→TTF conversions done
-    // by fontforge inside the engine are memoised across requests. The
-    // engine itself stays free of any DB import — it just sees a port.
-    setFontCacheForHandle(handle, createFontCacheDbAdapter());
-
-    // ── Collect redaction targets for the post-pass MuPDF redaction ───────────
-    // Every update / delete operation describes an area of the original page
-    // that must physically disappear from the content stream. The legacy
-    // mask-rectangle approach in updateText only HIDES it, leaving the bytes
-    // recoverable via copy-paste or re-flatten. We accumulate the PDF-space
-    // bounds here and pass them to MuPDF in a single batch after the pdf-lib
-    // operations complete.
-    const redactionTargets: RedactionTarget[] = [];
+    const inputBuffer = Buffer.from(arrayBuffer);
+    const metaHandle = await openDocument(inputBuffer);
 
     /** Convert web bounds → PDF user-space bounds for the given page. */
     const toPdfBounds = (
       pageNumber: number,
       webBounds: { x: number; y: number; width: number; height: number },
     ): RedactionTarget['bounds'] => {
-      const page = handle._pdfDoc.getPage(pageNumber - 1);
+      const page = metaHandle._pdfDoc.getPage(pageNumber - 1);
       const pageH = page.getHeight();
       const pageW = page.getWidth();
       const rotation = page.getRotation().angle as 0 | 90 | 180 | 270;
@@ -156,14 +144,85 @@ export async function POST(request: Request): Promise<Response> {
       );
     };
 
-    // ── Apply each operation in order ──────────────────────────────────────────
+    // ── Classify operations ───────────────────────────────────────────────────
+    // Two buckets:
+    //   - redactionTargets: oldBounds (from update/delete) → MuPDF Phase 1
+    //   - addOps: every action that materialises new content → pdf-lib Phase 2
+    // An 'update' is split into both buckets: redact the original area, then
+    // re-add the element at its NEW bounds. This avoids the in-place edit
+    // regression where a single MuPDF redaction would also wipe the freshly
+    // drawn replacement (newBounds overlapping oldBounds).
+    const redactionTargets: RedactionTarget[] = [];
+    const addOps: Array<{
+      pageNumber: number;
+      element: Record<string, unknown>;
+      elementType: string | undefined;
+      originalIndex: number;
+    }> = [];
+
     for (let opIndex = 0; opIndex < operations.length; opIndex++) {
       const op = operations[opIndex]!;
       const { action, pageNumber, element, oldBounds } = op;
       const elementType = element['type'] as string | undefined;
 
-      try {
       if (action === 'add') {
+        addOps.push({ pageNumber, element, elementType, originalIndex: opIndex });
+      } else if (action === 'update') {
+        if (!oldBounds) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `oldBounds is required for update operations (element type: ${elementType ?? 'unknown'}).`,
+            },
+            { status: 400 },
+          );
+        }
+        redactionTargets.push({
+          pageNumber,
+          bounds: toPdfBounds(pageNumber, oldBounds),
+        });
+        // Re-cast as add at element.bounds (the NEW position carried by
+        // element). This is the same data shape the 'add' branch consumes.
+        addOps.push({ pageNumber, element, elementType, originalIndex: opIndex });
+      } else if (action === 'delete') {
+        const bounds = (element['bounds'] ?? oldBounds) as Bounds | undefined;
+        if (bounds) {
+          redactionTargets.push({
+            pageNumber,
+            bounds: toPdfBounds(pageNumber, bounds),
+          });
+        }
+      }
+    }
+
+    // ── Phase 1: MuPDF redaction on the pristine input ────────────────────────
+    // Physically removes original glyphs/images/line-art from oldBounds
+    // areas. Operates on the input bytes — pdf-lib hasn't mutated anything
+    // yet. If MuPDF fails, we proceed without redaction (degraded: doublons
+    // visible like the legacy mask-only path).
+    let workingBytes: Uint8Array = new Uint8Array(inputBuffer);
+    if (redactionTargets.length > 0) {
+      try {
+        const result = await applyRedactions(workingBytes, redactionTargets);
+        workingBytes = result.bytes;
+      } catch (err) {
+        serverLogger.warn('api.pdf.apply-elements: MuPDF redaction failed', {
+          error: err instanceof Error ? err.message : String(err),
+          targetCount: redactionTargets.length,
+        });
+      }
+    }
+
+    // ── Phase 2: pdf-lib addition pass on the redacted bytes ──────────────────
+    // Re-open with pdf-lib because MuPDF may have rewritten the byte stream.
+    // updateText/updateImage/deleteElementArea are NOT used here — Phase 1
+    // already handled the removals. We just append the new content.
+    const handle = await openDocument(Buffer.from(workingBytes));
+    setFontCacheForHandle(handle, createFontCacheDbAdapter());
+
+    for (const op of addOps) {
+      const { pageNumber, element, elementType, originalIndex } = op;
+      try {
         switch (elementType) {
           case 'text': {
             await addText(handle, pageNumber, element as unknown as TextElement);
@@ -191,97 +250,18 @@ export async function POST(request: Request): Promise<Response> {
           default:
             break;
         }
-      } else if (action === 'update') {
-        if (!oldBounds) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: `oldBounds is required for update operations (element type: ${elementType ?? 'unknown'}).`,
-            },
-            { status: 400 },
-          );
-        }
-        const bounds: Bounds = oldBounds;
-
-        // Queue the original area for MuPDF redaction so the new render
-        // doesn't sit on top of the still-existing original glyphs/image.
-        redactionTargets.push({
-          pageNumber,
-          bounds: toPdfBounds(pageNumber, bounds),
-        });
-
-        switch (elementType) {
-          case 'text': {
-            await updateText(handle, pageNumber, bounds, element as unknown as TextElement);
-            break;
-          }
-          case 'image': {
-            const imageData = extractImageData(element);
-            await updateImage(handle, pageNumber, bounds, element as unknown as ImageElement, imageData);
-            break;
-          }
-          default: {
-            // For shape, annotation, form_field: clear the old area then re-add.
-            deleteElementArea(handle, pageNumber, bounds);
-            switch (elementType) {
-              case 'shape': {
-                addShape(handle, pageNumber, element as unknown as ShapeElement);
-                break;
-              }
-              case 'annotation': {
-                await addAnnotation(handle, pageNumber, element as unknown as AnnotationElement);
-                break;
-              }
-              case 'form_field': {
-                addFormField(handle, pageNumber, element as unknown as FormFieldElement);
-                break;
-              }
-              default:
-                break;
-            }
-            break;
-          }
-        }
-      } else if (action === 'delete') {
-        const bounds = (element['bounds'] ?? oldBounds) as Bounds | undefined;
-        if (bounds) {
-          deleteElementArea(handle, pageNumber, bounds);
-          redactionTargets.push({
-            pageNumber,
-            bounds: toPdfBounds(pageNumber, bounds),
-          });
-        }
-      }
       } catch (opError) {
         const elementId = element['elementId'] ?? element['id'];
         const annotated = new Error(
-          `apply-elements op[${opIndex}] failed (action=${action}, type=${elementType ?? 'unknown'}, page=${pageNumber}, elementId=${elementId ?? 'n/a'}): ${opError instanceof Error ? opError.message : String(opError)}`,
+          `apply-elements op[${originalIndex}] failed (type=${elementType ?? 'unknown'}, page=${pageNumber}, elementId=${elementId ?? 'n/a'}): ${opError instanceof Error ? opError.message : String(opError)}`,
         );
         if (opError instanceof Error) (annotated as Error & { cause?: unknown }).cause = opError;
         throw annotated;
       }
     }
 
-    // ── Save pdf-lib output ────────────────────────────────────────────────────
-    const pdfLibBytes = await saveDocument(handle);
-
-    // ── Post-pass: real redaction via MuPDF ────────────────────────────────────
-    // Physically removes the original glyphs/images/line-art under each
-    // update/delete area so the exported PDF contains the new content
-    // only — no doublons hidden behind a white rectangle. Falls back to
-    // the pdf-lib output if MuPDF errors out (degraded but functional).
-    let finalBytes: Uint8Array = new Uint8Array(pdfLibBytes);
-    if (redactionTargets.length > 0) {
-      try {
-        const result = await applyRedactions(finalBytes, redactionTargets);
-        finalBytes = result.bytes;
-      } catch (err) {
-        serverLogger.warn('api.pdf.apply-elements: MuPDF redaction failed', {
-          error: err instanceof Error ? err.message : String(err),
-          targetCount: redactionTargets.length,
-        });
-      }
-    }
+    // ── Save final ────────────────────────────────────────────────────────────
+    const finalBytes = await saveDocument(handle);
 
     // Wrap in Buffer so TypeScript accepts it as BodyInit across lib targets
     // (Uint8Array<ArrayBufferLike> is rejected by Next.js' stricter

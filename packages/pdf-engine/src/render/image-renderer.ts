@@ -116,6 +116,14 @@ export async function addImage(
   markDirty(handle._pdfDoc);
 }
 
+/**
+ * @deprecated Legacy mask-based image update. The hot edit pipeline
+ * (`/api/pdf/apply-elements`) now does real content-stream redaction via
+ * MuPDF in a separate post-pass. Kept for backward compat with the legacy
+ * `/api/pdf/image` route (whose React hook `usePdfImageOperation` is no
+ * longer wired into the editor UI). When that route is removed, this
+ * function can be deleted.
+ */
 export async function updateImage(
   handle: PDFDocumentHandle,
   pageNumber: number,
