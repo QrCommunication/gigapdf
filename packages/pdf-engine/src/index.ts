@@ -44,7 +44,9 @@ export {
   deleteElementArea,
   flattenAnnotations,
   flattenForms,
+  applyRedactions,
 } from './render';
+export type { RedactionTarget, ApplyRedactionsResult } from './render';
 
 // Merge/Split
 export { mergePDFs, splitPDF, splitAt } from './merge-split';
@@ -107,3 +109,6 @@ export {
   PDFPageOutOfRangeError,
   PDFUnsupportedOperationError,
 } from './errors';
+
+// Coordinate conversion (web ↔ PDF user space, with rotation handling)
+export { webToPdf, pdfToWeb, scaleRect } from './utils/coordinates';
