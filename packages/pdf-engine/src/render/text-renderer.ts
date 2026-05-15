@@ -583,7 +583,7 @@ function parseStyleColorToRgb(
  * pour éviter de peindre un rectangle blanc destructeur.
  * Note: L'implémentation complète nécessite l'analyse de la matrice de transformation (Tm, cm).
  */
-async function removeTextFromStream(page: any, bounds: { x: number, y: number, width: number, height: number }): Promise<boolean> {
+async function removeTextFromStream(_page: unknown, _bounds: { x: number, y: number, width: number, height: number }): Promise<boolean> {
   try {
     // Boilerplate for future complete stream editing
     // const { PDFRawStream, decodePDFRawStream } = require('pdf-lib');
@@ -592,7 +592,7 @@ async function removeTextFromStream(page: any, bounds: { x: number, y: number, w
     // ... logic to parse operators and strip Tj/TJ within bounds ...
     // return true if successful
     return false; // Currently false, fallback to drawRectangle
-  } catch (e) {
+  } catch {
     return false;
   }
 }
