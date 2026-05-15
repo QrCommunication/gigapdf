@@ -283,7 +283,10 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
 
-    return new Response(finalBytes, {
+    // Wrap in Buffer so TypeScript accepts it as BodyInit across lib targets
+    // (Uint8Array<ArrayBufferLike> is rejected by Next.js' stricter
+    // type-check while Buffer satisfies the BodyInit union).
+    return new Response(Buffer.from(finalBytes), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
