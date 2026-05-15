@@ -80,6 +80,19 @@ ln -sf /opt/gigapdf/.env /opt/gigapdf/apps/web/.env
 ln -sf /opt/gigapdf/.env /opt/gigapdf/apps/admin/.env
 
 # =============================================================================
+# 1.7 Lock down .env so only the gigapdf runtime user (and ubuntu owner) can
+# read it. The Python services use pydantic-settings which calls open('.env')
+# from the process itself — systemd's EnvironmentFile= load as root is not
+# enough, the file must be readable by User=gigapdf or celery crash-loops with
+# PermissionError. Owner=ubuntu keeps the file editable by the deployer.
+# =============================================================================
+if [ -f "$ENV_FILE" ]; then
+    log_info "Securing .env (owner=ubuntu, group=gigapdf, mode=640)..."
+    sudo chown ubuntu:gigapdf "$ENV_FILE"
+    sudo chmod 640 "$ENV_FILE"
+fi
+
+# =============================================================================
 # 2. Python Virtual Environment & Dependencies
 # =============================================================================
 log_info "Setting up Python environment..."
