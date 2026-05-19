@@ -29,7 +29,7 @@
     "expo-file-system": "~19.0.21",
     "expo-font": "~14.0.10",
     "expo-image-picker": "~17.0.10",
-    "expo-linking": "~8.0.11",
+    "expo-linking": "~55.0.14",
     "expo-localization": "^17.0.8",
     "expo-network": "~8.0.8",
     "expo-router": "~6.0.21",
