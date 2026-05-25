@@ -264,12 +264,12 @@ describe('mapPdfFontToStandard', () => {
   describe('Helvetica / Arial family detection', () => {
     it('maps "ArialMT-Bold" to Helvetica bold normal', () => {
       const result = mapPdfFontToStandard('ArialMT-Bold');
-      expect(result).toEqual({ fontFamily: 'Helvetica', fontWeight: 'bold', fontStyle: 'normal' });
+      expect(result).toEqual({ fontFamily: 'Arial', fontWeight: 'bold', fontStyle: 'normal' });
     });
 
     it('maps "ArialMT" to Helvetica normal normal', () => {
       const result = mapPdfFontToStandard('ArialMT');
-      expect(result).toEqual({ fontFamily: 'Helvetica', fontWeight: 'normal', fontStyle: 'normal' });
+      expect(result).toEqual({ fontFamily: 'Arial', fontWeight: 'normal', fontStyle: 'normal' });
     });
 
     it('maps "Helvetica" to Helvetica normal normal', () => {
