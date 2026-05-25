@@ -455,7 +455,7 @@ class FontExtractionService:
 
             # ── hmtx (uniform widths) ───────────────────────────────
             hmtx = newTable("hmtx")
-            hmtx.metrics = {gn: (default_width, 0) for gn in glyph_order}
+            hmtx.metrics = dict.fromkeys(glyph_order, (default_width, 0))
             font["hmtx"] = hmtx
 
             # ── maxp ────────────────────────────────────────────────
