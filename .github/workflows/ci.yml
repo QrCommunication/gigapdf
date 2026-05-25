@@ -20,7 +20,7 @@ jobs:
   # ─────────────────────────────────────────────
   lint:
     name: Lint (JS/TS)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +45,7 @@ jobs:
   # ─────────────────────────────────────────────
   type-check:
     name: Type Check (JS/TS)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -70,7 +70,7 @@ jobs:
   # ─────────────────────────────────────────────
   test-packages:
     name: Test (packages)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +98,7 @@ jobs:
   # ─────────────────────────────────────────────
   test-web:
     name: Test (web)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -130,7 +130,7 @@ jobs:
   # ─────────────────────────────────────────────
   lint-python:
     name: Lint + Type Check (Python)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -154,7 +154,7 @@ jobs:
   # ─────────────────────────────────────────────
   test-backend:
     name: Test (Python backend)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -178,7 +178,7 @@ jobs:
   # ─────────────────────────────────────────────
   build:
     name: Build (JS/TS)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     timeout-minutes: 10
     needs: [lint, type-check, test-packages, test-web, lint-python, test-backend]
     env:

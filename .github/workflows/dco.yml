@@ -11,7 +11,7 @@ permissions:
 jobs:
   dco:
     name: Check DCO sign-off
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     steps:
       - name: Checkout PR commits
         uses: actions/checkout@v4
