@@ -5,6 +5,39 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-06-12
+
+### Added
+- Automatic identification of the PDF's fonts with on-demand Google Fonts
+  download through a server-side proxy (`GET /api/fonts/google`). Lookups
+  are cached in the database (`font_cache`) and in the browser (IndexedDB);
+  no client request ever reaches Google — GDPR-friendly.
+- Server-side bake integration: a font downloaded from Google Fonts is
+  embedded in the final PDF, so the saved document renders identically
+  everywhere.
+- Real text formatting in the editor: bold, italic, underline and text
+  alignment.
+- Watermark "Apply to document" option (whole document, not just the
+  current page).
+- Share button in the editor toolbar.
+- Document detail page: preview, metadata, and version history with
+  one-click restore.
+- New text elements adopt the document's dominant font.
+- Global toast notification system.
+
+### Fixed
+- `Dockerfile.web` / `Dockerfile.admin`: Debian (bookworm) base image with
+  the complete PDF system dependencies (LibreOffice, fontforge,
+  tesseract-ocr fra+eng, Playwright Chromium), correct `public/` path for
+  the standalone monorepo output, and workspace-aware install.
+- Folder deletion now wired in the documents list view.
+- Missing i18n keys.
+
+### Changed
+- `docker-compose.yml`: `env_file` is now set on every application service
+  (api, celery-worker, celery-beat, web, admin), so the root `.env` is
+  passed in full.
+
 ## [1.0.0-oss] — 2026-04-26
 
 ### Added

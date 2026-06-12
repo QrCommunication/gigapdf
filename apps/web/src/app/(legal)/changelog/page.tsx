@@ -15,6 +15,23 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.1.0",
+    date: "2026-06-12",
+    type: "minor",
+    changes: [
+      { type: "feature", description: "Faithful fonts: the editor identifies the PDF's fonts and downloads the matching Google Font on demand — through our server, never from your browser (GDPR-friendly). The font is embedded in the saved PDF." },
+      { type: "feature", description: "Real text formatting in the editor: bold, italic, underline and alignment" },
+      { type: "feature", description: "New text automatically uses the document's dominant font" },
+      { type: "feature", description: "Watermark can now be applied to the whole document at once" },
+      { type: "feature", description: "Share button directly in the editor" },
+      { type: "feature", description: "Document detail page with preview, metadata, version history and one-click restore" },
+      { type: "improvement", description: "Unified toast notifications across the app" },
+      { type: "improvement", description: "Self-host Docker images now ship every PDF dependency out of the box (Office conversions, font fidelity, OCR, HTML to PDF)" },
+      { type: "fix", description: "Folder deletion now works from the documents list view" },
+      { type: "fix", description: "Added missing translations" },
+    ],
+  },
+  {
     version: "1.0.0",
     date: "2025-01-15",
     type: "major",

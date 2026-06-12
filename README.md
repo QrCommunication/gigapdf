@@ -50,6 +50,13 @@
 
 ## Quick start (self-hosting)
 
+GigaPDF can be self-hosted in two ways: **Docker** (recommended) or
+**native** (bare-metal / VPS).
+
+### Option 1 — Docker (recommended)
+
+Prerequisites: Docker 24+ with the Compose plugin.
+
 ```bash
 git clone https://github.com/QrCommunication/gigapdf.git
 cd gigapdf
@@ -59,22 +66,74 @@ docker compose up -d
 # App at http://localhost:3000
 ```
 
+The compose stack starts six services:
+
+| Service | Image / build | Port |
+|---|---|---|
+| `postgres` | `postgres:17-alpine` | 5432 |
+| `redis` | `redis:7-alpine` | 6379 |
+| `api` | FastAPI backend (`Dockerfile.api`) | 8000 |
+| `celery-worker` + `celery-beat` | Background jobs (`Dockerfile.api`) | — |
+| `web` | Next.js frontend (`Dockerfile.web`) | 3000 |
+| `admin` | Admin dashboard (`Dockerfile.admin`) | 3001 |
+
+The `web` image is based on **Debian bookworm** and already embeds every
+system dependency the PDF engine needs — no extra setup:
+
+- **LibreOffice** (writer/calc/impress/draw) — Office ↔ PDF conversions
+- **fontforge** — Type1/CFF → TTF conversion for faithful font rendering
+- **tesseract-ocr** (fra + eng) — OCR
+- **Playwright Chromium** — HTML → PDF and URL → PDF
+
 > ⚠️ **Self-hosters must configure `NEXT_PUBLIC_LEGAL_*` env vars** in
 > `apps/web/.env.local` for LCEN compliance. The web app refuses to start in
 > production mode without them. See `apps/web/.env.example`.
 
-### System Dependencies
+### Option 2 — Native (bare-metal / VPS)
 
-If you are running the project directly on a host (outside of Docker), ensure the following system packages are installed for document conversion and rasterization to work:
+Prerequisites:
 
-- **`libreoffice-core`** (or `libreoffice`): Required for DOCX, PPTX ↔ PDF conversions.
-- **`poppler-utils`**: Required for PDF to JPG/PNG conversions (provides `pdftocairo`).
+- **Node.js 22** + **pnpm 10.28**
+- **Python 3.12** + venv (backend API, `requirements.txt`)
+- **PostgreSQL 17** and **Redis 7**
 
-On Ubuntu/Debian:
+Install the system dependencies used by the PDF engine (Ubuntu/Debian):
+
 ```bash
 sudo apt-get update
-sudo apt-get install libreoffice-core poppler-utils
+sudo apt-get install -y libreoffice fontforge \
+  tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng
 ```
+
+Then build and install:
+
+```bash
+git clone https://github.com/QrCommunication/gigapdf.git
+cd gigapdf
+
+# Backend (FastAPI + Celery)
+python3.12 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+
+# Frontend (Next.js web + admin + packages)
+pnpm install && pnpm build
+
+# Chromium for HTML → PDF conversions
+pnpm exec playwright install --with-deps chromium
+```
+
+Run the services behind a reverse proxy. The repository ships systemd units
+(`deploy/systemd/`) and an Nginx configuration (`deploy/nginx.conf`) whose
+routing pattern is:
+
+- `/api/pdf/*` and `/api/auth/*` → **Next.js** (`:3000`, TypeScript PDF engine)
+- `/api/*`, `/socket.io/*`, `/webhooks/*` → **FastAPI** (`:8000`)
+- `/admin` → admin dashboard (`:3001`)
+- everything else → Next.js web (`:3000`)
+
+See [`docs/guides/INSTALLATION.md`](docs/guides/INSTALLATION.md) and
+[`docs/guides/DEPLOYMENT.md`](docs/guides/DEPLOYMENT.md) for the full
+walkthrough.
 
 ## Cloud vs Self-hosting
 
@@ -94,7 +153,12 @@ The self-hosted version uses the exact same code base.
 
 ### PDF Editing
 - **Visual WYSIWYG editor** — Canvas-based editing with drag-and-drop
-- **Text manipulation** — Add, edit, format text with full font support
+- **Text manipulation** — Add, edit, format text (bold, italic, underline,
+  alignment); new text adopts the document's dominant font
+- **Faithful fonts** — Automatic identification of the PDF's fonts with
+  on-demand Google Fonts download through a server-side proxy
+  (`/api/fonts/google`, DB + IndexedDB cache, no client request ever reaches
+  Google); the downloaded font is embedded in the final PDF
 - **Images & shapes** — Insert, resize, position visual elements
 - **Annotations** — Highlights, comments, stamps, freehand drawings
 - **Form builder** — Create and fill interactive PDF forms
@@ -103,8 +167,13 @@ The self-hosted version uses the exact same code base.
 - Page management (add, remove, reorder, rotate)
 - Merge & split documents
 - Encryption & password protection
+- Watermarking (single page or whole document)
+- PDF/A conversion
 - OCR (text extraction from scans, fra+eng default)
-- Conversion (HTML → PDF, URL → PDF via Playwright)
+- Conversion (HTML → PDF, URL → PDF via Playwright; DOCX/XLSX/PPTX ↔ PDF via
+  LibreOffice)
+- Sharing (email invitations, public links) and document detail page with
+  version history & restore
 
 ### Developer tools
 - **REST API** — Complete OpenAPI spec, see `docs/api/`
