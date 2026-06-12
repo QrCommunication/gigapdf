@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useTranslations } from "next-intl";
 import { X, Loader2, Droplet } from "lucide-react";
 import { useAddWatermark, downloadBlob } from "@giga-pdf/api";
 
@@ -10,7 +11,16 @@ export interface WatermarkDialogProps {
   currentFile: File | null;
   /** Suggested filename for the resulting download. */
   baseFilename?: string;
+  /**
+   * Called with the watermarked PDF when the user chooses to apply the
+   * watermark to the current document (instead of downloading a copy).
+   * When omitted, the dialog falls back to download-only behaviour.
+   */
+  onApplied?: (blob: Blob) => void;
 }
+
+/** What to do with the watermarked PDF once produced. */
+type OutputMode = "apply" | "download";
 
 type Position =
   | "center-diagonal"
@@ -42,12 +52,19 @@ export function WatermarkDialog({
   onClose,
   currentFile,
   baseFilename = "watermarked.pdf",
+  onApplied,
 }: WatermarkDialogProps) {
+  const t = useTranslations("editor.watermark");
   const [text, setText] = useState("CONFIDENTIEL");
   const [position, setPosition] = useState<Position>("center-diagonal");
   const [opacity, setOpacity] = useState(25);
   const [pagesInput, setPagesInput] = useState("");
+  const [outputMode, setOutputMode] = useState<OutputMode>("apply");
   const addWatermark = useAddWatermark();
+
+  // Without an onApplied callback there is nothing to apply the result to —
+  // the dialog degrades to its historical download-only behaviour.
+  const canApplyToDocument = Boolean(onApplied);
 
   const parsePages = (raw: string): number[] | undefined => {
     const trimmed = raw.trim();
@@ -79,10 +96,16 @@ export function WatermarkDialog({
         pages: parsePages(pagesInput),
       },
     });
-    downloadBlob(
-      blob,
-      baseFilename.replace(/\.pdf$/i, "") + ".watermarked.pdf",
-    );
+    if (canApplyToDocument && outputMode === "apply") {
+      // Hand the watermarked binary to the editor so it replaces the live
+      // document (and gets persisted) instead of only producing a download.
+      onApplied?.(blob);
+    } else {
+      downloadBlob(
+        blob,
+        baseFilename.replace(/\.pdf$/i, "") + ".watermarked.pdf",
+      );
+    }
     onClose();
   };
 
@@ -176,6 +199,56 @@ export function WatermarkDialog({
               className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
+
+          {canApplyToDocument && (
+            <fieldset>
+              <legend className="block text-sm font-medium text-foreground mb-1">
+                {t("modeLabel")}
+              </legend>
+              <div className="space-y-2">
+                {(
+                  [
+                    {
+                      value: "apply",
+                      label: t("applyToDocument"),
+                      hint: t("applyToDocumentHint"),
+                    },
+                    {
+                      value: "download",
+                      label: t("downloadOnly"),
+                      hint: t("downloadOnlyHint"),
+                    },
+                  ] as const
+                ).map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex items-start gap-3 px-3 py-2 rounded-md border cursor-pointer transition-colors ${
+                      outputMode === option.value
+                        ? "border-primary bg-primary/5"
+                        : "border-input hover:bg-muted"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="watermark-output-mode"
+                      value={option.value}
+                      checked={outputMode === option.value}
+                      onChange={() => setOutputMode(option.value)}
+                      className="mt-0.5 accent-primary"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-foreground">
+                        {option.label}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {option.hint}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
 
           {addWatermark.isError && (
             <p className="text-sm text-destructive">

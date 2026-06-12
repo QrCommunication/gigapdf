@@ -140,6 +140,11 @@ export interface EditorToolbarProps {
       bbox: [number, number, number, number];
     },
   ) => void;
+  /**
+   * Callback quand le filigrane est appliqué au document courant (mode
+   * « Appliquer au document » du WatermarkDialog). Reçoit le PDF filigrané.
+   */
+  onWatermarkApplied?: (blob: Blob) => void;
 }
 
 interface ToolButtonProps {
@@ -360,6 +365,7 @@ export function EditorToolbar({
   isContentEditActive,
   onToggleContentEdit,
   onSearchGoToPage,
+  onWatermarkApplied,
 }: EditorToolbarProps) {
   const t = useTranslations("editor.toolbar");
   const tProperties = useTranslations("editor.properties.text");
@@ -903,6 +909,7 @@ export function EditorToolbar({
         onClose={() => setShowWatermarkDialog(false)}
         currentFile={currentFile ?? null}
         baseFilename={currentFile?.name}
+        onApplied={onWatermarkApplied}
       />
       <OcrDialog
         open={showOcrDialog}

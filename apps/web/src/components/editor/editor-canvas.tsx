@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useEffect, useCallback, useState } from "react";
+import React, { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import type {
   PageObject,
@@ -31,6 +31,15 @@ function resolveImageUrl(url: string): string {
   return `${API_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
+/** Actions de formatage applicables aux textes sélectionnés depuis la toolbar */
+export type TextFormatAction =
+  | "bold"
+  | "italic"
+  | "underline"
+  | "alignLeft"
+  | "alignCenter"
+  | "alignRight";
+
 export interface EditorCanvasHandle {
   /** Ajouter une image au canvas */
   addImage: (dataUrl: string, width: number, height: number) => void;
@@ -48,6 +57,8 @@ export interface EditorCanvasHandle {
   duplicateSelected: () => void;
   /** Obtenir les IDs des éléments sélectionnés */
   getSelectedIds: () => string[];
+  /** Appliquer un formatage (gras/italique/souligné/alignement) aux textes sélectionnés */
+  applyTextFormat: (action: TextFormatAction) => void;
 }
 
 export interface EditorCanvasProps {
@@ -102,6 +113,43 @@ export interface EditorCanvasProps {
 // Génère un ID unique
 function generateId(): string {
   return `el_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Fabric stocke fontWeight soit en string ("bold"/"normal"/"700"), soit en
+// nombre CSS (400/600/700…). Normalise les deux conventions : toute valeur
+// numérique ≥ 600 compte comme bold (semi-bold et au-delà).
+function isBoldFontWeight(weight: string | number | undefined): boolean {
+  if (typeof weight === "number") return weight >= 600;
+  if (!weight) return false;
+  if (weight === "bold" || weight === "bolder") return true;
+  const numeric = Number.parseInt(weight, 10);
+  return Number.isFinite(numeric) && numeric >= 600;
+}
+
+// Famille de police dominante parmi les éléments texte de la page courante,
+// pondérée par la longueur du contenu (un paragraphe long pèse plus qu'une
+// puce d'un caractère). Les nouveaux textes créés par l'utilisateur héritent
+// de cette famille au lieu d'un "Arial" hardcodé, pour rester visuellement
+// cohérents avec le document. Fallback "Arial" si la page n'a aucun texte.
+function getDocumentDefaultFontFamily(elements: readonly Element[] | undefined): string {
+  if (!elements || elements.length === 0) return "Arial";
+  const familyWeights = new Map<string, number>();
+  for (const element of elements) {
+    if (element.type !== "text") continue;
+    const family = (element.style.fontFamily || "").trim();
+    if (!family) continue;
+    const weight = Math.max(1, (element.content || "").length);
+    familyWeights.set(family, (familyWeights.get(family) ?? 0) + weight);
+  }
+  let best: string | null = null;
+  let bestWeight = 0;
+  for (const [family, weight] of familyWeights) {
+    if (weight > bestWeight) {
+      best = family;
+      bestWeight = weight;
+    }
+  }
+  return best ?? "Arial";
 }
 
 // Bake an alpha value into a hex/rgb colour string. Used for shape fill/
@@ -207,6 +255,18 @@ export function EditorCanvas({
     scrollTop: number;
   } | null>(null);
 
+  // Police par défaut des nouveaux textes : famille dominante de la page
+  // courante. Valeur dérivée memoïsée — aucun état React supplémentaire,
+  // donc aucun re-render parasite. Le miroir ref est nécessaire car le
+  // handler mouse:down est enregistré UNE seule fois à l'init de Fabric
+  // (closure stale sans ref, même pattern que toolRef/strokeColorRef).
+  const pageElements = page?.elements;
+  const documentDefaultFontFamily = useMemo(
+    () => getDocumentDefaultFontFamily(pageElements),
+    [pageElements],
+  );
+  const documentDefaultFontFamilyRef = useRef(documentDefaultFontFamily);
+
   // Update refs when props change
   useEffect(() => {
     documentIdRef.current = documentId;
@@ -224,6 +284,7 @@ export function EditorCanvas({
     fillColorRef.current = fillColor;
     strokeWidthRef.current = strokeWidth;
     zoomRef.current = zoom;
+    documentDefaultFontFamilyRef.current = documentDefaultFontFamily;
   });
 
   // Historique pour undo/redo
@@ -311,7 +372,7 @@ export function EditorCanvas({
           text?: string;
           fontSize?: number;
           fontFamily?: string;
-          fontWeight?: string;
+          fontWeight?: string | number;
           fontStyle?: string;
           fill?: string;
           textAlign?: string;
@@ -365,7 +426,9 @@ export function EditorCanvas({
           style: {
             fontFamily: fontFamilyForRoundTrip,
             fontSize,
-            fontWeight: textObj.fontWeight === "bold" ? "bold" : "normal",
+            // Numeric CSS weights (600/700) must round-trip as "bold" too —
+            // applyTextFormat and parsed PDFs can both produce them.
+            fontWeight: isBoldFontWeight(textObj.fontWeight) ? "bold" : "normal",
             fontStyle: textObj.fontStyle === "italic" ? "italic" : "normal",
             color: (textObj.fill as string) || "#000000",
             opacity: obj.opacity ?? 1,
@@ -979,7 +1042,9 @@ export function EditorCanvas({
                 left: pointer.x,
                 top: pointer.y,
                 fontSize: 16,
-                fontFamily: "Arial",
+                // Famille dominante du document (memoïsée) — un nouveau texte
+                // doit ressembler au reste de la page, pas à un Arial générique.
+                fontFamily: documentDefaultFontFamilyRef.current,
                 fill: currentStrokeColor,
               });
               (newObj as FabricObjectWithData).data = { elementId: generateId() };
@@ -2180,10 +2245,74 @@ export function EditorCanvas({
           .map((obj) => (obj as FabricObjectWithData).data?.elementId)
           .filter(Boolean) as string[];
       },
+      applyTextFormat: (action: TextFormatAction) => {
+        if (!fabricRef.current) return;
+        const canvas = fabricRef.current;
+        // getActiveObjects() aplatit une ActiveSelection en ses enfants —
+        // sélection simple et multiple sont donc traitées uniformément.
+        const textObjects = canvas.getActiveObjects().filter((obj) => {
+          const typeName = (obj as FabricObject & { type?: string }).type ?? "";
+          return typeName === "i-text" || typeName === "text" || typeName === "textbox";
+        }) as Array<
+          FabricObjectWithData & {
+            fontWeight?: string | number;
+            fontStyle?: string;
+            underline?: boolean;
+          }
+        >;
+        if (textObjects.length === 0) return;
+
+        for (const obj of textObjects) {
+          switch (action) {
+            case "bold":
+              obj.set({
+                fontWeight: isBoldFontWeight(obj.fontWeight) ? "normal" : "bold",
+              });
+              break;
+            case "italic":
+              obj.set({
+                fontStyle: obj.fontStyle === "italic" ? "normal" : "italic",
+              });
+              break;
+            case "underline":
+              obj.set({ underline: !obj.underline });
+              break;
+            case "alignLeft":
+              obj.set({ textAlign: "left" });
+              break;
+            case "alignCenter":
+              obj.set({ textAlign: "center" });
+              break;
+            case "alignRight":
+              obj.set({ textAlign: "right" });
+              break;
+          }
+        }
+        canvas.requestRenderAll();
+
+        // MÊME synchronisation scene-graph que handleObjectModified (souris) :
+        // conversion objet→element + oldBounds trackés AVANT la modification
+        // (zone à effacer côté apply-elements) + onElementModified, puis un
+        // snapshot d'historique unique pour toute l'action.
+        for (const obj of textObjects) {
+          const element = fabricObjectToElement(obj);
+          if (!element) continue;
+          const oldBounds = lastKnownBoundsRef.current.get(element.elementId);
+          // Changement de style pur : le glyphe ne bouge pas. Dans une
+          // ActiveSelection, obj.left/top sont RELATIFS à la sélection —
+          // des bounds recalculées seraient fausses ; on réutilise alors
+          // les bounds trackées.
+          const bounds = obj.group && oldBounds ? oldBounds : element.bounds;
+          const syncedElement = { ...element, bounds };
+          lastKnownBoundsRef.current.set(element.elementId, bounds);
+          onElementModifiedRef.current?.(syncedElement, oldBounds);
+        }
+        saveHistory(canvas);
+      },
     };
 
     onCanvasReady(handle);
-  }, [historyIndex, historyStack, onCanvasReady]);
+  }, [historyIndex, historyStack, onCanvasReady, fabricObjectToElement, saveHistory]);
 
   // Calculer les dimensions du canvas basées sur la page
   const canvasWidth = page?.dimensions?.width || width;

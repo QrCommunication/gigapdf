@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { useShallow } from "zustand/react/shallow";
 import Link from "next/link";
 import type { Element, UUID, PageObject } from "@giga-pdf/types";
-import { Button } from "@giga-pdf/ui";
+import { Button, useToast } from "@giga-pdf/ui";
 import {
   useCanvasStore,
   useSelectionStore,
@@ -55,8 +55,12 @@ import {
   CollaboratorsList,
   DocumentInfoSidebar,
 } from "@/components/editor";
-import type { EditorCanvasHandle } from "@/components/editor/editor-canvas";
+import type {
+  EditorCanvasHandle,
+  TextFormatAction,
+} from "@/components/editor/editor-canvas";
 import { FormsPanel } from "@/components/editor/forms-panel";
+import { ShareDialog } from "@/components/sharing/share-dialog";
 import { useFlattenPdf, usePdfPageOperation, downloadBlob, useApplyElements } from "@giga-pdf/api";
 import { ContentEditLayer, type ElementModification } from "@/components/editor/content-edit-layer";
 import { clientLogger } from "@/lib/client-logger";
@@ -122,13 +126,42 @@ function convertToApiElement(element: Element): ElementCreateRequest {
   return base;
 }
 
+/** Identifiers emitted by the toolbar formatting buttons (kebab-case). */
+type ToolbarFormatAction =
+  | "bold"
+  | "italic"
+  | "underline"
+  | "align-left"
+  | "align-center"
+  | "align-right";
+
+/**
+ * Map toolbar identifiers to the canvas TextFormatAction contract
+ * (camelCase) exposed by EditorCanvasHandle.applyTextFormat.
+ */
+const TOOLBAR_FORMAT_TO_TEXT_FORMAT: Record<
+  ToolbarFormatAction,
+  TextFormatAction
+> = {
+  bold: "bold",
+  italic: "italic",
+  underline: "underline",
+  "align-left": "alignLeft",
+  "align-center": "alignCenter",
+  "align-right": "alignRight",
+};
+
 export default function EditorPage() {
   const params = useParams();
   const router = useRouter();
   const t = useTranslations("editor");
+  const { toast } = useToast();
 
   // ID du document stocké (depuis l'URL)
   const storedDocumentId = params?.id as string;
+
+  // Share dialog (GED) — partage le document STOCKÉ (storedDocumentId)
+  const [showShareDialog, setShowShareDialog] = useState(false);
 
   // Canvas store — tool, zoom, tool options
   const {
@@ -867,14 +900,17 @@ export default function EditorPage() {
   );
 
   const handleFormatAction = useCallback(
-    (action: string) => {
+    (action: ToolbarFormatAction) => {
       clientLogger.debug("[editor] Format action:", action);
+      // Applique le formatage aux éléments texte sélectionnés sur le canvas.
+      // Le canvas émet ensuite onElementModified pour chaque élément touché,
+      // ce qui queue l'op apply-elements et synchronise le scene graph.
+      canvasHandle?.applyTextFormat(TOOLBAR_FORMAT_TO_TEXT_FORMAT[action]);
       setDirty(true);
-      // TODO: Appliquer le formatage aux éléments sélectionnés
       // Modification de style → sauvegarde debounced vers S3
       saveWithPriority("debounced");
     },
-    [setDirty, saveWithPriority]
+    [canvasHandle, setDirty, saveWithPriority]
   );
 
   const handleExport = useCallback(async () => {
@@ -968,13 +1004,13 @@ export default function EditorPage() {
       window.location.reload();
     } catch (err) {
       clientLogger.error("[editor] Restore-original failed:", err);
-      alert(
-        "Échec de la restauration. Vérifiez que le document a bien une " +
-          "version d'origine accessible."
-      );
+      toast({
+        variant: "destructive",
+        title: t("error.restoreFailed"),
+      });
       setRestoring(false);
     }
-  }, [storedDocumentId]);
+  }, [storedDocumentId, toast, t]);
 
   const handleFlattenPdf = async () => {
     if (!currentPdfFile) return;
@@ -1064,15 +1100,38 @@ export default function EditorPage() {
     [replacePages],
   );
 
+  // Shared post-processing for any operation that produced a full
+  // replacement PDF binary (page ops, watermark, …): swap the in-memory
+  // binary, mark the document dirty, trigger an immediate save, and
+  // (optionally) re-parse so the scene graph matches the new layout.
+  //
+  // When `reparse` is true (default), the PDF is re-parsed after the op so
+  // the scene graph reflects the new layout. Set to false for ops that
+  // don't change element coordinates.
+  const adoptModifiedPdf = useCallback(
+    (blob: Blob, opts: { reparse?: boolean } = {}): File | null => {
+      const file = currentPdfFileRef.current;
+      if (!file) return null;
+      const newFile = new File([blob], file.name, {
+        type: 'application/pdf',
+      });
+      updateCurrentPdfFile(newFile);
+      setDirty(true);
+      saveWithPriority('immediate');
+      // Refresh the scene graph from the new binary so the canvas
+      // re-renders text items at the correct new bounds.
+      if (opts.reparse !== false) {
+        void reparseFromFile(newFile);
+      }
+      return newFile;
+    },
+    [setDirty, saveWithPriority, updateCurrentPdfFile, reparseFromFile],
+  );
+
   // Shared helper: run a page-level op through /api/pdf/pages, swap the
   // binary in memory, and trigger an immediate save. Returns the new file
   // so callers can run extra local-state updates (duplicate/add/delete need
   // to mirror the scene graph) in the same tick.
-  //
-  // When `reparse` is true (default), the PDF is re-parsed after the op so
-  // the scene graph reflects the new layout. Set to false for ops that
-  // don't change element coordinates (extract = download only, no mutation
-  // on the source document).
   const runPageOperation = useCallback(
     async (
       operation: 'add' | 'copy' | 'rotate' | 'delete' | 'move',
@@ -1087,24 +1146,29 @@ export default function EditorPage() {
           operation,
           params,
         });
-        const newFile = new File([result as Blob], file.name, {
-          type: 'application/pdf',
-        });
-        updateCurrentPdfFile(newFile);
-        setDirty(true);
-        saveWithPriority('immediate');
-        // Refresh the scene graph from the rotated/added/moved binary so
-        // the canvas re-renders text items at the correct new bounds.
-        if (opts.reparse !== false) {
-          void reparseFromFile(newFile);
-        }
-        return newFile;
+        return adoptModifiedPdf(result as Blob, opts);
       } catch (err) {
         clientLogger.error(`[editor] ${operation} page failed:`, err);
         return null;
       }
     },
-    [pageOperation, setDirty, saveWithPriority, updateCurrentPdfFile, reparseFromFile],
+    [pageOperation, adoptModifiedPdf],
+  );
+
+  // Filigrane appliqué au document courant (mode « Appliquer au document »
+  // du WatermarkDialog) : adopte le binaire filigrané exactement comme une
+  // opération de page (swap binaire + re-parse + save immédiat), puis
+  // confirme via toast.
+  const handleWatermarkApplied = useCallback(
+    (blob: Blob) => {
+      const adopted = adoptModifiedPdf(blob);
+      if (!adopted) return;
+      toast({
+        title: t("watermark.appliedTitle"),
+        description: t("watermark.appliedDescription"),
+      });
+    },
+    [adoptModifiedPdf, toast, t],
   );
 
   const handlePageRotate = useCallback(
@@ -1233,13 +1297,19 @@ export default function EditorPage() {
 
       // Vérifier le type de fichier
       if (!file.type.startsWith("image/")) {
-        alert(t("error.invalidImageType"));
+        toast({
+          variant: "destructive",
+          title: t("error.invalidImageType"),
+        });
         return;
       }
 
       // Vérifier la taille (max 10MB)
       if (file.size > 10 * 1024 * 1024) {
-        alert(t("error.imageTooLarge"));
+        toast({
+          variant: "destructive",
+          title: t("error.imageTooLarge"),
+        });
         return;
       }
 
@@ -1259,7 +1329,7 @@ export default function EditorPage() {
       // Reset input pour permettre de sélectionner le même fichier
       event.target.value = "";
     },
-    [t, canvasHandle, setDirty, saveWithPriority]
+    [t, toast, canvasHandle, setDirty, saveWithPriority]
   );
 
   // Keyboard shortcuts
@@ -1530,9 +1600,8 @@ export default function EditorPage() {
             variant="outline"
             size="sm"
             className="gap-2"
-            onClick={() => {
-              /* TODO: Share modal */
-            }}
+            onClick={() => setShowShareDialog(true)}
+            disabled={!storedDocumentId}
           >
             <Users className="h-4 w-4" />
             <span className="hidden sm:inline">{t("share")}</span>
@@ -1679,6 +1748,7 @@ export default function EditorPage() {
           // Search returns 1-based page numbers; goToPage expects 0-based.
           goToPage(pageNumber - 1);
         }}
+        onWatermarkApplied={handleWatermarkApplied}
       />
 
       {/* Main content */}
@@ -1779,6 +1849,14 @@ export default function EditorPage() {
           />
         )}
       </div>
+
+      {/* Share dialog (GED) — partage le document STOCKÉ, pas la copie de session */}
+      <ShareDialog
+        open={showShareDialog}
+        onOpenChange={setShowShareDialog}
+        documentId={storedDocumentId}
+        documentName={name}
+      />
 
       {/* Status bar */}
       <footer className="flex items-center justify-between border-t px-4 py-1.5 text-xs text-muted-foreground">

@@ -71,11 +71,11 @@
       "description": "Powerful features for individuals and teams, from simple edits to complex document workflows.",
       "wysiwyg": {
         "title": "WYSIWYG Editor",
-        "description": "Edit PDFs with a visual editor that shows exactly what you'll get. No more guessing how your document will look."
+        "description": "Edit PDFs with a visual editor that shows exactly what you'll get. Real text formatting (bold, italic, underline, alignment) with faithful fonts: the original fonts are identified and downloaded automatically, then embedded in the saved PDF."
       },
       "collaboration": {
-        "title": "Real-time Collaboration",
-        "description": "Work together with your team in real-time. See changes as they happen and collaborate seamlessly."
+        "title": "Collaboration & Sharing",
+        "description": "Work together with your team in real-time. Share documents from the editor and browse version history with one-click restore."
       },
       "security": {
         "title": "Enterprise Security",
@@ -86,16 +86,16 @@
         "description": "Full programmatic access to all features. Automate document workflows with our comprehensive API."
       },
       "export": {
-        "title": "Multi-format Export",
-        "description": "Export to PNG, JPEG, DOCX, HTML and more. OCR support for scanned documents with Tesseract."
+        "title": "Conversions & Export",
+        "description": "Export to PNG, JPEG, DOCX, HTML and more. Office conversions (DOCX, XLSX, PPTX), PDF/A, and OCR for scanned documents with Tesseract."
       },
       "selfHostable": {
         "title": "Self-hostable",
-        "description": "Deploy on your own infrastructure. Keep complete control over your documents and data."
+        "description": "Deploy on your own infrastructure with a single docker compose up. Keep complete control over your documents and data."
       },
       "pdfModification": {
         "title": "PDF Modification",
-        "description": "Add, update, or remove text, images, shapes, and annotations. Batch modify PDFs programmatically via API."
+        "description": "Add, update, or remove text, images, shapes, and annotations. Apply watermarks to a page or the whole document. Batch modify PDFs programmatically via API."
       }
     },
     "openSource": {
@@ -463,23 +463,52 @@
       }
     },
     "detail": {
+      "back": "Back to documents",
       "lastModified": "Last modified {date}",
       "actions": {
-        "edit": "Edit",
+        "edit": "Open in editor",
         "download": "Download",
+        "share": "Share",
+        "rename": "Rename",
         "delete": "Delete"
+      },
+      "preview": {
+        "title": "Preview"
       },
       "info": {
         "title": "Document Information",
         "description": "Details about this document",
         "fileName": "File Name",
+        "fileType": "Type",
         "fileSize": "File Size",
+        "pages": "Pages",
+        "pagesValue": "{count, plural, one {# page} other {# pages}}",
         "created": "Created",
         "lastModified": "Last Modified"
       },
-      "description": {
-        "title": "Description",
-        "subtitle": "Document description and notes"
+      "versions": {
+        "title": "Version history",
+        "description": "All saved versions of this document",
+        "current": "Current",
+        "version": "Version {version}",
+        "empty": "No version history yet",
+        "loadFailed": "Failed to load version history.",
+        "restoreOriginal": "Restore original"
+      },
+      "restoreDialog": {
+        "title": "Restore original document",
+        "description": "The content of \"{name}\" will be replaced by the original version (v1). Your current version will no longer be the active one. Are you sure?",
+        "cancel": "Cancel",
+        "confirm": "Restore",
+        "restoring": "Restoring...",
+        "error": "Failed to restore the original version. Please try again."
+      },
+      "errors": {
+        "notFoundTitle": "Document not found",
+        "notFoundDescription": "This document does not exist or has been deleted.",
+        "loadFailedTitle": "Failed to load document",
+        "loadFailedDescription": "An error occurred while loading this document. Please try again.",
+        "retry": "Retry"
       }
     },
     "upload": {
@@ -529,7 +558,17 @@
       "size": "Size",
       "created": "Created",
       "modified": "Modified",
-      "actions": "Actions"
+      "actions": "Actions",
+      "folderDeleteDialog": {
+        "title": "Delete folder",
+        "description": "Are you sure you want to delete the folder \"{name}\"? This action cannot be undone.",
+        "containsDocuments": "{count, plural, one {This folder contains # document. Move or delete it first.} other {This folder contains # documents. Move or delete them first.}}",
+        "cancel": "Cancel",
+        "confirm": "Delete",
+        "deleting": "Deleting...",
+        "notEmpty": "This folder is not empty. Move or delete its contents first.",
+        "error": "Failed to delete folder. Please try again."
+      }
     },
     "explorer": {
       "root": "My Documents",
@@ -725,7 +764,19 @@
     },
     "error": {
       "title": "Loading Error",
-      "backToDocuments": "Back to documents"
+      "backToDocuments": "Back to documents",
+      "invalidImageType": "Invalid file type. Please select an image.",
+      "imageTooLarge": "The image is too large (10 MB maximum).",
+      "restoreFailed": "Restore failed. Make sure the document has an accessible original version."
+    },
+    "watermark": {
+      "modeLabel": "Result",
+      "applyToDocument": "Apply to document",
+      "applyToDocumentHint": "The watermark is baked into the document you are editing",
+      "downloadOnly": "Download only",
+      "downloadOnlyHint": "Downloads a watermarked copy without modifying the document",
+      "appliedTitle": "Watermark applied",
+      "appliedDescription": "The document has been updated with the watermark."
     },
     "shortcuts": {
       "hint": "Press ? to view keyboard shortcuts"
@@ -1339,6 +1390,19 @@
         "export": "Export to PNG, JPEG, DOCX, HTML",
         "ocr": "OCR text extraction from scanned PDFs",
         "realtime": "Real-time collaboration via WebSocket"
+      },
+      "selfhost": {
+        "title": "Self-hosting",
+        "description": "GigaPDF is fully self-hostable (AGPLv3). Two deployment modes are supported:",
+        "docker": {
+          "title": "Docker (recommended)",
+          "description": "The compose stack starts PostgreSQL 17, Redis 7, the FastAPI backend, Celery worker + beat, the web app (:3000) and the admin dashboard (:3001). The web image ships LibreOffice, fontforge, Tesseract OCR (fra+eng) and Playwright Chromium — no extra setup."
+        },
+        "native": {
+          "title": "Native (bare-metal / VPS)",
+          "description": "Node.js 22 + pnpm 10.28, Python 3.12, PostgreSQL 17 and Redis 7, behind Nginx with systemd units. /api/pdf/* is served by Next.js (TypeScript PDF engine), other /api/* routes by FastAPI."
+        },
+        "readme": "Full instructions in the README"
       },
       "embedSdk": {
         "title": "Embed SDK",
