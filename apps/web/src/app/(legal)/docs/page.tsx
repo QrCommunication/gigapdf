@@ -209,6 +209,46 @@ export default function DocsPage() {
           ))}
         </div>
       </section>
+
+      {/* Self-hosting */}
+      <section className="mb-12">
+        <h2 className="text-2xl font-bold mb-6">{t("selfhost.title")}</h2>
+        <p className="text-muted-foreground mb-6">{t("selfhost.description")}</p>
+        <div className="grid gap-6 md:grid-cols-2 not-prose">
+          <div className="rounded-xl border border-border bg-card/50 p-6">
+            <h3 className="font-semibold text-lg mb-2">{t("selfhost.docker.title")}</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              {t("selfhost.docker.description")}
+            </p>
+            <div className="font-mono text-sm bg-muted/50 rounded-lg p-4 overflow-x-auto whitespace-pre">
+              <span className="text-terminal-green">$</span> git clone https://github.com/QrCommunication/gigapdf.git{"\n"}
+              <span className="text-terminal-green">$</span> cd gigapdf && cp .env.example .env{"\n"}
+              <span className="text-terminal-green">$</span> docker compose up -d
+            </div>
+          </div>
+          <div className="rounded-xl border border-border bg-card/50 p-6">
+            <h3 className="font-semibold text-lg mb-2">{t("selfhost.native.title")}</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              {t("selfhost.native.description")}
+            </p>
+            <div className="font-mono text-sm bg-muted/50 rounded-lg p-4 overflow-x-auto whitespace-pre">
+              <span className="text-terminal-green">$</span> pnpm install && pnpm build{"\n"}
+              <span className="text-terminal-green">$</span> pnpm exec playwright install --with-deps chromium
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 not-prose">
+          <a
+            href="https://github.com/QrCommunication/gigapdf#quick-start-self-hosting"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+          >
+            {t("selfhost.readme")}
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
+      </section>
     </div>
   );
 }

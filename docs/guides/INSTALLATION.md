@@ -36,19 +36,23 @@ Instructions d'installation complètes pour GigaPDF sur toutes les plateformes s
 | Software | Version | Purpose |
 |----------|---------|---------|
 | **Python** | 3.12+ | Backend API |
-| **Node.js** | 20+ | Frontend applications |
-| **PostgreSQL** | 16+ | Primary database |
+| **Node.js** | 22+ | Frontend applications + TypeScript PDF engine |
+| **PostgreSQL** | 17+ | Primary database |
 | **Redis** | 7+ | Caching and message queue |
-| **pnpm** | 9+ | Node.js package manager |
+| **pnpm** | 10.28+ | Node.js package manager (pinned via `packageManager`) |
 | **Git** | 2.30+ | Version control |
 
-### Optional Software / Logiciels optionnels
+### PDF Feature Dependencies / Dépendances des fonctionnalités PDF
 
-| Software | Version | Purpose |
-|----------|---------|---------|
-| **Tesseract OCR** | 5.x | Text extraction from images |
-| **Poppler** | 22+ | PDF utilities |
-| **MuPDF** | 1.23+ | PDF rendering |
+Required for the corresponding features to work on a native install
+(all of them are pre-installed in the Docker `web` image):
+
+| Software | Purpose |
+|----------|---------|
+| **LibreOffice** (writer/calc/impress/draw) | DOCX/XLSX/PPTX ↔ PDF conversions |
+| **fontforge** | Type1/CFF → TTF conversion (faithful font rendering at bake) |
+| **Tesseract OCR** (+ `fra` + `eng`) | Text extraction from scanned PDFs |
+| **Playwright Chromium** | HTML → PDF and URL → PDF conversions |
 
 ---
 
@@ -74,7 +78,7 @@ sudo apt install -y python3.12 python3.12-venv python3.12-dev
 python3.12 --version
 ```
 
-### Step 3: Install PostgreSQL 16 / Étape 3 : Installer PostgreSQL 16
+### Step 3: Install PostgreSQL 17 / Étape 3 : Installer PostgreSQL 17
 
 ```bash
 # Add PostgreSQL repository
@@ -82,8 +86,8 @@ sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)
 wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
 sudo apt update
 
-# Install PostgreSQL 16
-sudo apt install -y postgresql-16 postgresql-contrib-16
+# Install PostgreSQL 17
+sudo apt install -y postgresql-17 postgresql-contrib-17
 
 # Start and enable PostgreSQL
 sudo systemctl start postgresql
@@ -107,42 +111,37 @@ sudo systemctl enable redis-server
 redis-cli ping  # Should return PONG
 ```
 
-### Step 5: Install Node.js 20 / Étape 5 : Installer Node.js 20
+### Step 5: Install Node.js 22 / Étape 5 : Installer Node.js 22
 
 ```bash
 # Install Node.js via NodeSource
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 
 # Verify installation
 node --version
 npm --version
 
-# Install pnpm globally
-npm install -g pnpm
+# Install pnpm globally (version pinned by the repo's packageManager field)
+npm install -g pnpm@10.28.0
 
 # Verify pnpm
 pnpm --version
 ```
 
-### Step 6: Install Optional Dependencies / Étape 6 : Installer les dépendances optionnelles
+### Step 6: Install PDF Feature Dependencies / Étape 6 : Installer les dépendances des fonctionnalités PDF
 
 ```bash
-# Tesseract OCR (for text extraction from scanned PDFs)
-sudo apt install -y tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng tesseract-ocr-deu tesseract-ocr-spa
-
-# PDF processing libraries
-sudo apt install -y libmupdf-dev mupdf-tools poppler-utils
-
-# Image processing
-sudo apt install -y libmagickwand-dev
+# Office conversions (DOCX/XLSX/PPTX ↔ PDF) + faithful font rendering + OCR
+sudo apt install -y libreoffice fontforge \
+  tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng
 ```
 
 ### Step 7: Clone and Setup Project / Étape 7 : Cloner et configurer le projet
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/gigapdf.git
+git clone https://github.com/QrCommunication/gigapdf.git
 cd gigapdf
 
 # Create Python virtual environment
@@ -157,8 +156,11 @@ pip install -r requirements-dev.txt  # For development
 # Install Node.js dependencies
 pnpm install
 
-# Build shared packages
-pnpm --filter @giga-pdf/ui build
+# Build all packages and apps (turbo orders internal packages first)
+pnpm build
+
+# Chromium for HTML → PDF / URL → PDF conversions
+pnpm exec playwright install --with-deps chromium
 ```
 
 ---
@@ -243,6 +245,10 @@ Follow the [Ubuntu/Debian Installation](#ubuntudebian-installation) steps above.
 
 ## Docker Installation
 
+This is the recommended self-hosting path: every PDF system dependency
+(LibreOffice, fontforge, tesseract-ocr fra+eng, Playwright Chromium) is
+already baked into the Debian-based `web` image.
+
 ### Prerequisites / Prérequis
 
 - Docker 24+
@@ -252,91 +258,37 @@ Follow the [Ubuntu/Debian Installation](#ubuntudebian-installation) steps above.
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/gigapdf.git
+git clone https://github.com/QrCommunication/gigapdf.git
 cd gigapdf
 
-# Copy environment file
+# Copy environment files
 cp .env.example .env
+cp apps/web/.env.example apps/web/.env.local
 
 # Start all services
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ### Docker Compose Services
 
-| Service | Port | Description |
-|---------|------|-------------|
-| `api` | 8000 | FastAPI backend |
-| `web` | 3000 | Next.js frontend |
-| `admin` | 3001 | Admin dashboard |
-| `db` | 5432 | PostgreSQL database |
-| `redis` | 6379 | Redis cache |
-| `celery` | - | Background worker |
+The stack is defined in the repository's [`docker-compose.yml`](../../docker-compose.yml)
+(production overrides in `docker-compose.prod.yml`):
 
-### docker-compose.yml Example
+| Service | Image / Build | Port | Description |
+|---------|---------------|------|-------------|
+| `postgres` | `postgres:17-alpine` | 5432 | PostgreSQL database |
+| `redis` | `redis:7-alpine` | 6379 | Cache + Celery broker |
+| `api` | `Dockerfile.api` | 8000 | FastAPI backend |
+| `celery-worker` | `Dockerfile.api` | — | Background worker |
+| `celery-beat` | `Dockerfile.api` | — | Scheduled tasks |
+| `web` | `Dockerfile.web` (Debian bookworm) | 3000 | Next.js frontend + TypeScript PDF engine |
+| `admin` | `Dockerfile.admin` | 3001 | Admin dashboard |
 
-```yaml
-version: '3.8'
-
-services:
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: gigapdf
-      POSTGRES_PASSWORD: gigapdf
-      POSTGRES_DB: gigapdf
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-    environment:
-      DATABASE_URL: postgresql://gigapdf:gigapdf@db:5432/gigapdf
-      REDIS_URL: redis://redis:6379/0
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
-      - redis
-
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile.web
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-    ports:
-      - "3000:3000"
-    depends_on:
-      - api
-
-  celery:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-    command: celery -A app.tasks.celery_app worker --loglevel=info
-    environment:
-      DATABASE_URL: postgresql://gigapdf:gigapdf@db:5432/gigapdf
-      REDIS_URL: redis://redis:6379/0
-    depends_on:
-      - db
-      - redis
-
-volumes:
-  postgres_data:
-```
+All application services load the root `.env` through `env_file`, so a
+single file configures the whole stack (S3, Stripe, SMTP, …).
 
 ---
 

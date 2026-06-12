@@ -41,7 +41,7 @@ Guide complet pour déployer GigaPDF en environnement de production.
 
 | Service | Version | Hosting Options |
 |---------|---------|-----------------|
-| PostgreSQL | 16+ | Self-hosted, Supabase, AWS RDS, Scaleway |
+| PostgreSQL | 17+ | Self-hosted, Supabase, AWS RDS, Scaleway |
 | Redis | 7+ | Self-hosted, Redis Cloud, AWS ElastiCache |
 | S3 Storage | - | Scaleway, AWS S3, MinIO, Cloudflare R2 |
 
@@ -83,27 +83,28 @@ sudo add-apt-repository ppa:deadsnakes/ppa -y
 sudo apt update
 sudo apt install -y python3.12 python3.12-venv python3.12-dev
 
-# Install Node.js 20
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+# Install Node.js 22
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 
-# Install pnpm
-npm install -g pnpm
+# Install pnpm (version pinned by the repo's packageManager field)
+npm install -g pnpm@10.28.0
 
-# Install PM2
-npm install -g pm2
-
-# Install PostgreSQL 16
+# Install PostgreSQL 17
 sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
 wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
 sudo apt update
-sudo apt install -y postgresql-16 postgresql-contrib-16
+sudo apt install -y postgresql-17 postgresql-contrib-17
 
 # Install Redis 7
 sudo apt install -y redis-server
 
-# Install optional: Tesseract OCR
-sudo apt install -y tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng
+# Install PDF feature dependencies:
+#   - LibreOffice: DOCX/XLSX/PPTX ↔ PDF conversions
+#   - fontforge: Type1/CFF → TTF conversion (faithful font rendering)
+#   - Tesseract OCR (fra + eng): text extraction from scanned PDFs
+sudo apt install -y libreoffice fontforge \
+  tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng
 ```
 
 ---
@@ -329,6 +330,9 @@ pnpm build:packages
 pnpm --filter web build
 pnpm --filter admin build
 
+# Chromium for HTML → PDF / URL → PDF conversions
+pnpm exec playwright install --with-deps chromium
+
 # Configure environment
 cp .env.example .env
 # Edit .env with production values
@@ -347,6 +351,11 @@ cd apps/admin && npx prisma generate && npx prisma db push && cd ../..
 ## Nginx Configuration
 
 ### Main Configuration / Configuration principale
+
+The reference configuration used in production is
+[`deploy/nginx.conf`](../../deploy/nginx.conf). Its routing pattern is:
+`/api/pdf/*` and `/api/auth/*` → Next.js (`:3000`), all other `/api/*` →
+FastAPI (`:8000`), `/admin` → admin (`:3001`).
 
 Create `/etc/nginx/sites-available/gigapdf`:
 
@@ -382,6 +391,40 @@ server {
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';" always;
+
+    # Next.js auth routes (Better Auth) — must come before /api/
+    location /api/auth/ {
+        proxy_pass http://127.0.0.1:3000/api/auth/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Next.js PDF engine routes (TypeScript) — must come before /api/
+    # /api/pdf/* is served by Next.js (pdf-engine TS), NOT by FastAPI
+    location /api/pdf/ {
+        client_max_body_size 100M;
+        proxy_pass http://127.0.0.1:3000/api/pdf/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    # Remaining /api/ routes — FastAPI backend
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
     # Proxy to Next.js
     location / {
@@ -508,6 +551,13 @@ sudo certbot renew --dry-run
 ---
 
 ## Process Management (PM2)
+
+> **Note:** the reference production deployment uses **systemd** units shipped
+> in [`deploy/systemd/`](../../deploy/systemd/) (`gigapdf-api`, `gigapdf-web`,
+> `gigapdf-admin`, `gigapdf-celery`, `gigapdf-celery-billing`) together with
+> the zero-downtime procedure described in
+> [`docs/deployment.md`](../deployment.md). PM2 below is an alternative if you
+> prefer a Node-based process manager.
 
 ### PM2 Configuration / Configuration PM2
 
