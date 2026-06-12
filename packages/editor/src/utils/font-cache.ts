@@ -22,6 +22,31 @@ const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Evict oldest entries when total cache size exceeds 50 MB */
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 
+// ─── Public Types ─────────────────────────────────────────────────────────────
+
+/**
+ * Optional provenance metadata persisted alongside cached font bytes.
+ *
+ * `source: 'google'` entries additionally carry the FontFace descriptors
+ * (weight/style) returned by the Google Fonts proxy, so a cache hit can
+ * re-register the substitute face identically to the original download.
+ */
+export interface FontCacheMeta {
+  /** Where the bytes came from: extracted from the PDF or the Google Fonts proxy */
+  source: 'embedded' | 'google';
+  /** FontFace weight descriptor (Google-sourced entries only) */
+  weight?: number;
+  /** FontFace style descriptor (Google-sourced entries only) */
+  style?: 'normal' | 'italic';
+}
+
+/** Result of {@link FontCache.getEntry}: cached bytes plus optional provenance meta. */
+export interface FontCacheHit {
+  data: ArrayBuffer;
+  /** `null` for legacy entries written before meta support existed */
+  meta: FontCacheMeta | null;
+}
+
 // ─── Internal Types ───────────────────────────────────────────────────────────
 
 interface CacheEntry {
@@ -34,6 +59,8 @@ interface CacheEntry {
   lastAccessedAt: number;
   /** Byte size of `data` (pre-computed for fast eviction decisions) */
   sizeBytes: number;
+  /** Optional provenance + FontFace descriptors (absent on legacy entries) */
+  meta?: FontCacheMeta;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -125,6 +152,17 @@ export class FontCache {
    * Bumps `lastAccessedAt` on hit (LRU semantics).
    */
   async get(documentId: string, fontId: string): Promise<ArrayBuffer | null> {
+    const hit = await this.getEntry(documentId, fontId);
+    return hit?.data ?? null;
+  }
+
+  /**
+   * Retrieve a cached font buffer together with its provenance meta
+   * (needed to re-register Google-sourced fonts with the right descriptors).
+   * Returns `null` when the entry is absent or expired.
+   * Bumps `lastAccessedAt` on hit (LRU semantics).
+   */
+  async getEntry(documentId: string, fontId: string): Promise<FontCacheHit | null> {
     if (!isIdbAvailable()) return null;
 
     const key = buildKey(documentId, fontId);
@@ -154,7 +192,7 @@ export class FontCache {
       () => {},
     );
 
-    return entry.data;
+    return { data: entry.data, meta: entry.meta ?? null };
   }
 
   /**
@@ -166,6 +204,7 @@ export class FontCache {
     fontId: string,
     data: ArrayBuffer,
     ttlMs: number = DEFAULT_TTL_MS,
+    meta?: FontCacheMeta,
   ): Promise<void> {
     if (!isIdbAvailable()) return;
 
@@ -177,6 +216,7 @@ export class FontCache {
       expiresAt: now + ttlMs,
       lastAccessedAt: now,
       sizeBytes: data.byteLength,
+      ...(meta ? { meta } : {}),
     };
 
     try {
