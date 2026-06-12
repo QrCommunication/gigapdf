@@ -51,6 +51,8 @@ export type {
   MetadataResult,
   FlattenOptions,
   ApplyElementsOperation,
+  CompressPdfResult,
+  SearchablePdfResult,
 } from './services';
 
 // Hooks
@@ -214,7 +216,10 @@ export {
   useApplyElements,
   useSearchPdf,
   useAddWatermark,
+  useSignPdf,
   useOcrPdf,
+  useMakeSearchablePdf,
+  useCompressPdf,
   useIsOcrAvailable,
   useConvertToPdfA,
   downloadBlob,

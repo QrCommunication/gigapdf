@@ -270,6 +270,34 @@ describe('POST /api/office/export', () => {
     expect(mockConvertPdfToXlsx).toHaveBeenCalledWith(expect.any(Uint8Array));
   });
 
+  it('returns 200 with odt Content-Type for format=odt', async () => {
+    mockPythonSuccess();
+    mockConvertPdfToOffice.mockResolvedValue(fakeOfficeBytes());
+
+    const req = buildRequest({ documentId: 'abcdef12-rest', format: 'odt' });
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/vnd.oasis.opendocument.text');
+    expect(res.headers.get('Content-Disposition')).toContain('.odt');
+    expect(mockConvertPdfToOffice).toHaveBeenCalledWith(expect.any(Uint8Array), 'odt');
+  });
+
+  it('returns 200 with odp Content-Type for format=odp', async () => {
+    mockPythonSuccess();
+    mockConvertPdfToOffice.mockResolvedValue(fakeOfficeBytes());
+
+    const req = buildRequest({ documentId: 'abcdef12-rest', format: 'odp' });
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe(
+      'application/vnd.oasis.opendocument.presentation',
+    );
+    expect(res.headers.get('Content-Disposition')).toContain('.odp');
+    expect(mockConvertPdfToOffice).toHaveBeenCalledWith(expect.any(Uint8Array), 'odp');
+  });
+
   it('uses first 8 chars of documentId in the filename', async () => {
     mockPythonSuccess();
     mockConvertPdfToOffice.mockResolvedValue(fakeOfficeBytes());

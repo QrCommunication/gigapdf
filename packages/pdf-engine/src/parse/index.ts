@@ -21,3 +21,17 @@ export { getMetadataRobust } from './metadata-robust';
 
 export { ocrPdf, isTesseractAvailable, TesseractNotInstalledError } from './ocr';
 export type { OcrOptions, OcrPageResult, OcrResult } from './ocr';
+
+export {
+  makeSearchablePdf,
+  parseTsvWords,
+  tsvWordToPdfPlacement,
+  DEFAULT_MIN_WORD_CONFIDENCE,
+} from './ocr-searchable';
+export type {
+  MakeSearchablePdfOptions,
+  MakeSearchablePdfResult,
+  OcrTsvWord,
+  PdfPlacementContext,
+  PdfWordPlacement,
+} from './ocr-searchable';

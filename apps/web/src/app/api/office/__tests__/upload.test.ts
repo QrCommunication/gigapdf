@@ -98,8 +98,11 @@ import { requireSession } from '@/lib/auth-helpers';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Valid ZIP magic bytes (PK\x03\x04). */
+/** Valid ZIP magic bytes (PK\x03\x04) — OOXML (docx/xlsx/pptx) and ODF (odt/ods/odp). */
 const ZIP_MAGIC = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
+
+/** Valid OLE2 compound-file magic bytes — legacy Office 97-2003 (doc/xls/ppt). */
+const OLE2_MAGIC = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
 
 /** Minimal fake PDF bytes for mock return values. */
 const FAKE_PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]); // %PDF-
@@ -157,10 +160,17 @@ function makeFile(name: string, content: Uint8Array): File {
   return new File([plain], name, { type: 'application/octet-stream' });
 }
 
-/** Creates a valid Office file: ZIP magic bytes followed by zero padding. */
+/** Creates a valid modern Office/ODF file: ZIP magic bytes + zero padding. */
 function makeValidOfficeFile(name: string, extraBytes = 100): File {
   const buf = new Uint8Array(4 + extraBytes);
   buf.set(ZIP_MAGIC, 0);
+  return makeFile(name, buf);
+}
+
+/** Creates a valid legacy Office 97-2003 file: OLE2 magic bytes + zero padding. */
+function makeValidLegacyOfficeFile(name: string, extraBytes = 100): File {
+  const buf = new Uint8Array(OLE2_MAGIC.length + extraBytes);
+  buf.set(OLE2_MAGIC, 0);
   return makeFile(name, buf);
 }
 
@@ -222,6 +232,16 @@ describe('POST /api/office/upload', () => {
     expect(body.success).toBe(false);
   });
 
+  it('returns 400 for .rtf extension (not in the allowed list)', async () => {
+    const file = makeFile('legacy.rtf', OLE2_MAGIC);
+    const req = makeRequest(file);
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const body = await res.json() as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toMatch(/unsupported file extension/i);
+  });
+
   it('accepts .DOCX (uppercase extension)', async () => {
     const file = makeValidOfficeFile('REPORT.DOCX');
     const req = makeRequest(file);
@@ -245,6 +265,37 @@ describe('POST /api/office/upload', () => {
 
   it('returns 400 when buffer is too short to contain magic bytes', async () => {
     const file = makeFile('test.xlsx', new Uint8Array([0x50, 0x4b])); // only 2 bytes
+    const req = makeRequest(file);
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const body = await res.json() as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+  });
+
+  it('returns 400 when a legacy .doc carries ZIP magic instead of OLE2 (family mismatch)', async () => {
+    // ZIP bytes are valid for docx but NOT for .doc — per-family validation
+    const file = makeValidOfficeFile('report.doc');
+    const req = makeRequest(file);
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const body = await res.json() as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toMatch(/invalid magic bytes/i);
+  });
+
+  it('returns 400 when an .odt carries OLE2 magic instead of ZIP (family mismatch)', async () => {
+    const file = makeValidLegacyOfficeFile('notes.odt');
+    const req = makeRequest(file);
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const body = await res.json() as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toMatch(/invalid magic bytes/i);
+  });
+
+  it('returns 400 when a .doc buffer matches only a ZIP-length prefix of OLE2 magic', async () => {
+    // First 4 bytes of OLE2 only — must still be rejected (full 8-byte check)
+    const file = makeFile('short.doc', new Uint8Array([0xd0, 0xcf, 0x11, 0xe0]));
     const req = makeRequest(file);
     const res = await POST(req);
     expect(res.status).toBe(400);
@@ -337,6 +388,80 @@ describe('POST /api/office/upload', () => {
     expect(vi.mocked(convertOfficeToPdf)).toHaveBeenCalledWith(
       expect.any(Uint8Array),
       'pptx',
+    );
+  });
+
+  // ── Legacy Office 97-2003 (OLE2) formats ──────────────────────────────────
+
+  it('returns 200 with application/pdf for a .doc file with OLE2 magic bytes', async () => {
+    const file = makeValidLegacyOfficeFile('contract.doc');
+    const req = makeRequest(file);
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/pdf');
+    expect(vi.mocked(convertOfficeToPdf)).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      'doc',
+    );
+  });
+
+  it('accepts .xls and passes "xls" to convertOfficeToPdf', async () => {
+    const file = makeValidLegacyOfficeFile('ledger.xls');
+    const res = await POST(makeRequest(file));
+    expect(res.status).toBe(200);
+    expect(vi.mocked(convertOfficeToPdf)).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      'xls',
+    );
+  });
+
+  it('accepts .ppt and passes "ppt" to convertOfficeToPdf', async () => {
+    const file = makeValidLegacyOfficeFile('deck.ppt');
+    const res = await POST(makeRequest(file));
+    expect(res.status).toBe(200);
+    expect(vi.mocked(convertOfficeToPdf)).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      'ppt',
+    );
+  });
+
+  it('accepts .DOC (uppercase legacy extension)', async () => {
+    const file = makeValidLegacyOfficeFile('MEMO.DOC');
+    const res = await POST(makeRequest(file));
+    expect(res.status).toBe(200);
+  });
+
+  // ── OpenDocument (ODF) formats ────────────────────────────────────────────
+
+  it('returns 200 with application/pdf for an .odt file with ZIP magic bytes', async () => {
+    const file = makeValidOfficeFile('letter.odt');
+    const req = makeRequest(file);
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/pdf');
+    expect(vi.mocked(convertOfficeToPdf)).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      'odt',
+    );
+  });
+
+  it('accepts .ods and passes "ods" to convertOfficeToPdf', async () => {
+    const file = makeValidOfficeFile('budget.ods');
+    const res = await POST(makeRequest(file));
+    expect(res.status).toBe(200);
+    expect(vi.mocked(convertOfficeToPdf)).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      'ods',
+    );
+  });
+
+  it('accepts .odp and passes "odp" to convertOfficeToPdf', async () => {
+    const file = makeValidOfficeFile('slides.odp');
+    const res = await POST(makeRequest(file));
+    expect(res.status).toBe(200);
+    expect(vi.mocked(convertOfficeToPdf)).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      'odp',
     );
   });
 

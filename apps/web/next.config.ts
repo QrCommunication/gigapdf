@@ -135,6 +135,12 @@ const nextConfig: NextConfig = {
       "../../node_modules/mupdf/dist/mupdf-wasm.js",
       "../../node_modules/mupdf/dist/mupdf.js",
     ],
+    // Compression route: pdf-lib round-trip + MuPDF optimizeAndSave post-pass.
+    "/api/pdf/compress": [
+      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
+      "../../node_modules/mupdf/dist/mupdf-wasm.js",
+      "../../node_modules/mupdf/dist/mupdf.js",
+    ],
   },
   // Disable static generation for error pages
   experimental: {

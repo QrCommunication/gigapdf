@@ -81,6 +81,10 @@ export {
   ocrPdf,
   isTesseractAvailable,
   TesseractNotInstalledError,
+  makeSearchablePdf,
+  parseTsvWords,
+  tsvWordToPdfPlacement,
+  DEFAULT_MIN_WORD_CONFIDENCE,
 } from './parse';
 export type {
   StructuredChar,
@@ -94,6 +98,11 @@ export type {
   OcrOptions,
   OcrPageResult,
   OcrResult,
+  MakeSearchablePdfOptions,
+  MakeSearchablePdfResult,
+  OcrTsvWord,
+  PdfPlacementContext,
+  PdfWordPlacement,
 } from './parse';
 
 // Merge/Split
@@ -107,6 +116,10 @@ export type { FormFieldInfo, FillResult } from './forms';
 // Encrypt
 export { encryptPDF, decryptPDF, getPermissions, setPermissions } from './encrypt';
 export type { EncryptOptions, EncryptionAlgorithm, PermissionsResult } from './encrypt';
+
+// Sign — PKCS#7 detached digital signature with a user-provided P12/PFX
+export { signPdf, PdfSignInvalidCertificateError } from './sign';
+export type { SignPdfOptions, SignPdfResult } from './sign';
 
 // Preview
 export { renderPage, renderThumbnail, renderAllThumbnails } from './preview';
@@ -152,7 +165,12 @@ export {
   convertPdfToOffice,
   LibreOfficeUnavailableError,
   LibreOfficeConversionError,
+  OFFICE_IMPORT_FORMATS,
+  PDF_EXPORT_FORMATS,
+  isOfficeImportFormat,
+  isPdfExportFormat,
 } from './convert/office-headless';
+export type { OfficeImportFormat, PdfExportFormat } from './convert/office-headless';
 
 // PDF → XLSX (custom extraction, libreoffice ne supporte pas)
 export { convertPdfToXlsx } from './convert/pdf-to-xlsx';

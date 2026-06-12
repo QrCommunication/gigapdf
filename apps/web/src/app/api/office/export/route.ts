@@ -3,12 +3,14 @@
  *
  * POST /api/office/export
  * Fetches a session document's PDF bytes from the Python backend, then
- * converts the file to the requested Office format (docx, xlsx, pptx) using
- * the pdf-engine package.
+ * converts the file to the requested Office format (docx, xlsx, pptx, odt,
+ * odp) using the pdf-engine package.
  *
  * Conversion matrix:
  *   docx  — LibreOffice writer_pdf_import     (convertPdfToOffice)
+ *   odt   — LibreOffice writer_pdf_import     (convertPdfToOffice)
  *   pptx  — LibreOffice impress_pdf_import    (convertPdfToOffice)
+ *   odp   — LibreOffice impress_pdf_import    (convertPdfToOffice)
  *   xlsx  — pdfjs + exceljs extraction        (convertPdfToXlsx — dynamic import)
  *
  * Note on xlsx: LibreOffice headless does not support PDF → XLSX (structural
@@ -19,7 +21,7 @@
  * Request:
  *   Content-Type: application/json
  *   Cookie / Authorization: Better Auth session (validated by requireSession)
- *   Body: { documentId: string, format: 'docx' | 'xlsx' | 'pptx' }
+ *   Body: { documentId: string, format: 'docx' | 'xlsx' | 'pptx' | 'odt' | 'odp' }
  *
  * Responses:
  *   200  — Binary Office file (stream)
@@ -58,11 +60,13 @@ const PYTHON_BACKEND_URL =
 
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 
-// MIME types per Office format (OOXML)
+// MIME types per export format (OOXML + OpenDocument)
 const CONTENT_TYPE_MAP = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  odt: 'application/vnd.oasis.opendocument.text',
+  odp: 'application/vnd.oasis.opendocument.presentation',
 } as const;
 
 // ─── Zod schema ────────────────────────────────────────────────────────────────
@@ -71,8 +75,8 @@ const RequestBodySchema = z.object({
   documentId: z
     .string({ error: 'documentId is required and must be a string' })
     .min(1, 'documentId cannot be empty'),
-  format: z.enum(['docx', 'xlsx', 'pptx'], {
-    error: "format must be one of: 'docx', 'xlsx', 'pptx'",
+  format: z.enum(['docx', 'xlsx', 'pptx', 'odt', 'odp'], {
+    error: "format must be one of: 'docx', 'xlsx', 'pptx', 'odt', 'odp'",
   }),
 });
 
@@ -229,7 +233,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       };
       outputBytes = await convertPdfToXlsx(pdfBytes);
     } else {
-      // format is 'docx' | 'pptx' — handled by LibreOffice headless
+      // format is 'docx' | 'pptx' | 'odt' | 'odp' — handled by LibreOffice headless
       outputBytes = await convertPdfToOffice(pdfBytes, format);
     }
   } catch (err: unknown) {

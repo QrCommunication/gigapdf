@@ -323,6 +323,27 @@ export const useAddWatermark = () => {
   });
 };
 
+/**
+ * Sign a PDF with a PKCS#7 detached signature using a user-provided
+ * P12/PFX certificate. The certificate and passphrase only transit in the
+ * request body — never stored nor logged.
+ */
+export const useSignPdf = () => {
+  return useMutation({
+    mutationFn: ({
+      file,
+      p12,
+      passphrase,
+      options,
+    }: {
+      file: File | Blob;
+      p12: File | Blob;
+      passphrase: string;
+      options?: Parameters<typeof pdfService.signPdf>[3];
+    }) => pdfService.signPdf(file, p12, passphrase, options),
+  });
+};
+
 /** Run Tesseract OCR on each page of a PDF. */
 export const useOcrPdf = () => {
   return useMutation({
@@ -333,6 +354,32 @@ export const useOcrPdf = () => {
       file: File | Blob;
       options?: Parameters<typeof pdfService.ocrPdf>[1];
     }) => pdfService.ocrPdf(file, options),
+  });
+};
+
+/**
+ * Bake an invisible OCR text layer into the PDF so it becomes searchable
+ * and selectable. Returns the modified PDF Blob + pages/words stats.
+ */
+export const useMakeSearchablePdf = () => {
+  return useMutation({
+    mutationFn: ({
+      file,
+      options,
+    }: {
+      file: File | Blob;
+      options?: Parameters<typeof pdfService.makeSearchablePdf>[1];
+    }) => pdfService.makeSearchablePdf(file, options),
+  });
+};
+
+/**
+ * Compress a PDF (pdf-lib normalisation + MuPDF garbage collection).
+ * Resolves with the compressed Blob and the before/after sizes in bytes.
+ */
+export const useCompressPdf = () => {
+  return useMutation({
+    mutationFn: ({ file }: { file: File | Blob }) => pdfService.compressPdf(file),
   });
 };
 
