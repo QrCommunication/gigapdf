@@ -71,11 +71,11 @@
       "description": "Des fonctionnalités puissantes pour les particuliers et les équipes, des modifications simples aux flux de travail complexes.",
       "wysiwyg": {
         "title": "Éditeur WYSIWYG",
-        "description": "Modifiez vos PDFs avec un éditeur visuel qui montre exactement le résultat final. Plus besoin de deviner l'apparence de votre document."
+        "description": "Modifiez vos PDFs avec un éditeur visuel qui montre exactement le résultat final. Formatage de texte réel (gras, italique, souligné, alignement) et polices fidèles : les polices d'origine sont identifiées et téléchargées automatiquement, puis embarquées dans le PDF enregistré."
       },
       "collaboration": {
-        "title": "Collaboration en temps réel",
-        "description": "Travaillez avec votre équipe en temps réel. Voyez les modifications au fur et à mesure et collaborez sans effort."
+        "title": "Collaboration & Partage",
+        "description": "Travaillez avec votre équipe en temps réel. Partagez vos documents depuis l'éditeur et parcourez l'historique des versions avec restauration en un clic."
       },
       "security": {
         "title": "Sécurité Entreprise",
@@ -86,16 +86,16 @@
         "description": "Accès programmatique complet à toutes les fonctionnalités. Automatisez vos flux documentaires avec notre API complète."
       },
       "export": {
-        "title": "Export multi-format",
-        "description": "Exportez en PNG, JPEG, DOCX, HTML et plus encore. Support OCR pour les documents scannés avec Tesseract."
+        "title": "Conversions & Export",
+        "description": "Exportez en PNG, JPEG, DOCX, HTML et plus encore. Conversions Office (DOCX, XLSX, PPTX), PDF/A, et OCR pour les documents scannés avec Tesseract."
       },
       "selfHostable": {
         "title": "Auto-hébergeable",
-        "description": "Déployez sur votre propre infrastructure. Gardez le contrôle total sur vos documents et vos données."
+        "description": "Déployez sur votre propre infrastructure avec un simple docker compose up. Gardez le contrôle total sur vos documents et vos données."
       },
       "pdfModification": {
         "title": "Modification de PDF",
-        "description": "Ajoutez, modifiez ou supprimez du texte, des images, des formes et des annotations. Modifiez vos PDF en batch via l'API."
+        "description": "Ajoutez, modifiez ou supprimez du texte, des images, des formes et des annotations. Appliquez un filigrane à une page ou au document entier. Modifiez vos PDF en batch via l'API."
       }
     },
     "openSource": {
@@ -463,23 +463,52 @@
       }
     },
     "detail": {
+      "back": "Retour aux documents",
       "lastModified": "Dernière modification {date}",
       "actions": {
-        "edit": "Modifier",
+        "edit": "Ouvrir dans l'éditeur",
         "download": "Télécharger",
+        "share": "Partager",
+        "rename": "Renommer",
         "delete": "Supprimer"
+      },
+      "preview": {
+        "title": "Aperçu"
       },
       "info": {
         "title": "Informations du document",
         "description": "Détails sur ce document",
         "fileName": "Nom du fichier",
+        "fileType": "Type",
         "fileSize": "Taille du fichier",
+        "pages": "Pages",
+        "pagesValue": "{count, plural, one {# page} other {# pages}}",
         "created": "Créé le",
         "lastModified": "Dernière modification"
       },
-      "description": {
-        "title": "Description",
-        "subtitle": "Description et notes du document"
+      "versions": {
+        "title": "Historique des versions",
+        "description": "Toutes les versions enregistrées de ce document",
+        "current": "Actuelle",
+        "version": "Version {version}",
+        "empty": "Aucun historique de version pour le moment",
+        "loadFailed": "Échec du chargement de l'historique des versions.",
+        "restoreOriginal": "Restaurer l'original"
+      },
+      "restoreDialog": {
+        "title": "Restaurer le document original",
+        "description": "Le contenu de « {name} » sera remplacé par la version originale (v1). Votre version actuelle ne sera plus la version active. Êtes-vous sûr ?",
+        "cancel": "Annuler",
+        "confirm": "Restaurer",
+        "restoring": "Restauration...",
+        "error": "Échec de la restauration de la version originale. Veuillez réessayer."
+      },
+      "errors": {
+        "notFoundTitle": "Document introuvable",
+        "notFoundDescription": "Ce document n'existe pas ou a été supprimé.",
+        "loadFailedTitle": "Échec du chargement du document",
+        "loadFailedDescription": "Une erreur est survenue lors du chargement de ce document. Veuillez réessayer.",
+        "retry": "Réessayer"
       }
     },
     "upload": {
@@ -529,7 +558,17 @@
       "size": "Taille",
       "created": "Date de création",
       "modified": "Dernière modification",
-      "actions": "Actions"
+      "actions": "Actions",
+      "folderDeleteDialog": {
+        "title": "Supprimer le dossier",
+        "description": "Êtes-vous sûr de vouloir supprimer le dossier « {name} » ? Cette action est irréversible.",
+        "containsDocuments": "{count, plural, one {Ce dossier contient # document. Déplacez-le ou supprimez-le d'abord.} other {Ce dossier contient # documents. Déplacez-les ou supprimez-les d'abord.}}",
+        "cancel": "Annuler",
+        "confirm": "Supprimer",
+        "deleting": "Suppression...",
+        "notEmpty": "Ce dossier n'est pas vide. Déplacez ou supprimez son contenu d'abord.",
+        "error": "Échec de la suppression du dossier. Veuillez réessayer."
+      }
     },
     "explorer": {
       "root": "Mes documents",
@@ -725,7 +764,19 @@
     },
     "error": {
       "title": "Erreur de chargement",
-      "backToDocuments": "Retour aux documents"
+      "backToDocuments": "Retour aux documents",
+      "invalidImageType": "Type de fichier invalide. Veuillez sélectionner une image.",
+      "imageTooLarge": "L'image est trop volumineuse (10 Mo maximum).",
+      "restoreFailed": "Échec de la restauration. Vérifiez que le document a bien une version d'origine accessible."
+    },
+    "watermark": {
+      "modeLabel": "Résultat",
+      "applyToDocument": "Appliquer au document",
+      "applyToDocumentHint": "Le filigrane est intégré au document en cours d'édition",
+      "downloadOnly": "Télécharger seulement",
+      "downloadOnlyHint": "Télécharge une copie filigranée sans modifier le document",
+      "appliedTitle": "Filigrane appliqué",
+      "appliedDescription": "Le document a été mis à jour avec le filigrane."
     },
     "shortcuts": {
       "hint": "Appuyez sur ? pour voir les raccourcis clavier"
@@ -1339,6 +1390,19 @@
         "export": "Export vers PNG, JPEG, DOCX, HTML",
         "ocr": "Extraction de texte OCR depuis les PDFs scannés",
         "realtime": "Collaboration en temps réel via WebSocket"
+      },
+      "selfhost": {
+        "title": "Auto-hébergement",
+        "description": "GigaPDF est entièrement auto-hébergeable (AGPLv3). Deux modes de déploiement sont supportés :",
+        "docker": {
+          "title": "Docker (recommandé)",
+          "description": "La stack compose démarre PostgreSQL 17, Redis 7, le backend FastAPI, Celery worker + beat, l'application web (:3000) et le dashboard admin (:3001). L'image web embarque LibreOffice, fontforge, Tesseract OCR (fra+eng) et Chromium Playwright — aucune installation supplémentaire."
+        },
+        "native": {
+          "title": "Natif (bare-metal / VPS)",
+          "description": "Node.js 22 + pnpm 10.28, Python 3.12, PostgreSQL 17 et Redis 7, derrière Nginx avec des unités systemd. /api/pdf/* est servi par Next.js (moteur PDF TypeScript), les autres routes /api/* par FastAPI."
+        },
+        "readme": "Instructions complètes dans le README"
       },
       "embedSdk": {
         "title": "SDK Embed",

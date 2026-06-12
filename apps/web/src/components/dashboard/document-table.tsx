@@ -131,12 +131,17 @@ export function DocumentTable({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
+  // Folder dialog states
+  const [folderToDelete, setFolderToDelete] = useState<FolderItem | null>(null);
+  const [folderDeleteDialogOpen, setFolderDeleteDialogOpen] = useState(false);
+
   // Loading states
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [deletingFolder, setDeletingFolder] = useState(false);
 
   // Data states
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -286,6 +291,34 @@ export function DocumentTable({
     setDeleteDialogOpen(true);
   };
 
+  const openFolderDeleteDialog = (folder: FolderItem) => {
+    setFolderToDelete(folder);
+    setFolderDeleteDialogOpen(true);
+  };
+
+  const handleDeleteFolder = async () => {
+    if (!folderToDelete) return;
+    try {
+      setDeletingFolder(true);
+      await api.deleteFolder(folderToDelete.id);
+      setFolderDeleteDialogOpen(false);
+      setFolderToDelete(null);
+      onDelete?.();
+    } catch (err) {
+      clientLogger.error("document-table.delete-folder-failed", err);
+      // Backend returns 400 (INVALID_OPERATION) when the folder still
+      // contains documents and cascade is not requested.
+      const status = (err as Error & { status?: number }).status;
+      alert(
+        status === 400
+          ? t("table.folderDeleteDialog.notEmpty")
+          : t("table.folderDeleteDialog.error")
+      );
+    } finally {
+      setDeletingFolder(false);
+    }
+  };
+
   const openRenameDialog = (doc: Document) => {
     setSelectedDoc(doc);
     setNewName(doc.name);
@@ -426,17 +459,25 @@ export function DocumentTable({
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          {tCard("menu.rename")}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive">
+                        {/* NOTE: no "Rename" item here — the storage API has no
+                            folder rename endpoint (only create/delete/move). */}
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openFolderDeleteDialog(folder);
+                          }}
+                          className="text-destructive focus:text-destructive"
+                        >
                           <Trash2 className="mr-2 h-4 w-4" />
                           {tCard("menu.delete")}
                         </DropdownMenuItem>
@@ -620,6 +661,51 @@ export function DocumentTable({
                 </>
               ) : (
                 tCard("deleteDialog.confirm")
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Folder Delete Confirmation Dialog */}
+      <Dialog open={folderDeleteDialogOpen} onOpenChange={setFolderDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("table.folderDeleteDialog.title")}</DialogTitle>
+            <DialogDescription>
+              {t("table.folderDeleteDialog.description", {
+                name: folderToDelete?.name || "",
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          {folderToDelete &&
+            (folderStats[folderToDelete.id]?.document_count ?? 0) > 0 && (
+              <p className="text-sm font-medium text-destructive">
+                {t("table.folderDeleteDialog.containsDocuments", {
+                  count: folderStats[folderToDelete.id]?.document_count ?? 0,
+                })}
+              </p>
+            )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setFolderDeleteDialogOpen(false)}
+              disabled={deletingFolder}
+            >
+              {t("table.folderDeleteDialog.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteFolder}
+              disabled={deletingFolder}
+            >
+              {deletingFolder ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t("table.folderDeleteDialog.deleting")}
+                </>
+              ) : (
+                t("table.folderDeleteDialog.confirm")
               )}
             </Button>
           </DialogFooter>
