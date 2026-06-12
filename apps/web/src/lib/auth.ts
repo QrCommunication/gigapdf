@@ -116,7 +116,11 @@ export const auth = betterAuth({
         required: false,
         defaultValue: "fr",
       },
-      is_admin: {
+      // Nom du champ côté client Prisma (camelCase) — la colonne DB reste
+      // is_admin via @map. Déclarer "is_admin" ici faisait échouer CHAQUE
+      // création d'utilisateur (PrismaClientValidationError: Unknown
+      // argument `is_admin`) → erreur OAuth unable_to_create_user.
+      isAdmin: {
         type: "boolean",
         required: false,
         defaultValue: false,

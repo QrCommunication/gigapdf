@@ -460,6 +460,7 @@ async def get_current_user(
                     # Respect roles/is_admin claim from the unverified JWT in dev mode too.
                     dev_claims_admin = (
                         unverified_claims.get("is_admin") is True
+                        or unverified_claims.get("isAdmin") is True
                         or unverified_claims.get("role") == "admin"
                         or "admin" in (unverified_claims.get("roles") or [])
                     )
@@ -507,8 +508,13 @@ async def get_current_user(
             if user.get("id"):
                 logger.info(f"Session validated for user: {user.get('id')}")
                 # Derive role from Better Auth user data.
-                # Better Auth exposes `role` (string) or `is_admin` (bool) depending on the plugin.
-                is_admin = user.get("is_admin") is True or user.get("role") == "admin"
+                # Better Auth exposes `role` (string) and `isAdmin` (camelCase since
+                # the additionalFields fix); legacy payloads used `is_admin`.
+                is_admin = (
+                    user.get("is_admin") is True
+                    or user.get("isAdmin") is True
+                    or user.get("role") == "admin"
+                )
                 roles = ["admin"] if is_admin else ["user"]
                 return CurrentUser(
                     user_id=user.get("id", ""),
