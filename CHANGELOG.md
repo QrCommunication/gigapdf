@@ -5,6 +5,78 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-06-13
+
+### Added
+
+**Document management**
+- Trash: deleting a document now soft-deletes it. New `/trash` page to
+  restore or permanently delete documents; trashed documents are purged
+  automatically after 30 days (Celery task).
+- Tags on documents (max 20, normalized lowercase): chips in the list
+  views, tag filter, autocomplete from your existing tags, and a
+  manage-tags dialog.
+- Full-text search across document names **and** document content
+  (PostgreSQL generated `tsvector` + GIN index).
+- Real document thumbnails: page 1 is rendered at upload and refreshed
+  after editing (`POST /api/v1/storage/documents/{id}/thumbnail`).
+- Document duplication ("name (copie)", "(copie 2)", …).
+- Folder renaming (`PATCH /api/v1/storage/folders/{id}`).
+- Parallel uploads (pool of 3 concurrent uploads).
+- Wider import formats: PDF plus Word (`.doc`/`.docx`), Excel
+  (`.xls`/`.xlsx`), PowerPoint (`.ppt`/`.pptx`) and OpenDocument
+  (`.odt`/`.ods`/`.odp`) — converted to PDF on import.
+- Activity history on the document detail page.
+
+**Editor**
+- Real-time collaboration is now effective: element changes made by other
+  participants appear live on the canvas (server-side WebSocket relay of
+  `element:create` / `element:update` / `element:delete`, applied to the
+  Fabric canvas).
+- Layers panel wired to the scene graph: per-element visibility and
+  locking.
+- Multi-selection editing: opacity, colors and alignment applied to every
+  selected element at once.
+- PDF compression with the achieved ratio displayed before applying it to
+  the document.
+- OCR "searchable PDF": adds an invisible text layer to image-only pages
+  so scanned documents become selectable and searchable.
+- Digital signature (PKCS#7) with a P12/PFX certificate — the certificate
+  and its passphrase are processed in memory only, never stored.
+- Export to ODT and ODP, in addition to DOCX, XLSX and PPTX.
+
+**Backend**
+- `POST /api/v1/logs`: rate-limited ingestion endpoint for frontend logs.
+
+### Fixed
+- **Alembic `migrations/env.py`: migrations were silently rolled back**
+  on every database where the `alembic_version` table already existed.
+  An implicit transaction opened by the version-table check was never
+  committed, so `alembic upgrade head` exited 0 and logged
+  "Running upgrade …" while applying **no** schema change. Self-hosters
+  should run `alembic upgrade head` again after updating and verify with
+  `alembic current` that the latest revision (`017_ged_features`) is
+  applied.
+
+### Changed
+- The seven legacy FastAPI PDF-manipulation routers (bookmarks, forms,
+  history, layers, modify, pages, security — 29 endpoints) are now
+  flagged as deprecated in OpenAPI. They are superseded by the TypeScript
+  pdf-engine routes (`/api/pdf/*`) and scheduled for removal.
+- Removed the unimplemented annotation and text endpoints that only
+  returned HTTP 501.
+
+### Notes for self-hosters
+- **Database migration required** after updating:
+  ```bash
+  source venv/bin/activate
+  alembic upgrade head
+  ```
+  v1.2.0 ships migration `017_ged_features` (full-text search columns and
+  trash index on `stored_documents`). Because of the `env.py` bug fixed in
+  this release, double-check with `alembic current` that the revision is
+  really applied.
+
 ## [1.1.1] - 2026-06-12
 
 ### Fixed

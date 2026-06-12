@@ -190,6 +190,25 @@ else
   echo "  no migrations dir or DATABASE_URL not set, skipping"
 fi
 
+# ── 2.4d Apply alembic migrations (FastAPI backend schema) ───────────────
+# The Python backend owns the SQLAlchemy schema (stored_documents, folders,
+# shares…). Migrations MUST run on every deploy — v1.2.0's env.py fix made
+# them effective again (they were silently rolled back before), so verify
+# the current revision instead of trusting exit 0.
+section "Applying alembic migrations (Python backend)"
+ALEMBIC_BIN=""
+for cand in "\$VPS_PATH/.venv/bin/alembic" "\$VPS_PATH/venv/bin/alembic"; do
+  [ -x "\$cand" ] && ALEMBIC_BIN="\$cand" && break
+done
+if [ -n "\$ALEMBIC_BIN" ]; then
+  ( cd "\$VPS_PATH" && "\$ALEMBIC_BIN" upgrade head 2>&1 | tail -3 ) || \\
+    echo "  [warn] alembic upgrade failed — backend schema may be stale"
+  ALEMBIC_CURRENT=\$( cd "\$VPS_PATH" && "\$ALEMBIC_BIN" current 2>/dev/null | tail -1 )
+  echo "  alembic current: \${ALEMBIC_CURRENT:-unknown}"
+else
+  echo "  [warn] alembic not found in .venv/ or venv/ — apply migrations manually!"
+fi
+
 # ── 2.5 Build all workspace packages (force — no cache) ──────────────────
 section "Building workspace packages (--force)"
 NODE_OPTIONS='--max-old-space-size=1536' pnpm turbo run build \\

@@ -162,24 +162,44 @@ The self-hosted version uses the exact same code base.
 - **Images & shapes** — Insert, resize, position visual elements
 - **Annotations** — Highlights, comments, stamps, freehand drawings
 - **Form builder** — Create and fill interactive PDF forms
+- **Layers & multi-selection** — Per-element visibility and locking in a
+  layers panel; batch-edit opacity, colors and alignment across a
+  multi-selection
 
 ### Document operations
 - Page management (add, remove, reorder, rotate)
 - Merge & split documents
+- Compression with the achieved ratio shown before applying
 - Encryption & password protection
+- Digital signatures (PKCS#7) with your own P12/PFX certificate —
+  processed in memory only, never stored
 - Watermarking (single page or whole document)
 - PDF/A conversion
-- OCR (text extraction from scans, fra+eng default)
-- Conversion (HTML → PDF, URL → PDF via Playwright; DOCX/XLSX/PPTX ↔ PDF via
-  LibreOffice)
+- OCR — text extraction from scans (fra+eng default) and "searchable PDF"
+  mode that adds an invisible text layer to image-only pages
+- Conversion (HTML → PDF, URL → PDF via Playwright; Word, Excel,
+  PowerPoint and OpenDocument ↔ PDF via LibreOffice — import
+  `.doc`/`.docx`/`.xls`/`.xlsx`/`.ppt`/`.pptx`/`.odt`/`.ods`/`.odp`,
+  export DOCX/XLSX/PPTX/ODT/ODP)
 - Sharing (email invitations, public links) and document detail page with
-  version history & restore
+  version history, one-click restore and activity history
+
+### Document management
+- Trash with restore — deleted documents are recoverable for 30 days,
+  then purged automatically
+- Tags with filtering and autocomplete
+- Full-text search across document names and content (PostgreSQL
+  `tsvector` + GIN index)
+- Real thumbnails generated at upload and refreshed after editing
+- Document duplication, folder organization & renaming
+- Parallel uploads (3 concurrent)
 
 ### Developer tools
 - **REST API** — Complete OpenAPI spec, see `docs/api/`
 - **Embed widget** — `<script src=".../embed.js">` integration
 - **Webhooks** — Document lifecycle events
-- **Real-time collaboration** — WebSocket-based, multiple cursors
+- **Real-time collaboration** — WebSocket-based: live element sync on the
+  canvas, multiple cursors
 
 ## Architecture
 
