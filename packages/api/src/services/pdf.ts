@@ -776,6 +776,55 @@ export const pdfService = {
   },
 
   /**
+   * Sign a PDF with a PKCS#7 detached signature (adbe.pkcs7.detached) using
+   * a user-provided PKCS#12 (.p12/.pfx) certificate.
+   *
+   * SECURITY: the certificate and passphrase transit only inside this
+   * request body — they are never stored, cached, or logged anywhere.
+   *
+   * Throws an Error whose `name` is `'InvalidCertificateError'` when the
+   * server rejects the certificate/passphrase pair, so callers can show a
+   * dedicated i18n message without parsing server strings.
+   */
+  signPdf: async (
+    file: File | Blob,
+    p12File: File | Blob,
+    passphrase: string,
+    options: {
+      reason?: string;
+      location?: string;
+      contactInfo?: string;
+      signerName?: string;
+    } = {},
+  ): Promise<Blob> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+    appendFileToForm(form, p12File, 'p12');
+    form.append('passphrase', passphrase);
+    if (options.reason) form.append('reason', options.reason);
+    if (options.location) form.append('location', options.location);
+    if (options.contactInfo) form.append('contactInfo', options.contactInfo);
+    if (options.signerName) form.append('signerName', options.signerName);
+
+    const response = await fetch('/api/pdf/sign', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+    if (!response.ok) {
+      const json = (await response
+        .json()
+        .catch(() => ({}))) as PdfApiResponse & { code?: string };
+      const error = new Error(json.error ?? `HTTP ${response.status}`);
+      if (json.code === 'INVALID_CERTIFICATE_OR_PASSPHRASE') {
+        error.name = 'InvalidCertificateError';
+      }
+      throw error;
+    }
+    return response.blob();
+  },
+
+  /**
    * Run Tesseract OCR on each rasterised page. Requires `tesseract` to be
    * installed on the server (verified by GET /api/pdf/ocr).
    */
@@ -826,6 +875,75 @@ export const pdfService = {
   },
 
   /**
+   * Compress a PDF (pdf-lib normalisation + MuPDF garbage=4/compress=yes).
+   * Returns the compressed binary plus the before/after sizes reported by
+   * the route headers (X-Original-Size / X-Compressed-Size).
+   */
+  compressPdf: async (file: File | Blob): Promise<CompressPdfResult> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+
+    const response = await fetch('/api/pdf/compress', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+
+    const blob = await handleBlobResponse(response);
+    const originalHeader = Number(response.headers.get('X-Original-Size'));
+    const compressedHeader = Number(response.headers.get('X-Compressed-Size'));
+
+    return {
+      blob,
+      originalSize:
+        Number.isFinite(originalHeader) && originalHeader > 0
+          ? originalHeader
+          : file.size,
+      compressedSize:
+        Number.isFinite(compressedHeader) && compressedHeader > 0
+          ? compressedHeader
+          : blob.size,
+    };
+  },
+
+  /**
+   * Run OCR and bake an INVISIBLE text layer into the PDF so it becomes
+   * searchable/selectable (output="searchable" on /api/pdf/ocr). Only
+   * pages without extractable text are processed unless force=true.
+   */
+  makeSearchablePdf: async (
+    file: File | Blob,
+    options: {
+      lang?: string;
+      dpi?: 144 | 200 | 300;
+      force?: boolean;
+    } = {},
+  ): Promise<SearchablePdfResult> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+    form.append('output', 'searchable');
+    if (options.lang) form.append('lang', options.lang);
+    if (options.dpi) form.append('dpi', String(options.dpi));
+    if (options.force) form.append('force', 'true');
+
+    const response = await fetch('/api/pdf/ocr', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+
+    const blob = await handleBlobResponse(response);
+    const pagesProcessed = Number(response.headers.get('X-Ocr-Pages-Processed'));
+    const wordsAdded = Number(response.headers.get('X-Ocr-Words-Added'));
+
+    return {
+      blob,
+      pagesProcessed: Number.isFinite(pagesProcessed) ? pagesProcessed : 0,
+      wordsAdded: Number.isFinite(wordsAdded) ? wordsAdded : 0,
+    };
+  },
+
+  /**
    * Convert a PDF to PDF/A (archival format).
    */
   convertToPdfA: async (
@@ -844,6 +962,24 @@ export const pdfService = {
     return handleBlobResponse(response);
   },
 };
+
+/**
+ * Result of compressPdf — compressed binary + before/after sizes (bytes).
+ */
+export interface CompressPdfResult {
+  blob: Blob;
+  originalSize: number;
+  compressedSize: number;
+}
+
+/**
+ * Result of makeSearchablePdf — PDF with invisible OCR text layer.
+ */
+export interface SearchablePdfResult {
+  blob: Blob;
+  pagesProcessed: number;
+  wordsAdded: number;
+}
 
 /**
  * A single element operation passed to applyElements
@@ -875,3 +1011,5 @@ export type {
   MetadataResult,
   FlattenOptions,
 };
+// CompressPdfResult & SearchablePdfResult are exported above (interface
+// declarations) — no re-export needed here.

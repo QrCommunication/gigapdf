@@ -55,17 +55,25 @@ export interface SocketEventData {
     document_id: string;
     element: unknown;
     user_id: string;
+    /** Page cible (1-indexée). Requis par le récepteur pour router l'élément vers la bonne page. */
+    page_number?: number;
+    /** Identifiant du client émetteur (anti-écho) — estampillé automatiquement par SocketClient.emit. */
+    client_id?: string;
   };
   'element:update': {
     document_id: string;
     element_id: string;
     changes: unknown;
     user_id: string;
+    /** Identifiant du client émetteur (anti-écho) — estampillé automatiquement par SocketClient.emit. */
+    client_id?: string;
   };
   'element:delete': {
     document_id: string;
     element_id: string;
     user_id: string;
+    /** Identifiant du client émetteur (anti-écho) — estampillé automatiquement par SocketClient.emit. */
+    client_id?: string;
   };
   'element:bulk-update': {
     document_id: string;
@@ -108,11 +116,69 @@ export interface SocketEventData {
 }
 
 /**
+ * Génère un identifiant unique par onglet/instance de client.
+ * Utilisé pour l'anti-écho : un client ignore les événements de collaboration
+ * qui portent son propre client_id (cas d'un relay serveur sans skip_sid).
+ */
+function generateClientId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `client_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+/**
  * WebSocket client for real-time collaboration
  */
 class SocketClient {
   private socket: Socket | null = null;
   private listeners: Map<string, Set<(data: unknown) => void>> = new Map();
+  /** Identifiant stable de CE client (par onglet) — sert d'identité d'émetteur. */
+  private readonly clientId: string = generateClientId();
+  /**
+   * callback original → wrapper anti-écho. Nécessaire pour que off() puisse
+   * désenregistrer exactement la fonction passée à socket.io par on().
+   */
+  private wrappedCallbacks = new WeakMap<
+    (data: unknown) => void,
+    (data: unknown) => void
+  >();
+
+  /**
+   * Identifiant unique de ce client (stable pour la durée de vie de l'onglet).
+   * À comparer au champ `client_id` des payloads entrants pour l'anti-écho.
+   */
+  getClientId(): string {
+    return this.clientId;
+  }
+
+  /** Un payload entrant est-il l'écho d'un événement émis par CE client ? */
+  private isOwnEcho(data: unknown): boolean {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      (data as { client_id?: unknown }).client_id === this.clientId
+    );
+  }
+
+  /**
+   * Retourne (et mémoïse) le wrapper d'un callback qui filtre l'écho de nos
+   * propres événements avant de déléguer. Les événements sans client_id
+   * (présence, jobs, événements serveur) passent inchangés.
+   */
+  private getWrappedCallback(
+    callback: (data: unknown) => void
+  ): (data: unknown) => void {
+    let wrapped = this.wrappedCallbacks.get(callback);
+    if (!wrapped) {
+      wrapped = (data: unknown) => {
+        if (this.isOwnEcho(data)) return;
+        callback(data);
+      };
+      this.wrappedCallbacks.set(callback, wrapped);
+    }
+    return wrapped;
+  }
 
   /**
    * Connect to WebSocket server
@@ -197,14 +263,18 @@ class SocketClient {
    * Subscribe to a socket event
    */
   on<K extends SocketEvent>(event: K, callback: (data: SocketEventData[K]) => void): void {
+    // Le wrapper filtre l'écho de nos propres événements (client_id identique)
+    // avant de déléguer au callback applicatif. C'est lui qui est enregistré
+    // côté socket.io et dans listeners (pour la ré-attache au reconnect).
+    const wrapped = this.getWrappedCallback(callback as (data: unknown) => void);
+
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
-    this.listeners.get(event)!.add(callback as (data: unknown) => void);
+    this.listeners.get(event)!.add(wrapped);
 
     if (this.socket?.connected) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      this.socket.on(event as string, callback as any);
+      this.socket.on(event as string, wrapped);
     }
   }
 
@@ -215,17 +285,22 @@ class SocketClient {
     event: K,
     callback: (data: SocketEventData[K]) => void
   ): void {
+    // on() enregistre le wrapper anti-écho, pas le callback brut — il faut
+    // donc désenregistrer ce même wrapper (fallback brut par sécurité).
+    const wrapped =
+      this.wrappedCallbacks.get(callback as (data: unknown) => void) ??
+      (callback as (data: unknown) => void);
+
     const callbacks = this.listeners.get(event);
     if (callbacks) {
-      callbacks.delete(callback as (data: unknown) => void);
+      callbacks.delete(wrapped);
       if (callbacks.size === 0) {
         this.listeners.delete(event);
       }
     }
 
     if (this.socket?.connected) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      this.socket.off(event as string, callback as any);
+      this.socket.off(event as string, wrapped);
     }
   }
 
@@ -236,7 +311,16 @@ class SocketClient {
     if (!this.socket?.connected) {
       this.connect();
     }
-    this.socket?.emit(event, data);
+    // Estampille l'identité de CE client sur tout payload objet. À la
+    // réception, le wrapper de on() ignore les événements portant notre
+    // propre client_id — aucune boucle d'écho possible même si le serveur
+    // rediffuse à toute la room sans skip_sid. Un client_id explicitement
+    // fourni par l'appelant a priorité (spread après).
+    const payload =
+      typeof data === 'object' && data !== null
+        ? { client_id: this.clientId, ...(data as Record<string, unknown>) }
+        : data;
+    this.socket?.emit(event, payload);
   }
 
   /**

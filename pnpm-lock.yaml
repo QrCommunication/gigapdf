@@ -741,6 +741,15 @@ importers:
       '@giga-pdf/types':
         specifier: workspace:*
         version: link:../types
+      '@signpdf/placeholder-pdf-lib':
+        specifier: ^3.3.0
+        version: 3.3.0(pdf-lib@1.17.1)
+      '@signpdf/signer-p12':
+        specifier: ^3.3.0
+        version: 3.3.0(node-forge@1.4.0)
+      '@signpdf/signpdf':
+        specifier: ^3.3.0
+        version: 3.3.0
       canvas:
         specifier: ^3.1.0
         version: 3.2.3
@@ -4060,6 +4069,26 @@ packages:
     peerDependencies:
       webpack: '>=4.40.0'
 
+  '@signpdf/placeholder-pdf-lib@3.3.0':
+    resolution: {integrity: sha512-DT1s617z88NvvCmo+z8jaz7lNzy7b7/fwo/movJGukpfSkl4FaLNRXIHNBCTRCP9TUb6F/axK1JulES/jY7mLQ==}
+    engines: {node: '>=12', yarn: '>=1.22.18'}
+    peerDependencies:
+      pdf-lib: ^1.17.1
+
+  '@signpdf/signer-p12@3.3.0':
+    resolution: {integrity: sha512-MLynYKgUBu29ojIueIDV34sIOFDFpP0s1gQORxCc0zhs1jfy0juqU2xQpjUayMbhzB4L0zS9dPwgHtok1f89Cg==}
+    engines: {node: '>=12', yarn: '>=1.22.18'}
+    peerDependencies:
+      node-forge: '>=1.4.0'
+
+  '@signpdf/signpdf@3.3.0':
+    resolution: {integrity: sha512-/vy3dPTsTbLHdsKRarPQw8++UqN8GXxjEVnl4ZRl+o/zMWFqVb861RM5bxoRMGGMuPSvb1Rgt2lmVobEc0YUpw==}
+    engines: {node: '>=12'}
+
+  '@signpdf/utils@3.3.0':
+    resolution: {integrity: sha512-ArOP0MIhCfdChh1oZkog81TPeSY2e5TvHQmXJ682T4+SKb6Z609uAZhqMQZ9xm+YenEf/eNMSE5KVwU+EudXug==}
+    engines: {node: '>=12', yarn: '>=1.22.18'}
+
   '@sinclair/typebox@0.27.10':
     resolution: {integrity: sha512-MTBk/3jGLNB2tVxv6uLlFh1iu64iYOQ2PbdOSK3NW8JZsmlaOh2q6sdtKowBhfw8QFLmYNzTW4/oK4uATIi6ZA==}
 
@@ -6513,7 +6542,7 @@ packages:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
     engines: {node: '>=12.0.0'}
     peerDependencies:
-      picomatch: '>=4.0.4'
+      picomatch: '>=3.0.2'
     peerDependenciesMeta:
       picomatch:
         optional: true
@@ -13601,6 +13630,22 @@ snapshots:
     transitivePeerDependencies:
       - encoding
       - supports-color
+
+  '@signpdf/placeholder-pdf-lib@3.3.0(pdf-lib@1.17.1)':
+    dependencies:
+      '@signpdf/utils': 3.3.0
+      pdf-lib: 1.17.1
+
+  '@signpdf/signer-p12@3.3.0(node-forge@1.4.0)':
+    dependencies:
+      '@signpdf/utils': 3.3.0
+      node-forge: 1.4.0
+
+  '@signpdf/signpdf@3.3.0':
+    dependencies:
+      '@signpdf/utils': 3.3.0
+
+  '@signpdf/utils@3.3.0': {}
 
   '@sinclair/typebox@0.27.10': {}
 

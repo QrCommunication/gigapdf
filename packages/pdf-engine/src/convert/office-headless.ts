@@ -27,8 +27,57 @@ const SOFFICE_TIMEOUT_MS = 30_000;
 /** Magic bytes attendus pour un fichier PDF valide. */
 const PDF_MAGIC = Buffer.from('%PDF-', 'ascii');
 
-/** Magic bytes attendus pour un fichier Office (ZIP PK). */
+/** Magic bytes attendus pour un fichier Office moderne (ZIP PK). */
 const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+
+// ── Tables de formats ─────────────────────────────────────────────────────────
+
+/**
+ * Formats bureautiques acceptés en entrée pour la conversion Office → PDF.
+ * LibreOffice les importe tous nativement (aucun `--infilter` requis) :
+ *  - OOXML (ZIP)            : docx, xlsx, pptx
+ *  - Office 97-2003 (OLE2)  : doc, xls, ppt
+ *  - OpenDocument (ZIP)     : odt, ods, odp
+ */
+export const OFFICE_IMPORT_FORMATS = [
+  'docx',
+  'xlsx',
+  'pptx',
+  'doc',
+  'xls',
+  'ppt',
+  'odt',
+  'ods',
+  'odp',
+] as const;
+
+export type OfficeImportFormat = (typeof OFFICE_IMPORT_FORMATS)[number];
+
+/** Garde de type pure : `value` est-il un format d'import Office supporté ? */
+export function isOfficeImportFormat(value: string): value is OfficeImportFormat {
+  return (OFFICE_IMPORT_FORMATS as readonly string[]).includes(value);
+}
+
+/**
+ * Formats cibles supportés par {@link convertPdfToOffice}.
+ * `xlsx` figure dans la signature pour compat d'appel mais rejette toujours
+ * (LibreOffice ne sait pas transformer un PDF en tableur) — utiliser
+ * `convertPdfToXlsx` (extraction pdfjs + exceljs) à la place.
+ *
+ * `odt` et `odp` ont été validés en réel (LibreOffice 26.2, 2026-06-12) :
+ * sortie ZIP PK avec entrée `mimetype` opendocument correcte.
+ */
+export const PDF_EXPORT_FORMATS = ['docx', 'xlsx', 'pptx', 'odt', 'odp'] as const;
+
+export type PdfExportFormat = (typeof PDF_EXPORT_FORMATS)[number];
+
+/** Garde de type pure : `value` est-il un format d'export PDF → Office supporté ? */
+export function isPdfExportFormat(value: string): value is PdfExportFormat {
+  return (PDF_EXPORT_FORMATS as readonly string[]).includes(value);
+}
+
+/** Formats cibles réellement convertis par LibreOffice (xlsx exclu). */
+type LibreOfficeExportFormat = Exclude<PdfExportFormat, 'xlsx'>;
 
 // ── Erreurs dédiées ───────────────────────────────────────────────────────────
 
@@ -51,8 +100,17 @@ export class LibreOfficeConversionError extends Error {
 /**
  * Convertit un fichier Office en PDF.
  *
- * @param buffer       — contenu binaire du fichier source (DOCX, XLSX ou PPTX)
- * @param sourceFormat — format du fichier source
+ * Formats acceptés ({@link OFFICE_IMPORT_FORMATS}) :
+ *  - OOXML            : docx, xlsx, pptx
+ *  - Office 97-2003   : doc, xls, ppt (conteneur OLE2)
+ *  - OpenDocument     : odt, ods, odp
+ *
+ * LibreOffice auto-détecte tous ces formats à l'import — seul le format de
+ * sortie (`pdf`) est spécifié, aucun filtre d'import n'est nécessaire.
+ *
+ * @param buffer       — contenu binaire du fichier source
+ * @param sourceFormat — format du fichier source (détermine l'extension du
+ *                       fichier temporaire, indice de détection pour soffice)
  * @returns            bytes du fichier PDF produit (commence par `%PDF-`)
  * @throws {LibreOfficeUnavailableError} si `soffice` est absent du PATH
  * @throws {LibreOfficeConversionError}  si la conversion échoue ou produit un
@@ -60,7 +118,7 @@ export class LibreOfficeConversionError extends Error {
  */
 export async function convertOfficeToPdf(
   buffer: Uint8Array,
-  sourceFormat: 'docx' | 'xlsx' | 'pptx',
+  sourceFormat: OfficeImportFormat,
 ): Promise<Uint8Array> {
   const dir = await mkdtemp(join(tmpdir(), 'gigapdf-lo-'));
   const inPath = join(dir, `input.${sourceFormat}`);
@@ -100,13 +158,15 @@ export async function convertOfficeToPdf(
  *
  * Filtres d'import LibreOffice utilisés :
  *  - `docx` → `writer_pdf_import`   (LibreOffice Writer)
+ *  - `odt`  → `writer_pdf_import`   (LibreOffice Writer)
  *  - `pptx` → `impress_pdf_import`  (LibreOffice Impress/Draw)
+ *  - `odp`  → `impress_pdf_import`  (LibreOffice Impress/Draw)
  *  - `xlsx` → non supporté nativement depuis un PDF (LibreOffice ne peut pas
  *              transformer un document textuel/graphique en tableur de façon
  *              fiable). Lance `LibreOfficeConversionError`.
  *
  * @param buffer       — contenu binaire du fichier PDF source
- * @param targetFormat — format cible (docx ou pptx ; xlsx non supporté)
+ * @param targetFormat — format cible (docx, pptx, odt ou odp ; xlsx non supporté)
  * @returns            bytes du fichier Office produit (ZIP PK)
  * @throws {LibreOfficeUnavailableError} si `soffice` est absent du PATH
  * @throws {LibreOfficeConversionError}  si la conversion échoue, le format
@@ -115,7 +175,7 @@ export async function convertOfficeToPdf(
  */
 export async function convertPdfToOffice(
   buffer: Uint8Array,
-  targetFormat: 'docx' | 'xlsx' | 'pptx',
+  targetFormat: PdfExportFormat,
 ): Promise<Uint8Array> {
   // LibreOffice headless ne peut pas convertir un PDF en XLSX — un PDF n'est
   // pas un tableur et aucun filtre d'import Calc n'accepte le format PDF.
@@ -123,19 +183,23 @@ export async function convertPdfToOffice(
     throw new LibreOfficeConversionError(
       'PDF → XLSX is not supported by LibreOffice headless: a PDF document ' +
         'cannot be structurally interpreted as a spreadsheet. ' +
-        'Use docx or pptx as target format instead.',
+        'Use docx, pptx, odt or odp as target format instead.',
     );
   }
 
   // Filtre d'import selon le type d'application LibreOffice cible
-  const infilterMap: Record<'docx' | 'pptx', string> = {
+  const infilterMap: Record<LibreOfficeExportFormat, string> = {
     docx: 'writer_pdf_import',
     pptx: 'impress_pdf_import',
+    odt: 'writer_pdf_import',
+    odp: 'impress_pdf_import',
   };
-  // Filtre d'export nommé pour la cible Office
-  const exportFilterMap: Record<'docx' | 'pptx', string> = {
+  // Filtre d'export nommé pour la cible Office / OpenDocument
+  const exportFilterMap: Record<LibreOfficeExportFormat, string> = {
     docx: 'MS Word 2007 XML',
     pptx: 'Impress MS PowerPoint 2007 XML',
+    odt: 'writer8',
+    odp: 'impress8',
   };
 
   const dir = await mkdtemp(join(tmpdir(), 'gigapdf-lo-'));

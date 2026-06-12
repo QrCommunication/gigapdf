@@ -31,4 +31,6 @@ export type {
   MetadataResult,
   FlattenOptions,
   ApplyElementsOperation,
+  CompressPdfResult,
+  SearchablePdfResult,
 } from './pdf';

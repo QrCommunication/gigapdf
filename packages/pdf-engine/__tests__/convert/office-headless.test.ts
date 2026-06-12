@@ -1,22 +1,31 @@
 /**
  * Tests smoke pour la conversion Office <-> PDF via LibreOffice headless.
  *
- * Tous les tests sont conditionnes a la presence de `soffice` dans le PATH
- * via `it.runIf(sofficAvailable)`. Sur un CI sans LibreOffice installe les
- * tests sont skippes proprement sans erreur.
+ * Les tests de conversion sont conditionnes a la presence de `soffice` dans
+ * le PATH via `it.runIf(sofficAvailable)`. Sur un CI sans LibreOffice
+ * installe les tests sont skippes proprement sans erreur. Les tests de la
+ * table des formats (fonctions pures) tournent partout.
  *
  * Test 1 : DOCX minimal cree en memoire → PDF → validation magic %PDF-
  * Test 2 : PDF de debug existant (/tmp/gigapdf-debug/v1.pdf) → DOCX → ZIP PK
- * Test 3 : meme PDF → XLSX → ZIP PK
+ * Test 3 : PDF → XLSX rejette (non supporte par LibreOffice)
  * Test 4 : meme PDF → PPTX → ZIP PK
+ * Test 5 : test-free.pdf → ODT → ZIP PK + mimetype opendocument.text
+ * Test 6 : test-free.pdf → ODP → ZIP PK + mimetype opendocument.presentation
+ * Test 7 : roundtrip ODT → PDF (chemin d'import OpenDocument)
  */
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   convertOfficeToPdf,
   convertPdfToOffice,
+  isOfficeImportFormat,
+  isPdfExportFormat,
   LibreOfficeUnavailableError,
+  OFFICE_IMPORT_FORMATS,
+  PDF_EXPORT_FORMATS,
 } from '../../src/convert/office-headless';
 
 // ── Pre-condition globale ────────────────────────────────────────────────────
@@ -38,6 +47,29 @@ function checkSoffice(): boolean {
 }
 
 const sofficAvailable = checkSoffice();
+
+/**
+ * PDF d'exemple a la racine du repo, utilise pour les conversions ODT/ODP
+ * reelles. Resolu depuis le cwd du package OU depuis la racine du monorepo
+ * selon l'endroit d'ou vitest est lance.
+ */
+function findSamplePdf(): string | null {
+  const candidates = [
+    join(process.cwd(), 'test-free.pdf'),
+    join(process.cwd(), '..', '..', 'test-free.pdf'),
+  ];
+  return candidates.find((p) => existsSync(p)) ?? null;
+}
+
+const samplePdfPath = findSamplePdf();
+
+/** Verifie ZIP magic PK\x03\x04 en tete de buffer. */
+function expectZipMagic(result: Uint8Array): void {
+  expect(result[0]).toBe(0x50); // P
+  expect(result[1]).toBe(0x4b); // K
+  expect(result[2]).toBe(0x03);
+  expect(result[3]).toBe(0x04);
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -259,6 +291,110 @@ describe('convertPdfToOffice', () => {
     },
     45_000,
   );
+});
+
+describe('convertPdfToOffice — OpenDocument targets (odt/odp)', () => {
+  const pdfAvailable = samplePdfPath !== null;
+
+  it.runIf(sofficAvailable && pdfAvailable)(
+    'Test 5 — convertit test-free.pdf en ODT (ZIP PK + mimetype opendocument.text)',
+    async () => {
+      const pdfBytes = new Uint8Array(readFileSync(samplePdfPath as string));
+
+      const start = Date.now();
+      const result = await convertPdfToOffice(pdfBytes, 'odt');
+      const elapsed = Date.now() - start;
+
+      process.stdout.write(`\n  [timing] pdf→odt: ${elapsed}ms\n`);
+
+      expect(result).toBeInstanceOf(Uint8Array);
+      expect(result.length).toBeGreaterThan(100);
+      expectZipMagic(result);
+
+      // Conformement a la spec ODF, la premiere entree du ZIP est `mimetype`,
+      // stockee NON compressee — la chaine est donc presente en clair.
+      const ascii = Buffer.from(result).toString('latin1');
+      expect(ascii).toContain('application/vnd.oasis.opendocument.text');
+    },
+    45_000,
+  );
+
+  it.runIf(sofficAvailable && pdfAvailable)(
+    'Test 6 — convertit test-free.pdf en ODP (ZIP PK + mimetype opendocument.presentation)',
+    async () => {
+      const pdfBytes = new Uint8Array(readFileSync(samplePdfPath as string));
+
+      const start = Date.now();
+      const result = await convertPdfToOffice(pdfBytes, 'odp');
+      const elapsed = Date.now() - start;
+
+      process.stdout.write(`\n  [timing] pdf→odp: ${elapsed}ms\n`);
+
+      expect(result).toBeInstanceOf(Uint8Array);
+      expect(result.length).toBeGreaterThan(100);
+      expectZipMagic(result);
+
+      const ascii = Buffer.from(result).toString('latin1');
+      expect(ascii).toContain('application/vnd.oasis.opendocument.presentation');
+    },
+    45_000,
+  );
+
+  it.runIf(sofficAvailable && pdfAvailable)(
+    'Test 7 — roundtrip : ODT produit reimporte en PDF (chemin import OpenDocument)',
+    async () => {
+      const pdfBytes = new Uint8Array(readFileSync(samplePdfPath as string));
+      const odtBytes = await convertPdfToOffice(pdfBytes, 'odt');
+
+      const start = Date.now();
+      const pdfAgain = await convertOfficeToPdf(odtBytes, 'odt');
+      const elapsed = Date.now() - start;
+
+      process.stdout.write(`\n  [timing] odt→pdf: ${elapsed}ms\n`);
+
+      expect(pdfAgain).toBeInstanceOf(Uint8Array);
+      expect(pdfAgain.length).toBeGreaterThan(100);
+      expect(Buffer.from(pdfAgain.subarray(0, 5)).toString('ascii')).toBe('%PDF-');
+    },
+    90_000,
+  );
+});
+
+describe('Tables de formats (fonctions pures)', () => {
+  it('OFFICE_IMPORT_FORMATS contient exactement les 9 formats supportes', () => {
+    expect([...OFFICE_IMPORT_FORMATS].sort()).toEqual(
+      ['doc', 'docx', 'odp', 'ods', 'odt', 'ppt', 'pptx', 'xls', 'xlsx'].sort(),
+    );
+  });
+
+  it('isOfficeImportFormat accepte chaque format de la table', () => {
+    for (const format of OFFICE_IMPORT_FORMATS) {
+      expect(isOfficeImportFormat(format)).toBe(true);
+    }
+  });
+
+  it('isOfficeImportFormat rejette les formats inconnus, vides ou en casse differente', () => {
+    expect(isOfficeImportFormat('pdf')).toBe(false);
+    expect(isOfficeImportFormat('rtf')).toBe(false);
+    expect(isOfficeImportFormat('txt')).toBe(false);
+    expect(isOfficeImportFormat('')).toBe(false);
+    expect(isOfficeImportFormat('DOCX')).toBe(false); // normalisation = responsabilite caller
+  });
+
+  it('PDF_EXPORT_FORMATS contient docx, xlsx, pptx, odt et odp', () => {
+    expect([...PDF_EXPORT_FORMATS].sort()).toEqual(
+      ['docx', 'odp', 'odt', 'pptx', 'xlsx'].sort(),
+    );
+  });
+
+  it('isPdfExportFormat accepte chaque format de la table et rejette le reste', () => {
+    for (const format of PDF_EXPORT_FORMATS) {
+      expect(isPdfExportFormat(format)).toBe(true);
+    }
+    expect(isPdfExportFormat('ods')).toBe(false); // export tableur = convertPdfToXlsx only
+    expect(isPdfExportFormat('doc')).toBe(false); // pas d'export legacy 97-2003
+    expect(isPdfExportFormat('')).toBe(false);
+  });
 });
 
 describe('LibreOfficeUnavailableError', () => {

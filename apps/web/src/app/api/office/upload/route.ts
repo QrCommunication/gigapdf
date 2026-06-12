@@ -2,15 +2,22 @@
  * Office → PDF Conversion Route
  *
  * POST /api/office/upload
- * Converts a DOCX, XLSX, or PPTX file to PDF via LibreOffice headless.
+ * Converts an Office document to PDF via LibreOffice headless.
+ *
+ * Accepted formats:
+ *   - OOXML        : .docx, .xlsx, .pptx          (ZIP container)
+ *   - Office 97-2003: .doc, .xls, .ppt            (OLE2 container)
+ *   - OpenDocument : .odt, .ods, .odp             (ZIP container)
  *
  * Request: multipart/form-data
- *   file — the binary Office document (.docx, .xlsx, or .pptx)
+ *   file — the binary Office document
  *
  * Validation:
  *   - File required (400)
- *   - Extension must be .docx | .xlsx | .pptx, case-insensitive (400)
- *   - First 4 bytes must be ZIP magic (PK\x03\x04) (400)
+ *   - Extension must be one of the accepted formats, case-insensitive (400)
+ *   - Magic bytes must match the container family of the extension (400):
+ *       ZIP  (PK\x03\x04)                          → docx/xlsx/pptx/odt/ods/odp
+ *       OLE2 (\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1)    → doc/xls/ppt
  *   - Size limit: 25 MB (413)
  *
  * Returns: application/pdf binary (pure conversion — caller uploads to storage)
@@ -29,6 +36,9 @@ import {
   LibreOfficeUnavailableError,
   LibreOfficeConversionError,
 } from '@giga-pdf/pdf-engine';
+// Type-only import: erased at runtime, keeps unit-test mocks of the engine simple
+// while letting tsc enforce route ⊆ engine format compatibility.
+import type { OfficeImportFormat } from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
 import { serverLogger } from '@/lib/server-logger';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
@@ -37,12 +47,31 @@ import { sanitizeContentDisposition } from '@/lib/content-disposition';
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
 
-/** ZIP magic bytes shared by DOCX, XLSX, and PPTX (all OOXML containers). */
+/** ZIP magic bytes shared by OOXML (docx/xlsx/pptx) and ODF (odt/ods/odp). */
 const ZIP_MAGIC = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
 
-const ALLOWED_EXTENSIONS = new Set(['docx', 'xlsx', 'pptx']);
+/** OLE2 / Compound File magic bytes shared by legacy Office (doc/xls/ppt). */
+const OLE2_MAGIC = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
 
-type AllowedFormat = 'docx' | 'xlsx' | 'pptx';
+/**
+ * Expected container magic per accepted extension.
+ * Record<OfficeImportFormat, …> keeps this table exhaustive: adding a format
+ * to the engine without mapping its magic here fails type-check.
+ */
+const MAGIC_BY_FORMAT: Record<OfficeImportFormat, Uint8Array> = {
+  docx: ZIP_MAGIC,
+  xlsx: ZIP_MAGIC,
+  pptx: ZIP_MAGIC,
+  doc: OLE2_MAGIC,
+  xls: OLE2_MAGIC,
+  ppt: OLE2_MAGIC,
+  odt: ZIP_MAGIC,
+  ods: ZIP_MAGIC,
+  odp: ZIP_MAGIC,
+};
+
+const ALLOWED_EXTENSIONS_LABEL =
+  '.doc, .docx, .xls, .xlsx, .ppt, .pptx, .odt, .ods, .odp';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -66,14 +95,20 @@ function basenameWithoutExt(filename: string): string {
   return filename.slice(0, dot);
 }
 
+/** Type guard: is this extension one of the accepted Office import formats? */
+function isAllowedFormat(ext: string): ext is OfficeImportFormat {
+  return Object.hasOwn(MAGIC_BY_FORMAT, ext);
+}
+
 /**
- * Validates that the first 4 bytes of the buffer match ZIP magic (PK\x03\x04).
- * All OOXML formats (DOCX, XLSX, PPTX) are ZIP archives.
+ * Validates that the buffer starts with the expected magic bytes.
+ * OOXML/ODF files are ZIP archives (PK\x03\x04); legacy Office 97-2003 files
+ * are OLE2 compound files (\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1).
  */
-function hasZipMagic(buffer: Uint8Array): boolean {
-  if (buffer.length < 4) return false;
-  for (let i = 0; i < 4; i++) {
-    if (buffer[i] !== ZIP_MAGIC[i]) return false;
+function hasMagic(buffer: Uint8Array, magic: Uint8Array): boolean {
+  if (buffer.length < magic.length) return false;
+  for (let i = 0; i < magic.length; i++) {
+    if (buffer[i] !== magic[i]) return false;
   }
   return true;
 }
@@ -124,21 +159,21 @@ export async function POST(request: Request): Promise<Response> {
     const filename = file.name ?? '';
     const ext = extractExtension(filename);
 
-    if (!ALLOWED_EXTENSIONS.has(ext)) {
+    if (!isAllowedFormat(ext)) {
       return NextResponse.json(
         {
           success: false,
-          error: `Unsupported file extension "${ext || '(none)'}". Allowed: .docx, .xlsx, .pptx.`,
+          error: `Unsupported file extension "${ext || '(none)'}". Allowed: ${ALLOWED_EXTENSIONS_LABEL}.`,
         },
         { status: 400 },
       );
     }
 
-    // ── Read buffer and validate magic bytes ────────────────────────────────
+    // ── Read buffer and validate magic bytes (per container family) ─────────
     const arrayBuffer = await file.arrayBuffer();
     const buffer = new Uint8Array(arrayBuffer);
 
-    if (!hasZipMagic(buffer)) {
+    if (!hasMagic(buffer, MAGIC_BY_FORMAT[ext])) {
       return NextResponse.json(
         {
           success: false,
@@ -148,7 +183,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const sourceFormat = ext as AllowedFormat;
+    const sourceFormat: OfficeImportFormat = ext;
     const baseName = basenameWithoutExt(filename);
     const outputFilename = `${baseName}.pdf`;
 
