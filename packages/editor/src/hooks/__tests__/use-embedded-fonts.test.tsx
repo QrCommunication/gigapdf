@@ -8,6 +8,8 @@
  *  - test_cleanup_on_unmount_removes_font_from_document
  *  - test_resolves_pdf_font_name_with_subset_prefix
  *  - test_returns_null_for_non_embedded_fonts
+ *  - google_fallback: non-embedded → Google proxy, extraction failure → Google
+ *    proxy, IndexedDB cache consulted before network
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -71,6 +73,7 @@ function bufferToBase64(buffer: ArrayBuffer): string {
 function makeEmptyCache(): FontCache {
   return {
     get: vi.fn().mockResolvedValue(null),
+    getEntry: vi.fn().mockResolvedValue(null),
     set: vi.fn().mockResolvedValue(undefined),
     has: vi.fn().mockResolvedValue(false),
     delete: vi.fn().mockResolvedValue(undefined),
@@ -80,15 +83,32 @@ function makeEmptyCache(): FontCache {
 }
 
 /** Create a FontCache that already has the font cached */
-function makePopulatedCache(buffer: ArrayBuffer): FontCache {
+function makePopulatedCache(
+  buffer: ArrayBuffer,
+  meta: { source: 'embedded' | 'google'; weight?: number; style?: 'normal' | 'italic' } | null = null,
+): FontCache {
   return {
     get: vi.fn().mockResolvedValue(buffer),
+    getEntry: vi.fn().mockResolvedValue({ data: buffer, meta }),
     set: vi.fn().mockResolvedValue(undefined),
     has: vi.fn().mockResolvedValue(true),
     delete: vi.fn().mockResolvedValue(undefined),
     evictExpired: vi.fn().mockResolvedValue(undefined),
     clear: vi.fn().mockResolvedValue(undefined),
   } as unknown as FontCache;
+}
+
+/** Build a successful Google Fonts proxy response */
+function makeGoogleHit(overrides: Partial<{ weight: number; style: 'normal' | 'italic' }> = {}) {
+  return {
+    found: true as const,
+    family: 'Roboto',
+    weight: overrides.weight ?? 400,
+    style: overrides.style ?? ('normal' as const),
+    format: 'ttf' as const,
+    mimeType: 'font/ttf' as const,
+    dataBase64: bufferToBase64(makeFakeBuffer()),
+  };
 }
 
 // ─── Test Setup ────────────────────────────────────────────────────────────
@@ -221,6 +241,8 @@ describe('useEmbeddedFonts', () => {
       });
     });
 
+    // Google Fonts fallback misses too — the bad font ends up failed
+    const fetchGoogleFont = vi.fn().mockResolvedValue({ found: false });
     const cache = makeEmptyCache();
 
     const { result } = renderHook(() =>
@@ -228,6 +250,7 @@ describe('useEmbeddedFonts', () => {
         documentId: DOCUMENT_ID,
         fetchFontList,
         fetchFontData,
+        fetchGoogleFont,
         cache,
       }),
     );
@@ -314,6 +337,8 @@ describe('useEmbeddedFonts', () => {
 
     const fetchFontList = vi.fn().mockResolvedValue({ fonts: [metadata] });
     const fetchFontData = vi.fn();
+    // No Google Fonts substitute either — the font ends up failed
+    const fetchGoogleFont = vi.fn().mockResolvedValue({ found: false });
     const cache = makeEmptyCache();
 
     const { result } = renderHook(() =>
@@ -321,21 +346,165 @@ describe('useEmbeddedFonts', () => {
         documentId: DOCUMENT_ID,
         fetchFontList,
         fetchFontData,
+        fetchGoogleFont,
         cache,
       }),
     );
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    // Non-embedded fonts are marked failed
+    // Non-embedded fonts without a Google substitute are marked failed
     const nonEmbeddedFont = result.current.fonts[0];
     expect(nonEmbeddedFont).toBeDefined();
     expect(nonEmbeddedFont?.status).toBe('failed');
+    expect(nonEmbeddedFont?.error).toMatch(/no Google Fonts substitute/);
+    // The Google fallback was attempted with the original PDF font name
+    expect(fetchGoogleFont).toHaveBeenCalledWith(metadata.originalName);
     // fetchFontData was never called
     expect(fetchFontData).not.toHaveBeenCalled();
     // getFontFaceName returns null (not loaded)
     const resolved = result.current.getFontFaceName(metadata.originalName);
     expect(resolved).toBeNull();
+  });
+
+  // ── Google Fonts fallback ────────────────────────────────────────────────
+
+  it('google_fallback: loads a non-embedded font from the Google Fonts proxy', async () => {
+    const metadata = makeMetadata({
+      fontId: 'font-google',
+      originalName: 'Roboto-Bold',
+      isEmbedded: false,
+    });
+
+    const fetchFontList = vi.fn().mockResolvedValue({ fonts: [metadata] });
+    const fetchFontData = vi.fn();
+    const fetchGoogleFont = vi.fn().mockResolvedValue(makeGoogleHit({ weight: 700 }));
+    const cache = makeEmptyCache();
+
+    const { result } = renderHook(() =>
+      useEmbeddedFonts({
+        documentId: DOCUMENT_ID,
+        fetchFontList,
+        fetchFontData,
+        fetchGoogleFont,
+        cache,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    // The proxy was queried with the raw PDF font name, never the extractor
+    expect(fetchGoogleFont).toHaveBeenCalledWith(metadata.originalName);
+    expect(fetchFontData).not.toHaveBeenCalled();
+
+    const font = result.current.fonts[0];
+    expect(font).toBeDefined();
+    expect(font?.status).toBe('loaded');
+    expect(font?.error).toBeUndefined();
+    // Same conventional CSS name as embedded fonts — getFontFaceName resolves it
+    expect(result.current.getFontFaceName(metadata.originalName)).toBe(
+      `gigapdf-${DOCUMENT_ID}-font-google`,
+    );
+
+    // Cached with Google provenance + descriptors for identical re-registration
+    const setCalls = (cache.set as ReturnType<typeof vi.fn>).mock.calls;
+    expect(setCalls.length).toBeGreaterThan(0);
+    expect(setCalls[0]?.[0]).toBe(DOCUMENT_ID);
+    expect(setCalls[0]?.[1]).toBe('font-google');
+    expect(setCalls[0]?.[4]).toEqual({ source: 'google', weight: 700, style: 'normal' });
+  });
+
+  it('google_fallback: tries Google Fonts when embedded font bytes cannot be fetched', async () => {
+    const metadata = makeMetadata({ fontId: 'font-not-extractable', originalName: 'OpenSans' });
+
+    const fetchFontList = vi.fn().mockResolvedValue({ fonts: [metadata] });
+    // Backend cannot extract the bytes (e.g. 404 "not extractable")
+    const fetchFontData = vi
+      .fn()
+      .mockRejectedValue(new Error('Failed to fetch font data: HTTP 404'));
+    const fetchGoogleFont = vi.fn().mockResolvedValue(makeGoogleHit());
+    const cache = makeEmptyCache();
+
+    const { result } = renderHook(() =>
+      useEmbeddedFonts({
+        documentId: DOCUMENT_ID,
+        fetchFontList,
+        fetchFontData,
+        fetchGoogleFont,
+        cache,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    // The extractor was attempted first, then the Google fallback rescued it
+    expect(fetchFontData).toHaveBeenCalledWith(DOCUMENT_ID, metadata.fontId);
+    expect(fetchGoogleFont).toHaveBeenCalledWith(metadata.originalName);
+
+    const font = result.current.fonts[0];
+    expect(font).toBeDefined();
+    expect(font?.status).toBe('loaded');
+  });
+
+  it('google_fallback: consults the IndexedDB cache before hitting the network', async () => {
+    const metadata = makeMetadata({ fontId: 'font-cached-google', isEmbedded: false });
+    const buffer = makeFakeBuffer();
+
+    const fetchFontList = vi.fn().mockResolvedValue({ fonts: [metadata] });
+    const fetchFontData = vi.fn();
+    const fetchGoogleFont = vi.fn();
+    // Bytes already cached from a previous Google download
+    const cache = makePopulatedCache(buffer, { source: 'google', weight: 700, style: 'italic' });
+
+    const { result } = renderHook(() =>
+      useEmbeddedFonts({
+        documentId: DOCUMENT_ID,
+        fetchFontList,
+        fetchFontData,
+        fetchGoogleFont,
+        cache,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    // Bytes came from the cache — no network call at all
+    expect(fetchGoogleFont).not.toHaveBeenCalled();
+    expect(fetchFontData).not.toHaveBeenCalled();
+
+    const font = result.current.fonts[0];
+    expect(font).toBeDefined();
+    expect(font?.status).toBe('loaded');
+  });
+
+  it('google_fallback: marks the font failed on Google proxy network error', async () => {
+    const metadata = makeMetadata({ fontId: 'font-google-down', isEmbedded: false });
+
+    const fetchFontList = vi.fn().mockResolvedValue({ fonts: [metadata] });
+    const fetchFontData = vi.fn();
+    const fetchGoogleFont = vi
+      .fn()
+      .mockRejectedValue(new Error('Failed to fetch Google font: HTTP 503'));
+    const cache = makeEmptyCache();
+
+    const { result } = renderHook(() =>
+      useEmbeddedFonts({
+        documentId: DOCUMENT_ID,
+        fetchFontList,
+        fetchFontData,
+        fetchGoogleFont,
+        cache,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    // Network error resolves to failed (CSS fallback) — never an uncaught throw
+    const font = result.current.fonts[0];
+    expect(font).toBeDefined();
+    expect(font?.status).toBe('failed');
+    expect(font?.error).toMatch(/Google Fonts fallback failed/);
+    expect(result.current.error).toBeNull();
   });
 
   // ── Additional: disabled when feature flag is off ────────────────────────
@@ -419,6 +588,8 @@ describe('useEmbeddedFonts', () => {
         mimeType: 'font/ttf',
       });
     });
+    // Google fallback misses so the first attempt deterministically fails
+    const fetchGoogleFont = vi.fn().mockResolvedValue({ found: false });
     const cache = makeEmptyCache();
 
     const { result } = renderHook(() =>
@@ -426,6 +597,7 @@ describe('useEmbeddedFonts', () => {
         documentId: DOCUMENT_ID,
         fetchFontList,
         fetchFontData,
+        fetchGoogleFont,
         cache,
       }),
     );

@@ -15,6 +15,8 @@ import {
 import { engineLogger } from '../utils/logger';
 import { PDFPageOutOfRangeError } from '../errors';
 import { getFontCacheForHandle } from '../utils/font-cache-port';
+import { downloadGoogleFont } from '../utils/google-fonts';
+import type { GoogleFontQuery } from '../utils/google-fonts';
 import {
   convertFontToTtf,
   FontForgeUnavailableError,
@@ -325,7 +327,9 @@ async function convertWithCache(
  *  1. Si FONT_EMBED_CUSTOM_ENABLED && originalFont défini && fontBytes fournis → embed la police custom
  *  2. Si originalFont défini → tenter d'extraire la police du PDF source et la ré-embeder
  *  3. Si fontFamily correspond à une Standard Font → embed la StandardFont
- *  4. Fallback Helvetica avec warning explicite (jamais silencieux)
+ *  3.5. Si un FontCachePort est branché sur le handle → résolution Google Fonts
+ *       par nom (BaseFont) : téléchargement TTF + cache DB + embed subsetté
+ *  4. Fallback bundled OFL (Liberation/Courier Prime), puis StandardFont métrique
  */
 async function resolveFont(
   handle: PDFDocumentHandle,
@@ -424,6 +428,60 @@ async function resolveFont(
   const standardFont = resolveStandardFont(fontFamily);
   if (standardFont !== null) {
     return handle._pdfDoc.embedFont(standardFont);
+  }
+
+  // Stratégie 3.5 : Google Fonts — la police n'est ni extractible du source
+  // ni une StandardFont. Si un FontCachePort est branché sur le handle, on
+  // tente de résoudre la famille par son nom (BaseFont en priorité) via
+  // l'API Google Fonts : le TTF téléchargé est persisté dans le cache DB
+  // puis embedé subsetté. Tout échec (famille inconnue, réseau, embed
+  // rejeté par fontkit) tombe vers le bundled OFL — jamais de throw.
+  const googleFontCache = getFontCacheForHandle(handle);
+  if (googleFontCache) {
+    const requestedName = originalFont ?? fontFamily;
+    const googleKey = `${handle.id}::google::${requestedName}::${element.style.fontWeight}::${element.style.fontStyle}`;
+    const cachedGoogle = embeddedFontCache.get(googleKey);
+    if (cachedGoogle) return cachedGoogle;
+
+    try {
+      // Le poids/style explicites de l'élément priment ; sinon
+      // downloadGoogleFont infère depuis les suffixes du nom
+      // ("Lato-BlackItalic" → 900 italic).
+      const query: GoogleFontQuery = { name: requestedName };
+      if (element.style.fontWeight === 'bold') query.weight = 700;
+      if (element.style.fontStyle === 'italic') query.italic = true;
+
+      const result = await downloadGoogleFont(query, { cache: googleFontCache });
+      if (result.found) {
+        // fontkit est déjà enregistré sur le handle (registerFontkit dans
+        // openDocument, cf. document-handle.ts) — embedFont(bytes) accepte
+        // le TTF directement, comme pour les stratégies S1/S2.
+        const embedded = await handle._pdfDoc.embedFont(result.bytes, {
+          subset: true,
+        });
+        embeddedFontCache.set(googleKey, embedded);
+        engineLogger.info('Police résolue via Google Fonts', {
+          requestedName,
+          family: result.family,
+          weight: result.weight,
+          style: result.style,
+          documentId: handle.id,
+        });
+        return embedded;
+      }
+
+      engineLogger.debug(
+        'Police introuvable sur Google Fonts, fallback bundled OFL',
+        { requestedName, documentId: handle.id },
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      engineLogger.warn('Résolution Google Fonts échouée, fallback bundled OFL', {
+        requestedName,
+        documentId: handle.id,
+        error: message,
+      });
+    }
   }
 
   // Stratégie 4 : fallback bundled OFL (Liberation / CourierPrime).

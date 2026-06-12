@@ -135,6 +135,17 @@ export {
   type FontCacheSource,
 } from './utils/font-cache-port';
 
+// Google Fonts — résolution PostScript name → famille + téléchargement TTF
+// serveur (cache DB via FontCachePort, negative cache mémoire). Utilisé par
+// la stratégie 3.5 du text-renderer et exposé à apps/web (route /api/fonts).
+export { parsePostScriptName, downloadGoogleFont } from './utils/google-fonts';
+export type {
+  ParsedPostScriptName,
+  GoogleFontQuery,
+  DownloadGoogleFontOptions,
+  GoogleFontResult,
+} from './utils/google-fonts';
+
 // Office ↔ PDF conversion via LibreOffice headless
 export {
   convertOfficeToPdf,

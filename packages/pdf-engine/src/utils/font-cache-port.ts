@@ -16,7 +16,8 @@ export type FontCacheSource =
   | 'converted-type1'
   | 'converted-cff'
   | 'embedded-truetype'
-  | 'bundled-ofl';
+  | 'bundled-ofl'
+  | 'google-fonts';
 
 export interface FontCacheMeta {
   /** PostScript family name extracted from the source ("OCRB10PitchBT"). */

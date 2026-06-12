@@ -6,11 +6,13 @@
  *
  * Behaviour:
  *  1. Fetches font metadata list from /api/pdf/fonts/:documentId
- *  2. For each embedded font: checks IndexedDB cache → downloads if absent
- *  3. Registers each font via document.fonts.add(new FontFace(...))
- *  4. On unmount: removes registered FontFace instances (prevents leaks)
- *  5. Loads all fonts in parallel (Promise.allSettled)
- *  6. Respects the NEXT_PUBLIC_FONT_DYNAMIC_LOAD feature flag
+ *  2. For each font: checks IndexedDB cache → downloads embedded bytes if absent
+ *  3. Falls back to the /api/fonts/google proxy when a font is not embedded
+ *     in the PDF (or its bytes cannot be extracted) before marking it failed
+ *  4. Registers each font via document.fonts.add(new FontFace(...))
+ *  5. On unmount: removes registered FontFace instances (prevents leaks)
+ *  6. Loads all fonts in parallel (Promise.allSettled)
+ *  7. Respects the NEXT_PUBLIC_FONT_DYNAMIC_LOAD feature flag
  *
  * React 19.2: the React Compiler handles memoization automatically.
  * Manual useMemo/useCallback are kept only where they capture stale closure refs.
@@ -97,6 +99,13 @@ export interface UseEmbeddedFontsOptions {
     documentId: string,
     fontId: string,
   ) => Promise<{ dataBase64: string; format: 'ttf' | 'otf' | 'cff'; mimeType: string }>;
+  /**
+   * Injectable function to fetch a Google Fonts substitute for a font that
+   * is not embedded in the PDF (or whose bytes cannot be extracted).
+   * Defaults to fetch against /api/fonts/google.
+   * Override in tests to avoid network calls.
+   */
+  fetchGoogleFont?: (originalName: string) => Promise<GoogleFontResult>;
   /** Override the cache instance (useful in tests to inject a mock). */
   cache?: FontCache;
 }
@@ -110,8 +119,9 @@ export interface UseEmbeddedFontsResult {
   error: Error | null;
   /**
    * Resolve a raw PDF font originalName to the CSS font-family name
-   * registered with the FontFace API.
-   * Returns null when the font is not embedded or failed to load.
+   * registered with the FontFace API (embedded bytes or Google substitute).
+   * Returns null when the font failed to load (neither embedded bytes nor
+   * a Google Fonts substitute were available).
    */
   getFontFaceName: (originalName: string) => string | null;
   /** Retry a failed font load by fontId. Clears the cache entry first. */
@@ -227,6 +237,48 @@ async function defaultFetchFontData(
   };
 }
 
+// ─── Google Fonts proxy fallback ──────────────────────────────────────────────
+// When a font is not embedded in the PDF (or its bytes cannot be extracted),
+// the same-origin proxy route /api/fonts/google resolves the original PDF
+// font name to the closest Google Fonts variant instead of giving up.
+
+/** Successful Google Fonts proxy match for a PDF font name. */
+export interface GoogleFontMatch {
+  found: true;
+  family: string;
+  weight: number;
+  style: 'normal' | 'italic';
+  format: 'ttf';
+  mimeType: 'font/ttf';
+  dataBase64: string;
+}
+
+/** Response contract of GET /api/fonts/google?name=… */
+export type GoogleFontResult = GoogleFontMatch | { found: false };
+
+async function defaultFetchGoogleFont(
+  originalName: string,
+  getToken?: () => Promise<string | null> | string | null,
+): Promise<GoogleFontResult> {
+  const token = getToken ? await Promise.resolve(getToken()) : null;
+  const headers: HeadersInit = { Accept: 'application/json' };
+  if (token) (headers as Record<string, string>).Authorization = `Bearer ${token}`;
+  const response = await fetch(`/api/fonts/google?name=${encodeURIComponent(originalName)}`, {
+    headers,
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Google font: HTTP ${response.status}`);
+  }
+  const json = (await response.json()) as {
+    success: boolean;
+    data?: GoogleFontResult;
+    error?: string;
+  };
+  if (!json.success || !json.data) throw new Error(json.error ?? 'Google font request failed');
+  return json.data;
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFontsResult {
@@ -260,8 +312,10 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
   // them once so React effects don't loop on identity changes.
   const fetchListRef = useRef<typeof opts.fetchFontList>(opts.fetchFontList);
   const fetchDataRef = useRef<typeof opts.fetchFontData>(opts.fetchFontData);
+  const fetchGoogleRef = useRef<typeof opts.fetchGoogleFont>(opts.fetchGoogleFont);
   fetchListRef.current = opts.fetchFontList;
   fetchDataRef.current = opts.fetchFontData;
+  fetchGoogleRef.current = opts.fetchGoogleFont;
   const getAuthTokenRef = useRef(getAuthToken);
   getAuthTokenRef.current = getAuthToken;
 
@@ -279,22 +333,18 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
         : defaultFetchFontData(id, fid, getAuthTokenRef.current),
     [],
   );
+  const fetchGoogleFont = useCallback(
+    (originalName: string) =>
+      fetchGoogleRef.current
+        ? fetchGoogleRef.current(originalName)
+        : defaultFetchGoogleFont(originalName, getAuthTokenRef.current),
+    [],
+  );
 
   // ── Load a single font ────────────────────────────────────────────────────
 
   const loadSingleFont = useCallback(
     async (metadata: ExtractedFontMetadata, signal: { aborted: boolean }): Promise<void> => {
-      if (!metadata.isEmbedded) {
-        setFonts((prev) =>
-          prev.map((f) =>
-            f.metadata.fontId === metadata.fontId
-              ? { ...f, status: 'failed', error: 'Font is not embedded in the PDF' }
-              : f,
-          ),
-        );
-        return;
-      }
-
       setFonts((prev) =>
         prev.map((f) =>
           f.metadata.fontId === metadata.fontId ? { ...f, status: 'loading' } : f,
@@ -302,30 +352,115 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
       );
 
       try {
-        // Check IndexedDB cache first
-        let fontBuffer = await cache.get(documentId, metadata.fontId);
+        // Bytes + FontFace descriptors resolved from one of three sources:
+        // IndexedDB cache, the backend extractor (embedded bytes), or the
+        // Google Fonts proxy fallback.
+        let fontBuffer: ArrayBuffer | null = null;
+        let mimeType = formatToMime(metadata.format ?? 'ttf');
+        let descriptors: FontFaceDescriptors | undefined;
+        // Root cause kept so a Google miss after an extraction failure still
+        // surfaces the original error in the font's failed state.
+        let embeddedError: string | null = null;
 
-        if (!fontBuffer) {
-          const data = await fetchFontData(documentId, metadata.fontId);
-          if (signal.aborted) return;
-          fontBuffer = base64ToArrayBuffer(data.dataBase64);
-          // Cache asynchronously — do not block font registration
-          cache.set(documentId, metadata.fontId, fontBuffer).catch((err: unknown) => {
-            logger.warn('Failed to cache font in IndexedDB', {
+        // Check IndexedDB cache first — embedded and Google-sourced bytes
+        // share the same {documentId}:{fontId} key space.
+        const cached = await cache.getEntry(documentId, metadata.fontId);
+        if (signal.aborted) return;
+        if (cached) {
+          fontBuffer = cached.data;
+          if (cached.meta?.source === 'google') {
+            mimeType = 'font/ttf';
+            descriptors = {
+              weight: String(cached.meta.weight ?? 400),
+              style: cached.meta.style ?? 'normal',
+            };
+          }
+        }
+
+        // Embedded bytes from the backend extractor.
+        if (!fontBuffer && metadata.isEmbedded) {
+          try {
+            const data = await fetchFontData(documentId, metadata.fontId);
+            if (signal.aborted) return;
+            fontBuffer = base64ToArrayBuffer(data.dataBase64);
+            // Cache asynchronously — do not block font registration
+            cache
+              .set(documentId, metadata.fontId, fontBuffer, undefined, { source: 'embedded' })
+              .catch((err: unknown) => {
+                logger.warn('Failed to cache font in IndexedDB', {
+                  fontId: metadata.fontId,
+                  documentId,
+                  error: err instanceof Error ? err.message : String(err),
+                });
+              });
+          } catch (extractErr) {
+            if (signal.aborted) return;
+            // 404 "not extractable" & co — fall through to the Google Fonts
+            // fallback below instead of failing immediately.
+            embeddedError =
+              extractErr instanceof Error ? extractErr.message : String(extractErr);
+            logger.warn('Embedded font bytes unavailable, trying Google Fonts fallback', {
               fontId: metadata.fontId,
+              fontName: metadata.originalName,
               documentId,
-              error: err instanceof Error ? err.message : String(err),
+              error: embeddedError,
             });
-          });
+          }
+        }
+
+        // Google Fonts proxy fallback — font is not embedded in the PDF, or
+        // its embedded bytes could not be fetched. A miss or a network error
+        // resolves to 'failed' (CSS fallback), never an uncaught throw.
+        if (!fontBuffer) {
+          let google: GoogleFontResult | null = null;
+          let googleError: string | null = null;
+          try {
+            google = await fetchGoogleFont(metadata.originalName);
+          } catch (fallbackErr) {
+            googleError =
+              fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+          }
+          if (signal.aborted) return;
+
+          if (!google || !google.found) {
+            const fallbackDetail = googleError
+              ? `Google Fonts fallback failed: ${googleError}`
+              : 'no Google Fonts substitute found';
+            throw new Error(
+              embeddedError
+                ? `${embeddedError} (${fallbackDetail})`
+                : `Font is not embedded in the PDF (${fallbackDetail})`,
+            );
+          }
+
+          fontBuffer = base64ToArrayBuffer(google.dataBase64);
+          mimeType = google.mimeType;
+          descriptors = { weight: String(google.weight), style: google.style };
+          // Cache asynchronously — same entry shape as embedded fonts, tagged
+          // with provenance + descriptors so cache hits re-register identically.
+          cache
+            .set(documentId, metadata.fontId, fontBuffer, undefined, {
+              source: 'google',
+              weight: google.weight,
+              style: google.style,
+            })
+            .catch((err: unknown) => {
+              logger.warn('Failed to cache font in IndexedDB', {
+                fontId: metadata.fontId,
+                documentId,
+                error: err instanceof Error ? err.message : String(err),
+              });
+            });
         }
 
         if (signal.aborted) return;
 
+        // Same conventional CSS name for embedded and Google-substituted fonts,
+        // so getFontFaceName resolves both without special-casing.
         const fontFaceName = buildFontFaceName(documentId, metadata.fontId);
-        const mimeType = formatToMime(metadata.format ?? 'ttf');
         const blobUrl = URL.createObjectURL(new Blob([fontBuffer], { type: mimeType }));
 
-        const fontFace = new FontFace(fontFaceName, `url(${blobUrl})`);
+        const fontFace = new FontFace(fontFaceName, `url(${blobUrl})`, descriptors);
 
         try {
           await fontFace.load();
@@ -355,7 +490,7 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
 
         const message = err instanceof Error ? err.message : 'Unknown error loading font';
 
-        logger.warn('Failed to load embedded font', {
+        logger.warn('Failed to load font', {
           fontId: metadata.fontId,
           fontName: metadata.originalName,
           documentId,
@@ -371,7 +506,7 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
         );
       }
     },
-    [documentId, fetchFontData, cache],
+    [documentId, fetchFontData, fetchGoogleFont, cache],
   );
 
   // ── Main effect ───────────────────────────────────────────────────────────
@@ -419,35 +554,25 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
         }));
         setFonts(initialFonts);
 
-        const embeddedFonts = metadataList.filter((m) => m.isEmbedded);
-
-        if (embeddedFonts.length === 0) {
-          // All fonts are non-embedded — mark them all failed gracefully
-          setFonts((prev) =>
-            prev.map((f) =>
-              f.status === 'pending'
-                ? { ...f, status: 'failed', error: 'Font not embedded in PDF' }
-                : f,
-            ),
-          );
-          setIsLoading(false);
-          return;
-        }
-
-        // All fonts loaded in parallel — one failure does not block others
+        // All fonts loaded in parallel — one failure does not block others.
+        // Non-embedded (or non-extractable) fonts attempt the Google Fonts
+        // proxy fallback inside loadSingleFont before being marked failed.
         await Promise.allSettled(
-          embeddedFonts.map((meta) => loadSingleFont(meta, signal)),
+          metadataList.map((meta) => loadSingleFont(meta, signal)),
         );
 
         if (signal.aborted) return;
 
-        // Any font still in 'pending' is non-embedded — mark failed gracefully
+        // Safety net: every font reaches a terminal status inside
+        // loadSingleFont — sweep any straggler so the UI never hangs on 'pending'
         setFonts((prev) =>
-          prev.map((f) =>
-            f.status === 'pending'
-              ? { ...f, status: 'failed', error: 'Font not embedded in PDF' }
-              : f,
-          ),
+          prev.some((f) => f.status === 'pending')
+            ? prev.map((f) =>
+                f.status === 'pending'
+                  ? { ...f, status: 'failed', error: 'Font load did not complete' }
+                  : f,
+              )
+            : prev,
         );
       } catch (err) {
         if (signal.aborted) return;
