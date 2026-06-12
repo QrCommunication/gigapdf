@@ -5,6 +5,17 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-06-12
+
+### Fixed
+- nginx reference config: `/api/` now defaults to Next.js, with FastAPI
+  scoped to its real prefix `/api/v1/` (+ `/api/docs`, `/api/redoc`).
+  The previous allow-list routing sent every non-enumerated Next.js API
+  route to FastAPI, returning 404 in production for `/api/office/*`
+  (Office conversion), `/api/health`, `/api/fonts/google` and
+  `/api/v1/embed/validate-key` (embed widget). New Next.js API routes now
+  work without touching nginx.
+
 ## [1.1.0] - 2026-06-12
 
 ### Added
