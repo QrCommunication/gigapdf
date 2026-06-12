@@ -64,6 +64,11 @@ services:
       target: production
     container_name: gigapdf-api
     restart: unless-stopped
+    # Toutes les variables du .env (S3, Stripe, SMTP…) sont transmises ;
+    # les overrides `environment:` ci-dessous pointent vers le réseau interne.
+    env_file:
+      - path: .env
+        required: false
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-gigapdf}:${POSTGRES_PASSWORD:-gigapdf_secret}@postgres:5432/${POSTGRES_DB:-gigapdf}
       - REDIS_URL=redis://redis:6379/0
@@ -95,6 +100,9 @@ services:
       target: celery-worker
     container_name: gigapdf-celery-worker
     restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-gigapdf}:${POSTGRES_PASSWORD:-gigapdf_secret}@postgres:5432/${POSTGRES_DB:-gigapdf}
       - REDIS_URL=redis://redis:6379/0
@@ -116,6 +124,9 @@ services:
       target: celery-beat
     container_name: gigapdf-celery-beat
     restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-gigapdf}:${POSTGRES_PASSWORD:-gigapdf_secret}@postgres:5432/${POSTGRES_DB:-gigapdf}
       - REDIS_URL=redis://redis:6379/0
@@ -136,6 +147,12 @@ services:
       target: production
     container_name: gigapdf-web
     restart: unless-stopped
+    # web parle directement à S3 (parse-from-s3, sauvegardes) et envoie les
+    # emails d'auth : il a besoin de l'ensemble du .env, pas seulement des
+    # variables listées ci-dessous.
+    env_file:
+      - path: .env
+        required: false
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
       - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-ws://localhost:8000}
@@ -155,6 +172,9 @@ services:
       target: production
     container_name: gigapdf-admin
     restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-gigapdf}:${POSTGRES_PASSWORD:-gigapdf_secret}@postgres:5432/${POSTGRES_DB:-gigapdf}
