@@ -1,32 +1,14 @@
-# GigaPDF - Web Frontend (Next.js 16)
-# Node 22 LTS with pnpm
+# GigaPDF - Web Frontend (Next.js 16) + moteur PDF TypeScript
+#
+# Base Debian (bookworm) OBLIGATOIRE — pas Alpine :
+#   - Playwright ne fournit aucun build Chromium pour musl (HTML/URL → PDF)
+#   - LibreOffice (conversions Office ↔ PDF) indisponible en headless fiable sur Alpine
+#   - fontforge (conversion Type1/CFF → TTF pour la fidélité des polices) absent d'Alpine
+#   - node-canvas et sharp disposent de prebuilds glibc (aucune toolchain requise)
 
-FROM node:22-alpine AS base
+FROM node:22-bookworm-slim AS base
 
-# Enable corepack for pnpm
 RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
-
-# ============================================
-# Dependencies stage
-# ============================================
-FROM base AS deps
-
-WORKDIR /app
-
-# Copy package files for dependency installation
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/web/package.json ./apps/web/
-COPY packages/ui/package.json ./packages/ui/
-COPY packages/api/package.json ./packages/api/
-COPY packages/types/package.json ./packages/types/
-COPY packages/canvas/package.json ./packages/canvas/
-COPY packages/editor/package.json ./packages/editor/
-COPY packages/eslint-config/package.json ./packages/eslint-config/
-COPY packages/tailwind-config/package.json ./packages/tailwind-config/
-COPY packages/typescript-config/package.json ./packages/typescript-config/
-
-# Install dependencies
-RUN pnpm install --frozen-lockfile
 
 # ============================================
 # Builder stage
@@ -35,51 +17,97 @@ FROM base AS builder
 
 WORKDIR /app
 
-# Copy dependencies
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
-COPY --from=deps /app/packages ./packages
+# Sans TTY, pnpm refuse de purger le node_modules issu de `pnpm fetch`
+# (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY) — CI=true lève la confirmation.
+ENV CI=true
 
-# Copy source code
+# Couche cache dépendances : seule une modification du lockfile invalide ce layer.
+# `pnpm fetch` ne lit QUE le lockfile (pas besoin d'énumérer les package.json
+# de chaque workspace — source d'erreurs quand le monorepo évolue).
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+RUN pnpm fetch
+
+# Code source complet (le .dockerignore exclut .env, node_modules, .next, .git)
 COPY . .
 
-# Generate Prisma client
+# Install offline depuis le store pré-rempli. Les postinstall autorisés
+# (onlyBuiltDependencies : canvas, sharp, @prisma/engines…) gardent l'accès réseau.
+RUN pnpm install --frozen-lockfile --offline
+
+# Client Prisma
 RUN pnpm --filter web db:generate
 
-# Build packages first, then web app
+# Build : turbo ordonne les packages internes puis l'app web
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm build:packages
-RUN pnpm --filter web build
+RUN pnpm exec turbo run build --filter=web...
+
+# Navigateur Chromium de Playwright (binaire seul ; les bibliothèques système
+# sont installées au stage production, où le navigateur s'exécute réellement)
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN pnpm --filter @giga-pdf/pdf-engine exec playwright install chromium
 
 # ============================================
 # Production stage
 # ============================================
-FROM node:22-alpine AS production
+FROM node:22-bookworm-slim AS production
 
 WORKDIR /app
 
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs \
-    && adduser --system --uid 1001 nextjs
+# Dépendances système des fonctionnalités PDF :
+#   - libreoffice-{writer,calc,impress,draw} : conversions DOCX/XLSX/PPTX ↔ PDF
+#     (draw fournit le filtre d'import PDF utilisé par convertPdfToOffice)
+#   - fontforge-nox : conversion Type1/CFF → TTF (rendu fidèle des polices au bake)
+#   - tesseract-ocr (+fra +eng) : OCR (/api/pdf/ocr)
+#   - fonts-liberation/dejavu : substituts métriques pour LibreOffice et Chromium
+#   - dumb-init : gestion des signaux en PID 1
+#   - `playwright install-deps` : bibliothèques partagées requises par Chromium
+ARG PLAYWRIGHT_VERSION=1.50.1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libreoffice-writer \
+    libreoffice-calc \
+    libreoffice-impress \
+    libreoffice-draw \
+    fontforge-nox \
+    tesseract-ocr \
+    tesseract-ocr-fra \
+    tesseract-ocr-eng \
+    fonts-liberation \
+    fonts-dejavu-core \
+    ca-certificates \
+    dumb-init \
+    && npx -y playwright@${PLAYWRIGHT_VERSION} install-deps chromium \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* /root/.npm
 
-# Environment variables
+# Utilisateur non-root avec HOME inscriptible (profil LibreOffice headless)
+RUN addgroup --system --gid 1001 nodejs \
+    && adduser --system --uid 1001 --ingroup nodejs --home /home/nextjs nextjs
+
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
-    HOSTNAME="0.0.0.0"
+    HOSTNAME="0.0.0.0" \
+    HOME=/home/nextjs \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# Copy built application
-COPY --from=builder /app/apps/web/public ./public
+# Navigateur Chromium pré-téléchargé
+COPY --from=builder --chown=nextjs:nodejs /ms-playwright /ms-playwright
+
+# Build standalone Next.js (outputFileTracingRoot = racine monorepo, donc
+# server.js vit sous apps/web/). public/ et .next/static doivent être des
+# SIBLINGS de server.js — PAS à la racine de /app.
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 
-# Switch to non-root user
 USER nextjs
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1
+# fetch natif Node 22 — wget/curl inutiles dans l'image.
+# /api/health est un session-check : 401 sans session = serveur SAIN ;
+# seul un 5xx (DB down, crash) ou l'absence de réponse est unhealthy.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"
 
 EXPOSE 3000
 
+ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "apps/web/server.js"]

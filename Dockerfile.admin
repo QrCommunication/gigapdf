@@ -1,30 +1,13 @@
 # GigaPDF - Admin Dashboard (Next.js 16)
-# Node 22 LTS with pnpm
+#
+# Même base Debian que Dockerfile.web : `pnpm install` à la racine installe tout
+# le workspace (canvas/sharp inclus via les autres packages) — les prebuilds
+# glibc évitent toute toolchain de compilation, ce qu'Alpine/musl ne permet pas.
+# L'admin n'embarque aucune dépendance système PDF (pas de LibreOffice/Chromium).
 
-FROM node:22-alpine AS base
+FROM node:22-bookworm-slim AS base
 
-# Enable corepack for pnpm
 RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
-
-# ============================================
-# Dependencies stage
-# ============================================
-FROM base AS deps
-
-WORKDIR /app
-
-# Copy package files for dependency installation
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/admin/package.json ./apps/admin/
-COPY packages/ui/package.json ./packages/ui/
-COPY packages/api/package.json ./packages/api/
-COPY packages/types/package.json ./packages/types/
-COPY packages/eslint-config/package.json ./packages/eslint-config/
-COPY packages/tailwind-config/package.json ./packages/tailwind-config/
-COPY packages/typescript-config/package.json ./packages/typescript-config/
-
-# Install dependencies
-RUN pnpm install --frozen-lockfile
 
 # ============================================
 # Builder stage
@@ -33,51 +16,61 @@ FROM base AS builder
 
 WORKDIR /app
 
-# Copy dependencies
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/admin/node_modules ./apps/admin/node_modules
-COPY --from=deps /app/packages ./packages
+# Sans TTY, pnpm refuse de purger le node_modules issu de `pnpm fetch`
+# (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY) — CI=true lève la confirmation.
+ENV CI=true
 
-# Copy source code
+# Couche cache dépendances : seule une modification du lockfile invalide ce layer
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+RUN pnpm fetch
+
+# Code source complet (le .dockerignore exclut .env, node_modules, .next, .git)
 COPY . .
 
-# Generate Prisma client
+RUN pnpm install --frozen-lockfile --offline
+
+# Client Prisma
 RUN pnpm --filter admin db:generate
 
-# Build packages first, then admin app
+# Build : turbo ordonne les packages internes puis l'app admin
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm build:packages
-RUN pnpm --filter admin build
+RUN pnpm exec turbo run build --filter=admin...
 
 # ============================================
 # Production stage
 # ============================================
-FROM node:22-alpine AS production
+FROM node:22-bookworm-slim AS production
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    dumb-init \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs \
-    && adduser --system --uid 1001 nextjs
+    && adduser --system --uid 1001 --ingroup nodejs --home /home/nextjs nextjs
 
-# Environment variables
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3001 \
-    HOSTNAME="0.0.0.0"
+    HOSTNAME="0.0.0.0" \
+    HOME=/home/nextjs
 
-# Copy built application
-COPY --from=builder /app/apps/admin/public ./public
+# Build standalone Next.js : public/ et .next/static doivent être des SIBLINGS
+# de apps/admin/server.js — PAS à la racine de /app.
 COPY --from=builder --chown=nextjs:nodejs /app/apps/admin/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/admin/public ./apps/admin/public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/admin/.next/static ./apps/admin/.next/static
 
-# Switch to non-root user
 USER nextjs
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3001 || exit 1
+# Tout statut < 500 = serveur fonctionnel (une redirection vers /login compte)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:3001').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"
 
 EXPOSE 3001
 
+ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "apps/admin/server.js"]
