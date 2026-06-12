@@ -25,6 +25,8 @@ import {
   DropdownMenuTrigger,
   Input,
   Label,
+  ToastAction,
+  useToast,
 } from "@giga-pdf/ui";
 import { formatDate, formatBytes } from "@/lib/utils";
 import {
@@ -37,17 +39,22 @@ import {
   Eye,
   FileSpreadsheet,
   FileType,
+  Copy,
   Image,
   Share2,
   Pencil,
   CheckSquare,
   Square,
+  Tags,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { DragItem } from "./document-explorer";
 import { cn } from "@/lib/utils";
 import { ShareDialog } from "@/components/sharing";
 import { clientLogger } from "@/lib/client-logger";
+import { triggerBlobDownload } from "./blob-download";
+import { TagChips } from "./tag-input";
+import { ManageTagsDialog } from "./manage-tags-dialog";
 
 interface DocumentCardProps {
   id: string;
@@ -55,8 +62,12 @@ interface DocumentCardProps {
   size: number;
   createdAt: Date;
   updatedAt: Date;
+  tags?: string[];
+  thumbnailUrl?: string | null;
   onDelete?: () => void;
   onRename?: (newName: string) => void;
+  /** Refresh callback after duplicate / tags update. */
+  onChanged?: () => void;
   onDragStart?: (item: DragItem) => void;
   onDragEnd?: () => void;
   isDragging?: boolean;
@@ -71,8 +82,11 @@ export function DocumentCard({
   size,
   createdAt,
   updatedAt,
+  tags = [],
+  thumbnailUrl = null,
   onDelete,
   onRename,
+  onChanged,
   onDragStart,
   onDragEnd,
   isDragging,
@@ -82,6 +96,8 @@ export function DocumentCard({
 }: DocumentCardProps) {
   const router = useRouter();
   const t = useTranslations("documents.card");
+  const tToasts = useTranslations("documents.toasts");
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [documentName, setDocumentName] = useState(name);
 
@@ -91,17 +107,21 @@ export function DocumentCard({
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [tagsDialogOpen, setTagsDialogOpen] = useState(false);
 
   // Loading states
   const [deleting, setDeleting] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
 
   // Data states
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [newName, setNewName] = useState(name);
   const [sessionDocId, setSessionDocId] = useState<string | null>(null);
+  // Presigned thumbnail URLs can expire (7 days): fall back to the icon.
+  const [thumbnailBroken, setThumbnailBroken] = useState(false);
 
   const handleOpenEditor = async () => {
     // Navigate to editor with stored document ID (not session ID)
@@ -122,17 +142,57 @@ export function DocumentCard({
     }
   };
 
+  // Soft delete: the document goes to the trash (restorable for 30 days).
+  // The toast carries an inline "Undo" action that restores it on the spot.
   const handleDelete = async () => {
     try {
       setDeleting(true);
       await api.deleteDocument(id);
       setDeleteDialogOpen(false);
       onDelete?.();
+      toast({
+        title: tToasts("movedToTrash"),
+        description: documentName,
+        action: (
+          <ToastAction
+            altText={tToasts("movedToTrashUndo")}
+            onClick={async () => {
+              try {
+                await api.restoreDocument(id);
+                toast({ title: tToasts("restored") });
+                onDelete?.();
+              } catch (restoreErr) {
+                clientLogger.error("document-card.restore-failed", restoreErr);
+                toast({
+                  variant: "destructive",
+                  title: tToasts("restoreFailed"),
+                });
+              }
+            }}
+          >
+            {tToasts("movedToTrashUndo")}
+          </ToastAction>
+        ),
+      });
     } catch (err) {
       clientLogger.error("document-card.delete-failed", err);
       alert(t("errors.deleteFailed"));
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleDuplicate = async () => {
+    try {
+      setDuplicating(true);
+      const copy = await api.duplicateDocument(id);
+      toast({ title: tToasts("duplicated", { name: copy.name }) });
+      onChanged?.();
+    } catch (err) {
+      clientLogger.error("document-card.duplicate-failed", err);
+      toast({ variant: "destructive", title: tToasts("duplicateFailed") });
+    } finally {
+      setDuplicating(false);
     }
   };
 
@@ -210,9 +270,6 @@ export function DocumentCard({
 
       // Download result
       const blob = await api.getExportResult(docId, job.job_id);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
       // Set correct file extension
       const extensionMap: Record<string, string> = {
         png: "zip",
@@ -222,11 +279,7 @@ export function DocumentCard({
         docx: "docx",
         xlsx: "xlsx",
       };
-      a.download = `${documentName}.${extensionMap[format] || format}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      triggerBlobDownload(blob, `${documentName}.${extensionMap[format] || format}`);
 
       setExportDialogOpen(false);
     } catch (err) {
@@ -301,7 +354,7 @@ export function DocumentCard({
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 flex-shrink-0"
-                disabled={loading || exporting}
+                disabled={loading || exporting || duplicating}
               >
                 <MoreVertical className="h-4 w-4" />
                 <span className="sr-only">{t("menu.open")}</span>
@@ -320,6 +373,14 @@ export function DocumentCard({
               <DropdownMenuItem onClick={openRenameDialog}>
                 <Pencil className="mr-2 h-4 w-4" />
                 {t("menu.rename")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleDuplicate} disabled={duplicating}>
+                <Copy className="mr-2 h-4 w-4" />
+                {t("menu.duplicate")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTagsDialogOpen(true)}>
+                <Tags className="mr-2 h-4 w-4" />
+                {t("menu.manageTags")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleShare}>
                 <Share2 className="mr-2 h-4 w-4" />
@@ -366,11 +427,26 @@ export function DocumentCard({
           </DropdownMenu>
         </CardHeader>
         <CardContent>
+          {/* First-page thumbnail (presigned S3 URL). Absent or expired →
+              the card keeps its icon-only look, exactly as before. */}
+          {thumbnailUrl && !thumbnailBroken && (
+            <div className="mb-3 h-28 overflow-hidden rounded-md border bg-muted/30">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={thumbnailUrl}
+                alt={documentName}
+                loading="lazy"
+                className="h-full w-full object-cover object-top"
+                onError={() => setThumbnailBroken(true)}
+              />
+            </div>
+          )}
           <div className="space-y-1 text-sm text-muted-foreground">
             <p>{t("size")}: {formatBytes(size)}</p>
             <p>{t("created")}: {formatDate(createdAt)}</p>
             <p>{t("modified")}: {formatDate(updatedAt)}</p>
           </div>
+          <TagChips tags={tags} className="mt-2" />
         </CardContent>
         <CardFooter>
           <Button
@@ -478,6 +554,16 @@ export function DocumentCard({
         onOpenChange={setShareDialogOpen}
         documentId={id}
         documentName={documentName}
+      />
+
+      {/* Manage Tags Dialog */}
+      <ManageTagsDialog
+        open={tagsDialogOpen}
+        onOpenChange={setTagsDialogOpen}
+        documentId={id}
+        documentName={documentName}
+        initialTags={tags}
+        onSaved={() => onChanged?.()}
       />
 
       {/* Export Progress Dialog */}

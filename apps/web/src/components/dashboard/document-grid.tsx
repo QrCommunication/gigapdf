@@ -9,11 +9,15 @@ interface Document {
   size: number;
   createdAt: Date;
   updatedAt: Date;
+  tags?: string[];
+  thumbnailUrl?: string | null;
 }
 
 interface DocumentGridProps {
   documents: Document[];
   onDelete?: () => void;
+  /** Refresh callback after duplicate / tags update on a card. */
+  onChanged?: () => void;
   onDragStart?: (item: DragItem) => void;
   onDragEnd?: () => void;
   draggedItem?: DragItem | null;
@@ -25,6 +29,7 @@ interface DocumentGridProps {
 export function DocumentGrid({
   documents,
   onDelete,
+  onChanged,
   onDragStart,
   onDragEnd,
   draggedItem,
@@ -50,7 +55,10 @@ export function DocumentGrid({
           size={doc.size}
           createdAt={doc.createdAt}
           updatedAt={doc.updatedAt}
+          tags={doc.tags}
+          thumbnailUrl={doc.thumbnailUrl}
           onDelete={onDelete}
+          onChanged={onChanged}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           isDragging={draggedItem?.type === "document" && draggedItem?.id === doc.id}

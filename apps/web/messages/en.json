@@ -38,7 +38,8 @@
     "settings": "Settings",
     "developers": "Developers",
     "billing": "Billing",
-    "sharedWithMe": "Shared with me"
+    "sharedWithMe": "Shared with me",
+    "trash": "Trash"
   },
   "meta": {
     "title": {
@@ -75,11 +76,11 @@
       },
       "collaboration": {
         "title": "Collaboration & Sharing",
-        "description": "Work together with your team in real-time. Share documents from the editor and browse version history with one-click restore."
+        "description": "Work together with your team in real-time: edits from other participants appear live on the canvas. Share documents from the editor and browse version history with one-click restore."
       },
       "security": {
         "title": "Enterprise Security",
-        "description": "Your documents are encrypted and secure. SOC 2 compliant with enterprise-grade security features."
+        "description": "Your documents are encrypted and secure. Digitally sign PDFs (PKCS#7) with your own P12 certificate — processed in memory, never stored. SOC 2 compliant with enterprise-grade security features."
       },
       "api": {
         "title": "REST API",
@@ -87,7 +88,7 @@
       },
       "export": {
         "title": "Conversions & Export",
-        "description": "Export to PNG, JPEG, DOCX, HTML and more. Office conversions (DOCX, XLSX, PPTX), PDF/A, and OCR for scanned documents with Tesseract."
+        "description": "Export to PNG, JPEG, DOCX, HTML and more. Office and OpenDocument conversions (Word, Excel, PowerPoint, ODT/ODS/ODP), PDF/A, compression, and OCR that makes scanned documents searchable."
       },
       "selfHostable": {
         "title": "Self-hostable",
@@ -387,7 +388,7 @@
     "title": "Documents",
     "subtitle": "Manage and organize your PDF documents",
     "totalCount": "{count} document(s) total",
-    "search": "Search documents...",
+    "search": "Search (name and content)...",
     "newDocument": "New Document",
     "filters": {
       "all": "All",
@@ -420,14 +421,16 @@
         "exportImages": "Images (.png)",
         "exportHtml": "HTML",
         "exportText": "Text (.txt)",
-        "delete": "Delete"
+        "duplicate": "Duplicate",
+        "manageTags": "Manage tags",
+        "delete": "Move to trash"
       },
       "deleteDialog": {
-        "title": "Delete Document",
-        "description": "Are you sure you want to delete \"{name}\"? This action cannot be undone.",
+        "title": "Move to trash",
+        "description": "\"{name}\" will be moved to the trash. You can restore it for 30 days.",
         "cancel": "Cancel",
-        "confirm": "Delete",
-        "deleting": "Deleting..."
+        "confirm": "Move to trash",
+        "deleting": "Moving..."
       },
       "renameDialog": {
         "title": "Rename Document",
@@ -462,6 +465,34 @@
         "shareFailed": "Failed to generate share link. Please try again."
       }
     },
+    "toasts": {
+      "movedToTrash": "Document moved to trash",
+      "movedToTrashUndo": "Undo",
+      "restored": "Document restored",
+      "restoreFailed": "Failed to restore document",
+      "duplicated": "Document duplicated: \"{name}\"",
+      "duplicateFailed": "Failed to duplicate document",
+      "tagsUpdated": "Tags updated",
+      "tagsUpdateFailed": "Failed to update tags"
+    },
+    "tags": {
+      "label": "Tags",
+      "inputPlaceholder": "Add a tag...",
+      "addHint": "Press Enter or comma to add, max {max} tags",
+      "maxReached": "Maximum of {max} tags reached",
+      "remove": "Remove tag {tag}",
+      "suggestions": "Existing tags",
+      "moreCount": "+{count}",
+      "filterLabel": "Filter by tag",
+      "filterAll": "All tags",
+      "dialog": {
+        "title": "Manage tags",
+        "description": "Add or remove tags for \"{name}\".",
+        "cancel": "Cancel",
+        "save": "Save",
+        "saving": "Saving..."
+      }
+    },
     "detail": {
       "back": "Back to documents",
       "lastModified": "Last modified {date}",
@@ -470,7 +501,15 @@
         "download": "Download",
         "share": "Share",
         "rename": "Rename",
-        "delete": "Delete"
+        "duplicate": "Duplicate",
+        "delete": "Move to trash"
+      },
+      "tags": {
+        "title": "Tags",
+        "description": "Click to edit this document's tags",
+        "empty": "No tags — click to add some",
+        "edit": "Edit tags",
+        "loadFailed": "Tags are unavailable right now"
       },
       "preview": {
         "title": "Preview"
@@ -495,6 +534,32 @@
         "loadFailed": "Failed to load version history.",
         "restoreOriginal": "Restore original"
       },
+      "activity": {
+        "title": "Activity",
+        "description": "History of actions on this document",
+        "empty": "No activity yet",
+        "loadFailed": "Activity is unavailable right now",
+        "loadMore": "Show more",
+        "loadingMore": "Loading...",
+        "unknownUser": "Unknown user",
+        "actions": {
+          "create": "Created",
+          "view": "Viewed",
+          "download": "Downloaded",
+          "edit": "Edited",
+          "rename": "Renamed",
+          "delete": "Deleted",
+          "restore": "Restored",
+          "share": "Shared",
+          "unshare": "Unshared",
+          "export": "Exported",
+          "upload": "Uploaded",
+          "move": "Moved",
+          "copy": "Copied",
+          "lock": "Locked",
+          "unlock": "Unlocked"
+        }
+      },
       "restoreDialog": {
         "title": "Restore original document",
         "description": "The content of \"{name}\" will be replaced by the original version (v1). Your current version will no longer be the active one. Are you sure?",
@@ -513,20 +578,25 @@
     },
     "upload": {
       "title": "Upload Document",
-      "dragDrop": "Drag and drop your PDF here",
+      "dragDrop": "Drag and drop your files here (PDF, Word, Excel, PowerPoint, OpenDocument)",
       "or": "or",
       "browse": "Browse files",
       "maxSize": "Maximum file size: {size}MB",
       "uploading": "Uploading...",
+      "uploadingProgress": "Uploading... ({done}/{total})",
       "success": "Document uploaded successfully",
       "error": "Failed to upload document",
-      "dropTitle": "Drop your PDFs here",
-      "dropHint": "Uploading to the current folder"
+      "dropTitle": "Drop your files here",
+      "dropHint": "PDF, Word, Excel, PowerPoint, OpenDocument — uploading to the current folder",
+      "invalidFormat": "Unsupported format. Accepted formats: PDF, Word, Excel, PowerPoint, OpenDocument",
+      "summaryAllSuccess": "{count, plural, one {# document uploaded successfully} other {# documents uploaded successfully}}",
+      "summaryPartial": "{success, plural, one {# file uploaded} other {# files uploaded}}, {failed, plural, one {# failed} other {# failed}}",
+      "summaryAllFailed": "{count, plural, one {Failed to upload the file} other {Failed to upload # files}}"
     },
     "office": {
       "import": "Import Office",
       "importing": "Converting Office...",
-      "importErrorFormat": "Unsupported format. Use .docx, .xlsx or .pptx",
+      "importErrorFormat": "Unsupported format. Use Word, Excel, PowerPoint or OpenDocument (.docx, .doc, .xlsx, .xls, .pptx, .ppt, .odt, .ods, .odp)",
       "importErrorSize": "File too large (max 25 MB)",
       "importErrorConvert": "Failed to convert Office document",
       "importErrorService": "Conversion service unavailable. Try again later.",
@@ -586,6 +656,18 @@
         "create": "Create",
         "creating": "Creating..."
       },
+      "folderRenameDialog": {
+        "title": "Rename folder",
+        "description": "Enter a new name for this folder.",
+        "label": "Folder name",
+        "placeholder": "My folder",
+        "cancel": "Cancel",
+        "confirm": "Rename",
+        "renaming": "Renaming...",
+        "conflict": "A folder with this name already exists in this location.",
+        "error": "Failed to rename folder. Please try again."
+      },
+      "folderMenu": "Open folder menu",
       "moving": "Moving...",
       "movingItems": "Moving items...",
       "dropHere": "Drop here to move",
@@ -609,10 +691,11 @@
       "deleting": "Deleting...",
       "deleteDialog": {
         "title": "Confirm deletion",
-        "description": "Are you sure you want to delete {count} item(s)? This action cannot be undone.",
+        "description": "Are you sure you want to delete {count} item(s)? Documents will be moved to the trash (restorable for 30 days), folders will be permanently deleted.",
         "confirm": "Delete",
         "cancel": "Cancel"
       },
+      "deletedToTrash": "{count, plural, one {# item moved to trash} other {# items moved to trash}}",
       "errors": {
         "moveItemsFailed": "Failed to move some items. Please try again.",
         "deleteItemsFailed": "Failed to delete some items. Please try again.",
@@ -623,6 +706,41 @@
       "loadFailed": "Failed to load documents. Please try again.",
       "pdfOnly": "Please select a PDF file",
       "uploadFailed": "Failed to upload document"
+    }
+  },
+  "trash": {
+    "title": "Trash",
+    "subtitle": "Deleted documents are kept for 30 days before being permanently removed.",
+    "totalCount": "{count, plural, one {# document in the trash} other {# documents in the trash}}",
+    "deletedAt": "Deleted on {date}",
+    "restore": "Restore",
+    "restoring": "Restoring...",
+    "deletePermanently": "Delete permanently",
+    "empty": {
+      "title": "Trash is empty",
+      "description": "Documents you move to the trash appear here for 30 days."
+    },
+    "errors": {
+      "loadFailed": "Failed to load the trash. Please try again.",
+      "retry": "Retry"
+    },
+    "deleteDialog": {
+      "title": "Delete permanently",
+      "description": "\"{name}\" will be permanently deleted, along with all its versions. This action cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete permanently",
+      "confirmArmed": "Confirm permanent deletion",
+      "armedHint": "Click a second time to confirm.",
+      "deleting": "Deleting..."
+    },
+    "toasts": {
+      "restored": "Document restored",
+      "restoreFailed": "Failed to restore document",
+      "deleted": "Document permanently deleted",
+      "deleteFailed": "Failed to permanently delete document"
+    },
+    "pagination": {
+      "page": "Page {current} of {total}"
     }
   },
   "settings": {
@@ -778,6 +896,64 @@
       "appliedTitle": "Watermark applied",
       "appliedDescription": "The document has been updated with the watermark."
     },
+    "sign": {
+      "title": "Sign document",
+      "close": "Close",
+      "cancel": "Cancel",
+      "submit": "Sign",
+      "certificateLabel": "Certificate (.p12 / .pfx)",
+      "passphraseLabel": "Certificate password",
+      "reasonLabel": "Reason (optional)",
+      "reasonPlaceholder": "e.g. Contract approval",
+      "locationLabel": "Location (optional)",
+      "locationPlaceholder": "e.g. Paris",
+      "contactLabel": "Contact (optional)",
+      "contactPlaceholder": "e.g. name@example.com",
+      "privacyNote": "Your certificate and its password are never stored or logged — they are used only for this signature.",
+      "lastOperationWarning": "Signing must be the last operation: any later change to the document will invalidate the signature.",
+      "modeLabel": "Result",
+      "applyToDocument": "Apply to document",
+      "applyToDocumentHint": "The document you are editing is replaced with the signed version",
+      "downloadOnly": "Download only",
+      "downloadOnlyHint": "Downloads a signed copy without modifying the document",
+      "errors": {
+        "invalidCertificate": "Invalid certificate or password.",
+        "certificateTooLarge": "The certificate exceeds the 1 MB limit.",
+        "generic": "Failed to sign the document."
+      },
+      "appliedTitle": "Document signed",
+      "appliedDescription": "The digital signature has been applied to the document."
+    },
+    "compress": {
+      "title": "Compress PDF",
+      "currentSize": "Current size: {size}",
+      "compressButton": "Compress",
+      "cancel": "Cancel",
+      "close": "Close",
+      "modeLabel": "Result",
+      "applyToDocument": "Apply to document",
+      "applyToDocumentHint": "The document you are editing is replaced with the compressed version",
+      "downloadOnly": "Download only",
+      "downloadOnlyHint": "Downloads a compressed copy without modifying the document",
+      "resultSmaller": "Document compressed: {before} → {after} (−{percent}%)",
+      "resultNotSmaller": "No compression gain ({before} → {after}) — the document is already optimized",
+      "failed": "Compression failed.",
+      "appliedTitle": "Compression applied",
+      "appliedDescription": "The document has been replaced with the compressed version."
+    },
+    "ocr": {
+      "modeLabel": "Output",
+      "modeText": "Extract text",
+      "modeTextHint": "Shows the recognized text, exportable as .txt",
+      "modeSearchable": "Make the PDF searchable (invisible text)",
+      "modeSearchableHint": "Adds an invisible text layer over scanned pages: the PDF becomes selectable and searchable",
+      "pagesIgnoredHint": "Page selection is automatic in searchable mode (pages without text)",
+      "searchableProcessing": "Running OCR and inserting the text layer…",
+      "searchableButton": "Make searchable",
+      "searchableFailed": "Failed to generate the searchable PDF.",
+      "appliedTitle": "OCR applied",
+      "appliedDescription": "An invisible text layer has been added: the document is now searchable."
+    },
     "shortcuts": {
       "hint": "Press ? to view keyboard shortcuts"
     },
@@ -826,10 +1002,12 @@
       "merge": "Merge",
       "split": "Split",
       "encrypt": "Encrypt",
+      "sign": "Sign",
       "forms": "Forms",
       "metadata": "Metadata",
       "convert": "Convert",
-      "flatten": "Flatten"
+      "flatten": "Flatten",
+      "compress": "Compress"
     },
     "tools": {
       "select": "Select",
@@ -857,6 +1035,20 @@
       "title": "Properties",
       "noSelection": "No element selected",
       "multipleSelection": "{count} elements selected",
+      "batch": {
+        "opacity": "Opacity",
+        "mixed": "Mixed values",
+        "color": "Color",
+        "fill": "Fill",
+        "stroke": "Stroke",
+        "align": "Alignment",
+        "alignLeft": "Align left",
+        "alignCenterH": "Center horizontally",
+        "alignRight": "Align right",
+        "alignTop": "Align top",
+        "alignCenterV": "Center vertically",
+        "alignBottom": "Align bottom"
+      },
       "position": "Position",
       "size": "Size",
       "width": "Width",
@@ -907,7 +1099,14 @@
       "show": "Show layer",
       "hide": "Hide layer",
       "lock": "Lock layer",
-      "unlock": "Unlock layer"
+      "unlock": "Unlock layer",
+      "noElements": "No elements on this page",
+      "ocgGroups": "Document OCG groups",
+      "typeText": "Text",
+      "typeImage": "Image",
+      "typeShape": "Shape",
+      "typeAnnotation": "Annotation",
+      "typeFormField": "Form field"
     },
     "attachments": {
       "title": "Attachments",

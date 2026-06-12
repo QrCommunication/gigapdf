@@ -3,7 +3,7 @@
 import { useSession, signOut } from "@/lib/auth-client";
 import { useTranslations } from "next-intl";
 import { Button } from "@giga-pdf/ui";
-import { FileText, Home, Settings, CreditCard, LogOut, Menu, Building2, Share2, Code2 } from "lucide-react";
+import { FileText, Home, Settings, CreditCard, LogOut, Menu, Building2, Share2, Code2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Logo } from "@/components/logo";
@@ -25,6 +25,7 @@ export default function DashboardLayout(props: { children?: React.ReactNode }) {
     { name: t("dashboard"), href: "/dashboard", icon: Home },
     { name: t("documents"), href: "/documents", icon: FileText },
     { name: t("sharedWithMe"), href: "/shared", icon: Share2 },
+    { name: t("trash"), href: "/trash", icon: Trash2 },
     { name: t("organization"), href: "/organization", icon: Building2 },
     { name: t("settings"), href: "/settings", icon: Settings },
     { name: t("developers"), href: "/developers", icon: Code2 },

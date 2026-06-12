@@ -46,6 +46,8 @@ export interface StoredDocument {
   created_at: string;
   modified_at: string;
   thumbnail_url: string | null;
+  /** Non-null only for trashed documents (GET /storage/documents?trashed=true). */
+  deleted_at?: string | null;
 }
 
 export interface DocumentListResponse {
@@ -181,6 +183,8 @@ class APIClient {
     folder_id?: string | null;
     search?: string;
     tags?: string;
+    /** Filter by a single tag (exact match). */
+    tag?: string;
   } = {}): Promise<DocumentListResponse> {
     const searchParams = new URLSearchParams();
     if (params.page) searchParams.set("page", params.page.toString());
@@ -188,10 +192,136 @@ class APIClient {
     if (params.folder_id) searchParams.set("folder_id", params.folder_id);
     if (params.search) searchParams.set("search", params.search);
     if (params.tags) searchParams.set("tags", params.tags);
+    if (params.tag) searchParams.set("tag", params.tag);
 
     const response = await this.request<APIResponse<DocumentListResponse>>(
       `/api/v1/storage/documents?${searchParams.toString()}`
     );
+    return response.data;
+  }
+
+  /**
+   * List ONLY trashed (soft-deleted) documents.
+   * Backend: GET /api/v1/storage/documents?trashed=true — same pagination
+   * shape as listDocuments; items carry a non-null `deleted_at`.
+   */
+  async getTrashedDocuments(params: {
+    page?: number;
+    per_page?: number;
+  } = {}): Promise<DocumentListResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.set("trashed", "true");
+    if (params.page) searchParams.set("page", params.page.toString());
+    if (params.per_page) searchParams.set("per_page", params.per_page.toString());
+
+    const response = await this.request<APIResponse<DocumentListResponse>>(
+      `/api/v1/storage/documents?${searchParams.toString()}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Duplicate a stored document (server-side S3 copy, new independent doc).
+   * Backend: POST /api/v1/storage/documents/{id}/duplicate → 201 StoredDocument.
+   */
+  async duplicateDocument(storedDocumentId: string): Promise<StoredDocument> {
+    const response = await this.request<APIResponse<StoredDocument>>(
+      `/api/v1/storage/documents/${storedDocumentId}/duplicate`,
+      { method: "POST" }
+    );
+    return response.data;
+  }
+
+  /**
+   * Restore a trashed (soft-deleted) document back to the active space.
+   * Backend: POST /api/v1/storage/documents/{id}/restore.
+   * 404 when the document is not in the trash.
+   */
+  async restoreDocument(storedDocumentId: string): Promise<{
+    stored_document_id: string;
+    name: string;
+    restored: boolean;
+  }> {
+    const response = await this.request<APIResponse<{
+      stored_document_id: string;
+      name: string;
+      restored: boolean;
+    }>>(`/api/v1/storage/documents/${storedDocumentId}/restore`, {
+      method: "POST",
+    });
+    return response.data;
+  }
+
+  /**
+   * Permanently delete a document (S3 files + versions + DB). Irreversible.
+   * Works on active documents and on documents already in the trash.
+   * Backend: DELETE /api/v1/storage/documents/{id}?permanent=true.
+   * Kept separate from deleteDocument (soft delete) on purpose: the soft
+   * path stays the safe default for every existing call site.
+   */
+  async deleteDocumentPermanent(storedDocumentId: string): Promise<void> {
+    await this.request<APIResponse<{ deleted: boolean; permanent: boolean }>>(
+      `/api/v1/storage/documents/${storedDocumentId}?permanent=true`,
+      { method: "DELETE" }
+    );
+  }
+
+  /**
+   * Upload (or replace) the thumbnail image of a stored document.
+   * Backend: POST /api/v1/storage/documents/{id}/thumbnail — multipart
+   * field "file", PNG/JPEG/WebP, max 2 MB (magic bytes validated).
+   */
+  async uploadDocumentThumbnail(
+    storedDocumentId: string,
+    image: Blob,
+    fileName: string = "thumbnail.png"
+  ): Promise<{ thumbnail_url: string | null }> {
+    const fd = new FormData();
+    fd.append("file", image, fileName);
+
+    const response = await this.request<APIResponse<{ thumbnail_url: string | null }>>(
+      `/api/v1/storage/documents/${storedDocumentId}/thumbnail`,
+      { method: "POST", body: fd }
+    );
+    return response.data;
+  }
+
+  /**
+   * List the distinct tags across the user's (non-trashed) documents,
+   * deduplicated and sorted alphabetically (autocomplete material).
+   * Backend: GET /api/v1/storage/documents/tags.
+   */
+  async getUserTags(): Promise<string[]> {
+    const response = await this.request<APIResponse<{ tags: string[] }>>(
+      "/api/v1/storage/documents/tags"
+    );
+    return response.data.tags;
+  }
+
+  /**
+   * Update stored document metadata: tags (full replacement, max 20) and/or
+   * extracted text (full-text search material, truncated server-side).
+   * Backend: PATCH /api/v1/storage/documents/{id} — at least one field.
+   * Renaming has its own dedicated wrapper (renameDocument).
+   */
+  async updateStoredDocument(
+    storedDocumentId: string,
+    data: { tags?: string[]; extracted_text?: string | null }
+  ): Promise<{
+    stored_document_id: string;
+    name: string;
+    tags: string[];
+    updated_at: string;
+  }> {
+    const response = await this.request<APIResponse<{
+      stored_document_id: string;
+      name: string;
+      tags: string[];
+      updated_at: string;
+    }>>(`/api/v1/storage/documents/${storedDocumentId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
     return response.data;
   }
 
@@ -201,6 +331,8 @@ class APIClient {
     folderId?: string;
     tags?: string[];
     versionComment?: string;
+    /** Plain text content for full-text search (truncated server-side to 500k chars). */
+    extractedText?: string;
   }): Promise<{
     stored_document_id: string;
     name: string;
@@ -214,6 +346,7 @@ class APIClient {
     if (params.folderId) fd.append("folder_id", params.folderId);
     if (params.tags) fd.append("tags", JSON.stringify(params.tags));
     if (params.versionComment) fd.append("version_comment", params.versionComment);
+    if (params.extractedText) fd.append("extracted_text", params.extractedText);
 
     // NOTE: no Content-Type header — the browser sets multipart/form-data with boundary automatically
     const response = await this.request<APIResponse<{
@@ -627,6 +760,34 @@ class APIClient {
         body: JSON.stringify({ name, parent_id: parentId }),
       }
     );
+    return response.data;
+  }
+
+  /**
+   * Rename a folder. Sibling uniqueness is enforced server-side:
+   * a 409 Conflict (err.status === 409) is thrown when another folder of
+   * the same parent already uses the name.
+   * Backend: PATCH /api/v1/storage/folders/{id} {"name"}.
+   */
+  async renameFolder(folderId: string, name: string): Promise<{
+    folder_id: string;
+    name: string;
+    parent_id: string | null;
+    path: string;
+    created_at: string;
+    updated_at: string;
+  }> {
+    const response = await this.request<APIResponse<{
+      folder_id: string;
+      name: string;
+      parent_id: string | null;
+      path: string;
+      created_at: string;
+      updated_at: string;
+    }>>(`/api/v1/storage/folders/${folderId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    });
     return response.data;
   }
 
@@ -1213,6 +1374,56 @@ class APIClient {
     );
     return response.data;
   }
+
+  // ===== Activity API =====
+
+  /**
+   * Get the activity history of a stored document.
+   *
+   * Wraps GET /api/v1/activity/documents/{document_id}/history. The backend
+   * paginates with limit/offset; `page` (1-based) is converted to an offset
+   * client-side. Pagination metadata lives in `meta.pagination` (not in
+   * `data`), and each entry carries `extra_data` (the OpenAPI example says
+   * `metadata`, but the service actually serializes `extra_data`).
+   */
+  async getDocumentActivity(
+    documentId: string,
+    page: number = 1,
+    limit: number = 10
+  ): Promise<DocumentActivityPage> {
+    const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+    const safePage = Math.max(Math.trunc(page), 1);
+    const searchParams = new URLSearchParams();
+    searchParams.set("limit", safeLimit.toString());
+    searchParams.set("offset", ((safePage - 1) * safeLimit).toString());
+
+    const response = await this.request<{
+      success: boolean;
+      data: {
+        activities: DocumentActivityEntry[];
+        document_id: string;
+      };
+      meta: {
+        request_id: string;
+        timestamp: string;
+        processing_time_ms?: number;
+        pagination?: DocumentActivityPagination;
+      };
+    }>(
+      `/api/v1/activity/documents/${documentId}/history?${searchParams.toString()}`
+    );
+
+    return {
+      activities: response.data.activities,
+      document_id: response.data.document_id,
+      pagination: response.meta.pagination ?? {
+        page: safePage,
+        page_size: safeLimit,
+        total_items: response.data.activities.length,
+        total_pages: 1,
+      },
+    };
+  }
 }
 
 // Organization types
@@ -1614,6 +1825,35 @@ export interface CreateApiKeyResponse {
 export interface RegenerateKeyResponse {
   key: string;
   api_key: ApiKeyResponse;
+}
+
+// ===== Activity types =====
+
+export interface DocumentActivityEntry {
+  id: string;
+  /** create | view | download | edit | rename | delete | restore | share | unshare | export | upload | move | copy | lock | unlock */
+  action: string;
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  resource_type: string;
+  /** Additional context about the action (backend field name is `extra_data`). */
+  extra_data?: Record<string, unknown> | null;
+  ip_address?: string | null;
+  created_at: string | null;
+}
+
+export interface DocumentActivityPagination {
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+}
+
+export interface DocumentActivityPage {
+  activities: DocumentActivityEntry[];
+  document_id: string;
+  pagination: DocumentActivityPagination;
 }
 
 // Singleton instance

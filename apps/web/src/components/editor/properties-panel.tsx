@@ -1,7 +1,15 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { useTranslations } from "next-intl";
+import {
+  AlignStartVertical,
+  AlignCenterVertical,
+  AlignEndVertical,
+  AlignStartHorizontal,
+  AlignCenterHorizontal,
+  AlignEndHorizontal,
+} from "lucide-react";
 import type {
   Element,
   TextElement,
@@ -24,6 +32,305 @@ export interface PropertiesPanelProps {
   };
   /** Niveau de zoom */
   zoom: number;
+}
+
+// ============= Édition batch (multi-sélection) =============
+
+type BatchAlignAction = "left" | "centerH" | "right" | "top" | "centerV" | "bottom";
+
+const BATCH_ALIGN_ACTIONS: ReadonlyArray<{
+  action: BatchAlignAction;
+  labelKey: string;
+  Icon: React.ComponentType<{ size?: number | string }>;
+}> = [
+  { action: "left", labelKey: "batch.alignLeft", Icon: AlignStartVertical },
+  { action: "centerH", labelKey: "batch.alignCenterH", Icon: AlignCenterVertical },
+  { action: "right", labelKey: "batch.alignRight", Icon: AlignEndVertical },
+  { action: "top", labelKey: "batch.alignTop", Icon: AlignStartHorizontal },
+  { action: "centerV", labelKey: "batch.alignCenterV", Icon: AlignCenterHorizontal },
+  { action: "bottom", labelKey: "batch.alignBottom", Icon: AlignEndHorizontal },
+];
+
+/**
+ * Opacité représentative d'un élément, ou null si son style ne la supporte pas.
+ * Les shapes n'ont pas d'`opacity` plate : on lit `fillOpacity` comme valeur
+ * représentative (l'écriture met fill + stroke au même niveau).
+ */
+function getBatchOpacity(element: Element): number | null {
+  switch (element.type) {
+    case "text":
+    case "image":
+    case "annotation":
+      return element.style?.opacity ?? 1;
+    case "shape":
+      return element.style?.fillOpacity ?? 1;
+    default:
+      // form_field : FieldStyle n'expose aucune opacité
+      return null;
+  }
+}
+
+/**
+ * Update partiel d'opacité pour un élément — même shape `{ style: {...} }`
+ * que les éditeurs unitaires du panel (spread du style existant + champ écrasé).
+ */
+function buildBatchOpacityUpdate(element: Element, opacity: number): Partial<Element> | null {
+  switch (element.type) {
+    case "text":
+      return { style: { ...element.style, opacity } } as Partial<TextElement>;
+    case "image":
+      return { style: { ...element.style, opacity } } as Partial<ImageElement>;
+    case "annotation":
+      return { style: { ...element.style, opacity } } as Partial<AnnotationElement>;
+    case "shape":
+      return {
+        style: { ...element.style, fillOpacity: opacity, strokeOpacity: opacity },
+      } as Partial<ShapeElement>;
+    default:
+      return null;
+  }
+}
+
+/** Valeur commune d'une liste, ou null si hétérogène / vide / non définie. */
+function commonValue<T>(values: readonly T[]): T | null {
+  const first = values[0];
+  if (first === undefined || first === null) return null;
+  return values.every((v) => v === first) ? first : null;
+}
+
+interface BatchPropertiesProps {
+  elements: Element[];
+  onElementUpdate?: (elementId: string, updates: Partial<Element>) => void;
+}
+
+/**
+ * Section d'édition groupée affichée quand plusieurs éléments sont sélectionnés.
+ * Chaque action fan-out le même `onElementUpdate(elementId, Partial<Element>)`
+ * que l'édition unitaire — aucun nouveau mécanisme de propagation.
+ *
+ * Remontée avec une `key` dérivée des elementIds : le state local (valeurs des
+ * contrôles) se réinitialise à chaque changement de sélection.
+ */
+function BatchProperties({ elements, onElementUpdate }: BatchPropertiesProps) {
+  const t = useTranslations("editor.properties");
+
+  // ----- Opacité (éléments dont le style la supporte) -----
+  const opacityValues = elements
+    .map((el) => getBatchOpacity(el))
+    .filter((v): v is number => v !== null);
+  const hasOpacityCapable = opacityValues.length > 0;
+
+  // ----- Champs couleur communs au sous-ensemble des types présents -----
+  const allTextLike = elements.every(
+    (el) => el.type === "text" || el.type === "annotation"
+  );
+  const allShapes = elements.every((el) => el.type === "shape");
+
+  // State local : le scene graph n'est rafraîchi qu'en différé après un update
+  // panel (même comportement qu'en sélection simple) — on trace donc la
+  // dernière valeur appliquée pour que les contrôles restent réactifs.
+  // null = valeurs hétérogènes ("—") tant que l'utilisateur n'a pas édité.
+  const [opacity, setOpacity] = useState<number | null>(() =>
+    commonValue(opacityValues)
+  );
+  const [color, setColor] = useState<string | null>(() =>
+    allTextLike
+      ? commonValue(
+          elements.map((el) =>
+            el.type === "text" || el.type === "annotation"
+              ? (el.style?.color ?? null)
+              : null
+          )
+        )
+      : null
+  );
+  const [fillColor, setFillColor] = useState<string | null>(() =>
+    allShapes
+      ? commonValue(
+          elements.map((el) => (el.type === "shape" ? (el.style?.fillColor ?? null) : null))
+        )
+      : null
+  );
+  const [strokeColor, setStrokeColor] = useState<string | null>(() =>
+    allShapes
+      ? commonValue(
+          elements.map((el) => (el.type === "shape" ? (el.style?.strokeColor ?? null) : null))
+        )
+      : null
+  );
+
+  const applyOpacity = (value: number) => {
+    setOpacity(value);
+    for (const el of elements) {
+      const updates = buildBatchOpacityUpdate(el, value);
+      if (updates) onElementUpdate?.(el.elementId, updates);
+    }
+  };
+
+  const applyColor = (value: string) => {
+    setColor(value);
+    for (const el of elements) {
+      if (el.type === "text") {
+        onElementUpdate?.(el.elementId, {
+          style: { ...el.style, color: value },
+        } as Partial<TextElement>);
+      } else if (el.type === "annotation") {
+        onElementUpdate?.(el.elementId, {
+          style: { ...el.style, color: value },
+        } as Partial<AnnotationElement>);
+      }
+    }
+  };
+
+  const applyShapeColor = (field: "fillColor" | "strokeColor", value: string) => {
+    if (field === "fillColor") {
+      setFillColor(value);
+    } else {
+      setStrokeColor(value);
+    }
+    for (const el of elements) {
+      if (el.type === "shape") {
+        onElementUpdate?.(el.elementId, {
+          style: { ...el.style, [field]: value },
+        } as Partial<ShapeElement>);
+      }
+    }
+  };
+
+  // Alignement relatif : calcul pur sur les bounds de la sélection
+  // (min/max/centre du bounding box global), appliqué via le même
+  // `onElementUpdate({ bounds })` que les inputs X/Y unitaires.
+  const applyAlign = (action: BatchAlignAction) => {
+    const minX = Math.min(...elements.map((el) => el.bounds.x));
+    const maxRight = Math.max(...elements.map((el) => el.bounds.x + el.bounds.width));
+    const minY = Math.min(...elements.map((el) => el.bounds.y));
+    const maxBottom = Math.max(...elements.map((el) => el.bounds.y + el.bounds.height));
+
+    for (const el of elements) {
+      let x = el.bounds.x;
+      let y = el.bounds.y;
+      switch (action) {
+        case "left":
+          x = minX;
+          break;
+        case "centerH":
+          x = (minX + maxRight) / 2 - el.bounds.width / 2;
+          break;
+        case "right":
+          x = maxRight - el.bounds.width;
+          break;
+        case "top":
+          y = minY;
+          break;
+        case "centerV":
+          y = (minY + maxBottom) / 2 - el.bounds.height / 2;
+          break;
+        case "bottom":
+          y = maxBottom - el.bounds.height;
+          break;
+      }
+      if (x !== el.bounds.x || y !== el.bounds.y) {
+        onElementUpdate?.(el.elementId, { bounds: { ...el.bounds, x, y } });
+      }
+    }
+  };
+
+  const mixedBadge = (
+    <span className="ml-1 text-muted-foreground" title={t("batch.mixed")}>
+      —
+    </span>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Opacité */}
+      {hasOpacityCapable && (
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">
+            {t("batch.opacity")}
+            {opacity === null && mixedBadge}
+          </label>
+          <input
+            type="range"
+            value={(opacity ?? 1) * 100}
+            onChange={(e) => applyOpacity(parseInt(e.target.value, 10) / 100)}
+            min={0}
+            max={100}
+            aria-label={t("batch.opacity")}
+            className="w-full"
+          />
+        </div>
+      )}
+
+      {/* Couleur commune (text / annotation) */}
+      {allTextLike && (
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">
+            {t("batch.color")}
+            {color === null && mixedBadge}
+          </label>
+          <input
+            type="color"
+            value={color ?? "#000000"}
+            onChange={(e) => applyColor(e.target.value)}
+            aria-label={t("batch.color")}
+            className="w-full h-8 rounded border bg-background"
+          />
+        </div>
+      )}
+
+      {/* Couleurs communes (shapes) */}
+      {allShapes && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">
+              {t("batch.fill")}
+              {fillColor === null && mixedBadge}
+            </label>
+            <input
+              type="color"
+              value={fillColor ?? "#ffffff"}
+              onChange={(e) => applyShapeColor("fillColor", e.target.value)}
+              aria-label={t("batch.fill")}
+              className="w-full h-8 rounded border bg-background"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">
+              {t("batch.stroke")}
+              {strokeColor === null && mixedBadge}
+            </label>
+            <input
+              type="color"
+              value={strokeColor ?? "#000000"}
+              onChange={(e) => applyShapeColor("strokeColor", e.target.value)}
+              aria-label={t("batch.stroke")}
+              className="w-full h-8 rounded border bg-background"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Alignement entre éléments */}
+      <div>
+        <h4 className="font-medium text-sm mb-2">{t("batch.align")}</h4>
+        <div className="grid grid-cols-3 gap-1">
+          {BATCH_ALIGN_ACTIONS.map(({ action, labelKey, Icon }) => (
+            <button
+              key={action}
+              type="button"
+              onClick={() => applyAlign(action)}
+              title={t(labelKey)}
+              aria-label={t(labelKey)}
+              className="h-8 flex items-center justify-center rounded border bg-background hover:bg-accent transition-colors"
+            >
+              <Icon size={16} />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -401,8 +708,16 @@ export function PropertiesPanel({
             {t("noSelection")}
           </div>
         ) : hasMultipleSelection ? (
-          <div className="text-sm text-muted-foreground text-center py-8">
-            {t("multipleSelection", { count: selectedElements.length })}
+          <div>
+            {/* Compteur existant conservé en tête de section */}
+            <div className="text-sm text-muted-foreground text-center py-2 mb-3 border-b">
+              {t("multipleSelection", { count: selectedElements.length })}
+            </div>
+            <BatchProperties
+              key={selectedElements.map((el) => el.elementId).join("|")}
+              elements={selectedElements}
+              onElementUpdate={onElementUpdate}
+            />
           </div>
         ) : selectedElement ? (
           <div>

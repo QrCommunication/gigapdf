@@ -59,6 +59,53 @@ export interface EditorCanvasHandle {
   getSelectedIds: () => string[];
   /** Appliquer un formatage (gras/italique/souligné/alignement) aux textes sélectionnés */
   applyTextFormat: (action: TextFormatAction) => void;
+  /**
+   * Rendre sur le canvas un élément créé par un collaborateur distant.
+   * Aucun événement onElementAdded n'est émis (pas de queueAdd, pas de save,
+   * pas de réémission socket). L'appelant garantit que l'élément appartient
+   * à la page actuellement affichée.
+   */
+  applyRemoteElementCreate: (element: Element) => void;
+  /**
+   * Appliquer la mise à jour distante d'un élément (retire/re-crée l'objet
+   * Fabric via le même convertisseur que le render initial). Ignorée si
+   * l'élément est sélectionné ou en cours d'édition locale (le local gagne).
+   */
+  applyRemoteElementUpdate: (element: Element) => void;
+  /**
+   * Appliquer une mise à jour LOCALE (panneau propriétés) d'un élément :
+   * même retire/re-crée via le convertisseur que applyRemoteElementUpdate,
+   * mais SANS la garde anti-conflit de sélection — les éléments édités via
+   * le panel SONT sélectionnés par construction — et en RESTAURANT la
+   * sélection (setActiveObject / ActiveSelection) après la re-création.
+   * Aucun onElementModified n'est réémis (beginProgrammaticApply) et les
+   * événements de sélection transitoires (discard → re-select) ne sont pas
+   * forwardés à page.tsx (la sélection nette est inchangée).
+   */
+  applyLocalElementUpdate: (element: Element) => void;
+  /**
+   * Retirer du canvas un élément supprimé par un collaborateur distant.
+   * No-op si l'élément n'est pas rendu sur la page affichée.
+   */
+  applyRemoteElementDelete: (elementId: string) => void;
+  /**
+   * Afficher/masquer un élément (toggle œil du panneau calques).
+   * Le masquage est un OUTIL D'ÉDITION : l'objet Fabric passe visible=false
+   * mais l'élément RESTE dans le scene graph et dans le PDF baké au save —
+   * aucune redaction n'est déclenchée. Limite connue : les éléments PARSÉS
+   * rendus en mode "1:1 fidelity" (overlay transparent au-dessus du raster
+   * PDF) gardent leur raster visible — seul l'overlay interactif est masqué.
+   * La synchronisation du scene graph est faite par l'appelant (page.tsx).
+   */
+  setElementVisibility: (elementId: string, visible: boolean) => void;
+  /**
+   * Verrouiller/déverrouiller un élément (toggle cadenas du panneau calques).
+   * Verrouillé = non sélectionnable et non réactif aux événements souris
+   * (selectable=false, evented=false) ; l'objet est désélectionné s'il
+   * faisait partie de la sélection active. La synchronisation du scene
+   * graph est faite par l'appelant (page.tsx).
+   */
+  setElementLocked: (elementId: string, locked: boolean) => void;
 }
 
 export interface EditorCanvasProps {
@@ -294,6 +341,27 @@ export function EditorCanvas({
   const historyIndexRef = useRef(-1);
   useEffect(() => { historyIndexRef.current = historyIndex; }, [historyIndex]);
   const isUpdatingHistoryRef = useRef(false);
+  // Compteur de mutations programmatiques en vol (loadPage, undo/redo,
+  // application d'événements de collaboration distants). isUpdatingHistoryRef
+  // reste actif tant qu'AU MOINS une mutation est en cours : avec un booléen
+  // brut, deux opérations asynchrones entrelacées (ex: un create distant dont
+  // le chargement d'image chevauche un loadPage) verraient la première
+  // réactiver object:added pendant que la seconde ajoute encore ses objets —
+  // d'où un onElementAdded parasite → queueAdd + réémission socket (écho).
+  const programmaticApplyDepthRef = useRef(0);
+  const beginProgrammaticApply = useCallback(() => {
+    programmaticApplyDepthRef.current += 1;
+    isUpdatingHistoryRef.current = true;
+  }, []);
+  const endProgrammaticApply = useCallback(() => {
+    programmaticApplyDepthRef.current = Math.max(
+      0,
+      programmaticApplyDepthRef.current - 1,
+    );
+    if (programmaticApplyDepthRef.current === 0) {
+      isUpdatingHistoryRef.current = false;
+    }
+  }, []);
 
   // Ref pour tracker le contenu original des textes (pour detecter les vraies modifications)
   const originalContentRef = useRef<Map<string, string>>(new Map());
@@ -586,8 +654,17 @@ export function EditorCanvas({
     []
   );
 
+  // Suppression des événements de sélection pendant applyLocalElementUpdate :
+  // le retire/re-crée passe par discardActiveObject → selection:cleared puis
+  // setActiveObject → selection:created. Forwarder ces transitions ferait
+  // flasher le store (sélection vide un tick) → le properties panel se
+  // démonterait/remonterait et l'input en cours de frappe perdrait le focus.
+  // La sélection NETTE étant identique avant/après, on ne forward rien.
+  const suppressSelectionEventsRef = useRef(false);
+
   // Handlers d'événements - using refs to avoid stale closures
   const handleSelectionChange = useCallback(() => {
+    if (suppressSelectionEventsRef.current) return;
     if (!fabricRef.current) return;
     const activeObjects = fabricRef.current.getActiveObjects();
     const ids = activeObjects
@@ -1475,7 +1552,10 @@ export function EditorCanvas({
    * for typical 100-element pages. The canvas is rendered once after all sync objects are
    * added; async image loads each trigger a targeted renderAll on completion.
    */
-  const renderElementsOverlay = async (
+  // useCallback (et non simple const) : référencé par le useEffect qui expose
+  // EditorCanvasHandle — sans identité stable, le handle serait reconstruit à
+  // chaque render. Seule dépendance réelle : getFontFaceName (fonts embarquées).
+  const renderElementsOverlay = useCallback(async (
     canvas: FabricCanvas,
     elements: Element[],
     fabricModule: typeof import("fabric")
@@ -1943,7 +2023,7 @@ export function EditorCanvas({
     }
 
     canvas.renderAll();
-  };
+  }, [getFontFaceName]);
 
   // Charger une page dans le canvas
   const loadPage = useCallback(
@@ -1953,7 +2033,7 @@ export function EditorCanvas({
 
       // Bloquer les événements object:added/removed pendant le chargement pour
       // éviter d'envoyer des appels API pour des éléments déjà existants
-      isUpdatingHistoryRef.current = true;
+      beginProgrammaticApply();
 
       canvas.clear();
       canvas.backgroundColor = "#ffffff";
@@ -2035,8 +2115,13 @@ export function EditorCanvas({
         canvas.renderAll();
       }
 
-      isUpdatingHistoryRef.current = false;
+      endProgrammaticApply();
     },
+    // beginProgrammaticApply/endProgrammaticApply/renderElementsOverlay sont
+    // référencés via la closure du premier render (deps [] volontaires,
+    // pattern existant) — begin/end sont stables, renderElementsOverlay ne
+    // varie qu'avec getFontFaceName.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 
@@ -2173,11 +2258,11 @@ export function EditorCanvas({
         const newIndex = historyIndex - 1;
         const json = historyStack[newIndex];
         if (!json) return;
-        isUpdatingHistoryRef.current = true;
+        beginProgrammaticApply();
         fabricRef.current.loadFromJSON(JSON.parse(json)).then(() => {
           fabricRef.current?.renderAll();
           setHistoryIndex(newIndex);
-          isUpdatingHistoryRef.current = false;
+          endProgrammaticApply();
         });
       },
       redo: () => {
@@ -2186,11 +2271,11 @@ export function EditorCanvas({
         const newIndex = historyIndex + 1;
         const json = historyStack[newIndex];
         if (!json) return;
-        isUpdatingHistoryRef.current = true;
+        beginProgrammaticApply();
         fabricRef.current.loadFromJSON(JSON.parse(json)).then(() => {
           fabricRef.current?.renderAll();
           setHistoryIndex(newIndex);
-          isUpdatingHistoryRef.current = false;
+          endProgrammaticApply();
         });
       },
       canUndo: () => historyIndex > 0,
@@ -2309,10 +2394,350 @@ export function EditorCanvas({
         }
         saveHistory(canvas);
       },
+
+      // --- Application des événements de collaboration distants ---
+      // Ces trois méthodes reproduisent l'effet d'une action utilisateur SANS
+      // repasser par les callbacks Fabric : beginProgrammaticApply bloque
+      // handleObjectAdded/Removed pendant l'opération, donc AUCUN
+      // onElementAdded/onElementRemoved ne remonte à page.tsx → pas de
+      // queueAdd/queueUpdate/queueDelete, pas de save, pas de réémission
+      // socket (anti-boucle d'écho). Le scene graph React est mis à jour par
+      // l'appelant (page.tsx) AVANT l'appel.
+      applyRemoteElementCreate: (element: Element) => {
+        const canvas = fabricRef.current;
+        if (!canvas) return;
+        void (async () => {
+          beginProgrammaticApply();
+          try {
+            const fabricModule = await import("fabric");
+            // Double délivrance réseau : si l'objet existe déjà, le retirer
+            // d'abord au lieu d'empiler un doublon visuel.
+            const existing = canvas
+              .getObjects()
+              .find(
+                (o) =>
+                  (o as FabricObjectWithData).data?.elementId ===
+                  element.elementId,
+              );
+            if (existing) canvas.remove(existing);
+            // Même tracking qu'au load : bounds initiales pour que la
+            // première modification locale efface la bonne zone au bake.
+            lastKnownBoundsRef.current.set(element.elementId, element.bounds);
+            if (element.type === "text") {
+              originalContentRef.current.set(
+                element.elementId,
+                element.content || "",
+              );
+            }
+            // Réutilise le MÊME convertisseur element→Fabric que le render
+            // initial (z-order, data.elementId, originX/Y 'left'/'top',
+            // baseline texte, fonts embarquées).
+            await renderElementsOverlay(canvas, [element], fabricModule);
+          } catch (err) {
+            clientLogger.error(
+              "[EditorCanvas] applyRemoteElementCreate failed:",
+              element.elementId,
+              err,
+            );
+          } finally {
+            endProgrammaticApply();
+          }
+        })();
+      },
+      applyRemoteElementUpdate: (element: Element) => {
+        const canvas = fabricRef.current;
+        if (!canvas) return;
+        const existing = canvas
+          .getObjects()
+          .find(
+            (o) =>
+              (o as FabricObjectWithData).data?.elementId === element.elementId,
+          ) as (FabricObjectWithData & { isEditing?: boolean }) | undefined;
+        // L'édition locale gagne : un élément sélectionné ou en cours
+        // d'édition inline n'est PAS écrasé par l'update distant (dernière
+        // écriture au save).
+        if (existing) {
+          const isSelectedLocally = canvas
+            .getActiveObjects()
+            .some(
+              (o) =>
+                (o as FabricObjectWithData).data?.elementId ===
+                element.elementId,
+            );
+          if (isSelectedLocally || Boolean(existing.isEditing)) {
+            clientLogger.debug(
+              "[EditorCanvas] Remote update ignored (element locally selected/editing):",
+              element.elementId,
+            );
+            return;
+          }
+        }
+        void (async () => {
+          beginProgrammaticApply();
+          try {
+            const fabricModule = await import("fabric");
+            // Retirer/re-créer via le convertisseur : plus sûr que muter
+            // propriété par propriété (offsets baseline/descender, fonts
+            // embarquées et mode "1:1 fidelity" recalculés comme au load).
+            // La sélection locale d'AUTRES objets n'est pas affectée.
+            if (existing) canvas.remove(existing);
+            lastKnownBoundsRef.current.set(element.elementId, element.bounds);
+            if (element.type === "text") {
+              originalContentRef.current.set(
+                element.elementId,
+                element.content || "",
+              );
+            }
+            await renderElementsOverlay(canvas, [element], fabricModule);
+          } catch (err) {
+            clientLogger.error(
+              "[EditorCanvas] applyRemoteElementUpdate failed:",
+              element.elementId,
+              err,
+            );
+          } finally {
+            endProgrammaticApply();
+          }
+        })();
+      },
+      // Variante LOCALE de applyRemoteElementUpdate pour les éditions du
+      // panneau propriétés : même retire/re-crée via le convertisseur, mais
+      // SANS la garde "élément sélectionné = ignoré" (les éléments du panel
+      // SONT sélectionnés par construction) et en restaurant la sélection
+      // après re-création — y compris les multi-sélections (ActiveSelection).
+      applyLocalElementUpdate: (element: Element) => {
+        const canvas = fabricRef.current;
+        if (!canvas) return;
+        void (async () => {
+          beginProgrammaticApply();
+          suppressSelectionEventsRef.current = true;
+          try {
+            const fabricModule = await import("fabric");
+            const existing = canvas
+              .getObjects()
+              .find(
+                (o) =>
+                  (o as FabricObjectWithData).data?.elementId ===
+                  element.elementId,
+              ) as
+              | (FabricObjectWithData & {
+                  isEditing?: boolean;
+                  exitEditing?: () => void;
+                })
+              | undefined;
+
+            // Capture la sélection active AVANT le retire/re-crée pour la
+            // restaurer à l'identique (mono ou multi-sélection).
+            const activeIds = canvas
+              .getActiveObjects()
+              .map((o) => (o as FabricObjectWithData).data?.elementId)
+              .filter((id): id is string => Boolean(id));
+            const wasSelected = activeIds.includes(element.elementId);
+
+            if (existing) {
+              // Texte en cours d'édition inline : sortir du mode édition
+              // SANS forwarder de modification (le panel est la source de
+              // cette mise à jour, pas l'IText).
+              if (
+                existing.isEditing &&
+                typeof existing.exitEditing === "function"
+              ) {
+                originalContentRef.current.delete(element.elementId);
+                existing.exitEditing();
+              }
+              if (wasSelected) canvas.discardActiveObject();
+              canvas.remove(existing);
+            }
+
+            lastKnownBoundsRef.current.set(element.elementId, element.bounds);
+            if (element.type === "text") {
+              originalContentRef.current.set(
+                element.elementId,
+                element.content || "",
+              );
+            }
+            await renderElementsOverlay(canvas, [element], fabricModule);
+
+            // Restaurer la sélection sur l'objet re-créé (et les éventuels
+            // autres membres d'une multi-sélection, intacts sur le canvas).
+            if (wasSelected) {
+              const toSelect = activeIds
+                .map((id) =>
+                  canvas
+                    .getObjects()
+                    .find(
+                      (o) =>
+                        (o as FabricObjectWithData).data?.elementId === id,
+                    ),
+                )
+                .filter((o): o is FabricObject => Boolean(o));
+              if (toSelect.length === 1) {
+                canvas.setActiveObject(toSelect[0]!);
+              } else if (toSelect.length > 1) {
+                canvas.setActiveObject(
+                  new fabricModule.ActiveSelection(toSelect, { canvas }),
+                );
+              }
+            }
+            canvas.requestRenderAll();
+          } catch (err) {
+            clientLogger.error(
+              "[EditorCanvas] applyLocalElementUpdate failed:",
+              element.elementId,
+              err,
+            );
+          } finally {
+            suppressSelectionEventsRef.current = false;
+            endProgrammaticApply();
+          }
+        })();
+      },
+      applyRemoteElementDelete: (elementId: string) => {
+        const canvas = fabricRef.current;
+        if (!canvas) return;
+        const target = canvas
+          .getObjects()
+          .find(
+            (o) => (o as FabricObjectWithData).data?.elementId === elementId,
+          ) as
+          | (FabricObjectWithData & {
+              isEditing?: boolean;
+              exitEditing?: () => void;
+            })
+          | undefined;
+        if (!target) return; // pas rendu sur la page affichée — rien à retirer
+        beginProgrammaticApply();
+        try {
+          // Si le texte supprimé est en cours d'édition locale : sortir du
+          // mode édition SANS forwarder de modification. exitEditing()
+          // déclenche handleTextEditingExited, qui ne forward que si
+          // originalContentRef contient l'ancienne valeur — on la retire
+          // AVANT pour que contentChanged === false.
+          if (target.isEditing && typeof target.exitEditing === "function") {
+            originalContentRef.current.delete(elementId);
+            target.exitEditing();
+          }
+          // Désélectionner si l'objet fait partie de la sélection active,
+          // sinon Fabric garde des contrôles orphelins sur un objet retiré.
+          const isSelected = canvas
+            .getActiveObjects()
+            .some(
+              (o) => (o as FabricObjectWithData).data?.elementId === elementId,
+            );
+          if (isSelected) canvas.discardActiveObject();
+          canvas.remove(target);
+          // Nettoyage des refs de tracking pour cet élément.
+          lastKnownBoundsRef.current.delete(elementId);
+          originalContentRef.current.delete(elementId);
+          recentlyForwardedTextEditRef.current.delete(elementId);
+          canvas.requestRenderAll();
+        } finally {
+          endProgrammaticApply();
+        }
+      },
+
+      // --- Visibilité / verrouillage des calques (panneau calques) ---
+      // Mutations programmatiques pures, même contrat que les applyRemote* :
+      // beginProgrammaticApply bloque les callbacks Fabric pendant
+      // l'opération → aucun onElementAdded/Modified parasite ne remonte.
+      // L'appelant (page.tsx) met à jour le scene graph et déclenche le
+      // save lui-même. Au re-render d'une page (loadPage), les états sont
+      // ré-appliqués depuis element.visible/element.locked par
+      // renderElementsOverlay (baseOptions) — rien à re-faire ici.
+      setElementVisibility: (elementId: string, visible: boolean) => {
+        const canvas = fabricRef.current;
+        if (!canvas) return;
+        const target = canvas
+          .getObjects()
+          .find(
+            (o) => (o as FabricObjectWithData).data?.elementId === elementId,
+          ) as
+          | (FabricObjectWithData & {
+              isEditing?: boolean;
+              exitEditing?: () => void;
+            })
+          | undefined;
+        if (!target) return;
+        // Texte en cours d'édition inline : committer l'édition via le flux
+        // normal AVANT de masquer (hors garde programmatique, pour que
+        // handleTextEditingExited forwarde le changement de contenu).
+        if (
+          !visible &&
+          target.isEditing &&
+          typeof target.exitEditing === "function"
+        ) {
+          target.exitEditing();
+        }
+        beginProgrammaticApply();
+        try {
+          if (!visible) {
+            // Désélectionner avant de masquer, sinon Fabric garde des
+            // contrôles orphelins sur un objet invisible.
+            const isSelected = canvas
+              .getActiveObjects()
+              .some(
+                (o) =>
+                  (o as FabricObjectWithData).data?.elementId === elementId,
+              );
+            if (isSelected) canvas.discardActiveObject();
+          }
+          target.set({ visible });
+          canvas.requestRenderAll();
+        } finally {
+          endProgrammaticApply();
+        }
+      },
+      setElementLocked: (elementId: string, locked: boolean) => {
+        const canvas = fabricRef.current;
+        if (!canvas) return;
+        const target = canvas
+          .getObjects()
+          .find(
+            (o) => (o as FabricObjectWithData).data?.elementId === elementId,
+          ) as
+          | (FabricObjectWithData & {
+              isEditing?: boolean;
+              exitEditing?: () => void;
+            })
+          | undefined;
+        if (!target) return;
+        // Committer une édition inline en cours avant de verrouiller
+        // (même raison que setElementVisibility).
+        if (
+          locked &&
+          target.isEditing &&
+          typeof target.exitEditing === "function"
+        ) {
+          target.exitEditing();
+        }
+        beginProgrammaticApply();
+        try {
+          if (locked) {
+            const isSelected = canvas
+              .getActiveObjects()
+              .some(
+                (o) =>
+                  (o as FabricObjectWithData).data?.elementId === elementId,
+              );
+            if (isSelected) canvas.discardActiveObject();
+          }
+          target.set({
+            selectable: !locked,
+            evented: !locked,
+            hasControls: !locked,
+            hasBorders: !locked,
+            lockMovementX: locked,
+            lockMovementY: locked,
+          });
+          canvas.requestRenderAll();
+        } finally {
+          endProgrammaticApply();
+        }
+      },
     };
 
     onCanvasReady(handle);
-  }, [historyIndex, historyStack, onCanvasReady, fabricObjectToElement, saveHistory]);
+  }, [historyIndex, historyStack, onCanvasReady, fabricObjectToElement, saveHistory, renderElementsOverlay, beginProgrammaticApply, endProgrammaticApply]);
 
   // Calculer les dimensions du canvas basées sur la page
   const canvasWidth = page?.dimensions?.width || width;

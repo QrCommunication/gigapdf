@@ -61,7 +61,15 @@ import type {
 } from "@/components/editor/editor-canvas";
 import { FormsPanel } from "@/components/editor/forms-panel";
 import { ShareDialog } from "@/components/sharing/share-dialog";
-import { useFlattenPdf, usePdfPageOperation, downloadBlob, useApplyElements } from "@giga-pdf/api";
+import {
+  useFlattenPdf,
+  usePdfPageOperation,
+  downloadBlob,
+  useApplyElements,
+  useElementUpdates,
+  socketClient,
+  type SocketEventData,
+} from "@giga-pdf/api";
 import { ContentEditLayer, type ElementModification } from "@/components/editor/content-edit-layer";
 import { clientLogger } from "@/lib/client-logger";
 import { withRetry } from "@/lib/with-retry";
@@ -478,6 +486,87 @@ export default function EditorPage() {
     contentModificationsRef.current = contentModifications;
   }, [contentModifications]);
 
+  // PARTIE 4 — Rafraîchissement des métadonnées GED après un save éditeur.
+  // Best-effort + throttlé (max 1 fois / 60s) : (a) régénère la miniature du
+  // document stocké depuis le binaire sauvegardé, (b) reconstruit le texte de
+  // recherche full-text depuis les éléments text du scene graph EN MÉMOIRE
+  // (aucun re-parse). Les échecs sont silencieux (warn console uniquement) —
+  // la GED se rattrapera au prochain save au-delà de la fenêtre de throttle.
+  //
+  // pagesRef : le onSaved du save debounced/auto peut s'exécuter longtemps
+  // après la construction de sa closure — on lit l'état pages via ref pour
+  // éviter un texte de recherche figé sur un scene graph périmé.
+  const lastGedRefreshRef = useRef(0);
+  const pagesRef = useRef<PageObject[]>(pages);
+  useEffect(() => {
+    pagesRef.current = pages;
+  }, [pages]);
+
+  const refreshGedMetadata = useCallback(async () => {
+    if (!storedDocumentId) return;
+    const now = Date.now();
+    if (now - lastGedRefreshRef.current < 60_000) return;
+    lastGedRefreshRef.current = now;
+
+    // (a) Miniature : rend la page 1 du binaire sauvegardé en PNG via
+    // /api/pdf/preview (mode thumbnail) puis l'upload vers la GED.
+    const pdfFile = currentPdfFileRef.current;
+    if (pdfFile) {
+      try {
+        const token = await getAuthToken();
+        const form = new FormData();
+        form.append("file", pdfFile, pdfFile.name);
+        form.append("mode", "thumbnail");
+        form.append("pageNumber", "1");
+        form.append("format", "png");
+        form.append("maxWidth", "480");
+        form.append("maxHeight", "640");
+        const res = await fetch("/api/pdf/preview", {
+          method: "POST",
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          body: form,
+        });
+        if (res.ok) {
+          const png = await res.blob();
+          await api.uploadDocumentThumbnail(storedDocumentId, png);
+          clientLogger.debug("[editor] GED thumbnail refreshed");
+        } else {
+          clientLogger.warn(
+            "[editor] GED thumbnail refresh failed:",
+            res.status,
+          );
+        }
+      } catch (err) {
+        clientLogger.warn("[editor] GED thumbnail refresh failed:", err);
+      }
+    }
+
+    // (b) Texte de recherche : concatène le contenu de TOUS les éléments
+    // text du scene graph en mémoire, tronqué à 500k caractères.
+    try {
+      const parts: string[] = [];
+      for (const page of pagesRef.current) {
+        for (const el of page.elements) {
+          if (el.type === "text" && el.content) parts.push(el.content);
+        }
+      }
+      const extractedText = parts.join("\n").slice(0, 500_000);
+      if (extractedText.length > 0) {
+        await api.updateStoredDocument(storedDocumentId, {
+          extracted_text: extractedText,
+        });
+        clientLogger.debug(
+          "[editor] GED search text refreshed:",
+          extractedText.length,
+          "chars",
+        );
+      }
+    } catch (err) {
+      clientLogger.warn("[editor] GED search-text refresh failed:", err);
+    }
+  }, [storedDocumentId]);
+
   // Sauvegarde hybride (immédiate pour actions critiques, debounced pour modifications mineures)
   const {
     saving,
@@ -497,6 +586,9 @@ export default function EditorPage() {
     getPreparedBlob,
     onSaved: async (id) => {
       clientLogger.debug("[editor] Document sauvegardé:", id);
+      // PARTIE 4 — best-effort GED refresh (miniature + texte de recherche),
+      // fire-and-forget : ne bloque ni le flush Redis ni le flux de save.
+      void refreshGedMetadata();
       // Flush Redis backend for elements that were baked into the PDF in the
       // last apply-elements pass. We only run this AFTER S3 confirms the
       // upload, otherwise a transient upload failure would lose the data
@@ -572,32 +664,149 @@ export default function EditorPage() {
     }
   }, [handleConfirmRename, handleCancelRename]);
 
-  // Collaboration temps réel
+  // Collaboration temps réel (présence, curseurs, émissions update/delete)
   const {
     collaborators,
     cursors,
     sendCursorPosition,
     collaboratorCount,
     isConnected,
-    emitElementCreate,
     emitElementUpdate,
     emitElementDelete,
   } = useCollaboration({
     documentId,
     enabled: !!documentId,
-    onElementCreate: (element) => {
-      clientLogger.debug("[editor] Remote element created:", element);
-      // TODO: Ajouter l'élément au canvas
-    },
-    onElementUpdate: (elementId, changes) => {
-      clientLogger.debug("[editor] Remote element updated:", elementId, changes);
-      // TODO: Mettre à jour l'élément sur le canvas
-    },
-    onElementDelete: (elementId) => {
-      clientLogger.debug("[editor] Remote element deleted:", elementId);
-      // TODO: Supprimer l'élément du canvas
-    },
   });
+
+  // --- Application des événements de collaboration distants ---
+  // Abonnement direct via useElementUpdates (et non via les callbacks de
+  // useCollaboration) : ce dernier strippe l'enveloppe socket et ne transmet
+  // que l'élément — or le routage nécessite page_number et l'anti-écho
+  // nécessite client_id, présents uniquement dans le payload brut.
+  //
+  // Aucune de ces trois branches ne déclenche queueAdd/queueUpdate/queueDelete
+  // ni saveWithPriority : l'émetteur a déjà persisté (Redis + bake S3) — les
+  // re-saver ici provoquerait un double-bake du même élément.
+  const handleRemoteElementCreate = useCallback(
+    (data: SocketEventData["element:create"]) => {
+      // Anti-écho (ceinture) : socketClient filtre déjà au dispatch les
+      // événements portant notre propre client_id ; on re-vérifie au cas où
+      // un futur relay serveur contournerait le wrapper du provider.
+      if (data.client_id && data.client_id === socketClient.getClientId()) {
+        return;
+      }
+      const element = data.element as Element | null;
+      if (!element?.elementId) return;
+
+      // Routage : page_number (1-indexé) fourni par l'émetteur ; fallback
+      // page courante pour les émetteurs qui ne l'envoient pas encore.
+      const pageIndex =
+        typeof data.page_number === "number" && data.page_number >= 1
+          ? data.page_number - 1
+          : currentPageIndex;
+
+      clientLogger.debug(
+        "[editor] Remote element created:",
+        element.elementId,
+        "page:",
+        pageIndex + 1,
+      );
+
+      // Idempotence : double délivrance réseau ou élément déjà connu →
+      // traiter comme une mise à jour plutôt que d'empiler un doublon.
+      const ownerPageIndex = pages.findIndex((p) =>
+        p.elements.some((e) => e.elementId === element.elementId),
+      );
+      if (ownerPageIndex !== -1) {
+        updateElementInPage(element.elementId, element);
+        if (ownerPageIndex === currentPageIndex) {
+          canvasHandle?.applyRemoteElementUpdate(element);
+        }
+        return;
+      }
+
+      // 1. Scene graph React (toutes pages — une page non affichée sera
+      //    rendue à la navigation via loadPage).
+      addElementToPage(pageIndex, element);
+      // 2. Canvas Fabric uniquement si la page est actuellement affichée.
+      if (pageIndex === currentPageIndex) {
+        canvasHandle?.applyRemoteElementCreate(element);
+      }
+    },
+    [pages, currentPageIndex, addElementToPage, updateElementInPage, canvasHandle],
+  );
+
+  const handleRemoteElementUpdate = useCallback(
+    (data: SocketEventData["element:update"]) => {
+      if (data.client_id && data.client_id === socketClient.getClientId()) {
+        return;
+      }
+      const elementId = data.element_id;
+      if (!elementId) return;
+      const changes = data.changes as Partial<Element> | null;
+      if (!changes) return;
+
+      // Reconstruire l'Element complet : le payload peut être partiel
+      // (modification via panel propriétés) — merge sur l'élément connu.
+      const ownerPage = pages.find((p) =>
+        p.elements.some((e) => e.elementId === elementId),
+      );
+      if (!ownerPage) {
+        clientLogger.debug(
+          "[editor] Remote update for unknown element — ignored:",
+          elementId,
+        );
+        return;
+      }
+      const existing = ownerPage.elements.find(
+        (e) => e.elementId === elementId,
+      );
+      if (!existing) return;
+      // Merge shallow volontaire (même sémantique qu'updateElementInPage).
+      // Cast sûr : les changes distants proviennent du même type discriminant
+      // que l'élément d'origine (l'émetteur a envoyé l'élément modifié).
+      const merged = {
+        ...existing,
+        ...changes,
+        elementId: existing.elementId,
+      } as Element;
+
+      clientLogger.debug("[editor] Remote element updated:", elementId);
+
+      updateElementInPage(elementId, merged);
+      if (pages.indexOf(ownerPage) === currentPageIndex) {
+        canvasHandle?.applyRemoteElementUpdate(merged);
+      }
+    },
+    [pages, currentPageIndex, updateElementInPage, canvasHandle],
+  );
+
+  const handleRemoteElementDelete = useCallback(
+    (data: SocketEventData["element:delete"]) => {
+      if (data.client_id && data.client_id === socketClient.getClientId()) {
+        return;
+      }
+      const elementId = data.element_id;
+      if (!elementId) return;
+
+      clientLogger.debug("[editor] Remote element deleted:", elementId);
+
+      // Canvas d'abord : la méthode no-op si l'objet n'est pas rendu sur la
+      // page affichée, et son garde interne empêche tout onElementRemoved
+      // (donc aucune réémission ni queueDelete).
+      canvasHandle?.applyRemoteElementDelete(elementId);
+      deselectElement(elementId);
+      removeElementFromPage(elementId);
+    },
+    [canvasHandle, deselectElement, removeElementFromPage],
+  );
+
+  useElementUpdates(
+    documentId,
+    handleRemoteElementCreate,
+    handleRemoteElementUpdate,
+    handleRemoteElementDelete,
+  );
 
   // Ref pour le canvas (pour la position du curseur)
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -668,8 +877,20 @@ export default function EditorPage() {
       // Record the op so the save flow can bake it into the PDF.
       queueAdd(pageNumber, element);
 
-      // Émettre via WebSocket pour la collaboration
-      emitElementCreate(element);
+      // Émettre via WebSocket pour la collaboration. Émission directe via
+      // socketClient (et non emitElementCreate du hook) : le récepteur a
+      // besoin de page_number pour router l'élément vers la bonne page, or
+      // l'enveloppe du hook ne transporte que l'élément. client_id
+      // (anti-écho) est estampillé automatiquement par socketClient.emit ;
+      // user_id est renseigné côté serveur (même contrat que le hook).
+      if (documentId) {
+        socketClient.emit("element:create", {
+          document_id: documentId,
+          element,
+          user_id: "",
+          page_number: pageNumber,
+        });
+      }
 
       // Persister l'élément dans le backend (scene graph Redis) avec retry
       // exponentiel — couvre les hiccups Redis/réseau transients sans
@@ -701,7 +922,7 @@ export default function EditorPage() {
       // Sauvegarder le PDF vers S3 (debounced: batch ajouts rapprochés)
       saveWithPriority("debounced");
     },
-    [setDirty, emitElementCreate, saveWithPriority, documentId, currentPageIndex, queueAdd, addElementToPage, currentPage, selectElements]
+    [setDirty, saveWithPriority, documentId, currentPageIndex, queueAdd, addElementToPage, currentPage, selectElements]
   );
 
   const handleElementModified = useCallback(
@@ -847,6 +1068,34 @@ export default function EditorPage() {
     async (elementId: string, updates: Partial<Element>) => {
       clientLogger.debug("[editor] Element update:", elementId, updates);
       setDirty(true);
+
+      // PARTIE 3 — resync visuel panel→canvas. Historiquement ce handler ne
+      // touchait QUE le backend (websocket + api.updateElement + save) : ni
+      // le scene graph local ni le canvas Fabric n'étaient mis à jour, donc
+      // les éditions du panneau propriétés (single ET batch) n'étaient
+      // visibles qu'au reload. Fix : merge shallow dans le scene graph
+      // (même sémantique que le handler remote) PUIS ré-application sur le
+      // canvas via applyLocalElementUpdate — la variante SANS garde de
+      // sélection (les éléments du panel SONT sélectionnés) qui restaure la
+      // sélection après le retire/re-crée.
+      const ownerPage = pages.find((p) =>
+        p.elements.some((e) => e.elementId === elementId),
+      );
+      const existing = ownerPage?.elements.find(
+        (e) => e.elementId === elementId,
+      );
+      if (ownerPage && existing) {
+        const merged = {
+          ...existing,
+          ...updates,
+          elementId: existing.elementId,
+        } as Element;
+        updateElementInPage(elementId, merged);
+        if (pages.indexOf(ownerPage) === currentPageIndex) {
+          canvasHandle?.applyLocalElementUpdate(merged);
+        }
+      }
+
       // Émettre via WebSocket pour la collaboration
       emitElementUpdate(elementId, updates as Element);
 
@@ -896,7 +1145,16 @@ export default function EditorPage() {
       // Modification via panel propriétés → sauvegarde debounced vers S3
       saveWithPriority("debounced");
     },
-    [setDirty, emitElementUpdate, saveWithPriority, documentId]
+    [
+      setDirty,
+      emitElementUpdate,
+      saveWithPriority,
+      documentId,
+      pages,
+      currentPageIndex,
+      updateElementInPage,
+      canvasHandle,
+    ]
   );
 
   const handleFormatAction = useCallback(
@@ -1171,6 +1429,54 @@ export default function EditorPage() {
     [adoptModifiedPdf, toast, t],
   );
 
+  // Compression appliquée au document courant (mode « Appliquer au
+  // document » du CompressDialog) : swap du binaire + save immédiat. Pas de
+  // re-parse — la compression ne change ni la géométrie ni le contenu des
+  // pages, seulement la sérialisation des objets PDF.
+  const handleCompressApplied = useCallback(
+    (blob: Blob) => {
+      const adopted = adoptModifiedPdf(blob, { reparse: false });
+      if (!adopted) return;
+      toast({
+        title: t("compress.appliedTitle"),
+        description: t("compress.appliedDescription"),
+      });
+    },
+    [adoptModifiedPdf, toast, t],
+  );
+
+  // OCR « PDF cherchable » appliqué : le binaire contient désormais un
+  // calque de texte invisible — re-parse (défaut) pour que le scene graph
+  // (et la recherche côté éditeur) voient les nouveaux items de texte.
+  const handleOcrApplied = useCallback(
+    (blob: Blob) => {
+      const adopted = adoptModifiedPdf(blob);
+      if (!adopted) return;
+      toast({
+        title: t("ocr.appliedTitle"),
+        description: t("ocr.appliedDescription"),
+      });
+    },
+    [adoptModifiedPdf, toast, t],
+  );
+
+  // Signature numérique appliquée au document courant (mode « Appliquer au
+  // document » du SignDialog) : swap du binaire + save immédiat. Pas de
+  // re-parse — la signature n'ajoute qu'un dictionnaire /Sig invisible, la
+  // géométrie des pages est inchangée. Toute modification ultérieure du
+  // binaire invaliderait la signature : on n'y touche plus.
+  const handleSignApplied = useCallback(
+    (blob: Blob) => {
+      const adopted = adoptModifiedPdf(blob, { reparse: false });
+      if (!adopted) return;
+      toast({
+        title: t("sign.appliedTitle"),
+        description: t("sign.appliedDescription"),
+      });
+    },
+    [adoptModifiedPdf, toast, t],
+  );
+
   const handlePageRotate = useCallback(
     (pageIndex: number) =>
       runPageOperation('rotate', { pageNumber: pageIndex + 1, degrees: 90 }),
@@ -1249,21 +1555,48 @@ export default function EditorPage() {
     goToPage(pageNumber - 1); // pageNumber is 1-indexed, goToPage expects 0-indexed
   }, [goToPage]);
 
-  // Handler pour la visibilité des calques
-  const handleLayerVisibilityChange = useCallback((layerId: string, visible: boolean) => {
-    clientLogger.debug("[editor] Layer visibility changed:", layerId, visible);
-    // TODO: Implémenter la logique de changement de visibilité des calques
-    setDirty(true);
-    saveWithPriority("debounced");
-  }, [setDirty, saveWithPriority]);
+  // Handler pour la visibilité d'un calque (= élément de la page).
+  // Décision produit : le masquage est un OUTIL D'ÉDITION uniquement — un
+  // élément masqué reste dans le scene graph ET dans le PDF baké au save
+  // (aucun queueUpdate ici : pas de redaction, pas de réécriture du PDF).
+  // Le panneau calques étant contrôlé par element.visible, la mise à jour
+  // du scene graph suffit à rafraîchir l'icône œil ; le renderer du canvas
+  // ré-applique l'état au prochain loadPage (navigation de page).
+  const handleElementVisibilityChange = useCallback(
+    (elementId: string, visible: boolean) => {
+      clientLogger.debug(
+        "[editor] Element visibility changed:",
+        elementId,
+        visible,
+      );
+      // 1. Canvas Fabric (effet visuel immédiat, désélection si masqué)
+      canvasHandle?.setElementVisibility(elementId, visible);
+      // 2. Scene graph React (source de vérité du panel + des re-renders)
+      updateElementInPage(elementId, { visible });
+      // 3. Collaboration : payload partiel — le récepteur merge sur
+      //    l'élément connu puis re-rend l'objet Fabric (état appliqué).
+      emitElementUpdate(elementId, { visible });
+      setDirty(true);
+      saveWithPriority("debounced");
+    },
+    [canvasHandle, updateElementInPage, emitElementUpdate, setDirty, saveWithPriority],
+  );
 
-  // Handler pour le verrouillage des calques
-  const handleLayerLockChange = useCallback((layerId: string, locked: boolean) => {
-    clientLogger.debug("[editor] Layer lock changed:", layerId, locked);
-    // TODO: Implémenter la logique de verrouillage des calques
-    setDirty(true);
-    saveWithPriority("debounced");
-  }, [setDirty, saveWithPriority]);
+  // Handler pour le verrouillage d'un calque (= élément de la page).
+  // Verrouillé = non sélectionnable/non éditable sur le canvas
+  // (selectable=false, evented=false). Même contrat de sync que la
+  // visibilité : pas d'op PDF, état persisté dans le scene graph.
+  const handleElementLockChange = useCallback(
+    (elementId: string, locked: boolean) => {
+      clientLogger.debug("[editor] Element lock changed:", elementId, locked);
+      canvasHandle?.setElementLocked(elementId, locked);
+      updateElementInPage(elementId, { locked });
+      emitElementUpdate(elementId, { locked });
+      setDirty(true);
+      saveWithPriority("debounced");
+    },
+    [canvasHandle, updateElementInPage, emitElementUpdate, setDirty, saveWithPriority],
+  );
 
   // Handler pour le téléchargement de fichiers embarqués
   const handleDownloadFile = useCallback((file: { dataUrl: string; name: string }) => {
@@ -1749,6 +2082,9 @@ export default function EditorPage() {
           goToPage(pageNumber - 1);
         }}
         onWatermarkApplied={handleWatermarkApplied}
+        onCompressApplied={handleCompressApplied}
+        onOcrApplied={handleOcrApplied}
+        onSignApplied={handleSignApplied}
       />
 
       {/* Main content */}
@@ -1825,10 +2161,12 @@ export default function EditorPage() {
         <DocumentInfoSidebar
           outlines={outlines}
           layers={layers}
+          elements={currentPage?.elements ?? []}
+          selectedElementIds={selectedElementIds}
           embeddedFiles={embeddedFiles}
           onNavigateToPage={handleNavigateToPage}
-          onLayerVisibilityChange={handleLayerVisibilityChange}
-          onLayerLockChange={handleLayerLockChange}
+          onElementVisibilityChange={handleElementVisibilityChange}
+          onElementLockChange={handleElementLockChange}
           onDownloadFile={handleDownloadFile}
           currentPageIndex={currentPageIndex}
         />

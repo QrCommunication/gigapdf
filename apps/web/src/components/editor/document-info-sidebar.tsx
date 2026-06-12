@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Info, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@giga-pdf/ui";
-import type { BookmarkObject, LayerObject, EmbeddedFileObject } from "@giga-pdf/types";
+import type { BookmarkObject, Element, LayerObject, EmbeddedFileObject } from "@giga-pdf/types";
 import { cn } from "@/lib/utils";
 import { TOCPanel } from "./toc-panel";
 import { LayersPanel } from "./layers-panel";
@@ -13,10 +13,14 @@ import { EmbeddedFilesPanel } from "./embedded-files-panel";
 interface DocumentInfoSidebarProps {
   outlines: BookmarkObject[];
   layers: LayerObject[];
+  /** Éléments de la page courante — listés comme calques (œil/cadenas) */
+  elements: Element[];
+  /** IDs des éléments sélectionnés sur le canvas */
+  selectedElementIds?: string[];
   embeddedFiles: EmbeddedFileObject[];
   onNavigateToPage?: (pageNumber: number, position?: { x: number; y: number } | null) => void;
-  onLayerVisibilityChange?: (layerId: string, visible: boolean) => void;
-  onLayerLockChange?: (layerId: string, locked: boolean) => void;
+  onElementVisibilityChange?: (elementId: string, visible: boolean) => void;
+  onElementLockChange?: (elementId: string, locked: boolean) => void;
   onDownloadFile?: (file: EmbeddedFileObject) => void;
   currentPageIndex?: number;
   className?: string;
@@ -29,10 +33,12 @@ interface DocumentInfoSidebarProps {
 export function DocumentInfoSidebar({
   outlines,
   layers,
+  elements,
+  selectedElementIds,
   embeddedFiles,
   onNavigateToPage,
-  onLayerVisibilityChange,
-  onLayerLockChange,
+  onElementVisibilityChange,
+  onElementLockChange,
   onDownloadFile,
   currentPageIndex,
   className,
@@ -40,8 +46,13 @@ export function DocumentInfoSidebar({
   const t = useTranslations("editor");
   const [collapsed, setCollapsed] = useState(false);
 
-  // Check if there's any content to show
-  const hasContent = outlines.length > 0 || layers.length > 0 || embeddedFiles.length > 0;
+  // Check if there's any content to show — elements included so the layers
+  // panel (visibility/lock toggles) is reachable even without TOC/OCG/files.
+  const hasContent =
+    outlines.length > 0 ||
+    layers.length > 0 ||
+    embeddedFiles.length > 0 ||
+    elements.length > 0;
 
   if (!hasContent) {
     return null;
@@ -87,11 +98,13 @@ export function DocumentInfoSidebar({
             currentPageIndex={currentPageIndex}
           />
 
-          {/* Calques */}
+          {/* Calques (éléments de la page + groupes OCG en lecture seule) */}
           <LayersPanel
+            elements={elements}
             layers={layers}
-            onLayerVisibilityChange={onLayerVisibilityChange}
-            onLayerLockChange={onLayerLockChange}
+            selectedElementIds={selectedElementIds}
+            onElementVisibilityChange={onElementVisibilityChange}
+            onElementLockChange={onElementLockChange}
           />
 
           {/* Fichiers embarqués */}
