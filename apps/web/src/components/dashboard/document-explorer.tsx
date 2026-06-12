@@ -10,12 +10,33 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
   Input,
   Label,
   ToggleGroup,
   ToggleGroupItem,
+  useToast,
 } from "@giga-pdf/ui";
-import { Grid3X3, List, FolderPlus, Loader2, GripVertical, CheckSquare, Square, XCircle, FolderInput, Trash2 } from "lucide-react";
+import {
+  Grid3X3,
+  List,
+  FolderPlus,
+  Loader2,
+  GripVertical,
+  CheckSquare,
+  ChevronDown,
+  MoreVertical,
+  Pencil,
+  Square,
+  Tag,
+  XCircle,
+  FolderInput,
+  Trash2,
+} from "lucide-react";
 import { DocumentGrid } from "./document-grid";
 import { DocumentTable, SortField, SortDirection } from "./document-table";
 import { FolderBreadcrumb, BreadcrumbFolder } from "./folder-breadcrumb";
@@ -31,6 +52,8 @@ interface Document {
   createdAt: Date;
   updatedAt: Date;
   folderId?: string | null;
+  tags?: string[];
+  thumbnailUrl?: string | null;
 }
 
 interface Folder {
@@ -55,6 +78,17 @@ interface DocumentExplorerProps {
   viewMode: ViewMode;
   sortField: SortField;
   sortDirection: SortDirection;
+  /**
+   * When true (active search or tag filter), documents are shown across
+   * all folders (no client-side folder filter) and folders are hidden —
+   * results behave like a flat search listing.
+   */
+  flattenResults?: boolean;
+  /** Distinct user tags powering the toolbar filter dropdown. */
+  availableTags?: string[];
+  /** Currently active tag filter (URL-driven), null when inactive. */
+  currentTag?: string | null;
+  onTagChange?: (tag: string | null) => void;
   onViewModeChange: (mode: ViewMode) => void;
   onSortChange: (field: SortField, direction: SortDirection) => void;
   onFolderNavigate: (folderId: string | null) => void;
@@ -86,6 +120,10 @@ export function DocumentExplorer({
   viewMode,
   sortField,
   sortDirection,
+  flattenResults = false,
+  availableTags = [],
+  currentTag = null,
+  onTagChange,
   onViewModeChange,
   onSortChange,
   onFolderNavigate,
@@ -93,6 +131,8 @@ export function DocumentExplorer({
   onCreateFolder,
 }: DocumentExplorerProps) {
   const t = useTranslations("documents.explorer");
+  const tTags = useTranslations("documents.tags");
+  const { toast } = useToast();
   const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -100,6 +140,12 @@ export function DocumentExplorer({
   const [draggedItem, setDraggedItem] = useState<DragItem | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
+
+  // Folder rename dialog (shared by the grid folder menu and the table)
+  const [folderToRename, setFolderToRename] = useState<{ id: string; name: string } | null>(null);
+  const [renameFolderName, setRenameFolderName] = useState("");
+  const [renameFolderError, setRenameFolderError] = useState<string | null>(null);
+  const [renamingFolder, setRenamingFolder] = useState(false);
 
   // Multi-selection state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -210,6 +256,41 @@ export function DocumentExplorer({
     }
   };
 
+  // Folder rename — shared dialog, opened from the grid card menu or the
+  // table row menu. 409 = sibling name conflict (translated inline error).
+  const openFolderRenameDialog = useCallback((folder: { id: string; name: string }) => {
+    setFolderToRename(folder);
+    setRenameFolderName(folder.name);
+    setRenameFolderError(null);
+  }, []);
+
+  const handleRenameFolder = async () => {
+    if (!folderToRename) return;
+    const trimmed = renameFolderName.trim();
+    if (!trimmed || trimmed === folderToRename.name) {
+      setFolderToRename(null);
+      return;
+    }
+
+    try {
+      setRenamingFolder(true);
+      setRenameFolderError(null);
+      await api.renameFolder(folderToRename.id, trimmed);
+      setFolderToRename(null);
+      onRefresh();
+    } catch (err) {
+      clientLogger.error("document-explorer.rename-folder-failed", err);
+      const status = (err as Error & { status?: number }).status;
+      setRenameFolderError(
+        status === 409
+          ? t("folderRenameDialog.conflict")
+          : t("folderRenameDialog.error")
+      );
+    } finally {
+      setRenamingFolder(false);
+    }
+  };
+
   // Selection handlers
   const toggleItemSelection = useCallback((item: SelectionItem) => {
     setSelectedItems(prev => {
@@ -272,7 +353,8 @@ export function DocumentExplorer({
     }
   }, [selectedItems, clearSelection, onRefresh]);
 
-  // Delete selected items
+  // Delete selected items. Documents are SOFT deleted (trash, restorable
+  // for 30 days); folders are hard deleted (no trash for folders).
   const deleteSelectedItems = useCallback(async () => {
     if (selectedItems.length === 0) return;
 
@@ -287,8 +369,10 @@ export function DocumentExplorer({
         }
       }
 
+      const count = selectedItems.length;
       clearSelection();
       onRefresh();
+      toast({ title: t("deletedToTrash", { count }) });
     } catch (error) {
       clientLogger.error("document-explorer.delete-items-failed", error);
       alert(t("errors.deleteItemsFailed"));
@@ -296,7 +380,7 @@ export function DocumentExplorer({
       setDeleting(false);
       setDeleteDialogOpen(false);
     }
-  }, [selectedItems, clearSelection, onRefresh]);
+  }, [selectedItems, clearSelection, onRefresh, t, toast]);
 
   // Drag and Drop handlers
   const handleDragStart = useCallback((item: DragItem) => {
@@ -393,13 +477,22 @@ export function DocumentExplorer({
     }
   }, [draggedItem, moving, documents, folders, onRefresh]);
 
-  // Filter documents and folders for current folder
-  const currentDocuments = documents.filter(
-    (doc) => (doc.folderId || null) === currentFolderId
-  );
-  const currentFolders = folders.filter(
-    (folder) => folder.parentId === currentFolderId
-  );
+  // Filter documents and folders for current folder. In flatten mode
+  // (active search or tag filter) every matching document is shown
+  // regardless of its folder, and folders are hidden.
+  const currentDocuments = flattenResults
+    ? documents
+    : documents.filter((doc) => (doc.folderId || null) === currentFolderId);
+  const currentFolders = flattenResults
+    ? []
+    : folders.filter((folder) => folder.parentId === currentFolderId);
+
+  const visibleDocuments = flattenResults
+    ? sortedDocuments
+    : sortedDocuments.filter((d) => (d.folderId || null) === currentFolderId);
+  const visibleFolders = flattenResults
+    ? []
+    : sortedFolders.filter((f) => f.parentId === currentFolderId);
 
   // Get available folders for move dialog (exclude current folder and selected folders)
   const availableFoldersForMove = folders.filter(f => {
@@ -494,6 +587,40 @@ export function DocumentExplorer({
 
         {/* Actions */}
         <div className="flex items-center gap-2">
+          {/* Tag filter — visible as soon as the user has tags (or one is active) */}
+          {(availableTags.length > 0 || currentTag) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant={currentTag ? "default" : "outline"}
+                  size="sm"
+                  aria-label={tTags("filterLabel")}
+                >
+                  <Tag className="h-4 w-4 mr-2" />
+                  <span className="max-w-[120px] truncate">
+                    {currentTag ?? tTags("filterAll")}
+                  </span>
+                  <ChevronDown className="h-4 w-4 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="max-h-72 w-48 overflow-y-auto">
+                <DropdownMenuItem onClick={() => onTagChange?.(null)}>
+                  {tTags("filterAll")}
+                </DropdownMenuItem>
+                {availableTags.length > 0 && <DropdownMenuSeparator />}
+                {availableTags.map((tag) => (
+                  <DropdownMenuItem
+                    key={tag}
+                    onClick={() => onTagChange?.(tag)}
+                    className={tag === currentTag ? "bg-accent" : undefined}
+                  >
+                    <span className="truncate">{tag}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
           <Button
             variant={selectionMode ? "default" : "outline"}
             size="sm"
@@ -546,15 +673,13 @@ export function DocumentExplorer({
       {viewMode === "grid" ? (
         <div className="space-y-6">
           {/* Folders Grid */}
-          {currentFolders.length > 0 && (
+          {visibleFolders.length > 0 && (
             <div>
               <h3 className="text-sm font-medium text-muted-foreground mb-3">
-                Dossiers ({currentFolders.length})
+                Dossiers ({visibleFolders.length})
               </h3>
               <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-                {sortedFolders
-                  .filter((f) => f.parentId === currentFolderId)
-                  .map((folder) => (
+                {visibleFolders.map((folder) => (
                     <FolderCard
                       key={folder.id}
                       folder={folder}
@@ -564,6 +689,7 @@ export function DocumentExplorer({
                           onFolderNavigate(folder.id);
                         }
                       }}
+                      onRename={() => openFolderRenameDialog(folder)}
                       onDragStart={handleDragStart}
                       onDragEnd={handleDragEnd}
                       onDragEnter={(e) => handleDragEnterFolder(e, folder.id)}
@@ -584,16 +710,15 @@ export function DocumentExplorer({
           )}
 
           {/* Documents Grid */}
-          {currentDocuments.length > 0 && (
+          {visibleDocuments.length > 0 && (
             <div>
               <h3 className="text-sm font-medium text-muted-foreground mb-3">
-                Documents ({currentDocuments.length})
+                Documents ({visibleDocuments.length})
               </h3>
               <DocumentGrid
-                documents={sortedDocuments.filter(
-                  (d) => (d.folderId || null) === currentFolderId
-                )}
+                documents={visibleDocuments}
                 onDelete={onRefresh}
+                onChanged={onRefresh}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 draggedItem={draggedItem}
@@ -606,15 +731,15 @@ export function DocumentExplorer({
         </div>
       ) : (
         <DocumentTable
-          documents={sortedDocuments.filter(
-            (d) => (d.folderId || null) === currentFolderId
-          )}
-          folders={sortedFolders.filter((f) => f.parentId === currentFolderId)}
+          documents={visibleDocuments}
+          folders={visibleFolders}
           folderStats={folderStats}
           sortField={sortField}
           sortDirection={sortDirection}
           onSort={handleSort}
           onDelete={onRefresh}
+          onChanged={onRefresh}
+          onFolderRename={openFolderRenameDialog}
           onFolderClick={onFolderNavigate}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
@@ -724,6 +849,68 @@ export function DocumentExplorer({
         </DialogContent>
       </Dialog>
 
+      {/* Rename Folder Dialog */}
+      <Dialog
+        open={folderToRename !== null}
+        onOpenChange={(open) => {
+          if (!open) setFolderToRename(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("folderRenameDialog.title")}</DialogTitle>
+            <DialogDescription>
+              {t("folderRenameDialog.description")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="rename-folder-name">{t("folderRenameDialog.label")}</Label>
+            <Input
+              id="rename-folder-name"
+              value={renameFolderName}
+              onChange={(e) => {
+                setRenameFolderName(e.target.value);
+                setRenameFolderError(null);
+              }}
+              placeholder={t("folderRenameDialog.placeholder")}
+              className="mt-2"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleRenameFolder();
+                }
+              }}
+            />
+            {renameFolderError && (
+              <p className="mt-2 text-sm font-medium text-destructive">
+                {renameFolderError}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setFolderToRename(null)}
+              disabled={renamingFolder}
+            >
+              {t("folderRenameDialog.cancel")}
+            </Button>
+            <Button
+              onClick={handleRenameFolder}
+              disabled={renamingFolder || !renameFolderName.trim()}
+            >
+              {renamingFolder ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t("folderRenameDialog.renaming")}
+                </>
+              ) : (
+                t("folderRenameDialog.confirm")
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Move Dialog */}
       <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
         <DialogContent className="max-w-md">
@@ -823,6 +1010,7 @@ function FolderCard({
   folder,
   stats,
   onNavigate,
+  onRename,
   onDragStart,
   onDragEnd,
   onDragEnter,
@@ -840,6 +1028,7 @@ function FolderCard({
   folder: Folder;
   stats?: FolderStats;
   onNavigate: () => void;
+  onRename: () => void;
   onDragStart: (item: DragItem) => void;
   onDragEnd: () => void;
   onDragEnter: (e: React.DragEvent) => void;
@@ -854,6 +1043,8 @@ function FolderCard({
   isSelected: boolean;
   onSelect: () => void;
 }) {
+  const t = useTranslations("documents.explorer");
+  const tCard = useTranslations("documents.card");
   const handleDragStart = (e: React.DragEvent) => {
     if (selectionMode) {
       e.preventDefault();
@@ -901,7 +1092,7 @@ function FolderCard({
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       className={`
-        relative flex flex-col items-center gap-2 p-4 rounded-lg border bg-card
+        group/folder relative flex flex-col items-center gap-2 p-4 rounded-lg border bg-card
         transition-all duration-200 cursor-pointer select-none
         hover:bg-accent hover:shadow-md
         ${isDraggedOver ? "ring-2 ring-primary bg-primary/10 scale-105 shadow-lg" : ""}
@@ -927,6 +1118,40 @@ function FolderCard({
           ) : (
             <Square className="h-5 w-5 text-muted-foreground" />
           )}
+        </div>
+      )}
+
+      {/* Folder menu — above the drop-zone overlay (z-10) so it stays clickable */}
+      {!selectionMode && (
+        <div className="absolute top-1 right-1 z-20">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 opacity-0 transition-opacity group-hover/folder:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onDoubleClick={(e) => e.stopPropagation()}
+                aria-label={t("folderMenu")}
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRename();
+                }}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                {tCard("menu.rename")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
 

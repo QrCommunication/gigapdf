@@ -3,8 +3,13 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useFormatter, useTranslations } from "next-intl";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { storageKeys } from "@giga-pdf/api";
 import {
   Badge,
@@ -25,9 +30,13 @@ import {
   Label,
   Separator,
   Skeleton,
+  ToastAction,
+  useToast,
 } from "@giga-pdf/ui";
 import {
+  Activity,
   ArrowLeft,
+  Copy,
   Download,
   ExternalLink,
   FileText,
@@ -37,11 +46,13 @@ import {
   Pencil,
   RotateCcw,
   Share2,
+  Tags,
   Trash2,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, type StoredDocument } from "@/lib/api";
 import { formatBytes, formatDate } from "@/lib/utils";
 import { ShareDialog } from "@/components/sharing";
+import { ManageTagsDialog } from "@/components/dashboard/manage-tags-dialog";
 import { clientLogger } from "@/lib/client-logger";
 
 interface DocumentPageProps {
@@ -78,20 +89,90 @@ function sessionKey(storedDocumentId: string) {
   return [...storageKeys.documents(), storedDocumentId, "session"] as const;
 }
 
+/**
+ * Query key for the activity history of a stored document:
+ * ["storage", "documents", id, "activity"].
+ */
+function activityKey(storedDocumentId: string) {
+  return [...storageKeys.documents(), storedDocumentId, "activity"] as const;
+}
+
+/**
+ * Query key for the stored metadata (tags + thumbnail) of a document:
+ * ["storage", "documents", id, "meta"].
+ */
+function metaKey(storedDocumentId: string) {
+  return [...storageKeys.documents(), storedDocumentId, "meta"] as const;
+}
+
+/**
+ * Resolve the StoredDocument row (tags + thumbnail_url) for a given id.
+ * The storage API has no unitary GET endpoint, so the listing is narrowed
+ * by an exact-name search and matched by id client-side. Returns null when
+ * the document cannot be located (the tags section degrades gracefully).
+ */
+async function fetchStoredDocumentMeta(
+  storedDocumentId: string,
+  name: string,
+): Promise<StoredDocument | null> {
+  const response = await api.listDocuments({ search: name, per_page: 100 });
+  return (
+    response.items.find(
+      (item) => item.stored_document_id === storedDocumentId,
+    ) ?? null
+  );
+}
+
+const ACTIVITY_PAGE_SIZE = 10;
+
+/**
+ * Action types emitted by the backend ActivityAction enum
+ * (app/services/activity_service.py). Unknown actions fall back to the
+ * raw string so new backend actions never break the UI.
+ */
+const KNOWN_ACTIVITY_ACTIONS = [
+  "create",
+  "view",
+  "download",
+  "edit",
+  "rename",
+  "delete",
+  "restore",
+  "share",
+  "unshare",
+  "export",
+  "upload",
+  "move",
+  "copy",
+  "lock",
+  "unlock",
+] as const;
+
+type KnownActivityAction = (typeof KNOWN_ACTIVITY_ACTIONS)[number];
+
+function isKnownActivityAction(action: string): action is KnownActivityAction {
+  return (KNOWN_ACTIVITY_ACTIONS as readonly string[]).includes(action);
+}
+
 export default function DocumentPage({ params }: DocumentPageProps) {
   const { id } = use(params);
   const router = useRouter();
   const queryClient = useQueryClient();
   const t = useTranslations("documents.detail");
   const tCard = useTranslations("documents.card");
+  const tToasts = useTranslations("documents.toasts");
+  const { toast } = useToast();
 
   // Dialog states
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [tagsDialogOpen, setTagsDialogOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [downloading, setDownloading] = useState(false);
+  // Presigned thumbnail URLs expire after 7 days: fall back to the icon.
+  const [thumbnailBroken, setThumbnailBroken] = useState(false);
 
   // Load the stored document into a session (same pattern as document-card
   // preview): the session document_id powers the iframe preview + download.
@@ -115,6 +196,15 @@ export default function DocumentPage({ params }: DocumentPageProps) {
     staleTime: 30 * 1000,
   });
 
+  // Stored metadata: tags + thumbnail_url (resolved from the listing,
+  // narrowed by the session name — no unitary GET endpoint exists).
+  const metaQuery = useQuery({
+    queryKey: metaKey(id),
+    queryFn: () => fetchStoredDocumentMeta(id, sessionQuery.data?.name ?? ""),
+    enabled: sessionQuery.isSuccess,
+    staleTime: 30 * 1000,
+  });
+
   const renameMutation = useMutation({
     mutationFn: (name: string) => api.renameDocument(id, name),
     onSuccess: () => {
@@ -128,17 +218,58 @@ export default function DocumentPage({ params }: DocumentPageProps) {
     },
   });
 
+  // Soft delete: the document goes to the trash. The toast (global Toaster,
+  // survives the navigation back to /documents) offers an inline Undo that
+  // restores it on the spot.
   const deleteMutation = useMutation({
     mutationFn: () => api.deleteDocument(id),
     onSuccess: () => {
       setDeleteDialogOpen(false);
       queryClient.removeQueries({ queryKey: [...storageKeys.documents(), id] });
       queryClient.invalidateQueries({ queryKey: storageKeys.documents() });
+      toast({
+        title: tToasts("movedToTrash"),
+        description: sessionQuery.data?.name,
+        action: (
+          <ToastAction
+            altText={tToasts("movedToTrashUndo")}
+            onClick={async () => {
+              try {
+                await api.restoreDocument(id);
+                toast({ title: tToasts("restored") });
+                queryClient.invalidateQueries({
+                  queryKey: storageKeys.documents(),
+                });
+              } catch (restoreErr) {
+                clientLogger.error("document-detail.restore-trash-failed", restoreErr);
+                toast({
+                  variant: "destructive",
+                  title: tToasts("restoreFailed"),
+                });
+              }
+            }}
+          >
+            {tToasts("movedToTrashUndo")}
+          </ToastAction>
+        ),
+      });
       router.push("/documents");
     },
     onError: (error) => {
       clientLogger.error("document-detail.delete-failed", error);
       alert(tCard("errors.deleteFailed"));
+    },
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: () => api.duplicateDocument(id),
+    onSuccess: (copy) => {
+      toast({ title: tToasts("duplicated", { name: copy.name }) });
+      queryClient.invalidateQueries({ queryKey: storageKeys.documents() });
+    },
+    onError: (error) => {
+      clientLogger.error("document-detail.duplicate-failed", error);
+      toast({ variant: "destructive", title: tToasts("duplicateFailed") });
     },
   });
 
@@ -233,6 +364,11 @@ export default function DocumentPage({ params }: DocumentPageProps) {
   const documentName = session.name;
   const previewUrl = api.getDocumentDownloadUrl(session.document_id);
 
+  const meta = metaQuery.data ?? null;
+  const documentTags = meta?.tags ?? [];
+  const thumbnailUrl =
+    meta?.thumbnail_url && !thumbnailBroken ? meta.thumbnail_url : null;
+
   const versionsData = versionsQuery.data;
   const versions: DocumentVersion[] = versionsData?.versions ?? [];
   const sortedVersions = [...versions].sort((a, b) => b.version - a.version);
@@ -260,9 +396,21 @@ export default function DocumentPage({ params }: DocumentPageProps) {
       {/* Header */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-500/10">
-            <FileText className="h-6 w-6 text-red-500" />
-          </div>
+          {thumbnailUrl ? (
+            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border bg-muted/30">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={thumbnailUrl}
+                alt={documentName}
+                className="h-full w-full object-cover object-top"
+                onError={() => setThumbnailBroken(true)}
+              />
+            </div>
+          ) : (
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-500/10">
+              <FileText className="h-6 w-6 text-red-500" />
+            </div>
+          )}
           <div className="min-w-0 space-y-1">
             <h1 className="truncate text-2xl font-bold sm:text-3xl" title={documentName}>
               {documentName}
@@ -313,6 +461,19 @@ export default function DocumentPage({ params }: DocumentPageProps) {
           <Button variant="outline" className="gap-2" onClick={openRenameDialog}>
             <Pencil className="h-4 w-4" />
             {t("actions.rename")}
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => duplicateMutation.mutate()}
+            disabled={duplicateMutation.isPending}
+          >
+            {duplicateMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+            {t("actions.duplicate")}
           </Button>
           <Button
             variant="outline"
@@ -377,6 +538,45 @@ export default function DocumentPage({ params }: DocumentPageProps) {
                 label={t("info.lastModified")}
                 value={latestVersion ? formatDate(latestVersion.created_at) : "--"}
               />
+            </CardContent>
+          </Card>
+
+          {/* Tags (clickable → manage dialog) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Tags className="h-4 w-4" />
+                {t("tags.title")}
+              </CardTitle>
+              <CardDescription>{t("tags.description")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {metaQuery.isPending ? (
+                <Skeleton className="h-9 w-full" />
+              ) : metaQuery.isError ? (
+                <p className="text-sm text-muted-foreground">
+                  {t("tags.loadFailed")}
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setTagsDialogOpen(true)}
+                  className="flex w-full flex-wrap items-center gap-1.5 rounded-md border border-dashed p-3 text-left transition-colors hover:border-primary/50 hover:bg-accent/50"
+                  aria-label={t("tags.edit")}
+                >
+                  {documentTags.length === 0 ? (
+                    <span className="text-sm text-muted-foreground">
+                      {t("tags.empty")}
+                    </span>
+                  ) : (
+                    documentTags.map((tag) => (
+                      <Badge key={tag} variant="secondary">
+                        {tag}
+                      </Badge>
+                    ))
+                  )}
+                </button>
+              )}
             </CardContent>
           </Card>
 
@@ -462,6 +662,9 @@ export default function DocumentPage({ params }: DocumentPageProps) {
               </CardFooter>
             )}
           </Card>
+
+          {/* Activity history */}
+          <DocumentActivityCard documentId={id} />
         </div>
       </div>
 
@@ -589,7 +792,121 @@ export default function DocumentPage({ params }: DocumentPageProps) {
         documentId={id}
         documentName={documentName}
       />
+
+      {/* Manage Tags Dialog (invalidations handled inside: documents() prefix
+          covers the meta query of this page) */}
+      <ManageTagsDialog
+        open={tagsDialogOpen}
+        onOpenChange={setTagsDialogOpen}
+        documentId={id}
+        documentName={documentName}
+        initialTags={documentTags}
+      />
     </div>
+  );
+}
+
+/**
+ * "Activity" card: paginated audit trail of the document, fed by
+ * GET /api/v1/activity/documents/{id}/history (10 entries per page,
+ * "show more" appends the next page). Errors stay silent: the card shows
+ * a discreet message and never breaks the page.
+ */
+function DocumentActivityCard({ documentId }: { documentId: string }) {
+  const t = useTranslations("documents.detail.activity");
+  const format = useFormatter();
+
+  const activityQuery = useInfiniteQuery({
+    queryKey: activityKey(documentId),
+    queryFn: ({ pageParam }) =>
+      api.getDocumentActivity(documentId, pageParam, ACTIVITY_PAGE_SIZE),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) =>
+      lastPage.pagination.page < lastPage.pagination.total_pages
+        ? lastPage.pagination.page + 1
+        : undefined,
+    staleTime: 30 * 1000,
+    // Silent failure: a single attempt, the card degrades to a discreet
+    // message instead of retry-hammering the backend.
+    retry: false,
+  });
+
+  const activities =
+    activityQuery.data?.pages.flatMap((page) => page.activities) ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Activity className="h-4 w-4" />
+          {t("title")}
+        </CardTitle>
+        <CardDescription>{t("description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {activityQuery.isPending ? (
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : activityQuery.isError ? (
+          <p className="text-sm text-muted-foreground">{t("loadFailed")}</p>
+        ) : activities.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("empty")}</p>
+        ) : (
+          <>
+            <ul className="space-y-3">
+              {activities.map((activity) => (
+                <li
+                  key={activity.id}
+                  className="flex items-baseline justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">
+                      {isKnownActivityAction(activity.action)
+                        ? t(`actions.${activity.action}`)
+                        : activity.action}
+                    </p>
+                    <p
+                      className="truncate text-xs text-muted-foreground"
+                      title={activity.user_email ?? undefined}
+                    >
+                      {activity.user_name ||
+                        activity.user_email ||
+                        t("unknownUser")}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {activity.created_at
+                      ? format.relativeTime(new Date(activity.created_at))
+                      : "--"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {activityQuery.hasNextPage && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-3 w-full"
+                onClick={() => activityQuery.fetchNextPage()}
+                disabled={activityQuery.isFetchingNextPage}
+              >
+                {activityQuery.isFetchingNextPage ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {t("loadingMore")}
+                  </>
+                ) : (
+                  t("loadMore")
+                )}
+              </Button>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -633,6 +950,7 @@ function DocumentDetailSkeleton({ backLabel }: { backLabel: string }) {
         <div className="space-y-6">
           <Skeleton className="h-72 w-full" />
           <Skeleton className="h-56 w-full" />
+          <Skeleton className="h-48 w-full" />
         </div>
       </div>
     </div>

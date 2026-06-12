@@ -27,6 +27,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  ToastAction,
+  useToast,
 } from "@giga-pdf/ui";
 import { formatDate, formatBytes } from "@/lib/utils";
 import {
@@ -38,6 +40,7 @@ import {
   Eye,
   FileSpreadsheet,
   FileType,
+  Copy,
   Image,
   Share2,
   Pencil,
@@ -47,12 +50,15 @@ import {
   Folder,
   CheckSquare,
   Square,
+  Tags,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { DragItem, FolderStats, SelectionItem } from "./document-explorer";
 import { cn } from "@/lib/utils";
 import { ShareDialog } from "@/components/sharing";
 import { clientLogger } from "@/lib/client-logger";
+import { triggerBlobDownload } from "./blob-download";
+import { ManageTagsDialog } from "./manage-tags-dialog";
 
 export type SortField = "name" | "size" | "createdAt" | "updatedAt";
 export type SortDirection = "asc" | "desc";
@@ -64,6 +70,7 @@ interface Document {
   createdAt: Date;
   updatedAt: Date;
   folderId?: string | null;
+  tags?: string[];
 }
 
 interface FolderItem {
@@ -83,6 +90,10 @@ interface DocumentTableProps {
   onSort: (field: SortField) => void;
   onDelete?: () => void;
   onRename?: (id: string, newName: string) => void;
+  /** Refresh callback after duplicate / tags update. */
+  onChanged?: () => void;
+  /** Opens the folder rename dialog (owned by the explorer). */
+  onFolderRename?: (folder: FolderItem) => void;
   onFolderClick?: (folderId: string) => void;
   onDragStart?: (item: DragItem) => void;
   onDragEnd?: () => void;
@@ -106,6 +117,8 @@ export function DocumentTable({
   onSort,
   onDelete,
   onRename,
+  onChanged,
+  onFolderRename,
   onFolderClick,
   onDragStart,
   onDragEnd,
@@ -122,6 +135,8 @@ export function DocumentTable({
   const router = useRouter();
   const t = useTranslations("documents");
   const tCard = useTranslations("documents.card");
+  const tToasts = useTranslations("documents.toasts");
+  const { toast } = useToast();
 
   // Dialog states
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
@@ -130,6 +145,7 @@ export function DocumentTable({
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [tagsDialogOpen, setTagsDialogOpen] = useState(false);
 
   // Folder dialog states
   const [folderToDelete, setFolderToDelete] = useState<FolderItem | null>(null);
@@ -142,6 +158,7 @@ export function DocumentTable({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deletingFolder, setDeletingFolder] = useState(false);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   // Data states
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -167,20 +184,67 @@ export function DocumentTable({
     }
   };
 
+  // Soft delete: the document goes to the trash (restorable for 30 days).
+  // The toast carries an inline "Undo" action that restores it on the spot.
   const handleDelete = async () => {
     if (!selectedDoc) return;
+    const docId = selectedDoc.id;
+    const docName = selectedDoc.name;
     try {
       setDeleting(true);
-      await api.deleteDocument(selectedDoc.id);
+      await api.deleteDocument(docId);
       setDeleteDialogOpen(false);
       setSelectedDoc(null);
       onDelete?.();
+      toast({
+        title: tToasts("movedToTrash"),
+        description: docName,
+        action: (
+          <ToastAction
+            altText={tToasts("movedToTrashUndo")}
+            onClick={async () => {
+              try {
+                await api.restoreDocument(docId);
+                toast({ title: tToasts("restored") });
+                onDelete?.();
+              } catch (restoreErr) {
+                clientLogger.error("document-table.restore-failed", restoreErr);
+                toast({
+                  variant: "destructive",
+                  title: tToasts("restoreFailed"),
+                });
+              }
+            }}
+          >
+            {tToasts("movedToTrashUndo")}
+          </ToastAction>
+        ),
+      });
     } catch (err) {
       clientLogger.error("document-table.delete-failed", err);
       alert(tCard("errors.deleteFailed"));
     } finally {
       setDeleting(false);
     }
+  };
+
+  const handleDuplicate = async (doc: Document) => {
+    try {
+      setDuplicatingId(doc.id);
+      const copy = await api.duplicateDocument(doc.id);
+      toast({ title: tToasts("duplicated", { name: copy.name }) });
+      onChanged?.();
+    } catch (err) {
+      clientLogger.error("document-table.duplicate-failed", err);
+      toast({ variant: "destructive", title: tToasts("duplicateFailed") });
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
+
+  const openTagsDialog = (doc: Document) => {
+    setSelectedDoc(doc);
+    setTagsDialogOpen(true);
   };
 
   const handleRename = async () => {
@@ -259,9 +323,6 @@ export function DocumentTable({
       }
 
       const blob = await api.getExportResult(docId, job.job_id);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
       const extensionMap: Record<string, string> = {
         png: "zip",
         jpeg: "zip",
@@ -270,11 +331,7 @@ export function DocumentTable({
         docx: "docx",
         xlsx: "xlsx",
       };
-      a.download = `${doc.name}.${extensionMap[format] || format}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      triggerBlobDownload(blob, `${doc.name}.${extensionMap[format] || format}`);
 
       setExportDialogOpen(false);
     } catch (err) {
@@ -469,8 +526,16 @@ export function DocumentTable({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        {/* NOTE: no "Rename" item here — the storage API has no
-                            folder rename endpoint (only create/delete/move). */}
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onFolderRename?.(folder);
+                          }}
+                        >
+                          <Pencil className="mr-2 h-4 w-4" />
+                          {tCard("menu.rename")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onClick={(e) => {
                             e.stopPropagation();
@@ -566,7 +631,7 @@ export function DocumentTable({
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        disabled={loadingId === doc.id || exporting}
+                        disabled={loadingId === doc.id || exporting || duplicatingId === doc.id}
                       >
                         <MoreVertical className="h-4 w-4" />
                       </Button>
@@ -584,6 +649,17 @@ export function DocumentTable({
                       <DropdownMenuItem onClick={() => openRenameDialog(doc)}>
                         <Pencil className="mr-2 h-4 w-4" />
                         {tCard("menu.rename")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleDuplicate(doc)}
+                        disabled={duplicatingId === doc.id}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        {tCard("menu.duplicate")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openTagsDialog(doc)}>
+                        <Tags className="mr-2 h-4 w-4" />
+                        {tCard("menu.manageTags")}
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleShare(doc)}>
                         <Share2 className="mr-2 h-4 w-4" />
@@ -763,6 +839,18 @@ export function DocumentTable({
           onOpenChange={setShareDialogOpen}
           documentId={selectedDoc.id}
           documentName={selectedDoc.name}
+        />
+      )}
+
+      {/* Manage Tags Dialog */}
+      {selectedDoc && (
+        <ManageTagsDialog
+          open={tagsDialogOpen}
+          onOpenChange={setTagsDialogOpen}
+          documentId={selectedDoc.id}
+          documentName={selectedDoc.name}
+          initialTags={selectedDoc.tags ?? []}
+          onSaved={() => onChanged?.()}
         />
       )}
 

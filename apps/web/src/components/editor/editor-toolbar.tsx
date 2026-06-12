@@ -36,6 +36,7 @@ import {
   Merge,
   Scissors,
   Lock,
+  FileSignature,
   FileText,
   Layers,
   FileSearch,
@@ -45,16 +46,19 @@ import {
   Droplet,
   ScanText,
   FileCheck2,
+  Minimize2,
 } from "lucide-react";
 import { MergeDialog } from "./merge-dialog";
 import { SplitDialog } from "./split-dialog";
 import { EncryptDialog } from "./encrypt-dialog";
+import { SignDialog } from "./sign-dialog";
 import { MetadataDialog } from "./metadata-dialog";
 import { ConvertDialog } from "./convert-dialog";
 import { SearchDialog } from "./search-dialog";
 import { WatermarkDialog } from "./watermark-dialog";
 import { OcrDialog } from "./ocr-dialog";
 import { PdfADialog } from "./pdfa-dialog";
+import { CompressDialog } from "./compress-dialog";
 
 export interface EditorToolbarProps {
   /** Outil actuellement sélectionné */
@@ -145,6 +149,21 @@ export interface EditorToolbarProps {
    * « Appliquer au document » du WatermarkDialog). Reçoit le PDF filigrané.
    */
   onWatermarkApplied?: (blob: Blob) => void;
+  /**
+   * Callback quand la compression est appliquée au document courant (mode
+   * « Appliquer au document » du CompressDialog). Reçoit le PDF compressé.
+   */
+  onCompressApplied?: (blob: Blob) => void;
+  /**
+   * Callback quand l'OCR « PDF cherchable » est appliqué au document
+   * courant. Reçoit le PDF avec son calque de texte invisible.
+   */
+  onOcrApplied?: (blob: Blob) => void;
+  /**
+   * Callback quand la signature numérique est appliquée au document courant
+   * (mode « Appliquer au document » du SignDialog). Reçoit le PDF signé.
+   */
+  onSignApplied?: (blob: Blob) => void;
 }
 
 interface ToolButtonProps {
@@ -366,6 +385,9 @@ export function EditorToolbar({
   onToggleContentEdit,
   onSearchGoToPage,
   onWatermarkApplied,
+  onCompressApplied,
+  onOcrApplied,
+  onSignApplied,
 }: EditorToolbarProps) {
   const t = useTranslations("editor.toolbar");
   const tProperties = useTranslations("editor.properties.text");
@@ -376,27 +398,49 @@ export function EditorToolbar({
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const [showSplitDialog, setShowSplitDialog] = useState(false);
   const [showEncryptDialog, setShowEncryptDialog] = useState(false);
+  const [showSignDialog, setShowSignDialog] = useState(false);
   const [showMetadataDialog, setShowMetadataDialog] = useState(false);
   const [showConvertDialog, setShowConvertDialog] = useState(false);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [showWatermarkDialog, setShowWatermarkDialog] = useState(false);
   const [showOcrDialog, setShowOcrDialog] = useState(false);
   const [showPdfADialog, setShowPdfADialog] = useState(false);
+  const [showCompressDialog, setShowCompressDialog] = useState(false);
 
-  // Font states for text elements
-  const [selectedFontValue, setSelectedFontValue] = useState("arial");
-  const [selectedFontSize, setSelectedFontSize] = useState(14);
+  // Font controls — derived-with-override pattern (replaces the previous
+  // setState-in-useEffect sync that triggered react-hooks/set-state-in-effect):
+  // the displayed values DERIVE from the selected text element during render;
+  // a manual pick is stored as an override KEYED BY elementId, so switching
+  // the selection naturally falls back to the new element's derived values
+  // (the stale override no longer matches) without any effect.
+  const selectedTextElement =
+    selectedElement?.type === "text" ? selectedElement : null;
+  const [fontValueOverride, setFontValueOverride] = useState<{
+    elementId: string;
+    value: string;
+  } | null>(null);
+  const [fontSizeOverride, setFontSizeOverride] = useState<{
+    elementId: string;
+    size: number;
+  } | null>(null);
 
-  // Sync font states with selected text element
-  useEffect(() => {
-    if (selectedElement?.type === "text") {
-      const textElement = selectedElement;
-      const fontFamily = textElement.style?.fontFamily || "Arial, sans-serif";
-      const fontSize = textElement.style?.fontSize || 14;
-      setSelectedFontValue(getFontValueFromFamily(fontFamily));
-      setSelectedFontSize(fontSize);
-    }
-  }, [selectedElement]);
+  const derivedFontValue = selectedTextElement
+    ? getFontValueFromFamily(
+        selectedTextElement.style?.fontFamily || "Arial, sans-serif",
+      )
+    : "arial";
+  const derivedFontSize = selectedTextElement?.style?.fontSize || 14;
+
+  const selectedFontValue =
+    fontValueOverride &&
+    fontValueOverride.elementId === selectedTextElement?.elementId
+      ? fontValueOverride.value
+      : derivedFontValue;
+  const selectedFontSize =
+    fontSizeOverride &&
+    fontSizeOverride.elementId === selectedTextElement?.elementId
+      ? fontSizeOverride.size
+      : derivedFontSize;
 
   // Définition des formes
   const shapes: { type: ShapeType; icon: React.ReactNode; labelKey: string }[] =
@@ -690,7 +734,10 @@ export function EditorToolbar({
             <FontPicker
               value={selectedFontValue}
               onChange={(font) => {
-                setSelectedFontValue(font.value);
+                setFontValueOverride({
+                  elementId: selectedElement.elementId,
+                  value: font.value,
+                });
                 onElementStyleChange(selectedElement.elementId, {
                   fontFamily: font.family,
                 });
@@ -702,7 +749,10 @@ export function EditorToolbar({
               value={selectedFontSize}
               onChange={(e) => {
                 const size = parseInt(e.target.value, 10);
-                setSelectedFontSize(size);
+                setFontSizeOverride({
+                  elementId: selectedElement.elementId,
+                  size,
+                });
                 onElementStyleChange(selectedElement.elementId, {
                   fontSize: size,
                 });
@@ -832,6 +882,11 @@ export function EditorToolbar({
         onClick={() => setShowEncryptDialog(true)}
       />
       <ToolButton
+        icon={<FileSignature size={20} />}
+        label={t("sign")}
+        onClick={() => setShowSignDialog(true)}
+      />
+      <ToolButton
         icon={<FileText size={20} />}
         label={t("forms")}
         onClick={() => onToggleFormsPanel?.()}
@@ -850,6 +905,11 @@ export function EditorToolbar({
         icon={<Layers size={20} />}
         label={t("flatten")}
         onClick={() => onFlattenPdf?.()}
+      />
+      <ToolButton
+        icon={<Minimize2 size={20} />}
+        label={t("compress")}
+        onClick={() => setShowCompressDialog(true)}
       />
       <ToolButton
         icon={<Search size={20} />}
@@ -887,6 +947,13 @@ export function EditorToolbar({
         onClose={() => setShowEncryptDialog(false)}
         currentFile={currentFile}
       />
+      <SignDialog
+        open={showSignDialog}
+        onClose={() => setShowSignDialog(false)}
+        currentFile={currentFile ?? null}
+        baseFilename={currentFile?.name}
+        onApplied={onSignApplied}
+      />
       <MetadataDialog
         isOpen={showMetadataDialog}
         onClose={() => setShowMetadataDialog(false)}
@@ -916,12 +983,20 @@ export function EditorToolbar({
         onClose={() => setShowOcrDialog(false)}
         currentFile={currentFile ?? null}
         baseFilename={currentFile?.name}
+        onApplied={onOcrApplied}
       />
       <PdfADialog
         open={showPdfADialog}
         onClose={() => setShowPdfADialog(false)}
         currentFile={currentFile ?? null}
         baseFilename={currentFile?.name}
+      />
+      <CompressDialog
+        open={showCompressDialog}
+        onClose={() => setShowCompressDialog(false)}
+        currentFile={currentFile ?? null}
+        baseFilename={currentFile?.name}
+        onApplied={onCompressApplied}
       />
     </div>
   );

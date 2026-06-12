@@ -38,7 +38,8 @@
     "settings": "Paramètres",
     "developers": "Développeurs",
     "billing": "Facturation",
-    "sharedWithMe": "Partagés avec moi"
+    "sharedWithMe": "Partagés avec moi",
+    "trash": "Corbeille"
   },
   "meta": {
     "title": {
@@ -75,11 +76,11 @@
       },
       "collaboration": {
         "title": "Collaboration & Partage",
-        "description": "Travaillez avec votre équipe en temps réel. Partagez vos documents depuis l'éditeur et parcourez l'historique des versions avec restauration en un clic."
+        "description": "Travaillez avec votre équipe en temps réel : les modifications des autres participants apparaissent en direct sur le canvas. Partagez vos documents depuis l'éditeur et parcourez l'historique des versions avec restauration en un clic."
       },
       "security": {
         "title": "Sécurité Entreprise",
-        "description": "Vos documents sont chiffrés et sécurisés. Conforme SOC 2 avec des fonctionnalités de sécurité de niveau entreprise."
+        "description": "Vos documents sont chiffrés et sécurisés. Signez numériquement vos PDF (PKCS#7) avec votre propre certificat P12 — traité en mémoire, jamais stocké. Conforme SOC 2 avec des fonctionnalités de sécurité de niveau entreprise."
       },
       "api": {
         "title": "API REST",
@@ -87,7 +88,7 @@
       },
       "export": {
         "title": "Conversions & Export",
-        "description": "Exportez en PNG, JPEG, DOCX, HTML et plus encore. Conversions Office (DOCX, XLSX, PPTX), PDF/A, et OCR pour les documents scannés avec Tesseract."
+        "description": "Exportez en PNG, JPEG, DOCX, HTML et plus encore. Conversions Office et OpenDocument (Word, Excel, PowerPoint, ODT/ODS/ODP), PDF/A, compression, et OCR qui rend les documents scannés cherchables."
       },
       "selfHostable": {
         "title": "Auto-hébergeable",
@@ -387,7 +388,7 @@
     "title": "Documents",
     "subtitle": "Gérez et organisez vos documents PDF",
     "totalCount": "{count} document(s) au total",
-    "search": "Rechercher des documents...",
+    "search": "Rechercher (nom et contenu)...",
     "newDocument": "Nouveau document",
     "filters": {
       "all": "Tous",
@@ -420,14 +421,16 @@
         "exportImages": "Images (.png)",
         "exportHtml": "HTML",
         "exportText": "Texte (.txt)",
-        "delete": "Supprimer"
+        "duplicate": "Dupliquer",
+        "manageTags": "Gérer les tags",
+        "delete": "Mettre à la corbeille"
       },
       "deleteDialog": {
-        "title": "Supprimer le document",
-        "description": "Êtes-vous sûr de vouloir supprimer « {name} » ? Cette action est irréversible.",
+        "title": "Mettre à la corbeille",
+        "description": "« {name} » sera déplacé dans la corbeille. Vous pourrez le restaurer pendant 30 jours.",
         "cancel": "Annuler",
-        "confirm": "Supprimer",
-        "deleting": "Suppression..."
+        "confirm": "Mettre à la corbeille",
+        "deleting": "Déplacement..."
       },
       "renameDialog": {
         "title": "Renommer le document",
@@ -462,6 +465,34 @@
         "shareFailed": "Échec de la génération du lien de partage. Veuillez réessayer."
       }
     },
+    "toasts": {
+      "movedToTrash": "Document mis à la corbeille",
+      "movedToTrashUndo": "Annuler",
+      "restored": "Document restauré",
+      "restoreFailed": "Échec de la restauration du document",
+      "duplicated": "Document dupliqué : « {name} »",
+      "duplicateFailed": "Échec de la duplication du document",
+      "tagsUpdated": "Tags mis à jour",
+      "tagsUpdateFailed": "Échec de la mise à jour des tags"
+    },
+    "tags": {
+      "label": "Tags",
+      "inputPlaceholder": "Ajouter un tag...",
+      "addHint": "Entrée ou virgule pour ajouter, max {max} tags",
+      "maxReached": "Maximum {max} tags atteint",
+      "remove": "Retirer le tag {tag}",
+      "suggestions": "Tags existants",
+      "moreCount": "+{count}",
+      "filterLabel": "Filtrer par tag",
+      "filterAll": "Tous les tags",
+      "dialog": {
+        "title": "Gérer les tags",
+        "description": "Ajoutez ou retirez des tags pour « {name} ».",
+        "cancel": "Annuler",
+        "save": "Enregistrer",
+        "saving": "Enregistrement..."
+      }
+    },
     "detail": {
       "back": "Retour aux documents",
       "lastModified": "Dernière modification {date}",
@@ -470,7 +501,15 @@
         "download": "Télécharger",
         "share": "Partager",
         "rename": "Renommer",
-        "delete": "Supprimer"
+        "duplicate": "Dupliquer",
+        "delete": "Mettre à la corbeille"
+      },
+      "tags": {
+        "title": "Tags",
+        "description": "Cliquez pour modifier les tags de ce document",
+        "empty": "Aucun tag — cliquez pour en ajouter",
+        "edit": "Modifier les tags",
+        "loadFailed": "Tags indisponibles pour le moment"
       },
       "preview": {
         "title": "Aperçu"
@@ -495,6 +534,32 @@
         "loadFailed": "Échec du chargement de l'historique des versions.",
         "restoreOriginal": "Restaurer l'original"
       },
+      "activity": {
+        "title": "Activité",
+        "description": "Historique des actions sur ce document",
+        "empty": "Aucune activité pour le moment",
+        "loadFailed": "Activité indisponible pour le moment",
+        "loadMore": "Voir plus",
+        "loadingMore": "Chargement...",
+        "unknownUser": "Utilisateur inconnu",
+        "actions": {
+          "create": "Créé",
+          "view": "Consulté",
+          "download": "Téléchargé",
+          "edit": "Modifié",
+          "rename": "Renommé",
+          "delete": "Supprimé",
+          "restore": "Restauré",
+          "share": "Partagé",
+          "unshare": "Partage retiré",
+          "export": "Exporté",
+          "upload": "Importé",
+          "move": "Déplacé",
+          "copy": "Copié",
+          "lock": "Verrouillé",
+          "unlock": "Déverrouillé"
+        }
+      },
       "restoreDialog": {
         "title": "Restaurer le document original",
         "description": "Le contenu de « {name} » sera remplacé par la version originale (v1). Votre version actuelle ne sera plus la version active. Êtes-vous sûr ?",
@@ -513,20 +578,25 @@
     },
     "upload": {
       "title": "Importer un document",
-      "dragDrop": "Glissez-déposez votre PDF ici",
+      "dragDrop": "Glissez-déposez vos fichiers ici (PDF, Word, Excel, PowerPoint, OpenDocument)",
       "or": "ou",
       "browse": "Parcourir les fichiers",
       "maxSize": "Taille maximale : {size} Mo",
       "uploading": "Import en cours...",
+      "uploadingProgress": "Import en cours... ({done}/{total})",
       "success": "Document importé avec succès",
       "error": "Échec de l'import du document",
-      "dropTitle": "Déposez vos PDF ici",
-      "dropHint": "Importation dans le dossier courant"
+      "dropTitle": "Déposez vos fichiers ici",
+      "dropHint": "PDF, Word, Excel, PowerPoint, OpenDocument — import dans le dossier courant",
+      "invalidFormat": "Format non supporté. Formats acceptés : PDF, Word, Excel, PowerPoint, OpenDocument",
+      "summaryAllSuccess": "{count, plural, one {# document importé avec succès} other {# documents importés avec succès}}",
+      "summaryPartial": "{success, plural, one {# fichier importé} other {# fichiers importés}}, {failed, plural, one {# échec} other {# échecs}}",
+      "summaryAllFailed": "{count, plural, one {Échec de l'import du fichier} other {Échec de l'import des # fichiers}}"
     },
     "office": {
       "import": "Importer Office",
       "importing": "Conversion Office...",
-      "importErrorFormat": "Format non supporté. Utilisez .docx, .xlsx ou .pptx",
+      "importErrorFormat": "Format non supporté. Utilisez Word, Excel, PowerPoint ou OpenDocument (.docx, .doc, .xlsx, .xls, .pptx, .ppt, .odt, .ods, .odp)",
       "importErrorSize": "Fichier trop volumineux (max 25 Mo)",
       "importErrorConvert": "Échec de la conversion du document Office",
       "importErrorService": "Service de conversion indisponible. Réessayez plus tard.",
@@ -586,6 +656,18 @@
         "create": "Créer",
         "creating": "Création..."
       },
+      "folderRenameDialog": {
+        "title": "Renommer le dossier",
+        "description": "Entrez un nouveau nom pour ce dossier.",
+        "label": "Nom du dossier",
+        "placeholder": "Mon dossier",
+        "cancel": "Annuler",
+        "confirm": "Renommer",
+        "renaming": "Renommage...",
+        "conflict": "Un dossier portant ce nom existe déjà à cet emplacement.",
+        "error": "Échec du renommage du dossier. Veuillez réessayer."
+      },
+      "folderMenu": "Ouvrir le menu du dossier",
       "moving": "Déplacement...",
       "movingItems": "Déplacement en cours...",
       "dropHere": "Déposez ici pour déplacer",
@@ -609,10 +691,11 @@
       "deleting": "Suppression...",
       "deleteDialog": {
         "title": "Confirmer la suppression",
-        "description": "Voulez-vous vraiment supprimer {count} élément(s) ? Cette action est irréversible.",
+        "description": "Voulez-vous vraiment supprimer {count} élément(s) ? Les documents seront mis à la corbeille (restaurables pendant 30 jours), les dossiers seront supprimés définitivement.",
         "confirm": "Supprimer",
         "cancel": "Annuler"
       },
+      "deletedToTrash": "{count, plural, one {# élément mis à la corbeille} other {# éléments mis à la corbeille}}",
       "errors": {
         "moveItemsFailed": "Impossible de déplacer certains éléments. Veuillez réessayer.",
         "deleteItemsFailed": "Impossible de supprimer certains éléments. Veuillez réessayer.",
@@ -623,6 +706,41 @@
       "loadFailed": "Échec du chargement des documents. Veuillez réessayer.",
       "pdfOnly": "Veuillez sélectionner un fichier PDF",
       "uploadFailed": "Échec de l'import du document"
+    }
+  },
+  "trash": {
+    "title": "Corbeille",
+    "subtitle": "Les documents supprimés sont conservés 30 jours avant suppression définitive.",
+    "totalCount": "{count, plural, one {# document dans la corbeille} other {# documents dans la corbeille}}",
+    "deletedAt": "Supprimé le {date}",
+    "restore": "Restaurer",
+    "restoring": "Restauration...",
+    "deletePermanently": "Supprimer définitivement",
+    "empty": {
+      "title": "La corbeille est vide",
+      "description": "Les documents que vous mettez à la corbeille apparaissent ici pendant 30 jours."
+    },
+    "errors": {
+      "loadFailed": "Échec du chargement de la corbeille. Veuillez réessayer.",
+      "retry": "Réessayer"
+    },
+    "deleteDialog": {
+      "title": "Supprimer définitivement",
+      "description": "« {name} » sera supprimé définitivement, ainsi que toutes ses versions. Cette action est irréversible.",
+      "cancel": "Annuler",
+      "confirm": "Supprimer définitivement",
+      "confirmArmed": "Confirmer la suppression définitive",
+      "armedHint": "Cliquez une seconde fois pour confirmer.",
+      "deleting": "Suppression..."
+    },
+    "toasts": {
+      "restored": "Document restauré",
+      "restoreFailed": "Échec de la restauration du document",
+      "deleted": "Document supprimé définitivement",
+      "deleteFailed": "Échec de la suppression définitive"
+    },
+    "pagination": {
+      "page": "Page {current} sur {total}"
     }
   },
   "settings": {
@@ -778,6 +896,64 @@
       "appliedTitle": "Filigrane appliqué",
       "appliedDescription": "Le document a été mis à jour avec le filigrane."
     },
+    "sign": {
+      "title": "Signer le document",
+      "close": "Fermer",
+      "cancel": "Annuler",
+      "submit": "Signer",
+      "certificateLabel": "Certificat (.p12 / .pfx)",
+      "passphraseLabel": "Mot de passe du certificat",
+      "reasonLabel": "Raison (optionnel)",
+      "reasonPlaceholder": "ex. Approbation du contrat",
+      "locationLabel": "Lieu (optionnel)",
+      "locationPlaceholder": "ex. Paris",
+      "contactLabel": "Contact (optionnel)",
+      "contactPlaceholder": "ex. nom@exemple.com",
+      "privacyNote": "Votre certificat et son mot de passe ne sont ni stockés ni journalisés — utilisés uniquement pour cette signature.",
+      "lastOperationWarning": "La signature doit être la dernière opération : toute modification ultérieure du document l'invalidera.",
+      "modeLabel": "Résultat",
+      "applyToDocument": "Appliquer au document",
+      "applyToDocumentHint": "Le document en cours d'édition est remplacé par la version signée",
+      "downloadOnly": "Télécharger seulement",
+      "downloadOnlyHint": "Télécharge une copie signée sans modifier le document",
+      "errors": {
+        "invalidCertificate": "Certificat ou mot de passe invalide.",
+        "certificateTooLarge": "Le certificat dépasse la limite de 1 Mo.",
+        "generic": "Échec de la signature du document."
+      },
+      "appliedTitle": "Document signé",
+      "appliedDescription": "La signature numérique a été appliquée au document."
+    },
+    "compress": {
+      "title": "Compresser le PDF",
+      "currentSize": "Taille actuelle : {size}",
+      "compressButton": "Compresser",
+      "cancel": "Annuler",
+      "close": "Fermer",
+      "modeLabel": "Résultat",
+      "applyToDocument": "Appliquer au document",
+      "applyToDocumentHint": "Le document en cours d'édition est remplacé par la version compressée",
+      "downloadOnly": "Télécharger seulement",
+      "downloadOnlyHint": "Télécharge une copie compressée sans modifier le document",
+      "resultSmaller": "Document compressé : {before} → {after} (−{percent} %)",
+      "resultNotSmaller": "Aucun gain de compression ({before} → {after}) — le document est déjà optimisé",
+      "failed": "Échec de la compression.",
+      "appliedTitle": "Compression appliquée",
+      "appliedDescription": "Le document a été remplacé par la version compressée."
+    },
+    "ocr": {
+      "modeLabel": "Sortie",
+      "modeText": "Extraire le texte",
+      "modeTextHint": "Affiche le texte reconnu, exportable en .txt",
+      "modeSearchable": "Rendre le PDF cherchable (texte invisible)",
+      "modeSearchableHint": "Ajoute un calque de texte invisible sur les pages scannées : le PDF devient sélectionnable et cherchable",
+      "pagesIgnoredHint": "La sélection de pages est automatique en mode cherchable (pages sans texte)",
+      "searchableProcessing": "OCR et insertion du calque de texte en cours…",
+      "searchableButton": "Rendre cherchable",
+      "searchableFailed": "Échec de la génération du PDF cherchable.",
+      "appliedTitle": "OCR appliqué",
+      "appliedDescription": "Un calque de texte invisible a été ajouté : le document est désormais cherchable."
+    },
     "shortcuts": {
       "hint": "Appuyez sur ? pour voir les raccourcis clavier"
     },
@@ -826,10 +1002,12 @@
       "merge": "Fusionner",
       "split": "Diviser",
       "encrypt": "Chiffrer",
+      "sign": "Signer",
       "forms": "Formulaires",
       "metadata": "Métadonnées",
       "convert": "Convertir",
-      "flatten": "Aplatir"
+      "flatten": "Aplatir",
+      "compress": "Compresser"
     },
     "tools": {
       "select": "Sélectionner",
@@ -857,6 +1035,20 @@
       "title": "Propriétés",
       "noSelection": "Aucun élément sélectionné",
       "multipleSelection": "{count} éléments sélectionnés",
+      "batch": {
+        "opacity": "Opacité",
+        "mixed": "Valeurs multiples",
+        "color": "Couleur",
+        "fill": "Remplissage",
+        "stroke": "Contour",
+        "align": "Alignement",
+        "alignLeft": "Aligner à gauche",
+        "alignCenterH": "Centrer horizontalement",
+        "alignRight": "Aligner à droite",
+        "alignTop": "Aligner en haut",
+        "alignCenterV": "Centrer verticalement",
+        "alignBottom": "Aligner en bas"
+      },
       "position": "Position",
       "size": "Taille",
       "width": "Largeur",
@@ -907,7 +1099,14 @@
       "show": "Afficher le calque",
       "hide": "Masquer le calque",
       "lock": "Verrouiller le calque",
-      "unlock": "Déverrouiller le calque"
+      "unlock": "Déverrouiller le calque",
+      "noElements": "Aucun élément sur cette page",
+      "ocgGroups": "Groupes OCG du document",
+      "typeText": "Texte",
+      "typeImage": "Image",
+      "typeShape": "Forme",
+      "typeAnnotation": "Annotation",
+      "typeFormField": "Champ de formulaire"
     },
     "attachments": {
       "title": "Pièces jointes",

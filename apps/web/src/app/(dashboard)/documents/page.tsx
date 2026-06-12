@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { DocumentExplorer, ViewMode } from "@/components/dashboard/document-explorer";
 import { SortField, SortDirection } from "@/components/dashboard/document-table";
 import { BreadcrumbFolder } from "@/components/dashboard/folder-breadcrumb";
-import { Button, Input, Skeleton } from "@giga-pdf/ui";
+import { Button, Input, Skeleton, useToast } from "@giga-pdf/ui";
 import {
   Plus,
   Search,
@@ -18,7 +18,7 @@ import {
   Home,
   RefreshCw,
 } from "lucide-react";
-import { api, StoredDocument } from "@/lib/api";
+import { api, getAuthToken, StoredDocument } from "@/lib/api";
 import { clientLogger } from "@/lib/client-logger";
 
 interface Document {
@@ -28,6 +28,8 @@ interface Document {
   createdAt: Date;
   updatedAt: Date;
   folderId?: string | null;
+  tags: string[];
+  thumbnailUrl: string | null;
 }
 
 interface Folder {
@@ -38,15 +40,177 @@ interface Folder {
   updatedAt: Date;
 }
 
+// Office formats convertible to PDF via /api/office/upload: modern + legacy
+// Microsoft formats and OpenDocument. Kept in sync with the office route
+// contract (25MB max, returns the converted PDF binary).
+const OFFICE_EXTENSION_REGEX = /\.(docx|doc|xlsx|xls|pptx|ppt|odt|ods|odp)$/i;
+const OFFICE_ACCEPT = ".docx,.doc,.xlsx,.xls,.pptx,.ppt,.odt,.ods,.odp";
+const UPLOAD_ACCEPT = `.pdf,${OFFICE_ACCEPT}`;
+const MAX_OFFICE_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+
+// Pool size for parallel imports. Unbounded Promise.allSettled would open
+// one full pipeline (convert + upload + download + save) per file and
+// overwhelm the backend on large drops; sequential is too slow.
+const UPLOAD_CONCURRENCY = 3;
+
+interface ImportSuccess {
+  ok: true;
+  name: string;
+}
+
+interface ImportFailure {
+  ok: false;
+  name: string;
+  reason: string;
+}
+
+type ImportOutcome = ImportSuccess | ImportFailure;
+
+/**
+ * Run `worker` over `items` with at most `concurrency` workers in flight.
+ * Results preserve the input order. Workers are expected to handle their
+ * own errors (a rejection aborts the remaining items of that runner).
+ */
+async function runWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  const runner = async (): Promise<void> => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const item = items[index];
+      if (item === undefined) continue;
+      results[index] = await worker(item, index);
+    }
+  };
+
+  const poolSize = Math.max(1, Math.min(concurrency, items.length));
+  await Promise.all(Array.from({ length: poolSize }, () => runner()));
+  return results;
+}
+
+// Thumbnail rendering bounds (PNG ≤ 2 MB backend limit is comfortable at
+// this size) and client-side cap for the extracted full-text material
+// (the backend truncates at the same threshold).
+const THUMBNAIL_MAX_WIDTH = 480;
+const THUMBNAIL_MAX_HEIGHT = 640;
+const EXTRACTED_TEXT_MAX_CHARS = 500_000;
+
+/**
+ * Render page 1 of a PDF as a PNG thumbnail via POST /api/pdf/preview
+ * (mode=thumbnail, magic-bytes friendly PNG). Best-effort: returns null on
+ * any failure and never throws — a missing thumbnail must not fail an import.
+ */
+async function renderPdfThumbnail(pdfFile: File): Promise<Blob | null> {
+  try {
+    const fd = new FormData();
+    fd.append("file", pdfFile);
+    fd.append("mode", "thumbnail");
+    fd.append("pageNumber", "1");
+    fd.append("format", "png");
+    fd.append("maxWidth", String(THUMBNAIL_MAX_WIDTH));
+    fd.append("maxHeight", String(THUMBNAIL_MAX_HEIGHT));
+
+    const res = await fetch("/api/pdf/preview", {
+      method: "POST",
+      credentials: "include",
+      body: fd,
+    });
+    if (!res.ok) {
+      clientLogger.warn("documents.thumbnail-render-failed", res.status);
+      return null;
+    }
+    return await res.blob();
+  } catch (err) {
+    clientLogger.warn("documents.thumbnail-render-failed", err);
+    return null;
+  }
+}
+
+/**
+ * Extract the plain text of a PDF via POST /api/pdf/parse (extractText only,
+ * everything else disabled). NOTE: /api/pdf/text is an element add/update
+ * route, NOT an extractor — parse is the actual extraction contract. The
+ * text content of every parsed text element is concatenated per page.
+ * Best-effort: returns null on any failure and never throws.
+ */
+async function extractPdfText(pdfFile: File): Promise<string | null> {
+  try {
+    const fd = new FormData();
+    fd.append("file", pdfFile);
+    fd.append("extractText", "true");
+    fd.append("extractImages", "false");
+    fd.append("extractDrawings", "false");
+    fd.append("extractAnnotations", "false");
+    fd.append("extractFormFields", "false");
+    fd.append("extractBookmarks", "false");
+
+    const res = await fetch("/api/pdf/parse", {
+      method: "POST",
+      credentials: "include",
+      body: fd,
+    });
+    if (!res.ok) {
+      clientLogger.warn("documents.text-extract-failed", res.status);
+      return null;
+    }
+
+    const json = (await res.json()) as {
+      success?: boolean;
+      data?: {
+        pages?: Array<{
+          elements?: Array<{ type?: string; content?: string }>;
+        }>;
+      };
+    };
+    if (!json.success || !json.data?.pages) return null;
+
+    const text = json.data.pages
+      .map((page) =>
+        (page.elements ?? [])
+          .filter(
+            (element) =>
+              element.type === "text" && typeof element.content === "string",
+          )
+          .map((element) => element.content)
+          .join(" "),
+      )
+      .filter((pageText) => pageText.length > 0)
+      .join("\n\n")
+      .trim();
+
+    return text ? text.slice(0, EXTRACTED_TEXT_MAX_CHARS) : null;
+  } catch (err) {
+    clientLogger.warn("documents.text-extract-failed", err);
+    return null;
+  }
+}
+
+/** Build the /documents URL preserving folder and tag query params. */
+function buildDocumentsUrl(folderId: string | null, tag: string | null): string {
+  const params = new URLSearchParams();
+  if (folderId) params.set("folder", folderId);
+  if (tag) params.set("tag", tag);
+  const queryString = params.toString();
+  return queryString ? `/documents?${queryString}` : "/documents";
+}
+
 export default function DocumentsPage() {
   const t = useTranslations("documents");
+  const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const officeFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Get current folder from URL
+  // Get current folder + tag filter from URL
   const currentFolderId = searchParams?.get("folder") || null;
+  const currentTag = searchParams?.get("tag") || null;
 
   // Navigation history for custom back/forward
   const [navigationHistory, setNavigationHistory] = useState<(string | null)[]>([null]);
@@ -55,8 +219,14 @@ export default function DocumentsPage() {
   // Data states
   const [documents, setDocuments] = useState<Document[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [userTags, setUserTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  // Exact batch progress: one tick per settled file (success or failure).
+  const [uploadProgress, setUploadProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Search and pagination
@@ -134,12 +304,17 @@ export default function DocumentsPage() {
       setLoading(true);
       setError(null);
 
-      // Load documents for current folder
+      // Active search or tag filter = flat results across all folders, so
+      // the folder constraint is dropped from the backend query too.
+      const isFiltering = Boolean(debouncedSearch || currentTag);
+
+      // Load documents for current folder (or flat filtered results)
       const response = await api.listDocuments({
         page,
         per_page: 50,
         search: debouncedSearch || undefined,
-        folder_id: currentFolderId || undefined,
+        tag: currentTag || undefined,
+        folder_id: isFiltering ? undefined : currentFolderId || undefined,
       });
 
       const transformedDocs: Document[] = response.items.map(
@@ -150,6 +325,8 @@ export default function DocumentsPage() {
           createdAt: new Date(doc.created_at),
           updatedAt: new Date(doc.modified_at),
           folderId: doc.folder_id || null,
+          tags: doc.tags ?? [],
+          thumbnailUrl: doc.thumbnail_url ?? null,
         })
       );
 
@@ -174,13 +351,22 @@ export default function DocumentsPage() {
         clientLogger.warn("documents.load-folders-failed", folderErr);
         setFolders([]);
       }
+
+      // Load the distinct user tags (toolbar filter dropdown). Best-effort:
+      // the explorer simply hides the filter when the list is empty.
+      try {
+        setUserTags(await api.getUserTags());
+      } catch (tagsErr) {
+        clientLogger.warn("documents.load-tags-failed", tagsErr);
+        setUserTags([]);
+      }
     } catch (err) {
       clientLogger.error("documents.load-failed", err);
       setError(t("errors.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch, currentFolderId, t]);
+  }, [page, debouncedSearch, currentFolderId, currentTag, t]);
 
   useEffect(() => {
     loadDocuments();
@@ -194,143 +380,201 @@ export default function DocumentsPage() {
     officeFileInputRef.current?.click();
   };
 
-  // Importe un fichier Office (.docx/.xlsx/.pptx) en passant par le pipeline :
-  // 1) POST /api/office/upload -> retourne le PDF binaire converti
-  // 2) Re-injecte le PDF dans le pipeline standard via api.uploadDocument + saveDocument
-  // Ainsi un fichier Office devient un document éditable comme un PDF natif.
-  const handleOfficeFileUpload = async (
+  // Routes one file through the right pipeline by extension:
+  // - .pdf  -> standard pipeline (uploadDocument -> download -> saveDocument)
+  // - Office (.docx/.doc/.xlsx/.xls/.pptx/.ppt/.odt/.ods/.odp)
+  //   -> POST /api/office/upload (returns the converted PDF binary), then the
+  //      same standard pipeline. An Office file becomes editable like a PDF.
+  // Never throws: every failure is returned as an ImportFailure with a
+  // precise per-file reason, so one bad file cannot abort the batch.
+  const importSingleFile = useCallback(
+    async (file: File): Promise<ImportOutcome> => {
+      const lowerName = file.name.toLowerCase();
+      const isPdf = lowerName.endsWith(".pdf");
+      const isOffice = OFFICE_EXTENSION_REGEX.test(lowerName);
+
+      // Client-side validation: extension + size, per-file precise reason.
+      if (!isPdf && !isOffice) {
+        return { ok: false, name: file.name, reason: t("upload.invalidFormat") };
+      }
+      if (isOffice && file.size > MAX_OFFICE_FILE_SIZE_BYTES) {
+        return { ok: false, name: file.name, reason: t("office.importErrorSize") };
+      }
+
+      try {
+        let pdfFile: File;
+        let baseName: string;
+
+        if (isPdf) {
+          pdfFile = file;
+          baseName = file.name.replace(/\.pdf$/i, "");
+        } else {
+          // 1) Office -> PDF conversion (server-side)
+          const formData = new FormData();
+          formData.append("file", file);
+          const convertRes = await fetch("/api/office/upload", {
+            method: "POST",
+            credentials: "include",
+            body: formData,
+          });
+          if (!convertRes.ok) {
+            const reason =
+              convertRes.status === 503
+                ? t("office.importErrorService")
+                : convertRes.status === 413
+                  ? t("office.importErrorSize")
+                  : t("office.importErrorConvert");
+            return { ok: false, name: file.name, reason };
+          }
+          const pdfBlob = await convertRes.blob();
+          baseName = file.name.replace(OFFICE_EXTENSION_REGEX, "");
+          pdfFile = new File([pdfBlob], `${baseName}.pdf`, {
+            type: "application/pdf",
+          });
+        }
+
+        // 2) Standard PDF pipeline: upload -> download -> save to storage.
+        // Thumbnail rendering + full-text extraction start in parallel with
+        // the upload; both helpers are best-effort (resolve to null, never
+        // reject), so they cannot fail the import nor skew the progress
+        // counter (one tick per settled file, unchanged).
+        const thumbnailPromise = renderPdfThumbnail(pdfFile);
+        const extractedTextPromise = extractPdfText(pdfFile);
+
+        const uploadResult = await api.uploadDocument(pdfFile);
+        const token = await getAuthToken();
+        const downloadRes = await fetch(
+          `/api/v1/documents/${uploadResult.document_id}/download`,
+          {
+            credentials: "include",
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          },
+        );
+        if (!downloadRes.ok) {
+          throw new Error(`Failed to download PDF: ${downloadRes.status}`);
+        }
+        const finalPdfBlob = await downloadRes.blob();
+        const extractedText = await extractedTextPromise;
+        const saved = await api.saveDocument({
+          file: finalPdfBlob,
+          name: baseName,
+          tags: [],
+          folderId: currentFolderId || undefined,
+          extractedText: extractedText ?? undefined,
+        });
+
+        // 3) Best-effort thumbnail upload (needs the stored document id,
+        // hence after save). A failure is logged and silently ignored.
+        try {
+          const thumbnail = await thumbnailPromise;
+          if (thumbnail) {
+            await api.uploadDocumentThumbnail(
+              saved.stored_document_id,
+              thumbnail,
+              `${baseName}.png`,
+            );
+          }
+        } catch (thumbErr) {
+          clientLogger.warn("documents.thumbnail-upload-failed", thumbErr);
+        }
+
+        return { ok: true, name: file.name };
+      } catch (err) {
+        clientLogger.error("documents.import-file-failed", err);
+        return {
+          ok: false,
+          name: file.name,
+          reason: err instanceof Error ? err.message : t("errors.uploadFailed"),
+        };
+      }
+    },
+    [currentFolderId, t],
+  );
+
+  // Imports a batch of files through a bounded concurrency pool (3 parallel
+  // pipelines). The progress counter ticks exactly once per settled file and
+  // a summary toast reports successes/failures (with file names) at the end.
+  const processFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+
+      setUploading(true);
+      setError(null);
+      setUploadProgress({ done: 0, total: files.length });
+
+      try {
+        const outcomes = await runWithConcurrency(
+          files,
+          UPLOAD_CONCURRENCY,
+          async (file) => {
+            const outcome = await importSingleFile(file);
+            setUploadProgress((prev) =>
+              prev ? { ...prev, done: prev.done + 1 } : prev,
+            );
+            return outcome;
+          },
+        );
+
+        const failures = outcomes.filter(
+          (outcome): outcome is ImportFailure => !outcome.ok,
+        );
+        const successCount = outcomes.length - failures.length;
+
+        if (failures.length === 0) {
+          toast({
+            title: t("upload.summaryAllSuccess", { count: successCount }),
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title:
+              successCount === 0
+                ? t("upload.summaryAllFailed", { count: failures.length })
+                : t("upload.summaryPartial", {
+                    success: successCount,
+                    failed: failures.length,
+                  }),
+            description: (
+              <span>
+                {failures.map((failure, index) => (
+                  <span key={`${failure.name}-${index}`} className="block">
+                    {failure.name} : {failure.reason}
+                  </span>
+                ))}
+              </span>
+            ),
+          });
+        }
+
+        if (successCount > 0) {
+          await loadDocuments();
+        }
+      } finally {
+        setUploading(false);
+        setUploadProgress(null);
+      }
+    },
+    [importSingleFile, loadDocuments, t, toast],
+  );
+
+  // Shared by both hidden file inputs (PDF + Office): extension routing is
+  // handled per file inside processFiles/importSingleFile.
+  const handleFileInputChange = (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const lower = file.name.toLowerCase();
-    const isOffice = lower.endsWith(".docx") || lower.endsWith(".xlsx") || lower.endsWith(".pptx");
-    if (!isOffice) {
-      setError(t("office.importErrorFormat"));
-      if (officeFileInputRef.current) officeFileInputRef.current.value = "";
-      return;
-    }
-    if (file.size > 25 * 1024 * 1024) {
-      setError(t("office.importErrorSize"));
-      if (officeFileInputRef.current) officeFileInputRef.current.value = "";
-      return;
-    }
-
-    try {
-      setUploading(true);
-      setError(null);
-
-      // 1) Conversion Office -> PDF côté serveur
-      const formData = new FormData();
-      formData.append("file", file);
-      const convertRes = await fetch("/api/office/upload", {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      });
-      if (!convertRes.ok) {
-        const msg =
-          convertRes.status === 503
-            ? t("office.importErrorService")
-            : convertRes.status === 413
-              ? t("office.importErrorSize")
-              : t("office.importErrorConvert");
-        throw new Error(msg);
-      }
-      const pdfBlob = await convertRes.blob();
-      const baseName = file.name.replace(/\.(docx|xlsx|pptx)$/i, "");
-      const pdfFile = new File([pdfBlob], `${baseName}.pdf`, {
-        type: "application/pdf",
-      });
-
-      // 2) Pipeline standard PDF identique à handleFileUpload
-      const uploadResult = await api.uploadDocument(pdfFile);
-      const { getAuthToken } = await import("@/lib/api");
-      const token = await getAuthToken();
-      const downloadRes = await fetch(
-        `/api/v1/documents/${uploadResult.document_id}/download`,
-        {
-          credentials: "include",
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        },
-      );
-      if (!downloadRes.ok) {
-        throw new Error(`Failed to download PDF: ${downloadRes.status}`);
-      }
-      const finalPdfBlob = await downloadRes.blob();
-      await api.saveDocument({
-        file: finalPdfBlob,
-        name: baseName,
-        tags: [],
-        folderId: currentFolderId || undefined,
-      });
-      await loadDocuments();
-    } catch (err) {
-      clientLogger.error("documents.office-upload-failed", err);
-      setError(err instanceof Error ? err.message : t("office.importErrorConvert"));
-    } finally {
-      setUploading(false);
-      if (officeFileInputRef.current) officeFileInputRef.current.value = "";
-    }
-  };
-
-  const handleFileUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      setError(t("errors.pdfOnly"));
-      return;
-    }
-
-    try {
-      setUploading(true);
-      setError(null);
-
-      const uploadResult = await api.uploadDocument(file);
-
-      // Fetch the PDF Blob from the server before saving
-      const { getAuthToken } = await import("@/lib/api");
-      const token = await getAuthToken();
-      const downloadRes = await fetch(
-        `/api/v1/documents/${uploadResult.document_id}/download`,
-        {
-          credentials: "include",
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        }
-      );
-      if (!downloadRes.ok) {
-        throw new Error(`Failed to download PDF: ${downloadRes.status}`);
-      }
-      const pdfBlob = await downloadRes.blob();
-
-      await api.saveDocument({
-        file: pdfBlob,
-        name: file.name.replace(".pdf", ""),
-        tags: [],
-        folderId: currentFolderId || undefined,
-      });
-
-      await loadDocuments();
-    } catch (err) {
-      clientLogger.error("documents.upload-failed", err);
-      setError(err instanceof Error ? err.message : t("errors.uploadFailed"));
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    // Reset immediately: the File references stay valid after clearing.
+    event.target.value = "";
+    void processFiles(files);
   };
 
   const handleCreateFolder = async (name: string, parentId: string | null) => {
     await api.createFolder(name, parentId);
   };
 
-  // Navigate to folder using URL
+  // Navigate to folder using URL. Folder browsing is an explicit context
+  // switch: it clears any active tag filter (flat results would otherwise
+  // contradict the folder the user just opened).
   const handleFolderNavigate = useCallback((folderId: string | null) => {
     // Update navigation history
     const newHistory = [...navigationHistory.slice(0, historyIndex + 1), folderId];
@@ -338,13 +582,18 @@ export default function DocumentsPage() {
     setHistoryIndex(newHistory.length - 1);
 
     // Update URL
-    if (folderId) {
-      router.push(`/documents?folder=${folderId}`);
-    } else {
-      router.push("/documents");
-    }
+    router.push(buildDocumentsUrl(folderId, null));
     setPage(1);
   }, [router, navigationHistory, historyIndex]);
+
+  // Toggle the tag filter (URL-driven, folder context preserved)
+  const handleTagChange = useCallback(
+    (tag: string | null) => {
+      router.push(buildDocumentsUrl(currentFolderId, tag));
+      setPage(1);
+    },
+    [router, currentFolderId],
+  );
 
   // Custom back navigation
   const handleBack = useCallback(() => {
@@ -352,12 +601,7 @@ export default function DocumentsPage() {
       const newIndex = historyIndex - 1;
       const folderId = navigationHistory[newIndex];
       setHistoryIndex(newIndex);
-
-      if (folderId) {
-        router.push(`/documents?folder=${folderId}`);
-      } else {
-        router.push("/documents");
-      }
+      router.push(buildDocumentsUrl(folderId ?? null, null));
     }
   }, [historyIndex, navigationHistory, router]);
 
@@ -367,12 +611,7 @@ export default function DocumentsPage() {
       const newIndex = historyIndex + 1;
       const folderId = navigationHistory[newIndex];
       setHistoryIndex(newIndex);
-
-      if (folderId) {
-        router.push(`/documents?folder=${folderId}`);
-      } else {
-        router.push("/documents");
-      }
+      router.push(buildDocumentsUrl(folderId ?? null, null));
     }
   }, [historyIndex, navigationHistory, router]);
 
@@ -398,69 +637,31 @@ export default function DocumentsPage() {
     return "/" + path;
   }, [currentFolderId, breadcrumbPath]);
 
-  // Drop multiple PDFs anywhere on the page (explorer-like UX). The
-  // overlay only shows when the user drags actual files from the OS;
-  // internal drag-and-drop (folder reorganization) doesn't trigger it
-  // because Radix DnD doesn't put `Files` in dataTransfer.types.
+  // Drop multiple files anywhere on the page (explorer-like UX). PDFs and
+  // Office documents are accepted; each file is routed/validated
+  // individually by processFiles. The overlay only shows when the user
+  // drags actual files from the OS; internal drag-and-drop (folder
+  // reorganization) doesn't trigger it because Radix DnD doesn't put
+  // `Files` in dataTransfer.types.
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const dragDepthRef = useRef(0);
 
   const handleFilesDropped = useCallback(
-    async (files: FileList | File[]) => {
-      const pdfFiles = Array.from(files).filter((f) =>
-        f.name.toLowerCase().endsWith(".pdf"),
-      );
-      if (pdfFiles.length === 0) {
-        setError(t("errors.pdfOnly"));
-        return;
-      }
-      setUploading(true);
-      setError(null);
-      try {
-        // Upload sequentially — keeps backend pressure low and gives
-        // a more predictable progress UX. Future: parallel with
-        // Promise.allSettled for faster bulk import.
-        for (const file of pdfFiles) {
-          const uploadResult = await api.uploadDocument(file);
-          const { getAuthToken } = await import("@/lib/api");
-          const token = await getAuthToken();
-          const downloadRes = await fetch(
-            `/api/v1/documents/${uploadResult.document_id}/download`,
-            {
-              credentials: "include",
-              headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-            },
-          );
-          if (!downloadRes.ok) {
-            throw new Error(`Failed to download PDF: ${downloadRes.status}`);
-          }
-          const pdfBlob = await downloadRes.blob();
-          await api.saveDocument({
-            file: pdfBlob,
-            name: file.name.replace(/\.pdf$/i, ""),
-            tags: [],
-            folderId: currentFolderId || undefined,
-          });
-        }
-        await loadDocuments();
-      } catch (err) {
-        clientLogger.error("documents.drop-upload-failed", err);
-        setError(
-          err instanceof Error ? err.message : t("errors.uploadFailed"),
-        );
-      } finally {
-        setUploading(false);
-      }
+    (files: FileList | File[]) => {
+      void processFiles(Array.from(files));
     },
-    [currentFolderId, loadDocuments, t],
+    [processFiles],
   );
 
-  // Filter documents for current folder when not searching
-  const displayDocuments = debouncedSearch
+  // Active search OR tag filter = flat results (no folder grouping)
+  const isFiltering = Boolean(debouncedSearch || currentTag);
+
+  // Filter documents for current folder when not filtering
+  const displayDocuments = isFiltering
     ? documents
     : documents.filter((doc) => (doc.folderId || null) === currentFolderId);
 
-  const displayFolders = debouncedSearch
+  const displayFolders = isFiltering
     ? []
     : folders.filter((folder) => folder.parentId === currentFolderId);
 
@@ -521,16 +722,18 @@ export default function DocumentsPage() {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".pdf"
+        accept={UPLOAD_ACCEPT}
+        multiple
         className="hidden"
-        onChange={handleFileUpload}
+        onChange={handleFileInputChange}
       />
       <input
         ref={officeFileInputRef}
         type="file"
-        accept=".docx,.xlsx,.pptx"
+        accept={OFFICE_ACCEPT}
+        multiple
         className="hidden"
-        onChange={handleOfficeFileUpload}
+        onChange={handleFileInputChange}
       />
 
       {/* Header */}
@@ -559,7 +762,12 @@ export default function DocumentsPage() {
             {uploading ? (
               <>
                 <Upload className="h-4 w-4 animate-pulse" />
-                {t("upload.uploading")}
+                {uploadProgress && uploadProgress.total > 1
+                  ? t("upload.uploadingProgress", {
+                      done: uploadProgress.done,
+                      total: uploadProgress.total,
+                    })
+                  : t("upload.uploading")}
               </>
             ) : (
               <>
@@ -651,7 +859,7 @@ export default function DocumentsPage() {
         </div>
       ) : displayDocuments.length === 0 &&
         displayFolders.length === 0 &&
-        !debouncedSearch ? (
+        !isFiltering ? (
         <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-12 text-center">
           <Upload className="mb-4 h-12 w-12 text-muted-foreground" />
           <h3 className="mb-2 text-lg font-semibold">{t("noDocuments.title")}</h3>
@@ -665,14 +873,16 @@ export default function DocumentsPage() {
         </div>
       ) : displayDocuments.length === 0 &&
         displayFolders.length === 0 &&
-        debouncedSearch ? (
+        isFiltering ? (
         <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-12 text-center">
           <Search className="mb-4 h-12 w-12 text-muted-foreground" />
           <h3 className="mb-2 text-lg font-semibold">
             {t("noDocuments.noResults")}
           </h3>
           <p className="text-muted-foreground">
-            {t("noDocuments.noResultsDescription", { search: debouncedSearch })}
+            {t("noDocuments.noResultsDescription", {
+              search: debouncedSearch || currentTag || "",
+            })}
           </p>
         </div>
       ) : (
@@ -685,6 +895,10 @@ export default function DocumentsPage() {
             viewMode={viewMode}
             sortField={sortField}
             sortDirection={sortDirection}
+            flattenResults={isFiltering}
+            availableTags={userTags}
+            currentTag={currentTag}
+            onTagChange={handleTagChange}
             onViewModeChange={setViewMode}
             onSortChange={handleSortChange}
             onFolderNavigate={handleFolderNavigate}
