@@ -2,6 +2,9 @@
 Page management endpoints.
 
 Handles page CRUD, preview generation, rotation, and reordering.
+
+Deprecated: superseded by the TypeScript pdf-engine routes (/api/pdf/*).
+Scheduled for removal.
 """
 
 import time
@@ -24,7 +27,10 @@ from app.schemas.responses.common import APIResponse, MetaInfo
 from app.services.document_service import document_service
 from app.utils.helpers import now_utc
 
-router = APIRouter()
+# deprecated=True cascades to every endpoint of this router (OpenAPI).
+# Deprecated: superseded by the TypeScript pdf-engine routes (/api/pdf/*).
+# Scheduled for removal.
+router = APIRouter(deprecated=True)
 
 
 @router.get(

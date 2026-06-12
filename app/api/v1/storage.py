@@ -14,9 +14,12 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import cast, func, literal_column, or_, select, true
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import array as pg_array
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import undefer
 
 from app.core.database import get_db, get_db_session
 from app.middleware.auth import AuthenticatedUser
@@ -49,6 +52,117 @@ def _count_pdf_pages_sync(pdf_bytes: bytes) -> int:
 
     with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
         return len(pdf.pages)
+
+
+# ── GED constants ───────────────────────────────────────────────────────
+_MAX_TAGS = 20
+_MAX_TAG_LENGTH = 50
+_MAX_EXTRACTED_TEXT_CHARS = 500_000
+_MAX_DOCUMENT_NAME_LENGTH = 255
+
+_THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024  # 2 MB
+_THUMBNAIL_URL_EXPIRES_SECONDS = 7 * 24 * 3600  # 7 days (SigV4 maximum)
+
+# PostgreSQL text-search configuration: 'simple' (no stemming) because the
+# stored content is multilingual.
+_TSQUERY_CONFIG = literal_column("'simple'")
+
+
+def _normalize_tags(raw_tags: list[str]) -> list[str]:
+    """Normalize a tag list: trim + lowercase, drop empties, dedupe (keep order).
+
+    Raises:
+        ValueError: if more than _MAX_TAGS tags remain after normalization,
+            or if a tag exceeds _MAX_TAG_LENGTH characters.
+    """
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for tag in raw_tags:
+        if not isinstance(tag, str):
+            raise ValueError("Tags must be strings")
+        cleaned = tag.strip().lower()
+        if not cleaned:
+            continue
+        if len(cleaned) > _MAX_TAG_LENGTH:
+            raise ValueError(
+                f"Tag too long: '{cleaned[:_MAX_TAG_LENGTH]}…' "
+                f"(max {_MAX_TAG_LENGTH} characters)"
+            )
+        if cleaned not in seen:
+            seen.add(cleaned)
+            normalized.append(cleaned)
+    if len(normalized) > _MAX_TAGS:
+        raise ValueError(f"Too many tags: {len(normalized)} (max {_MAX_TAGS})")
+    return normalized
+
+
+def _detect_thumbnail_format(data: bytes) -> tuple[str, str] | None:
+    """Detect thumbnail image format from magic bytes.
+
+    Returns:
+        (extension, content_type) for PNG / JPEG / WebP, or None if the
+        bytes do not match any allowed format.
+    """
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ("png", "image/png")
+    if data.startswith(b"\xff\xd8\xff"):
+        return ("jpg", "image/jpeg")
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ("webp", "image/webp")
+    return None
+
+
+def _next_copy_name(base_name: str, existing_names: set[str]) -> str:
+    """Compute the duplicate name: "{name} (copie)", then "(copie 2)", "(copie 3)"…
+
+    The result is guaranteed to fit in _MAX_DOCUMENT_NAME_LENGTH characters
+    (the base name is truncated if needed) and to be absent from
+    ``existing_names``.
+    """
+    counter = 1
+    while True:
+        suffix = " (copie)" if counter == 1 else f" (copie {counter})"
+        max_base = _MAX_DOCUMENT_NAME_LENGTH - len(suffix)
+        candidate = f"{base_name[:max_base]}{suffix}"
+        if candidate not in existing_names:
+            return candidate
+        counter += 1
+
+
+def _thumbnail_url_for(thumbnail_path: str | None) -> str | None:
+    """Build a presigned GET URL for a thumbnail S3 key.
+
+    Convention: ``stored_documents.thumbnail_path`` stores the raw S3 key
+    (``thumbnails/{user_id}/{document_id}.{ext}``); serializers expose a
+    presigned URL (7 days — SigV4 maximum) under the ``thumbnail_url`` field.
+    Returns None when no thumbnail is set or signing fails.
+    """
+    if not thumbnail_path:
+        return None
+    try:
+        return s3_service.get_presigned_url(
+            thumbnail_path, expires_in=_THUMBNAIL_URL_EXPIRES_SECONDS
+        )
+    except Exception:  # pragma: no cover — missing S3 credentials, etc.
+        _logger.warning("Failed to presign thumbnail URL for %s", thumbnail_path)
+        return None
+
+
+def _serialize_stored_document(doc: StoredDocument) -> dict:
+    """Serialize a StoredDocument row to the public list-item shape."""
+    return {
+        "stored_document_id": doc.id,
+        "name": doc.name,
+        "page_count": doc.page_count,
+        "version": doc.current_version,
+        "folder_id": doc.folder_id,
+        "tags": doc.tags or [],
+        "file_size_bytes": doc.file_size_bytes or 0,
+        "created_at": doc.created_at.isoformat(),
+        "modified_at": doc.updated_at.isoformat(),
+        "thumbnail_url": _thumbnail_url_for(doc.thumbnail_path),
+        "deleted_at": doc.deleted_at.isoformat() if doc.deleted_at else None,
+    }
 
 
 class CreateFolderRequest(BaseModel):
@@ -90,8 +204,9 @@ with document metadata as form fields. No active editing session is required.
 | file | file | Yes | PDF file bytes |
 | name | string | Yes | Display name (1-255 characters) |
 | folder_id | string | No | Target folder UUID (null for root) |
-| tags | string | No | JSON array of tag strings, e.g. `["contract","legal"]` |
+| tags | string | No | JSON array of tag strings, e.g. `["contract","legal"]` (max 20 tags of 50 chars, normalized lowercase/trim) |
 | version_comment | string | No | Comment describing this version |
+| extracted_text | string | No | Plain text content of the PDF for full-text search (truncated server-side to 500k chars) |
 """,
     responses={
         201: {
@@ -201,6 +316,11 @@ async def save_document(
     folder_id: str | None = Form(default=None, description="Folder UUID (null for root)"),
     tags: str | None = Form(default=None, description='JSON array of tags, e.g. ["contract","legal"]'),
     version_comment: str | None = Form(default=None, description="Comment describing this version"),
+    extracted_text: str | None = Form(
+        default=None,
+        description="Plain text content of the PDF for full-text search "
+        "(truncated server-side to 500k characters)",
+    ),
 ) -> APIResponse[dict]:
     """Save a PDF document to persistent storage.
 
@@ -251,15 +371,20 @@ async def save_document(
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Cannot read PDF structure: {exc}") from exc
 
-    # ── 3. Parse tags (JSON array string → list[str]) ────────────────────
+    # ── 3. Parse + normalize tags (JSON array string → list[str]) ────────
     parsed_tags: list[str] = []
     if tags:
         try:
             parsed_tags = json.loads(tags)
             if not isinstance(parsed_tags, list):
                 raise ValueError("tags must be a JSON array")
+            parsed_tags = _normalize_tags(parsed_tags)
         except (json.JSONDecodeError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=f"Invalid tags format: {exc}") from exc
+
+    # ── 3bis. Truncate extracted text (full-text search material) ────────
+    if extracted_text is not None:
+        extracted_text = extracted_text[:_MAX_EXTRACTED_TEXT_CHARS]
 
     # ── 4. Quota check ──────────────────────────────────────────────────
     effective_limits = await quota_service.get_effective_limits(user.user_id)
@@ -292,6 +417,7 @@ async def save_document(
             current_version=1,
             file_size_bytes=file_size,
             tags=parsed_tags,
+            extracted_text=extracted_text,
         )
         session.add(stored_doc)
 
@@ -386,12 +512,20 @@ This endpoint provides paginated access to stored documents with powerful filter
 | page | integer | 1 | Page number (1-based) |
 | per_page | integer | 20 | Items per page (1-100) |
 | folder_id | string | null | Filter by folder UUID, empty string for root |
-| search | string | null | Search in document names |
-| tags | string | null | Filter by tags (comma-separated) |
+| search | string | null | Full-text search: matches document names (substring) OR extracted PDF content (websearch syntax) |
+| tags | string | null | Filter by tags, comma-separated (matches documents having ANY of the tags) |
+| tag | string | null | Filter by a single tag (exact match) |
+| trashed | boolean | false | If true, list ONLY trashed documents (same pagination/sorting) |
 
 ## Response Structure
-- **items**: Array of document objects
+- **items**: Array of document objects (`deleted_at` is non-null for trashed items)
 - **pagination**: Pagination metadata (total, page, per_page, total_pages)
+
+## Trash
+Trashed documents (soft-deleted via `DELETE /documents/{id}`) are excluded
+from the default listing, from search and from tag filters. Pass
+`trashed=true` to browse the trash; documents older than 30 days in the
+trash are purged automatically.
 """,
     responses={
         200: {
@@ -513,16 +647,25 @@ async def list_stored_documents(
     folder_id: str | None = Query(default=None),
     search: str | None = Query(default=None),
     tags: str | None = Query(default=None),
+    tag: str | None = Query(default=None, description="Filter by a single tag (exact match)"),
+    trashed: bool = Query(default=False, description="List only trashed documents"),
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     """List stored documents with pagination."""
     start_time = time.time()
 
-    # Build base query
+    # Build base query.
+    # Default: exclude trashed documents. trashed=true: ONLY the trash.
     base_query = select(StoredDocument).where(
         StoredDocument.owner_id == user.user_id,
-        ~StoredDocument.is_deleted,
     )
+    if trashed:
+        base_query = base_query.where(
+            StoredDocument.is_deleted,
+            StoredDocument.deleted_at.is_not(None),
+        )
+    else:
+        base_query = base_query.where(~StoredDocument.is_deleted)
 
     # Filter by folder
     # - None (not provided): no filter, return all documents
@@ -541,14 +684,32 @@ async def list_stored_documents(
                 # Invalid UUID format - treat as root-level filter
                 base_query = base_query.where(StoredDocument.folder_id.is_(None))
 
-    # Search by name
+    # Search: name substring OR full-text match on the generated tsvector
+    # (name + extracted_text, 'simple' config — multilingual content).
     if search:
-        base_query = base_query.where(StoredDocument.name.ilike(f"%{search}%"))
+        base_query = base_query.where(
+            or_(
+                StoredDocument.name.ilike(f"%{search}%"),
+                StoredDocument.search_vector.bool_op("@@")(
+                    func.websearch_to_tsquery(_TSQUERY_CONFIG, search)
+                ),
+            )
+        )
 
-    # Filter by tags
+    # Filter by tags (comma-separated, ANY match).
+    # tags is a JSON column → cast to JSONB and use the ?| (exists any) operator.
     if tags:
-        tag_list = [t.strip() for t in tags.split(",")]
-        base_query = base_query.where(StoredDocument.tags.op("&&")(tag_list))
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+        if tag_list:
+            base_query = base_query.where(
+                cast(StoredDocument.tags, JSONB).bool_op("?|")(pg_array(tag_list))
+            )
+
+    # Filter by a single tag (exact match) — JSONB containment.
+    if tag:
+        base_query = base_query.where(
+            cast(StoredDocument.tags, JSONB).contains([tag])
+        )
 
     # Get total count
     count_query = select(func.count()).select_from(base_query.subquery())
@@ -562,20 +723,7 @@ async def list_stored_documents(
     documents = result.scalars().all()
 
     # Format results
-    items = []
-    for doc in documents:
-        items.append({
-            "stored_document_id": doc.id,
-            "name": doc.name,
-            "page_count": doc.page_count,
-            "version": doc.current_version,
-            "folder_id": doc.folder_id,
-            "tags": doc.tags or [],
-            "file_size_bytes": doc.file_size_bytes or 0,
-            "created_at": doc.created_at.isoformat(),
-            "modified_at": doc.updated_at.isoformat(),
-            "thumbnail_url": doc.thumbnail_path,
-        })
+    items = [_serialize_stored_document(doc) for doc in documents]
 
     total_pages = (total + per_page - 1) // per_page
 
@@ -592,6 +740,111 @@ async def list_stored_documents(
                 total_pages=total_pages,
             ).model_dump(),
         },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
+
+
+@router.get(
+    "/documents/tags",
+    response_model=APIResponse[dict],
+    summary="List user document tags",
+    description="""
+List all distinct tags used across the authenticated user's stored documents.
+
+Intended for tag autocomplete in the document manager UI. Tags from trashed
+documents are excluded. The list is deduplicated and sorted alphabetically.
+
+## Response Structure
+- **tags**: Array of unique tag strings, sorted alphabetically
+""",
+    responses={
+        200: {
+            "description": "Tags retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {"tags": ["2024", "contract", "facture", "legal"]},
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-15T10:30:00Z"},
+                    }
+                }
+            },
+        },
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X GET "https://api.giga-pdf.com/api/v1/storage/documents/tags" \\
+  -H "Authorization: Bearer $TOKEN"'''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+response = requests.get(
+    "https://api.giga-pdf.com/api/v1/storage/documents/tags",
+    headers={"Authorization": f"Bearer {token}"}
+)
+
+tags = response.json()["data"]["tags"]
+print(f"{len(tags)} tags: {', '.join(tags)}")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const response = await fetch(
+  "https://api.giga-pdf.com/api/v1/storage/documents/tags",
+  { headers: { "Authorization": `Bearer ${token}` } }
+);
+
+const { data: { tags } } = await response.json();
+console.log(`${tags.length} tags:`, tags);'''
+            },
+        ]
+    },
+)
+async def list_document_tags(
+    user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[dict]:
+    """List distinct tags across the user's (non-trashed) stored documents."""
+    start_time = time.time()
+
+    # Expand the JSON tags array with jsonb_array_elements_text.
+    # In PostgreSQL, set-returning functions in FROM are implicitly LATERAL,
+    # so the function can reference stored_documents.tags directly.
+    doc_tags = func.jsonb_array_elements_text(
+        cast(StoredDocument.tags, JSONB)
+    ).table_valued("value", name="doc_tags")
+
+    stmt = (
+        select(doc_tags.c.value)
+        .distinct()
+        .select_from(StoredDocument)
+        .join(doc_tags, true())
+        .where(
+            StoredDocument.owner_id == user.user_id,
+            ~StoredDocument.is_deleted,
+            StoredDocument.tags.is_not(None),
+            func.jsonb_typeof(cast(StoredDocument.tags, JSONB)) == "array",
+        )
+        .order_by(doc_tags.c.value)
+    )
+    result = await db.execute(stmt)
+    tag_values = [row[0] for row in result.all()]
+
+    processing_time = int((time.time() - start_time) * 1000)
+
+    return APIResponse(
+        success=True,
+        data={"tags": tag_values},
         meta=MetaInfo(
             request_id=get_request_id(),
             timestamp=now_utc(),
@@ -756,6 +1009,319 @@ async def load_stored_document(
             "name": stored_doc.name,
             "page_count": document.metadata.page_count,
         },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
+
+
+@router.post(
+    "/documents/{stored_document_id}/duplicate",
+    response_model=APIResponse[dict],
+    status_code=201,
+    summary="Duplicate stored document",
+    description="""
+Duplicate a stored document into a new independent document.
+
+The PDF file is copied **server-side on S3** (no download/re-upload through
+the API) and a new database record is created.
+
+## Path Parameters
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| stored_document_id | string | UUID of the document to duplicate |
+
+## Behavior
+- New name: `"{name} (copie)"` — suffix incremented (`(copie 2)`, `(copie 3)`…)
+  if the name is already taken in the same folder
+- Same folder and same tags as the source
+- Version history and shares are **NOT** copied (the copy starts at version 1)
+- Storage quota is checked and consumed exactly like an upload
+- Encrypted documents are transparently re-encrypted for the new document ID
+
+## Errors
+- 400: storage quota or document limit exceeded
+- 404: source document not found (or trashed)
+""",
+    responses={
+        201: {
+            "description": "Document duplicated successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "stored_document_id": "990e8400-e29b-41d4-a716-446655440004",
+                            "name": "Contract Agreement 2024 (copie)",
+                            "page_count": 15,
+                            "version": 1,
+                            "folder_id": "660e8400-e29b-41d4-a716-446655440001",
+                            "tags": ["contract", "legal"],
+                            "file_size_bytes": 1048576,
+                            "created_at": "2024-01-18T14:00:00Z",
+                            "modified_at": "2024-01-18T14:00:00Z",
+                            "thumbnail_url": None,
+                            "deleted_at": None,
+                            "source_document_id": "770e8400-e29b-41d4-a716-446655440002",
+                            "quota_source": "personal",
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-18T14:00:00Z"},
+                    }
+                }
+            },
+        },
+        400: {"description": "Storage quota exceeded"},
+        404: {"description": "Stored document not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X POST "https://api.giga-pdf.com/api/v1/storage/documents/770e8400-e29b-41d4-a716-446655440002/duplicate" \\
+  -H "Authorization: Bearer $TOKEN"'''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+stored_doc_id = "770e8400-e29b-41d4-a716-446655440002"
+response = requests.post(
+    f"https://api.giga-pdf.com/api/v1/storage/documents/{stored_doc_id}/duplicate",
+    headers={"Authorization": f"Bearer {token}"}
+)
+
+copy = response.json()["data"]
+print(f"Duplicated as: {copy['name']} ({copy['stored_document_id']})")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const storedDocId = "770e8400-e29b-41d4-a716-446655440002";
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/documents/${storedDocId}/duplicate`,
+  {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${token}` }
+  }
+);
+
+const { data: copy } = await response.json();
+console.log(`Duplicated as: ${copy.name} (${copy.stored_document_id})`);'''
+            },
+        ]
+    },
+)
+async def duplicate_stored_document(
+    stored_document_id: str,
+    user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[dict]:
+    """Duplicate a stored document (server-side S3 copy + new DB record).
+
+    Order of operations:
+      1. Validate source ownership + quota (like an upload).
+      2. Copy the file on S3 first — for encrypted documents the DEK is
+         bound to the document ID (AES-GCM AAD), so the copy must be
+         re-encrypted and the new encrypted DEK is only known after upload.
+      3. Commit DB records; on failure, delete the new S3 object
+         (compensation) so no orphan file remains.
+    """
+    start_time = time.time()
+
+    # ── 1. Source document (ownership + not trashed) ─────────────────────
+    result = await db.execute(
+        select(StoredDocument)
+        .options(undefer(StoredDocument.extracted_text))
+        .where(
+            StoredDocument.id == stored_document_id,
+            StoredDocument.owner_id == user.user_id,
+            ~StoredDocument.is_deleted,
+        )
+    )
+    source_doc = result.scalar_one_or_none()
+
+    if not source_doc:
+        raise NotFoundError(f"Stored document not found: {stored_document_id}")
+
+    # Current version row (file path + encryption material)
+    version_result = await db.execute(
+        select(DocumentVersion).where(
+            DocumentVersion.document_id == stored_document_id,
+            DocumentVersion.version_number == source_doc.current_version,
+        )
+    )
+    source_version = version_result.scalar_one_or_none()
+
+    if not source_version:
+        raise NotFoundError(
+            f"Current version not found for document: {stored_document_id}"
+        )
+
+    file_size = source_doc.file_size_bytes or 0
+
+    # ── 2. Quota check — same rules as an upload ─────────────────────────
+    effective_limits = await quota_service.get_effective_limits(user.user_id)
+
+    if effective_limits.storage_used_bytes + file_size > effective_limits.storage_limit_bytes:
+        raise InvalidOperationError(
+            f"Storage quota exceeded. Used: {effective_limits.storage_used_bytes}, "
+            f"Limit: {effective_limits.storage_limit_bytes}"
+        )
+
+    if effective_limits.document_limit != -1 and effective_limits.document_count >= effective_limits.document_limit:
+        raise InvalidOperationError(
+            f"Document limit exceeded. Limit: {effective_limits.document_limit}"
+        )
+
+    # ── 3. Compute the copy name ("{name} (copie)", incremented) ─────────
+    sibling_filter = [
+        StoredDocument.owner_id == user.user_id,
+        ~StoredDocument.is_deleted,
+    ]
+    if source_doc.folder_id is None:
+        sibling_filter.append(StoredDocument.folder_id.is_(None))
+    else:
+        sibling_filter.append(StoredDocument.folder_id == source_doc.folder_id)
+
+    names_result = await db.execute(select(StoredDocument.name).where(*sibling_filter))
+    existing_names = {row[0] for row in names_result.all()}
+    copy_name = _next_copy_name(source_doc.name, existing_names)
+
+    # ── 4. Copy the file on S3 ───────────────────────────────────────────
+    new_doc_id = generate_uuid()
+    source_key = source_version.file_path
+    new_key = s3_service.get_document_key(user.user_id, new_doc_id, 1)
+
+    new_encryption_key: str | None = None
+    new_is_encrypted = False
+
+    try:
+        if source_version.is_encrypted and source_version.encryption_key:
+            # The AES-256-GCM DEK is bound to (document_id, user_id) via AAD:
+            # a raw S3 copy would be undecryptable under the new document ID.
+            # Decrypt with the source identity, re-encrypt for the copy.
+            plaintext = s3_service.download_encrypted_document(
+                key=source_key,
+                encrypted_dek=source_version.encryption_key,
+                document_id=stored_document_id,
+                user_id=user.user_id,
+            )
+            if plaintext is None:
+                raise NotFoundError(
+                    f"Document file not found in storage: {source_key}"
+                )
+            _, new_encryption_key = s3_service.upload_encrypted_document(
+                document_data=plaintext,
+                key=new_key,
+                document_id=new_doc_id,
+                user_id=user.user_id,
+                metadata={
+                    "document_id": new_doc_id,
+                    "user_id": user.user_id,
+                    "version": "1",
+                    "duplicated_from": stored_document_id,
+                },
+            )
+            new_is_encrypted = True
+        else:
+            # Fast path: server-side S3 copy — no bytes through the API.
+            s3_service.copy_file(
+                source_key=source_key,
+                dest_key=new_key,
+                content_type="application/pdf",
+                metadata={
+                    "document_id": new_doc_id,
+                    "user_id": user.user_id,
+                    "version": "1",
+                    "duplicated_from": stored_document_id,
+                },
+            )
+    except NotFoundError:
+        raise
+    except Exception as exc:
+        _logger.error(
+            "duplicate: S3 copy failed (%s -> %s)", source_key, new_key, exc_info=True
+        )
+        raise InvalidOperationError(f"Failed to copy document file: {exc}") from exc
+
+    # ── 5. DB records (compensation: drop the S3 copy on failure) ────────
+    created_at = now_utc()
+    try:
+        new_doc = StoredDocument(
+            id=new_doc_id,
+            name=copy_name,
+            owner_id=user.user_id,
+            folder_id=source_doc.folder_id,
+            page_count=source_doc.page_count,
+            current_version=1,
+            file_size_bytes=file_size,
+            mime_type=source_doc.mime_type,
+            tags=list(source_doc.tags or []),
+            extracted_text=source_doc.extracted_text,
+            created_at=created_at,
+            updated_at=created_at,
+        )
+        db.add(new_doc)
+
+        new_version = DocumentVersion(
+            document_id=new_doc_id,
+            version_number=1,
+            file_path=new_key,
+            file_size_bytes=source_version.file_size_bytes,
+            file_hash=source_version.file_hash,
+            comment=f"Duplicated from '{source_doc.name}'",
+            created_by=user.user_id,
+            encryption_key=new_encryption_key,
+            is_encrypted=new_is_encrypted,
+        )
+        db.add(new_version)
+        await db.commit()
+    except Exception as exc:
+        _logger.error(
+            "duplicate: DB commit failed — compensation: deleting s3_key=%s",
+            new_key,
+            exc_info=True,
+        )
+        s3_service.delete_file(new_key)  # best-effort compensation
+        raise InvalidOperationError(f"Failed to duplicate document: {exc}") from exc
+
+    # ── 6. Quota counters — same as an upload ────────────────────────────
+    if effective_limits.is_tenant_based and effective_limits.tenant_id:
+        await quota_service.update_tenant_storage(
+            effective_limits.tenant_id, file_size, delta_documents=1
+        )
+    else:
+        await quota_service.update_storage_usage(
+            user.user_id, file_size, delta_documents=1
+        )
+
+    # ── 7. Activity log ──────────────────────────────────────────────────
+    await activity_service.log_activity(
+        user_id=user.user_id,
+        action=ActivityAction.COPY,
+        document_id=new_doc_id,
+        user_email=user.email,
+        extra_data={
+            "source_document_id": stored_document_id,
+            "source_name": source_doc.name,
+            "name": copy_name,
+        },
+        tenant_id=effective_limits.tenant_id if effective_limits.is_tenant_based else None,
+    )
+
+    processing_time = int((time.time() - start_time) * 1000)
+
+    data = _serialize_stored_document(new_doc)
+    data["source_document_id"] = stored_document_id
+    data["quota_source"] = "tenant" if effective_limits.is_tenant_based else "personal"
+
+    return APIResponse(
+        success=True,
+        data=data,
         meta=MetaInfo(
             request_id=get_request_id(),
             timestamp=now_utc(),
@@ -1433,38 +1999,72 @@ async def restore_original(
     )
 
 
-class RenameDocumentRequest(BaseModel):
-    """Request to rename a document."""
+class UpdateDocumentRequest(BaseModel):
+    """Request to update a stored document (rename, tags, extracted text).
 
-    name: str = Field(
+    All fields are optional but at least one must be provided.
+    """
+
+    name: str | None = Field(
+        default=None,
         description="New name for the document",
         min_length=1,
         max_length=255,
     )
+    extracted_text: str | None = Field(
+        default=None,
+        description="Plain text content of the PDF for full-text search "
+        "(truncated server-side to 500k characters). Explicit null clears it.",
+    )
+    tags: list[str] | None = Field(
+        default=None,
+        description="Replacement tag list (max 20 tags of 50 chars, "
+        "normalized lowercase/trim). Empty list clears all tags.",
+    )
+
+    @field_validator("tags")
+    @classmethod
+    def _validate_tags(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        try:
+            return _normalize_tags(value)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+
+
+# Backwards-compatible alias (historical name of the rename-only request model)
+RenameDocumentRequest = UpdateDocumentRequest
 
 
 @router.patch(
     "/documents/{stored_document_id}",
     response_model=APIResponse[dict],
-    summary="Rename stored document",
+    summary="Update stored document (rename, tags, extracted text)",
     description="""
-Rename a document in persistent storage.
+Update a document in persistent storage: rename it, replace its tags and/or
+refresh its extracted text (full-text search material) after an edit.
 
-This endpoint updates the display name of a stored document. The rename operation is logged in the activity history for audit purposes.
+All body fields are optional — provide only the ones to change. At least one
+field is required. The update is logged in the activity history for audit
+purposes.
 
 ## Path Parameters
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| stored_document_id | string | UUID of the stored document to rename |
+| stored_document_id | string | UUID of the stored document to update |
 
 ## Request Body
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| name | string | Yes | New display name (1-255 characters) |
+| name | string | No | New display name (1-255 characters) |
+| extracted_text | string | No | Plain text content for full-text search (truncated to 500k chars, null clears it) |
+| tags | string[] | No | Replacement tag list (max 20 tags of 50 chars, normalized lowercase/trim, `[]` clears) |
 
 ## Notes
 - Renaming does not affect version history
-- The rename is recorded in the activity log
+- Updates are recorded in the activity log
+- `tags` fully REPLACES the existing tag list
 """,
     responses={
         200: {
@@ -1555,14 +2155,23 @@ echo "Updated at: " . $renamed["updated_at"] . "\\n";'''
         ]
     },
 )
-async def rename_stored_document(
+async def update_stored_document(
     stored_document_id: str,
-    request: RenameDocumentRequest,
+    request: UpdateDocumentRequest,
     user: AuthenticatedUser,
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
-    """Rename stored document."""
+    """Update stored document metadata (name / tags / extracted_text)."""
     start_time = time.time()
+
+    provided_fields = request.model_fields_set
+    if not provided_fields:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one of 'name', 'extracted_text' or 'tags' must be provided",
+        )
+    if "name" in provided_fields and request.name is None:
+        raise HTTPException(status_code=400, detail="'name' cannot be null")
 
     # Get stored document
     result = await db.execute(
@@ -1579,19 +2188,47 @@ async def rename_stored_document(
 
     # Store old name for activity log
     old_name = stored_doc.name
+    updated_fields: list[str] = []
 
-    # Update name
-    stored_doc.name = request.name
+    # Apply updates
+    if "name" in provided_fields and request.name is not None:
+        stored_doc.name = request.name
+        updated_fields.append("name")
+
+    if "tags" in provided_fields and request.tags is not None:
+        stored_doc.tags = request.tags
+        updated_fields.append("tags")
+
+    if "extracted_text" in provided_fields:
+        # Explicit null clears the search material; strings are truncated.
+        stored_doc.extracted_text = (
+            request.extracted_text[:_MAX_EXTRACTED_TEXT_CHARS]
+            if request.extracted_text is not None
+            else None
+        )
+        updated_fields.append("extracted_text")
+
+    if not updated_fields:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one of 'name', 'extracted_text' or 'tags' must be provided",
+        )
+
     stored_doc.updated_at = now_utc()
     await db.commit()
 
-    # Log the rename activity
+    # Log the update activity (RENAME action kept when the name changed,
+    # EDIT otherwise — both carry the list of updated fields)
+    name_changed = "name" in updated_fields and request.name != old_name
+    extra_data: dict = {"updated_fields": updated_fields}
+    if name_changed:
+        extra_data.update({"old_name": old_name, "new_name": request.name})
     await activity_service.log_activity(
         user_id=user.user_id,
-        action=ActivityAction.RENAME,
+        action=ActivityAction.RENAME if name_changed else ActivityAction.EDIT,
         document_id=stored_document_id,
         user_email=user.email,
-        extra_data={"old_name": old_name, "new_name": request.name},
+        extra_data=extra_data,
     )
 
     processing_time = int((time.time() - start_time) * 1000)
@@ -1600,7 +2237,8 @@ async def rename_stored_document(
         success=True,
         data={
             "stored_document_id": stored_document_id,
-            "name": request.name,
+            "name": stored_doc.name,
+            "tags": stored_doc.tags or [],
             "updated_at": stored_doc.updated_at.isoformat(),
         },
         meta=MetaInfo(
@@ -1614,26 +2252,42 @@ async def rename_stored_document(
 @router.delete(
     "/documents/{stored_document_id}",
     response_model=APIResponse[dict],
-    summary="Delete stored document",
+    summary="Delete stored document (trash or permanent)",
     description="""
-Delete a document from persistent storage using soft delete.
+Move a document to the trash (soft delete) or delete it permanently.
 
-This endpoint performs a soft delete, marking the document as deleted without physically removing it from storage. This allows for potential recovery and maintains audit trails.
+By default this endpoint performs a **soft delete**: the document is moved to
+the trash (`deleted_at` timestamp set) and can be restored with
+`POST /documents/{id}/restore`. Trashed documents are excluded from listings,
+search, sharing and folder statistics, and are **purged automatically after
+30 days**.
+
+With `permanent=true` the document is **permanently deleted**: all version
+files and the thumbnail are removed from S3 and the database records are
+erased. This works both on active documents and on documents already in the
+trash (empty-trash use case). This operation is irreversible.
 
 ## Path Parameters
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | stored_document_id | string | UUID of the stored document to delete |
 
+## Query Parameters
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| permanent | boolean | false | If true, permanently delete (S3 files + versions + DB) |
+
 ## Behavior
-- Document is marked as deleted with timestamp
-- Storage quota is immediately updated (freed space)
+- Soft delete: document moved to trash, restorable for 30 days
+- Storage quota is freed when the document leaves the active space
+  (soft delete) — a permanent delete of an already-trashed document does
+  not free quota twice
 - Activity is logged for audit purposes
-- All versions are preserved (soft deleted)
 
 ## Notes
 - Quota is adjusted based on source (personal or organization)
-- Deleted documents are not returned in list queries
+- Deleted documents are not returned in default list queries
+  (use `GET /documents?trashed=true` to browse the trash)
 """,
     responses={
         200: {
@@ -1719,11 +2373,18 @@ if ($result["deleted"]) {
 async def delete_stored_document(
     stored_document_id: str,
     user: AuthenticatedUser,
+    permanent: bool = Query(
+        default=False,
+        description="If true, permanently delete the document (S3 + versions + DB)",
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
-    """Delete stored document (soft delete)."""
+    """Delete stored document (soft delete by default, hard with permanent=true)."""
     start_time = time.time()
-    _logger.info(f"Deleting document {stored_document_id} for user {user.user_id}")
+    _logger.info(
+        f"Deleting document {stored_document_id} for user {user.user_id} "
+        f"(permanent={permanent})"
+    )
 
     try:
         # Get effective limits to determine quota source (tenant or personal)
@@ -1732,28 +2393,55 @@ async def delete_stored_document(
         _logger.error(f"Error getting effective limits: {e}", exc_info=True)
         raise
 
-    # Get stored document
-    result = await db.execute(
-        select(StoredDocument).where(
-            StoredDocument.id == stored_document_id,
-            StoredDocument.owner_id == user.user_id,
-            ~StoredDocument.is_deleted,
-        )
-    )
+    # Get stored document.
+    # Permanent delete also targets documents already in the trash
+    # (empty-trash use case); soft delete only targets active documents.
+    doc_filter = [
+        StoredDocument.id == stored_document_id,
+        StoredDocument.owner_id == user.user_id,
+    ]
+    if not permanent:
+        doc_filter.append(~StoredDocument.is_deleted)
+
+    result = await db.execute(select(StoredDocument).where(*doc_filter))
     stored_doc = result.scalar_one_or_none()
 
     if not stored_doc:
         raise NotFoundError(f"Stored document not found: {stored_document_id}")
 
     file_size = stored_doc.file_size_bytes or 0
+    was_trashed = stored_doc.is_deleted
 
-    # Soft delete
-    stored_doc.is_deleted = True
-    stored_doc.deleted_at = now_utc()
-    await db.commit()
+    if permanent:
+        # ── Hard delete: S3 files + versions + DB row ────────────────────
+        versions_result = await db.execute(
+            select(DocumentVersion.file_path).where(
+                DocumentVersion.document_id == stored_document_id
+            )
+        )
+        s3_keys = [row[0] for row in versions_result.all() if row[0]]
+        thumbnail_key = stored_doc.thumbnail_path
 
-    # Update quota (tenant or personal based on membership) - only if file_size > 0
-    if file_size > 0:
+        # DB first (cascades versions, shares, invitations, activity logs);
+        # S3 cleanup after commit is best-effort — an orphan S3 object is
+        # recoverable, a dangling DB row pointing to a deleted file is not.
+        await db.delete(stored_doc)
+        await db.commit()
+
+        for key in s3_keys:
+            s3_service.delete_file(key)  # best-effort
+        if thumbnail_key:
+            s3_service.delete_file(thumbnail_key)  # best-effort
+    else:
+        # ── Soft delete: move to trash ───────────────────────────────────
+        stored_doc.is_deleted = True
+        stored_doc.deleted_at = now_utc()
+        await db.commit()
+
+    # Update quota (tenant or personal based on membership).
+    # The quota was already freed at soft-delete time, so a permanent
+    # delete of an already-trashed document must NOT free it twice.
+    if not was_trashed and file_size > 0:
         if effective_limits.is_tenant_based and effective_limits.tenant_id:
             await quota_service.update_tenant_storage(
                 effective_limits.tenant_id, -file_size, delta_documents=-1
@@ -1763,10 +2451,165 @@ async def delete_stored_document(
                 user.user_id, -file_size, delta_documents=-1
             )
 
-    # Log the delete activity
+    # Log the delete activity.
+    # For a permanent delete the document row (and its FK-cascaded activity
+    # logs) no longer exists — log without document FK to keep an audit trace.
     await activity_service.log_activity(
         user_id=user.user_id,
         action=ActivityAction.DELETE,
+        document_id=None if permanent else stored_document_id,
+        user_email=user.email,
+        extra_data={
+            "file_size_bytes": file_size,
+            "permanent": permanent,
+            "stored_document_id": stored_document_id,
+        },
+        tenant_id=effective_limits.tenant_id if effective_limits.is_tenant_based else None,
+    )
+
+    processing_time = int((time.time() - start_time) * 1000)
+
+    return APIResponse(
+        success=True,
+        data={
+            "stored_document_id": stored_document_id,
+            "deleted": True,
+            "permanent": permanent,
+            "quota_source": "tenant" if effective_limits.is_tenant_based else "personal",
+        },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
+
+
+@router.post(
+    "/documents/{stored_document_id}/restore",
+    response_model=APIResponse[dict],
+    summary="Restore document from trash",
+    description="""
+Restore a trashed (soft-deleted) document back to the active space.
+
+The document becomes visible again in listings, search, sharing and folder
+statistics, and the storage quota it occupies is consumed again.
+
+## Path Parameters
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| stored_document_id | string | UUID of the trashed document to restore |
+
+## Errors
+- 404: the document does not exist, belongs to another user, or is NOT in
+  the trash
+""",
+    responses={
+        200: {
+            "description": "Document restored successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "stored_document_id": "770e8400-e29b-41d4-a716-446655440002",
+                            "name": "Contract Agreement 2024",
+                            "restored": True,
+                            "quota_source": "personal",
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-18T15:00:00Z"},
+                    }
+                }
+            },
+        },
+        404: {"description": "Document not found in trash"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X POST "https://api.giga-pdf.com/api/v1/storage/documents/770e8400-e29b-41d4-a716-446655440002/restore" \\
+  -H "Authorization: Bearer $TOKEN"'''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+stored_doc_id = "770e8400-e29b-41d4-a716-446655440002"
+response = requests.post(
+    f"https://api.giga-pdf.com/api/v1/storage/documents/{stored_doc_id}/restore",
+    headers={"Authorization": f"Bearer {token}"}
+)
+
+result = response.json()["data"]
+print(f"Restored: {result['name']}")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const storedDocId = "770e8400-e29b-41d4-a716-446655440002";
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/documents/${storedDocId}/restore`,
+  {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${token}` }
+  }
+);
+
+const { data: result } = await response.json();
+console.log(`Restored: ${result.name}`);'''
+            },
+        ]
+    },
+)
+async def restore_stored_document(
+    stored_document_id: str,
+    user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[dict]:
+    """Restore a soft-deleted document from the trash."""
+    start_time = time.time()
+
+    effective_limits = await quota_service.get_effective_limits(user.user_id)
+
+    # Only documents currently in the trash can be restored
+    result = await db.execute(
+        select(StoredDocument).where(
+            StoredDocument.id == stored_document_id,
+            StoredDocument.owner_id == user.user_id,
+            StoredDocument.is_deleted,
+        )
+    )
+    stored_doc = result.scalar_one_or_none()
+
+    if not stored_doc:
+        raise NotFoundError(f"Document not found in trash: {stored_document_id}")
+
+    file_size = stored_doc.file_size_bytes or 0
+
+    # Restore
+    stored_doc.is_deleted = False
+    stored_doc.deleted_at = None
+    stored_doc.updated_at = now_utc()
+    await db.commit()
+
+    # Re-consume the quota that was freed at soft-delete time
+    if file_size > 0:
+        if effective_limits.is_tenant_based and effective_limits.tenant_id:
+            await quota_service.update_tenant_storage(
+                effective_limits.tenant_id, file_size, delta_documents=1
+            )
+        else:
+            await quota_service.update_storage_usage(
+                user.user_id, file_size, delta_documents=1
+            )
+
+    # Log the restore activity
+    await activity_service.log_activity(
+        user_id=user.user_id,
+        action=ActivityAction.RESTORE,
         document_id=stored_document_id,
         user_email=user.email,
         extra_data={"file_size_bytes": file_size},
@@ -1779,9 +2622,194 @@ async def delete_stored_document(
         success=True,
         data={
             "stored_document_id": stored_document_id,
-            "deleted": True,
+            "name": stored_doc.name,
+            "restored": True,
             "quota_source": "tenant" if effective_limits.is_tenant_based else "personal",
         },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
+
+
+@router.post(
+    "/documents/{stored_document_id}/thumbnail",
+    response_model=APIResponse[dict],
+    summary="Upload document thumbnail",
+    description="""
+Upload (or replace) the thumbnail image of a stored document.
+
+The frontend renders the first page of the PDF and uploads the resulting
+image here. The image is stored on S3 under the `thumbnails/` prefix and a
+presigned URL is exposed as `thumbnail_url` in document listings.
+
+## Path Parameters
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| stored_document_id | string | UUID of the stored document |
+
+## Multipart Form Fields
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| file | file | Yes | Image bytes — PNG, JPEG or WebP, max 2 MB (magic bytes validated) |
+
+## Behavior
+- Re-uploading replaces the previous thumbnail
+- The returned `thumbnail_url` is a presigned URL valid 7 days; listings
+  always return a fresh one
+
+## Errors
+- 400: file too large (> 2 MB) or not a PNG/JPEG/WebP image
+- 404: document not found (or trashed)
+""",
+    responses={
+        200: {
+            "description": "Thumbnail uploaded successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "thumbnail_url": "https://s3.fr-par.scw.cloud/bucket/thumbnails/user/doc.png?X-Amz-..."
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-18T15:30:00Z"},
+                    }
+                }
+            },
+        },
+        400: {"description": "Invalid image (format or size)"},
+        404: {"description": "Stored document not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X POST "https://api.giga-pdf.com/api/v1/storage/documents/770e8400-e29b-41d4-a716-446655440002/thumbnail" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -F "file=@thumbnail.png;type=image/png"'''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+stored_doc_id = "770e8400-e29b-41d4-a716-446655440002"
+with open("thumbnail.png", "rb") as f:
+    response = requests.post(
+        f"https://api.giga-pdf.com/api/v1/storage/documents/{stored_doc_id}/thumbnail",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"file": ("thumbnail.png", f, "image/png")},
+    )
+
+print(response.json()["data"]["thumbnail_url"])'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const formData = new FormData();
+formData.append("file", thumbnailBlob, "thumbnail.png");
+
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/documents/${storedDocId}/thumbnail`,
+  {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${token}` },
+    body: formData,
+  }
+);
+
+const { data } = await response.json();
+console.log(data.thumbnail_url);'''
+            },
+        ]
+    },
+)
+async def upload_document_thumbnail(
+    stored_document_id: str,
+    user: AuthenticatedUser,
+    file: UploadFile = File(..., description="Thumbnail image (PNG/JPEG/WebP, max 2 MB)"),
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[dict]:
+    """Upload or replace the thumbnail of a stored document."""
+    start_time = time.time()
+
+    # ── 1. Read + validate image bytes (size + magic bytes) ──────────────
+    image_bytes = await file.read()
+
+    if len(image_bytes) > _THUMBNAIL_MAX_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Thumbnail too large: {len(image_bytes)} bytes "
+            f"(limit: {_THUMBNAIL_MAX_BYTES} bytes)",
+        )
+
+    detected = _detect_thumbnail_format(image_bytes)
+    if detected is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid thumbnail format: PNG, JPEG or WebP required "
+            "(magic bytes validation failed)",
+        )
+    extension, content_type = detected
+
+    # ── 2. Ownership check ───────────────────────────────────────────────
+    result = await db.execute(
+        select(StoredDocument).where(
+            StoredDocument.id == stored_document_id,
+            StoredDocument.owner_id == user.user_id,
+            ~StoredDocument.is_deleted,
+        )
+    )
+    stored_doc = result.scalar_one_or_none()
+
+    if not stored_doc:
+        raise NotFoundError(f"Stored document not found: {stored_document_id}")
+
+    # ── 3. Upload to S3 (deterministic key — re-upload overwrites) ───────
+    thumbnail_key = s3_service.get_thumbnail_key(
+        user.user_id, stored_document_id, extension
+    )
+    old_key = stored_doc.thumbnail_path
+
+    try:
+        s3_service.upload_file(
+            file_data=image_bytes,
+            key=thumbnail_key,
+            content_type=content_type,
+            metadata={"document_id": stored_document_id, "user_id": user.user_id},
+        )
+    except Exception as exc:
+        _logger.error(
+            "thumbnail: S3 upload failed (key=%s)", thumbnail_key, exc_info=True
+        )
+        raise InvalidOperationError(f"Thumbnail upload failed: {exc}") from exc
+
+    # If the extension changed (e.g. png → webp), drop the stale object
+    if old_key and old_key != thumbnail_key:
+        s3_service.delete_file(old_key)  # best-effort
+
+    # ── 4. Persist the S3 key (serializers expose a presigned URL) ───────
+    stored_doc.thumbnail_path = thumbnail_key
+    stored_doc.updated_at = now_utc()
+    await db.commit()
+
+    # Log the thumbnail update
+    await activity_service.log_activity(
+        user_id=user.user_id,
+        action=ActivityAction.EDIT,
+        document_id=stored_document_id,
+        user_email=user.email,
+        extra_data={"updated_fields": ["thumbnail"], "thumbnail_key": thumbnail_key},
+    )
+
+    processing_time = int((time.time() - start_time) * 1000)
+
+    return APIResponse(
+        success=True,
+        data={"thumbnail_url": _thumbnail_url_for(thumbnail_key)},
         meta=MetaInfo(
             request_id=get_request_id(),
             timestamp=now_utc(),
@@ -2136,6 +3164,198 @@ async def create_folder(
             "parent_id": request.parent_id,
             "path": path,
             "created_at": created_at.isoformat(),
+        },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
+
+
+class RenameFolderRequest(BaseModel):
+    """Request to rename a folder."""
+
+    name: str = Field(
+        description="New folder name",
+        min_length=1,
+        max_length=255,
+    )
+
+
+@router.patch(
+    "/folders/{folder_id}",
+    response_model=APIResponse[dict],
+    summary="Rename folder",
+    description="""
+Rename a folder.
+
+The new name must not already be used by another folder of the same parent
+(sibling uniqueness) — a 409 Conflict is returned otherwise.
+
+## Path Parameters
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| folder_id | string | UUID of the folder to rename |
+
+## Request Body
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| name | string | Yes | New folder name (1-255 characters) |
+
+## Errors
+- 404: folder not found or owned by another user
+- 409: a sibling folder already uses this name
+""",
+    responses={
+        200: {
+            "description": "Folder renamed successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "folder_id": "660e8400-e29b-41d4-a716-446655440001",
+                            "name": "Contrats 2024",
+                            "parent_id": None,
+                            "path": "/",
+                            "created_at": "2024-01-10T08:00:00Z",
+                            "updated_at": "2024-01-18T16:00:00Z",
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2024-01-18T16:00:00Z"},
+                    }
+                }
+            },
+        },
+        404: {"description": "Folder not found"},
+        409: {"description": "A sibling folder already uses this name"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X PATCH "https://api.giga-pdf.com/api/v1/storage/folders/660e8400-e29b-41d4-a716-446655440001" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name": "Contrats 2024"}' '''
+            },
+            {
+                "lang": "python",
+                "label": "Python",
+                "source": '''import requests
+
+folder_id = "660e8400-e29b-41d4-a716-446655440001"
+response = requests.patch(
+    f"https://api.giga-pdf.com/api/v1/storage/folders/{folder_id}",
+    headers={"Authorization": f"Bearer {token}"},
+    json={"name": "Contrats 2024"},
+)
+
+if response.status_code == 409:
+    print("Name already taken in this parent folder")
+else:
+    folder = response.json()["data"]
+    print(f"Folder renamed to: {folder['name']}")'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const folderId = "660e8400-e29b-41d4-a716-446655440001";
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/folders/${folderId}`,
+  {
+    method: "PATCH",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ name: "Contrats 2024" })
+  }
+);
+
+if (response.status === 409) {
+  console.warn("Name already taken in this parent folder");
+} else {
+  const { data: folder } = await response.json();
+  console.log(`Folder renamed to: ${folder.name}`);
+}'''
+            },
+        ]
+    },
+)
+async def rename_folder(
+    folder_id: str,
+    request: RenameFolderRequest,
+    user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[dict]:
+    """Rename a folder (409 if the name is already taken in the same parent)."""
+    start_time = time.time()
+
+    # Get folder (ownership check)
+    result = await db.execute(
+        select(Folder).where(
+            Folder.id == folder_id,
+            Folder.owner_id == user.user_id,
+        )
+    )
+    folder = result.scalar_one_or_none()
+
+    if not folder:
+        raise NotFoundError(f"Folder not found: {folder_id}")
+
+    # Sibling uniqueness: same owner + same parent + same name → 409
+    sibling_filter = [
+        Folder.owner_id == user.user_id,
+        Folder.id != folder_id,
+        Folder.name == request.name,
+    ]
+    if folder.parent_id is None:
+        sibling_filter.append(Folder.parent_id.is_(None))
+    else:
+        sibling_filter.append(Folder.parent_id == folder.parent_id)
+
+    conflict_result = await db.execute(
+        select(func.count()).select_from(Folder).where(*sibling_filter)
+    )
+    if (conflict_result.scalar() or 0) > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"A folder named '{request.name}' already exists in this location",
+        )
+
+    # Rename
+    old_name = folder.name
+    folder.name = request.name
+    folder.updated_at = now_utc()
+    await db.commit()
+
+    # Log the rename activity (folder resource)
+    await activity_service.log_activity(
+        user_id=user.user_id,
+        action=ActivityAction.RENAME,
+        document_id=None,
+        user_email=user.email,
+        resource_type="folder",
+        extra_data={
+            "folder_id": folder_id,
+            "old_name": old_name,
+            "new_name": request.name,
+        },
+    )
+
+    processing_time = int((time.time() - start_time) * 1000)
+
+    return APIResponse(
+        success=True,
+        data={
+            "folder_id": folder_id,
+            "name": folder.name,
+            "parent_id": folder.parent_id,
+            "path": folder.path,
+            "created_at": folder.created_at.isoformat(),
+            "updated_at": folder.updated_at.isoformat(),
         },
         meta=MetaInfo(
             request_id=get_request_id(),

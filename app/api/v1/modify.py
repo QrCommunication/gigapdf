@@ -3,6 +3,9 @@ PDF modification endpoints.
 
 Handles batch modifications to PDF documents: add, update, and delete
 elements (text, images, shapes, annotations) on specific pages.
+
+Deprecated: superseded by the TypeScript pdf-engine routes (/api/pdf/*).
+Scheduled for removal.
 """
 
 import time
@@ -15,7 +18,10 @@ from app.middleware.request_id import get_request_id
 from app.schemas.responses.common import APIResponse, MetaInfo
 from app.utils.helpers import now_utc
 
-router = APIRouter()
+# deprecated=True cascades to every endpoint of this router (OpenAPI).
+# Deprecated: superseded by the TypeScript pdf-engine routes (/api/pdf/*).
+# Scheduled for removal.
+router = APIRouter(deprecated=True)
 
 
 class ElementStyle(BaseModel):

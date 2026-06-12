@@ -2,7 +2,10 @@
 Celery application configuration.
 
 Configures Celery for async task processing including
-OCR, export, billing, and infrastructure operations.
+export, billing, storage, and infrastructure operations.
+
+Note: the legacy OCR task (app.tasks.ocr_tasks.process_ocr) was removed on
+2026-06-13 — OCR is handled by the TypeScript pdf-engine via /api/pdf/ocr.
 """
 
 import asyncio
@@ -23,10 +26,10 @@ celery_app = Celery(
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
     include=[
-        "app.tasks.ocr_tasks",
         "app.tasks.export_tasks",
         "app.tasks.billing_tasks",
         "app.tasks.infra_tasks",
+        "app.tasks.storage_tasks",
     ],
 )
 
@@ -54,13 +57,11 @@ celery_app.conf.update(
 
     # Rate limiting
     task_annotations={
-        "app.tasks.ocr_tasks.process_ocr": {"rate_limit": "10/m"},
         "app.tasks.export_tasks.export_document": {"rate_limit": "20/m"},
     },
 
     # Queues
     task_routes={
-        "app.tasks.ocr_tasks.*": {"queue": "ocr"},
         "app.tasks.export_tasks.*": {"queue": "export"},
         "app.tasks.billing_tasks.*": {"queue": "billing"},
         "app.tasks.infra_tasks.*": {"queue": "infra"},
@@ -98,6 +99,11 @@ celery_app.conf.update(
         "cleanup-export-files": {
             "task": "app.tasks.export_tasks.cleanup_expired_exports",
             "schedule": 3600.0,  # Every hour
+        },
+        # Purge stored documents trashed more than 30 days ago
+        "purge-trashed-documents": {
+            "task": "app.tasks.storage_tasks.purge_trashed_documents",
+            "schedule": 86400.0,  # Every 24 hours
         },
         # Infrastructure monitoring
         "collect-infrastructure-metrics": {
@@ -201,7 +207,6 @@ def task_postrun_handler(sender=None, task_id=None, task=None, retval=None, stat
 
     Covers:
     - app.tasks.export_tasks.* (export operations)
-    - app.tasks.ocr_tasks.* (OCR processing)
     - billing.* (billing operations)
     - infra.* (infrastructure tasks)
     """
@@ -213,7 +218,6 @@ def task_postrun_handler(sender=None, task_id=None, task=None, retval=None, stat
     # Global coverage: handle all application tasks
     tracked_prefixes = (
         "app.tasks.export_tasks.",
-        "app.tasks.ocr_tasks.",
         "billing.",
         "infra.",
     )
@@ -230,7 +234,6 @@ def task_failure_handler(sender=None, task_id=None, exception=None, **kwargs):
 
     Catches failures for:
     - app.tasks.export_tasks.* (export operations)
-    - app.tasks.ocr_tasks.* (OCR processing)
     - billing.* (billing operations)
     - infra.* (infrastructure tasks)
     """

@@ -2,6 +2,9 @@
 Bookmark management endpoints.
 
 Handles PDF bookmarks (document outline/table of contents).
+
+Deprecated: superseded by the TypeScript pdf-engine routes (/api/pdf/*).
+Scheduled for removal.
 """
 
 
@@ -11,7 +14,10 @@ from pydantic import BaseModel, Field
 from app.middleware.auth import OptionalUser
 from app.schemas.responses.common import APIResponse
 
-router = APIRouter()
+# deprecated=True cascades to every endpoint of this router (OpenAPI).
+# Deprecated: superseded by the TypeScript pdf-engine routes (/api/pdf/*).
+# Scheduled for removal.
+router = APIRouter(deprecated=True)
 
 
 class CreateBookmarkRequest(BaseModel):

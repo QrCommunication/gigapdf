@@ -5,6 +5,9 @@ Handles PDF encryption, decryption, and permission management via pikepdf.
 Encryption is applied inline using pikepdf (AES-256 / AES-128 / RC4-128) and
 the resulting bytes are persisted back into the document session so that
 subsequent save / download operations return the actually-encrypted file.
+
+Deprecated: superseded by the TypeScript pdf-engine routes (/api/pdf/*).
+Scheduled for removal.
 """
 
 import io
@@ -19,7 +22,10 @@ from app.middleware.request_id import get_request_id
 from app.schemas.responses.common import APIResponse, MetaInfo
 from app.utils.helpers import now_utc
 
-router = APIRouter()
+# deprecated=True cascades to every endpoint of this router (OpenAPI).
+# Deprecated: superseded by the TypeScript pdf-engine routes (/api/pdf/*).
+# Scheduled for removal.
+router = APIRouter(deprecated=True)
 
 
 class EncryptDocumentRequest(BaseModel):

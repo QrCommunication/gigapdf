@@ -2,6 +2,9 @@
 History management endpoints (Undo/Redo).
 
 Handles document editing history for reversible operations.
+
+Deprecated: superseded by the TypeScript pdf-engine routes (/api/pdf/*).
+Scheduled for removal.
 """
 
 from fastapi import APIRouter
@@ -12,7 +15,10 @@ from app.schemas.responses.common import APIResponse, MetaInfo
 from app.services.history_service import history_service
 from app.utils.helpers import now_utc
 
-router = APIRouter()
+# deprecated=True cascades to every endpoint of this router (OpenAPI).
+# Deprecated: superseded by the TypeScript pdf-engine routes (/api/pdf/*).
+# Scheduled for removal.
+router = APIRouter(deprecated=True)
 
 
 @router.get(

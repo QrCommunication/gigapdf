@@ -8,7 +8,6 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     activity,
-    annotations,
     api_keys,
     billing,
     bookmarks,
@@ -21,6 +20,7 @@ from app.api.v1 import (
     history,
     jobs,
     layers,
+    logs,
     modify,
     pages,
     plans,
@@ -30,7 +30,6 @@ from app.api.v1 import (
     sharing,
     storage,
     tenant_documents,
-    text,
 )
 from app.api.v1.admin import admin_router
 
@@ -62,21 +61,9 @@ api_router.include_router(
 )
 
 api_router.include_router(
-    text.router,
-    prefix="/documents",
-    tags=["Text Operations"],
-)
-
-api_router.include_router(
     forms.router,
     prefix="/documents",
     tags=["Forms"],
-)
-
-api_router.include_router(
-    annotations.router,
-    prefix="/documents",
-    tags=["Annotations"],
 )
 
 api_router.include_router(
@@ -113,6 +100,12 @@ api_router.include_router(
     jobs.router,
     prefix="/jobs",
     tags=["Jobs"],
+)
+
+api_router.include_router(
+    logs.router,
+    prefix="/logs",
+    tags=["Logs"],
 )
 
 api_router.include_router(

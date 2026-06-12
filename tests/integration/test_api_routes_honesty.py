@@ -1,7 +1,7 @@
 """
 Tests d'honnêteté des endpoints TODO.
 
-Valide que les 21 endpoints non implémentés retournent 501 (Not Implemented)
+Valide que les 13 endpoints non implémentés retournent 501 (Not Implemented)
 et non 200 avec de fausses données. Cela garantit que l'API ne ment pas à
 ses consommateurs en simulant un succès pour des opérations non réelles.
 
@@ -12,6 +12,11 @@ Contexte (post-mortem 04):
 - Les endpoints peuvent retourner 401 (auth requise) ou 501 (stub honnête),
   mais JAMAIS 200 avec de fausses données.
 
+Historique :
+- 2026-06-13 : suppression des stubs text.py (5 endpoints) et annotations.py
+  (3 endpoints) — modules retirés du codebase, la fonctionnalité équivalente
+  vit dans le moteur TypeScript (/api/pdf/*). 21 → 13 endpoints.
+
 Les chemins de template comme /{document_id}/... sont remplacés par "test-doc-id"
 et /{page_number}/... par "1" pour obtenir des URLs concrètes.
 """
@@ -20,25 +25,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 # ---------------------------------------------------------------------------
-# Stub endpoints — exactement les 21 détectés dans le codebase
+# Stub endpoints — exactement les 13 détectés dans le codebase
 # ---------------------------------------------------------------------------
 
 TODO_ENDPOINTS = [
-    # text.py — prefix: /api/v1/documents
-    ("POST", "/api/v1/documents/test-doc-id/text/search"),
-    ("POST", "/api/v1/documents/test-doc-id/text/replace"),
-    ("GET",  "/api/v1/documents/test-doc-id/text/extract"),
-    ("POST", "/api/v1/documents/test-doc-id/ocr"),
-    ("GET",  "/api/v1/documents/test-doc-id/ocr/status"),
     # forms.py — prefix: /api/v1/documents
     ("GET",  "/api/v1/documents/test-doc-id/forms/fields"),
     ("PUT",  "/api/v1/documents/test-doc-id/forms/fill"),
     ("POST", "/api/v1/documents/test-doc-id/pages/1/forms/fields"),
     ("POST", "/api/v1/documents/test-doc-id/forms/flatten"),
-    # annotations.py — prefix: /api/v1/documents
-    ("POST", "/api/v1/documents/test-doc-id/pages/1/annotations/markup"),
-    ("POST", "/api/v1/documents/test-doc-id/pages/1/annotations/note"),
-    ("POST", "/api/v1/documents/test-doc-id/pages/1/annotations/link"),
     # layers.py — prefix: /api/v1/documents
     ("GET",  "/api/v1/documents/test-doc-id/layers"),
     ("POST", "/api/v1/documents/test-doc-id/layers"),
@@ -108,42 +103,44 @@ def test_todo_endpoint_is_honest(api_client, method, path):
 
 
 @pytest.mark.parametrize("method,path", [
+    # text.py et annotations.py ont été SUPPRIMÉS le 2026-06-13 (stubs 501
+    # jamais appelés). Ces routes doivent désormais retourner 404/405 —
+    # jamais 200 ni 501 (une résurrection accidentelle serait détectée ici).
     ("POST", "/api/v1/documents/test-doc-id/text/search"),
     ("POST", "/api/v1/documents/test-doc-id/text/replace"),
     ("GET",  "/api/v1/documents/test-doc-id/text/extract"),
     ("POST", "/api/v1/documents/test-doc-id/ocr"),
     ("GET",  "/api/v1/documents/test-doc-id/ocr/status"),
+    ("GET",  "/api/v1/documents/test-doc-id/ocr/languages"),
+    ("POST", "/api/v1/documents/test-doc-id/pages/1/annotations/markup"),
+    ("POST", "/api/v1/documents/test-doc-id/pages/1/annotations/note"),
+    ("POST", "/api/v1/documents/test-doc-id/pages/1/annotations/link"),
 ])
-def test_text_stubs_carry_not_implemented_message(api_client, method, path):
+def test_removed_stub_routes_are_gone(api_client, method, path):
     """
-    Les endpoints text/* qui retournent 501 doivent inclure 'Not implemented'
-    dans le detail pour guider les consommateurs de l'API.
-
-    Ce test est intentionnellement scopé aux endpoints text/* car leur
-    implémentation est connue pour retourner 501 (pas 401 ou 404).
-    Les autres stubs peuvent être masqués par l'auth ou le routing.
+    Les routes des modules supprimés (text.py, annotations.py) ne doivent
+    plus exister : ni 200 (réimplémentation non testée), ni 501 (stub
+    ressuscité). 404/405 attendus (401/429 tolérés si un middleware
+    intercepte avant le routing).
     """
     response = api_client.request(
         method,
         path,
-        json={"query": "test", "search": "test", "replace": "test"},
+        json={},
         headers={"Authorization": "Bearer test-token"},
     )
 
-    # Si le middleware auth laisse passer et qu'on atteint le stub :
-    if response.status_code == 501:
-        body = response.json()
-        detail = body.get("detail", "")
-        assert "Not implemented" in detail or "not implemented" in detail.lower(), (
-            f"{method} {path} returned 501 but detail does not mention 'Not implemented'. "
-            f"Got: {detail!r}"
-        )
+    assert response.status_code not in (200, 501), (
+        f"{method} {path} returned {response.status_code} — this route was "
+        "removed on 2026-06-13 (superseded by the TypeScript pdf-engine "
+        "/api/pdf/* routes) and must not be resurrected silently."
+    )
 
 
 def test_todo_endpoints_count():
     """Pin le nombre exact de stubs connus — alerte si un stub est ajouté ou retiré sans mise à jour."""
-    assert len(TODO_ENDPOINTS) == 21, (
-        f"Expected exactly 21 TODO endpoints, got {len(TODO_ENDPOINTS)}. "
+    assert len(TODO_ENDPOINTS) == 13, (
+        f"Expected exactly 13 TODO endpoints, got {len(TODO_ENDPOINTS)}. "
         "Update this test and TODO_ENDPOINTS when adding or implementing stubs."
     )
 
