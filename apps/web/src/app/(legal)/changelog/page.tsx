@@ -15,6 +15,27 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.2.0",
+    date: "2026-06-13",
+    type: "minor",
+    changes: [
+      { type: "feature", description: "Trash: deleted documents can now be restored for 30 days before being permanently removed" },
+      { type: "feature", description: "Tags on documents, with filtering and autocomplete from your existing tags" },
+      { type: "feature", description: "Full-text search across document names and their content" },
+      { type: "feature", description: "Real document thumbnails in your library, generated at upload and refreshed after editing" },
+      { type: "feature", description: "Import Word, Excel, PowerPoint and OpenDocument files (.doc, .docx, .xls, .xlsx, .ppt, .pptx, .odt, .ods, .odp) — converted to PDF automatically" },
+      { type: "feature", description: "Real-time collaboration: edits from other participants now appear live on the canvas" },
+      { type: "feature", description: "Digital signature (PKCS#7) with your own P12/PFX certificate — processed in memory, never stored" },
+      { type: "feature", description: "PDF compression with the space saved shown before you apply it" },
+      { type: "feature", description: "Searchable PDF: OCR adds an invisible text layer to scanned documents so their text can be selected and searched" },
+      { type: "feature", description: "Layers panel: show, hide and lock individual elements" },
+      { type: "feature", description: "Multi-selection editing: change opacity, colors and alignment of several elements at once" },
+      { type: "feature", description: "Export to ODT and ODP, alongside DOCX, XLSX and PPTX" },
+      { type: "improvement", description: "Document duplication, folder renaming, parallel uploads (3 at a time) and an activity history on the document page" },
+      { type: "fix", description: "Self-hosted: database migrations could be silently skipped on existing installs — fixed. Run 'alembic upgrade head' after updating" },
+    ],
+  },
+  {
     version: "1.1.0",
     date: "2026-06-12",
     type: "minor",
@@ -199,7 +220,7 @@ export default function ChangelogPage() {
               {t("subscribe.description")}
             </p>
             <a
-              href="https://github.com/ronylicha/gigapdf/releases"
+              href="https://github.com/QrCommunication/gigapdf/releases"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-sm text-primary hover:underline"

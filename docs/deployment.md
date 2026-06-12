@@ -58,6 +58,29 @@ bash deploy/deploy.sh
 
 Le script sort avec code `0` si tout est sain, `1` si un service échoue (rollback déclenché automatiquement).
 
+### Migrations base de données (OBLIGATOIRE après chaque mise à jour)
+
+`deploy.sh` exécute `alembic upgrade head` (étape 4) mais **ne bloque pas
+le déploiement si la migration échoue** (simple warning). Après chaque mise
+à jour, vérifier manuellement que la révision attendue est appliquée :
+
+```bash
+cd /opt/gigapdf
+source .venv/bin/activate
+alembic upgrade head     # idempotent — depuis la racine (alembic.ini)
+alembic current          # doit afficher la dernière révision
+```
+
+- **v1.2.0** introduit la migration `017_ged_features` (colonnes de
+  recherche plein texte + index corbeille sur `stored_documents`).
+  `alembic current` doit afficher `017_ged_features`.
+- Les versions antérieures à v1.2.0 contenaient un bug dans
+  `migrations/env.py` : sur toute base où la table `alembic_version`
+  existait déjà, les migrations étaient **silencieusement annulées**
+  (exit 0, "Running upgrade …" loggé, aucun changement de schéma).
+  Corrigé en v1.2.0 — d'où l'importance du contrôle `alembic current`
+  post-déploiement.
+
 ---
 
 ## Rollback
