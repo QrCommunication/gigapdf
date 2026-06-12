@@ -13,6 +13,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    Computed,
     DateTime,
     Float,
     ForeignKey,
@@ -23,7 +24,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -57,9 +58,30 @@ class StoredDocument(Base):
     mime_type: Mapped[str] = mapped_column(String(100), default="application/pdf")
     tags: Mapped[dict | None] = mapped_column(JSON, default=list)
     metadata_cache: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    thumbnail_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    thumbnail_path: Mapped[str | None] = mapped_column(
+        String(500), nullable=True, comment="S3 key of the document thumbnail (thumbnails/ prefix)"
+    )
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Full-text search material — deferred: never loaded by list queries
+    # (extracted_text can be up to 500k characters).
+    extracted_text: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        deferred=True,
+        comment="Plain text extracted from the PDF (search material, max 500k chars)",
+    )
+    # PostgreSQL generated column (STORED) — populated by the database,
+    # never written by the application (Computed excludes it from INSERT/UPDATE).
+    search_vector: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed(
+            "to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(extracted_text, ''))",
+            persisted=True,
+        ),
+        nullable=True,
+        deferred=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=func.now(), nullable=False
     )
@@ -80,6 +102,12 @@ class StoredDocument(Base):
         Index("idx_stored_documents_owner", "owner_id"),
         Index("idx_stored_documents_folder", "folder_id"),
         Index("idx_stored_documents_deleted", "is_deleted"),
+        Index("idx_stored_documents_deleted_at", "deleted_at"),
+        Index(
+            "idx_stored_documents_search_vector",
+            "search_vector",
+            postgresql_using="gin",
+        ),
     )
 
 

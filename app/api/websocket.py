@@ -614,6 +614,104 @@ async def document_update(sid: str, data: dict) -> None:
         logger.error(f"Error broadcasting document update: {e}")
 
 
+# ---------------------------------------------------------------------------
+# Element collaboration relays (scene graph sync)
+#
+# The client emits element:create / element:update / element:delete on every
+# local mutation (see packages/api/src/websocket/client.ts SocketEventData).
+# The server is a pure relay: it validates that the emitter joined the room
+# of the targeted document, then rebroadcasts the UNTOUCHED payload to the
+# room (skip_sid=emitter). client_id is preserved — receivers use it for
+# anti-echo filtering. Persistence is NOT done here: the scene graph goes
+# through the REST elements API.
+# ---------------------------------------------------------------------------
+
+# Event names contain ":" so they cannot use @sio.event (function-name based).
+_ELEMENT_RELAY_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
+    "element:create": ("document_id", "element"),
+    "element:update": ("document_id", "element_id"),
+    "element:delete": ("document_id", "element_id"),
+}
+
+
+async def _relay_element_event(event: str, sid: str, data: dict) -> None:
+    """
+    Relay an element collaboration event to the document room.
+
+    Light validation only (same pattern as document_update):
+    - payload is a dict carrying the required fields for the event
+    - the emitter has joined the room of the targeted document
+
+    The payload is rebroadcast AS-IS (client_id included — receivers rely
+    on it for anti-echo).
+    """
+    try:
+        if not isinstance(data, dict):
+            logger.debug(f"{event}: non-dict payload from {sid}, dropped")
+            return
+
+        required = _ELEMENT_RELAY_REQUIRED_FIELDS.get(event, ("document_id",))
+        missing = [field for field in required if not data.get(field)]
+        if missing:
+            logger.debug(f"{event}: missing fields {missing} from {sid}, dropped")
+            return
+
+        # Get session info (populated by connect/join_document)
+        async with sio.session(sid) as session:
+            user_id = session.get("user_id")
+            joined_document_id = session.get("document_id")
+
+        # Emitter must have joined the room of the document it targets
+        if not joined_document_id or joined_document_id != data["document_id"]:
+            logger.debug(
+                f"{event}: emitter {sid} (user {user_id}) has not joined "
+                f"document {data['document_id']!r}, dropped"
+            )
+            return
+
+        # Rebroadcast the untouched payload to the room, excluding the emitter
+        room = await get_document_room(joined_document_id)
+        await sio.emit(event, data, room=room, skip_sid=sid)
+
+        logger.debug(
+            f"{event} relayed from user {user_id} "
+            f"on document {joined_document_id} (socket: {sid})"
+        )
+
+    except Exception as e:
+        logger.error(f"Error relaying {event}: {e}")
+
+
+@sio.on("element:create")
+async def element_create(sid: str, data: dict) -> None:
+    """
+    Relay element creation to collaborators.
+
+    Payload: {document_id, element, user_id, page_number?, client_id}
+    """
+    await _relay_element_event("element:create", sid, data)
+
+
+@sio.on("element:update")
+async def element_update(sid: str, data: dict) -> None:
+    """
+    Relay element update to collaborators.
+
+    Payload: {document_id, element_id, changes, user_id, client_id}
+    """
+    await _relay_element_event("element:update", sid, data)
+
+
+@sio.on("element:delete")
+async def element_delete(sid: str, data: dict) -> None:
+    """
+    Relay element deletion to collaborators.
+
+    Payload: {document_id, element_id, user_id, client_id}
+    """
+    await _relay_element_event("element:delete", sid, data)
+
+
 # Periodic cleanup tasks
 async def cleanup_task():
     """

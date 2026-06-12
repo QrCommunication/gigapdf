@@ -280,6 +280,58 @@ class S3Service:
             logger.error(f"S3 delete failed for {key}: {e}")
             return False
 
+    def copy_file(
+        self,
+        source_key: str,
+        dest_key: str,
+        content_type: str | None = None,
+        metadata: dict | None = None,
+    ) -> dict:
+        """
+        Copy an object inside the bucket using S3 server-side copy.
+
+        No bytes transit through the application — the copy happens
+        entirely on the storage backend (CopyObject API).
+
+        Args:
+            source_key: Existing S3 object key.
+            dest_key: Destination S3 object key.
+            content_type: Optional content type override. When provided
+                (or when metadata is provided), the copy uses
+                MetadataDirective=REPLACE; otherwise source metadata is kept.
+            metadata: Optional metadata to attach to the destination object.
+
+        Returns:
+            dict with copy result including source/destination keys.
+        """
+        try:
+            extra_args: dict = {}
+            if content_type or metadata:
+                extra_args["MetadataDirective"] = "REPLACE"
+                if content_type:
+                    extra_args["ContentType"] = content_type
+                if metadata:
+                    extra_args["Metadata"] = {k: str(v) for k, v in metadata.items()}
+
+            self.client.copy_object(
+                Bucket=self.bucket_name,
+                Key=dest_key,
+                CopySource={"Bucket": self.bucket_name, "Key": source_key},
+                **extra_args,
+            )
+
+            logger.info(f"Copied S3 object: {source_key} -> {dest_key}")
+
+            return {
+                "source_key": source_key,
+                "dest_key": dest_key,
+                "bucket": self.bucket_name,
+            }
+
+        except ClientError as e:
+            logger.error(f"S3 copy failed ({source_key} -> {dest_key}): {e}")
+            raise
+
     def file_exists(self, key: str) -> bool:
         """
         Check if a file exists in S3.
@@ -380,6 +432,20 @@ class S3Service:
             S3 key string.
         """
         return f"documents/{user_id}/{document_id}/v{version}.pdf"
+
+    def get_thumbnail_key(self, user_id: str, document_id: str, extension: str) -> str:
+        """
+        Generate S3 key for a stored document thumbnail.
+
+        Args:
+            user_id: User identifier.
+            document_id: Stored document identifier.
+            extension: Image extension without dot (png, jpg, webp).
+
+        Returns:
+            S3 key string under the thumbnails/ prefix.
+        """
+        return f"thumbnails/{user_id}/{document_id}.{extension}"
 
 
 # Global service instance

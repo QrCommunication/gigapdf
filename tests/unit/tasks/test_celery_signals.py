@@ -4,9 +4,11 @@ Unit tests for Celery signal handlers covering all task types.
 Tests that task_postrun and task_failure handlers correctly update AsyncJob status
 for all tracked task families:
 - app.tasks.export_tasks.*
-- app.tasks.ocr_tasks.*
 - billing.*
 - infra.*
+
+Note: app.tasks.ocr_tasks.* was removed on 2026-06-13 (OCR is handled by the
+TypeScript pdf-engine via /api/pdf/ocr — the Celery task had no dispatcher).
 """
 
 import pytest
@@ -34,7 +36,8 @@ class TestTaskPostrunSignal:
 
     @pytest.mark.parametrize("task_name,should_handle", [
         ("app.tasks.export_tasks.export_document", True),
-        ("app.tasks.ocr_tasks.process_ocr", True),
+        # Removed family must no longer be tracked (dead code guard)
+        ("app.tasks.ocr_tasks.process_ocr", False),
         ("billing.sync_plans_to_stripe", True),
         ("billing.process_overdue_payments", True),
         ("infra.collect_metrics", True),
@@ -179,13 +182,17 @@ class TestSignalCoverage:
         # Verify all task families are mentioned
         required_prefixes = [
             "app.tasks.export_tasks.",
-            "app.tasks.ocr_tasks.",
             "billing.",
             "infra.",
         ]
 
         for prefix in required_prefixes:
             assert prefix in source, f"Task prefix '{prefix}' not found in handler"
+
+        # Removed family must NOT resurface in the handler (dead code guard)
+        assert "app.tasks.ocr_tasks." not in source, (
+            "OCR task family was removed on 2026-06-13 — it must not be tracked"
+        )
 
 
 class TestBeatScheduleInclusion:

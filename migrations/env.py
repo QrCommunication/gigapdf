@@ -46,6 +46,16 @@ def ensure_alembic_version_table(connection) -> None:
 
     Default Alembic creates VARCHAR(32) which is too short for descriptive revision names.
     This function creates or resizes it to VARCHAR(255).
+
+    CRITICAL: this function must NOT leave a transaction in progress on the
+    connection. The inspector queries below implicitly begin one (SQLAlchemy
+    2.0 "begin once" semantics); if it is still open when Alembic configures
+    the migration context, ``context.begin_transaction()`` does not take
+    ownership of it and the WHOLE migration run is silently ROLLED BACK when
+    the connection closes (exit code 0, "Running upgrade ..." logged, but no
+    schema change and alembic_version unchanged). This bit on every database
+    where alembic_version already existed — the final commit() closes the
+    implicit transaction in all code paths.
     """
     inspector = inspect(connection)
 
@@ -55,22 +65,24 @@ def ensure_alembic_version_table(connection) -> None:
         connection.execute(
             text("CREATE TABLE alembic_version (version_num VARCHAR(255) NOT NULL, CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))")
         )
-        connection.commit()
-        return
+    else:
+        # Table exists - check current column size and resize if needed
+        columns = inspector.get_columns("alembic_version")
+        for col in columns:
+            if col["name"] == "version_num":
+                # Get the column type length
+                col_type = str(col["type"])
+                if "VARCHAR(32)" in col_type.upper() or "VARCHAR(128)" in col_type.upper():
+                    # Resize to 255
+                    connection.execute(
+                        text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(255)")
+                    )
+                break
 
-    # Table exists - check current column size and resize if needed
-    columns = inspector.get_columns("alembic_version")
-    for col in columns:
-        if col["name"] == "version_num":
-            # Get the column type length
-            col_type = str(col["type"])
-            if "VARCHAR(32)" in col_type.upper() or "VARCHAR(128)" in col_type.upper():
-                # Resize to 255
-                connection.execute(
-                    text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(255)")
-                )
-                connection.commit()
-            break
+    # Always close the implicit transaction so Alembic owns (and commits)
+    # the migration transaction itself.
+    if connection.in_transaction():
+        connection.commit()
 
 
 def run_migrations_offline() -> None:
