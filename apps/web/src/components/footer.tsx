@@ -7,7 +7,7 @@ import { defaultLocale } from "@/i18n/config";
 import { Logo } from "@/components/logo";
 import { ExternalLink, Github } from "lucide-react";
 
-const GITHUB_URL = "https://github.com/ronylicha/gigapdf";
+const GITHUB_URL = "https://github.com/QrCommunication/gigapdf";
 
 /**
  * Pied de page marketing — 4 colonnes façon achevé d'imprimer :

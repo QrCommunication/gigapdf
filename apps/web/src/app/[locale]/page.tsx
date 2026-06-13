@@ -38,7 +38,7 @@ import {
   VignetteTrust,
 } from "@/components/landing/section-vignettes";
 
-const GITHUB_URL = "https://github.com/ronylicha/gigapdf";
+const GITHUB_URL = "https://github.com/QrCommunication/gigapdf";
 const CONTACT_EMAIL = "contact@giga-pdf.com";
 
 /** Les 5 sections numérotées du cahier (zigzag 2 colonnes alternées). */
