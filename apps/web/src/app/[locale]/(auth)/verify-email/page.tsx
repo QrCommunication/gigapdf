@@ -2,6 +2,7 @@ import { VerifyEmailForm } from "@/components/auth/verify-email-form";
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { publicPageAlternates } from "@/lib/seo/hreflang";
+import { Suspense } from "react";
 
 interface VerifyEmailPageProps {
   params: Promise<{ locale: string }>;
@@ -21,5 +22,9 @@ export default async function VerifyEmailPage({ params }: VerifyEmailPageProps) 
   const { locale } = await params;
   setRequestLocale(locale);
 
-  return <VerifyEmailForm />;
+  return (
+    <Suspense fallback={null}>
+      <VerifyEmailForm />
+    </Suspense>
+  );
 }

@@ -2,6 +2,7 @@ import { LoginForm } from "@/components/auth/login-form";
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { publicPageAlternates } from "@/lib/seo/hreflang";
+import { Suspense } from "react";
 
 interface LoginPageProps {
   params: Promise<{ locale: string }>;
@@ -21,5 +22,9 @@ export default async function LoginPage({ params }: LoginPageProps) {
   const { locale } = await params;
   setRequestLocale(locale);
 
-  return <LoginForm />;
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
 }
