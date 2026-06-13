@@ -9,7 +9,7 @@ import {
   Stamp,
   Type,
 } from "lucide-react";
-import { cn } from "@giga-pdf/ui";
+import { cn } from "@giga-pdf/ui/lib/utils";
 import { CropMarks } from "./crop-marks";
 
 const TOOLBAR_ICONS = [Type, ImageIcon, Square, PenLine, Stamp, Droplets];

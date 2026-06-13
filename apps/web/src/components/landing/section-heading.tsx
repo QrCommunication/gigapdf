@@ -1,4 +1,4 @@
-import { cn } from "@giga-pdf/ui";
+import { cn } from "@giga-pdf/ui/lib/utils";
 
 interface SectionHeadingProps {
   /** Numéro façon cahier d'impression : "01", "02"… */

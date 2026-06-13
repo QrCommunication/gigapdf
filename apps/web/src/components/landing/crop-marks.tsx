@@ -1,4 +1,4 @@
-import { cn } from "@giga-pdf/ui";
+import { cn } from "@giga-pdf/ui/lib/utils";
 
 /**
  * Repères de coupe d'imprimerie (crop marks) : 8 traits fins positionnés
