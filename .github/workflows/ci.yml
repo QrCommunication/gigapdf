@@ -23,13 +23,14 @@ jobs:
     runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.28.0
+      - uses: pnpm/action-setup@v6
+        # No `version:` input — pnpm reads it from package.json's
+        # `packageManager: pnpm@10.28.0` (single source of truth, avoids the
+        # "Multiple versions of pnpm specified" error in action-setup v5+).
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -51,13 +52,14 @@ jobs:
     runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.28.0
+      - uses: pnpm/action-setup@v6
+        # No `version:` input — pnpm reads it from package.json's
+        # `packageManager: pnpm@10.28.0` (single source of truth, avoids the
+        # "Multiple versions of pnpm specified" error in action-setup v5+).
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -80,13 +82,14 @@ jobs:
     runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.28.0
+      - uses: pnpm/action-setup@v6
+        # No `version:` input — pnpm reads it from package.json's
+        # `packageManager: pnpm@10.28.0` (single source of truth, avoids the
+        # "Multiple versions of pnpm specified" error in action-setup v5+).
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -110,13 +113,14 @@ jobs:
     runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.28.0
+      - uses: pnpm/action-setup@v6
+        # No `version:` input — pnpm reads it from package.json's
+        # `packageManager: pnpm@10.28.0` (single source of truth, avoids the
+        # "Multiple versions of pnpm specified" error in action-setup v5+).
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -144,9 +148,9 @@ jobs:
     runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -168,9 +172,9 @@ jobs:
     runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -214,13 +218,14 @@ jobs:
       BETTER_AUTH_SECRET: "ci-build-placeholder-secret-do-not-use-in-prod"
       BETTER_AUTH_URL: "https://app.giga-pdf.com"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.28.0
+      - uses: pnpm/action-setup@v6
+        # No `version:` input — pnpm reads it from package.json's
+        # `packageManager: pnpm@10.28.0` (single source of truth, avoids the
+        # "Multiple versions of pnpm specified" error in action-setup v5+).
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'pnpm'
