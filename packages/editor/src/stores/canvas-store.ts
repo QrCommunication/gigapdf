@@ -5,8 +5,31 @@
 
 import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import type { Tool, ShapeType, AnnotationType, FieldType } from "@giga-pdf/types";
+import type {
+  Tool,
+  ShapeType,
+  AnnotationType,
+  FieldType,
+  FieldCreationKind,
+} from "@giga-pdf/types";
 import type { CanvasState, ViewportDimensions } from "../types";
+
+/** Map a creation palette kind to the underlying PDF field type. */
+function fieldKindToFieldType(kind: FieldCreationKind): FieldType {
+  switch (kind) {
+    case "checkbox":
+      return "checkbox";
+    case "radio_group":
+      return "radio";
+    case "dropdown":
+      return "dropdown";
+    case "text":
+    case "multiline":
+    case "date":
+    default:
+      return "text";
+  }
+}
 
 export interface CanvasStore extends CanvasState {
   // Actions
@@ -15,6 +38,7 @@ export interface CanvasStore extends CanvasState {
   zoomOut: () => void;
   zoomToFit: () => void;
   resetZoom: () => void;
+  setFitMode: (mode: CanvasState["fitMode"]) => void;
   setPan: (x: number, y: number) => void;
   panBy: (deltaX: number, deltaY: number) => void;
   setActiveTool: (tool: Tool, subtype?: string | null) => void;
@@ -33,6 +57,7 @@ export interface CanvasStore extends CanvasState {
   setShapeType: (shapeType: ShapeType) => void;
   setAnnotationType: (annotationType: AnnotationType) => void;
   setFieldType: (fieldType: FieldType) => void;
+  setFieldKind: (fieldKind: FieldCreationKind) => void;
   setStrokeColor: (color: string) => void;
   setFillColor: (color: string) => void;
   setStrokeWidth: (width: number) => void;
@@ -42,7 +67,8 @@ export interface CanvasStore extends CanvasState {
 const initialState: CanvasState = {
   zoom: 1.0,
   minZoom: 0.1,
-  maxZoom: 5.0,
+  maxZoom: 8.0,
+  fitMode: null,
   panOffset: { x: 0, y: 0 },
   activeTool: "select",
   activeSubtype: null,
@@ -56,6 +82,7 @@ const initialState: CanvasState = {
   shapeType: "rectangle",
   annotationType: "highlight",
   fieldType: "text",
+  fieldKind: "text",
   strokeColor: "#000000",
   fillColor: "transparent",
   strokeWidth: 2,
@@ -98,6 +125,11 @@ export const useCanvasStore: UseBoundStore<StoreApi<CanvasStore>> = create<Canva
       set((state) => {
         state.zoom = 1.0;
         state.panOffset = { x: 0, y: 0 };
+      }),
+
+    setFitMode: (mode) =>
+      set((state) => {
+        state.fitMode = mode;
       }),
 
     setPan: (x, y) =>
@@ -186,6 +218,15 @@ export const useCanvasStore: UseBoundStore<StoreApi<CanvasStore>> = create<Canva
     setFieldType: (fieldType) =>
       set((state) => {
         state.fieldType = fieldType;
+      }),
+
+    // Garde fieldType (type PDF de base) synchronisé : le reste du code
+    // (rendu, bake) ne connaît que FieldType — fieldKind n'est qu'un
+    // raffinement de création (multiline/date/radio_group).
+    setFieldKind: (fieldKind) =>
+      set((state) => {
+        state.fieldKind = fieldKind;
+        state.fieldType = fieldKindToFieldType(fieldKind);
       }),
 
     setStrokeColor: (color) =>

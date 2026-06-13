@@ -5,7 +5,12 @@ import { useParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useShallow } from "zustand/react/shallow";
 import Link from "next/link";
-import type { Element, UUID, PageObject } from "@giga-pdf/types";
+import type {
+  Element,
+  FormFieldElement,
+  UUID,
+  PageObject,
+} from "@giga-pdf/types";
 import { Button, useToast } from "@giga-pdf/ui";
 import {
   useCanvasStore,
@@ -59,7 +64,12 @@ import type {
   EditorCanvasHandle,
   TextFormatAction,
 } from "@/components/editor/editor-canvas";
-import { FormsPanel } from "@/components/editor/forms-panel";
+import {
+  FormsPanel,
+  type FormsPanelMode,
+  type LoadedFormField,
+} from "@/components/editor/forms-panel";
+import { FormFillOverlay } from "@/components/editor/form-fill-overlay";
 import { ShareDialog } from "@/components/sharing/share-dialog";
 import {
   useFlattenPdf,
@@ -175,17 +185,19 @@ export default function EditorPage() {
   const {
     activeTool,
     zoom,
+    fitMode,
     shapeType,
     annotationType,
-    fieldType,
+    fieldKind,
     strokeColor,
     fillColor,
     strokeWidth,
     setActiveTool,
     setZoom,
+    setFitMode,
     setShapeType,
     setAnnotationType,
-    setFieldType,
+    setFieldKind,
     setStrokeColor,
     setFillColor,
     setStrokeWidth,
@@ -193,22 +205,38 @@ export default function EditorPage() {
     useShallow((s) => ({
       activeTool: s.activeTool,
       zoom: s.zoom,
+      fitMode: s.fitMode,
       shapeType: s.shapeType,
       annotationType: s.annotationType,
-      fieldType: s.fieldType,
+      fieldKind: s.fieldKind,
       strokeColor: s.strokeColor,
       fillColor: s.fillColor,
       strokeWidth: s.strokeWidth,
       setActiveTool: s.setActiveTool,
       setZoom: s.setZoom,
+      setFitMode: s.setFitMode,
       setShapeType: s.setShapeType,
       setAnnotationType: s.setAnnotationType,
-      setFieldType: s.setFieldType,
+      setFieldKind: s.setFieldKind,
       setStrokeColor: s.setStrokeColor,
       setFillColor: s.setFillColor,
       setStrokeWidth: s.setStrokeWidth,
     }))
   );
+
+  // Zoom MANUEL (molette, presets, ±, Ctrl+1) : sort du mode fit — le fit ne
+  // doit plus recalculer par-dessus le choix explicite de l'utilisateur.
+  // Les modes fit, eux, passent par setZoom directement (onFitZoomChange).
+  const handleManualZoomChange = useCallback(
+    (newZoom: number) => {
+      setFitMode(null);
+      setZoom(newZoom);
+    },
+    [setFitMode, setZoom],
+  );
+
+  const handleFitPage = useCallback(() => setFitMode("page"), [setFitMode]);
+  const handleFitWidth = useCallback(() => setFitMode("width"), [setFitMode]);
 
   // Selection store — selected element ids
   const {
@@ -247,6 +275,15 @@ export default function EditorPage() {
 
   // Canvas handle (via callback) — kept local: transient imperative handle
   const [canvasHandle, setCanvasHandle] = useState<EditorCanvasHandle | null>(null);
+
+  // --- Formulaires : mode Concevoir / Remplir -----------------------------
+  // Concevoir = placer/éditer des champs (comportement historique).
+  // Remplir = les champs EXISTANTS du PDF sont listés (FormsPanel) ET
+  // surlignés sur le canvas (FormFillOverlay) ; saisie + application via
+  // /api/pdf/forms. États locaux : purement UI, non persistés.
+  const [formsMode, setFormsMode] = useState<FormsPanelMode>("design");
+  const [loadedFormFields, setLoadedFormFields] = useState<LoadedFormField[]>([]);
+  const [focusedFormField, setFocusedFormField] = useState<string | null>(null);
   // Ref pour l'input file
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -822,6 +859,78 @@ export default function EditorPage() {
       selectedElementIds.includes(el.elementId)
     );
   }, [currentPage, selectedElementIds]);
+
+  // --- Champs de formulaire du document (mode Concevoir) -------------------
+  // Liste plate ordonnée page par page : c'est l'ordre dans lequel les
+  // champs seront bakés en AcroForm au save/export — soit l'ordre de
+  // tabulation logique dans la plupart des lecteurs PDF.
+  const designFields = useMemo(() => {
+    const list: Array<{ element: FormFieldElement; pageIndex: number }> = [];
+    pages.forEach((page, pageIndex) => {
+      for (const el of page.elements) {
+        if (el.type === "form_field") {
+          list.push({ element: el, pageIndex });
+        }
+      }
+    });
+    return list;
+  }, [pages]);
+
+  // Noms de champs du document — validation d'unicité dans le panel
+  // propriétés (les widgets radio d'un groupe partagent leur nom : le panel
+  // exclut le nom courant).
+  const allFieldNames = useMemo(
+    () => designFields.map(({ element }) => element.fieldName),
+    [designFields],
+  );
+
+  // Sélection d'un champ depuis la liste du FormsPanel : navigue vers sa
+  // page puis le sélectionne (le properties panel suit).
+  const handleDesignFieldSelect = useCallback(
+    (elementId: string, pageIndex: number) => {
+      const targetPage = pages[pageIndex];
+      if (!targetPage) return;
+      if (pageIndex !== currentPageIndex) goToPage(pageIndex);
+      selectElements([elementId], targetPage.pageId);
+    },
+    [pages, currentPageIndex, goToPage, selectElements],
+  );
+
+  // Réordonnancement d'un champ dans l'ordre de bake. Limitation moteur
+  // documentée : l'ordre de tabulation PDF étant l'ordre des /Annots de la
+  // PAGE, le réordonnancement n'opère qu'entre champs d'une même page (un
+  // swap inter-pages déplacerait physiquement le champ).
+  const handleDesignFieldReorder = useCallback(
+    (elementId: string, direction: "up" | "down") => {
+      const index = designFields.findIndex(
+        ({ element }) => element.elementId === elementId,
+      );
+      if (index < 0) return;
+      const neighborIndex = direction === "up" ? index - 1 : index + 1;
+      if (neighborIndex < 0 || neighborIndex >= designFields.length) return;
+      const current = designFields[index]!;
+      const neighbor = designFields[neighborIndex]!;
+      if (current.pageIndex !== neighbor.pageIndex) return;
+
+      const newPages = pages.map((page, pageIndex) => {
+        if (pageIndex !== current.pageIndex) return page;
+        const elements = [...page.elements];
+        const ia = elements.findIndex(
+          (el) => el.elementId === current.element.elementId,
+        );
+        const ib = elements.findIndex(
+          (el) => el.elementId === neighbor.element.elementId,
+        );
+        if (ia < 0 || ib < 0) return page;
+        [elements[ia], elements[ib]] = [elements[ib]!, elements[ia]!];
+        return { ...page, elements };
+      });
+      replacePages(newPages);
+      setDirty(true);
+      saveWithPriority("debounced");
+    },
+    [designFields, pages, replacePages, setDirty, saveWithPriority],
+  );
 
   // Handlers
   const handleUndo = useCallback(() => {
@@ -1754,17 +1863,22 @@ export default function EditorPage() {
         }
       }
 
-      // Zoom shortcuts (canvas-store setZoom clamps to [minZoom, maxZoom])
+      // Zoom shortcuts — pas multiplicatifs fluides (×1.25), clampés par le
+      // store. Ctrl+0 = ajuster la page (mode fit, recalculé au resize),
+      // Ctrl+1 = 100 % (zoom manuel → sort du mode fit).
       if (cmdOrCtrl) {
         if (e.key === "=" || e.key === "+") {
           e.preventDefault();
-          setZoom(zoom + 0.25);
+          handleManualZoomChange(zoom * 1.25);
         } else if (e.key === "-") {
           e.preventDefault();
-          setZoom(zoom - 0.25);
+          handleManualZoomChange(zoom / 1.25);
         } else if (e.key === "0") {
           e.preventDefault();
-          setZoom(1);
+          handleFitPage();
+        } else if (e.key === "1") {
+          e.preventDefault();
+          handleManualZoomChange(1);
         }
       }
     };
@@ -1782,7 +1896,8 @@ export default function EditorPage() {
     zoom,
     clearSelection,
     setActiveTool,
-    setZoom,
+    handleManualZoomChange,
+    handleFitPage,
   ]);
 
   // Find the PDF canvas element for content edit background capture
@@ -2050,7 +2165,7 @@ export default function EditorPage() {
         activeTool={activeTool}
         onToolChange={setActiveTool}
         zoom={zoom}
-        onZoomChange={setZoom}
+        onZoomChange={handleManualZoomChange}
         canUndo={canUndo}
         canRedo={canRedo}
         onUndo={handleUndo}
@@ -2061,8 +2176,11 @@ export default function EditorPage() {
         onShapeTypeChange={setShapeType}
         annotationType={annotationType}
         onAnnotationTypeChange={setAnnotationType}
-        fieldType={fieldType}
-        onFieldTypeChange={setFieldType}
+        fieldKind={fieldKind}
+        onFieldKindChange={setFieldKind}
+        fitMode={fitMode}
+        onFitPage={handleFitPage}
+        onFitWidth={handleFitWidth}
         strokeColor={strokeColor}
         onStrokeColorChange={setStrokeColor}
         fillColor={fillColor}
@@ -2116,9 +2234,11 @@ export default function EditorPage() {
             getFontFaceName={getFontFaceName}
             tool={activeTool}
             zoom={zoom}
+            fitMode={fitMode}
+            onFitZoomChange={setZoom}
             shapeType={shapeType}
             annotationType={annotationType}
-            fieldType={fieldType}
+            fieldKind={fieldKind}
             strokeColor={strokeColor}
             fillColor={fillColor}
             strokeWidth={strokeWidth}
@@ -2126,9 +2246,22 @@ export default function EditorPage() {
             onElementModified={handleElementModified}
             onElementRemoved={handleElementRemoved}
             onSelectionChanged={handleSelectionChanged}
-            onZoomChanged={setZoom}
+            onZoomChanged={handleManualZoomChange}
             onCanvasReady={setCanvasHandle}
             onHyperlinkClick={handleHyperlinkClick}
+            overlay={
+              showFormsPanel &&
+              formsMode === "fill" &&
+              loadedFormFields.length > 0 ? (
+                <FormFillOverlay
+                  fields={loadedFormFields}
+                  currentPageIndex={currentPageIndex}
+                  zoom={zoom}
+                  focusedFieldName={focusedFormField}
+                  onFieldClick={setFocusedFormField}
+                />
+              ) : null
+            }
           />
 
           {/* Content edit layer (deep PDF editing overlay) */}
@@ -2155,6 +2288,7 @@ export default function EditorPage() {
           onElementUpdate={handleElementUpdate}
           pageInfo={pageInfo}
           zoom={zoom}
+          allFieldNames={allFieldNames}
         />
 
         {/* Document info sidebar (TOC, Layers, Embedded Files) */}
@@ -2175,6 +2309,16 @@ export default function EditorPage() {
         {showFormsPanel && (
           <FormsPanel
             currentFile={currentPdfFile}
+            mode={formsMode}
+            onModeChange={(nextMode) => {
+              setFormsMode(nextMode);
+              setFocusedFormField(null);
+            }}
+            onFieldsLoaded={setLoadedFormFields}
+            focusedFieldName={focusedFormField}
+            designFields={designFields}
+            onDesignFieldSelect={handleDesignFieldSelect}
+            onDesignFieldReorder={handleDesignFieldReorder}
             onPdfUpdated={(blob) => {
               // Convert blob back to File for subsequent operations
               const file = new File(
@@ -2183,6 +2327,8 @@ export default function EditorPage() {
                 { type: "application/pdf" }
               );
               updateCurrentPdfFile(file);
+              setDirty(true);
+              saveWithPriority("immediate");
             }}
           />
         )}

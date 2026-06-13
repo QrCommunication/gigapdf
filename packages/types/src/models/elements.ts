@@ -209,6 +209,8 @@ export interface FieldStyle {
   backgroundColor: string | null;
   borderColor: string | null;
   borderWidth: number;
+  /** Horizontal alignment of the field text (maps to /Q in AcroForm). */
+  textAlign?: "left" | "center" | "right";
 }
 
 export interface FormFieldElement extends ElementBase {
@@ -221,6 +223,10 @@ export interface FormFieldElement extends ElementBase {
   properties: FieldProperties;
   style: FieldStyle;
   format: FieldFormat;
+  /** Hint text shown while the field is empty (editor-side only — not part of AcroForm). */
+  placeholder?: string | null;
+  /** Tooltip / alternate description (maps to /TU in AcroForm, read by screen readers). */
+  tooltip?: string | null;
 }
 
 // ============= Union Type =============
@@ -260,3 +266,17 @@ export type Tool =
 export type ShapeSubtype = "rectangle" | "ellipse" | "line" | "polygon" | "path";
 export type AnnotationSubtype = "highlight" | "underline" | "strikeout" | "note" | "link";
 export type FormFieldSubtype = "text" | "checkbox" | "radio" | "dropdown" | "signature";
+
+/**
+ * Creation palette for the form-field tool. Richer than FieldType: some kinds
+ * map to the same PDF field type with different presets (multiline → text with
+ * properties.multiline, date → text with format.type "date", radio_group →
+ * N radio widgets sharing one fieldName).
+ */
+export type FieldCreationKind =
+  | "text"
+  | "multiline"
+  | "date"
+  | "checkbox"
+  | "radio_group"
+  | "dropdown";

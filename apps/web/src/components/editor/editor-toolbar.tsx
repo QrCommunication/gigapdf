@@ -2,7 +2,15 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import type { Tool, ShapeType, AnnotationType, FieldType, Element, TextStyle } from "@giga-pdf/types";
+import type {
+  Tool,
+  ShapeType,
+  AnnotationType,
+  FieldType,
+  FieldCreationKind,
+  Element,
+  TextStyle,
+} from "@giga-pdf/types";
 import { FontPicker } from "@giga-pdf/ui";
 import {
   MousePointer2,
@@ -47,6 +55,14 @@ import {
   ScanText,
   FileCheck2,
   Minimize2,
+  TextCursorInput,
+  AlignJustify,
+  CheckSquare,
+  CircleDot,
+  List,
+  CalendarDays,
+  Maximize,
+  MoveHorizontal,
 } from "lucide-react";
 import { MergeDialog } from "./merge-dialog";
 import { SplitDialog } from "./split-dialog";
@@ -101,6 +117,16 @@ export interface EditorToolbarProps {
   fieldType?: FieldType;
   /** Callback pour changer le type de champ de formulaire */
   onFieldTypeChange?: (fieldType: FieldType) => void;
+  /** Variante de création du champ (palette complète : multiligne, date, groupe radio…) */
+  fieldKind?: FieldCreationKind;
+  /** Callback pour changer la variante de création du champ */
+  onFieldKindChange?: (fieldKind: FieldCreationKind) => void;
+  /** Mode de zoom adaptatif actif (page / largeur / null = manuel) */
+  fitMode?: "page" | "width" | null;
+  /** Ajuster la page entière au viewport (Ctrl+0) */
+  onFitPage?: () => void;
+  /** Ajuster la largeur de page au viewport */
+  onFitWidth?: () => void;
   /** Couleur de contour */
   strokeColor?: string;
   /** Callback pour changer la couleur de contour */
@@ -365,8 +391,11 @@ export function EditorToolbar({
   onShapeTypeChange,
   annotationType = "highlight",
   onAnnotationTypeChange,
-  fieldType = "text",
-  onFieldTypeChange,
+  fieldKind = "text",
+  onFieldKindChange,
+  fitMode = null,
+  onFitPage,
+  onFitWidth,
   strokeColor = "#000000",
   onStrokeColorChange,
   fillColor = "transparent",
@@ -394,6 +423,7 @@ export function EditorToolbar({
   const [showShapeDropdown, setShowShapeDropdown] = useState(false);
   const [showAnnotationDropdown, setShowAnnotationDropdown] = useState(false);
   const [showFieldDropdown, setShowFieldDropdown] = useState(false);
+  const [showZoomDropdown, setShowZoomDropdown] = useState(false);
   const [showColorDropdown, setShowColorDropdown] = useState(false);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const [showSplitDialog, setShowSplitDialog] = useState(false);
@@ -480,8 +510,24 @@ export function EditorToolbar({
       { tool: "hand", icon: <Hand size={20} />, labelKey: "pan" },
     ];
 
-  // Presets de zoom
-  const zoomPresets = [0.5, 0.75, 1, 1.25, 1.5, 2];
+  // Presets de zoom (menu déroulant) — bornes moteur : 10 % à 800 %.
+  const zoomPresets = [0.5, 0.75, 1, 1.25, 1.5, 2, 4];
+  const MIN_TOOLBAR_ZOOM = 0.1;
+  const MAX_TOOLBAR_ZOOM = 8;
+
+  // Palette de création des champs de formulaire (variantes riches).
+  const fieldKinds: {
+    kind: FieldCreationKind;
+    icon: React.ReactNode;
+    labelKey: string;
+  }[] = [
+    { kind: "text", icon: <TextCursorInput size={16} />, labelKey: "fields.text" },
+    { kind: "multiline", icon: <AlignJustify size={16} />, labelKey: "fields.multiline" },
+    { kind: "checkbox", icon: <CheckSquare size={16} />, labelKey: "fields.checkbox" },
+    { kind: "radio_group", icon: <CircleDot size={16} />, labelKey: "fields.radioGroup" },
+    { kind: "dropdown", icon: <List size={16} />, labelKey: "fields.dropdown" },
+    { kind: "date", icon: <CalendarDays size={16} />, labelKey: "fields.date" },
+  ];
 
   // Icône de forme actuelle
   const currentShapeIcon =
@@ -641,31 +687,27 @@ export function EditorToolbar({
           isOpen={showFieldDropdown}
           onClose={() => setShowFieldDropdown(false)}
         >
-          <div className="flex flex-col gap-1">
-            {[
-              { type: "text" as const, label: "Texte" },
-              { type: "checkbox" as const, label: "Case à cocher" },
-              { type: "radio" as const, label: "Bouton radio" },
-              { type: "dropdown" as const, label: "Liste déroulante" },
-            ].map(({ type, label }) => (
+          <div className="flex flex-col gap-1 min-w-[180px]">
+            {fieldKinds.map(({ kind, icon, labelKey }) => (
               <button
-                key={type}
+                key={kind}
                 type="button"
                 onClick={() => {
-                  onFieldTypeChange?.(type);
+                  onFieldKindChange?.(kind);
                   onToolChange("form_field");
                   setShowFieldDropdown(false);
                 }}
                 className={`
                   flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors
                   ${
-                    fieldType === type
+                    fieldKind === kind
                       ? "bg-primary text-primary-foreground"
                       : "hover:bg-muted"
                   }
                 `}
               >
-                <span>{label}</span>
+                {icon}
+                <span>{t(labelKey)}</span>
               </button>
             ))}
           </div>
@@ -826,32 +868,96 @@ export function EditorToolbar({
         </>
       )}
 
-      {/* Zoom */}
+      {/* Zoom — boutons ± à pas multiplicatif + menu presets/ajustements.
+          Le bouton central affiche TOUJOURS la valeur courante (y compris
+          un zoom arbitraire issu de la molette ou d'un mode fit). */}
       <div className="flex items-center gap-1 ml-auto">
         <ToolButton
           icon={<ZoomOut size={20} />}
           label={t("zoomOut")}
-          onClick={() => onZoomChange(Math.max(0.25, zoom - 0.25))}
-          disabled={zoom <= 0.25}
+          onClick={() =>
+            onZoomChange(Math.max(MIN_TOOLBAR_ZOOM, zoom / 1.25))
+          }
+          disabled={zoom <= MIN_TOOLBAR_ZOOM + 0.001}
         />
 
-        <select
-          value={zoom}
-          onChange={(e) => onZoomChange(parseFloat(e.target.value))}
-          className="h-8 px-2 rounded border bg-background text-sm"
-        >
-          {zoomPresets.map((preset) => (
-            <option key={preset} value={preset}>
-              {Math.round(preset * 100)}%
-            </option>
-          ))}
-        </select>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowZoomDropdown(!showZoomDropdown)}
+            title={t("zoomLevel")}
+            className="h-8 min-w-[72px] px-2 rounded border bg-background text-sm flex items-center justify-center gap-1 hover:bg-muted transition-colors"
+          >
+            <span>{Math.round(zoom * 100)}%</span>
+            <ChevronDown size={12} />
+          </button>
+          <Dropdown
+            isOpen={showZoomDropdown}
+            onClose={() => setShowZoomDropdown(false)}
+          >
+            <div className="flex flex-col gap-1 min-w-[176px]">
+              <button
+                type="button"
+                onClick={() => {
+                  onFitPage?.();
+                  setShowZoomDropdown(false);
+                }}
+                className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors ${
+                  fitMode === "page"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                }`}
+              >
+                <Maximize size={16} />
+                <span>{t("fitPage")}</span>
+                <span className="ml-auto text-[10px] text-muted-foreground">
+                  Ctrl+0
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onFitWidth?.();
+                  setShowZoomDropdown(false);
+                }}
+                className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors ${
+                  fitMode === "width"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                }`}
+              >
+                <MoveHorizontal size={16} />
+                <span>{t("fitWidth")}</span>
+              </button>
+              <div className="h-px bg-border my-1" />
+              {zoomPresets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => {
+                    onZoomChange(preset);
+                    setShowZoomDropdown(false);
+                  }}
+                  className={`px-2 py-1.5 rounded text-sm text-left transition-colors ${
+                    fitMode === null && Math.abs(zoom - preset) < 0.001
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted"
+                  }`}
+                >
+                  {Math.round(preset * 100)}%
+                </button>
+              ))}
+            </div>
+          </Dropdown>
+        </div>
 
         <ToolButton
           icon={<ZoomIn size={20} />}
           label={t("zoomIn")}
-          onClick={() => onZoomChange(Math.min(4, zoom + 0.25))}
-          disabled={zoom >= 4}
+          onClick={() =>
+            onZoomChange(Math.min(MAX_TOOLBAR_ZOOM, zoom * 1.25))
+          }
+          disabled={zoom >= MAX_TOOLBAR_ZOOM - 0.001}
         />
       </div>
 

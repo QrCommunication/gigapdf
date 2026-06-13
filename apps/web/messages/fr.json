@@ -953,7 +953,19 @@
     },
     "canvas": {
       "defaultText": "Texte",
-      "textPlaceholder": "Champ de texte"
+      "textPlaceholder": "Champ de texte",
+      "multilinePlaceholder": "Zone de texte multiligne",
+      "dateHint": "JJ/MM/AAAA",
+      "selectPlaceholder": "Sélectionner…",
+      "defaultOption": "Option",
+      "radioPrompt": {
+        "title": "Nouveau groupe de boutons radio",
+        "groupName": "Nom du groupe",
+        "options": "Options",
+        "optionsHint": "Une option par ligne — un bouton est créé pour chacune.",
+        "cancel": "Annuler",
+        "create": "Créer le groupe"
+      }
     },
     "error": {
       "title": "Erreur de chargement",
@@ -1082,7 +1094,16 @@
       "metadata": "Métadonnées",
       "convert": "Convertir",
       "flatten": "Aplatir",
-      "compress": "Compresser"
+      "compress": "Compresser",
+      "zoomLevel": "Niveau de zoom",
+      "fields": {
+        "text": "Texte",
+        "multiline": "Texte multiligne",
+        "checkbox": "Case à cocher",
+        "radioGroup": "Groupe de boutons radio",
+        "dropdown": "Liste déroulante",
+        "date": "Date"
+      }
     },
     "tools": {
       "select": "Sélectionner",
@@ -1153,6 +1174,33 @@
       "image": {
         "dimensions": "Dimensions",
         "opacity": "Opacité"
+      },
+      "formField": {
+        "fieldType": "Type de champ",
+        "name": "Nom du champ",
+        "nameInvalid": "Caractères autorisés : lettres, chiffres, _ . -",
+        "nameDuplicate": "Ce nom est déjà utilisé par un autre champ.",
+        "tooltip": "Libellé / infobulle",
+        "placeholder": "Texte indicatif",
+        "required": "Champ obligatoire",
+        "readOnly": "Lecture seule",
+        "multiline": "Multiligne",
+        "checkedByDefault": "Cochée par défaut",
+        "defaultValue": "Valeur par défaut",
+        "noDefault": "— Aucune —",
+        "maxLength": "Longueur maximale",
+        "options": "Options",
+        "addOption": "Ajouter une option",
+        "removeOption": "Supprimer l'option",
+        "newOption": "Option",
+        "moveUp": "Monter",
+        "moveDown": "Descendre",
+        "noOptions": "Aucune option définie.",
+        "fontSize": "Taille de police",
+        "textAlign": "Alignement",
+        "alignLeft": "Gauche",
+        "alignCenter": "Centre",
+        "alignRight": "Droite"
       }
     },
     "sidebar": {
@@ -1196,6 +1244,52 @@
       "selectedPages": "Pages sélectionnées",
       "export": "Exporter",
       "exporting": "Export en cours..."
+    },
+    "forms": {
+      "title": "Formulaires",
+      "modeDesign": "Concevoir",
+      "modeFill": "Remplir",
+      "designHint": "Placez des champs depuis la palette de la barre d'outils, puis éditez-les dans le panneau Propriétés.",
+      "noDesignFields": "Aucun champ de formulaire dans le document.",
+      "tabOrderHint": "L'ordre de la liste définit l'ordre de tabulation (ordre de création des champs dans le PDF, par page).",
+      "pageShort": "p. {page}",
+      "moveUp": "Monter",
+      "moveDown": "Descendre",
+      "scanning": "Analyse des champs…",
+      "loadFields": "Charger les champs",
+      "reloadFields": "Recharger les champs",
+      "loadFailed": "Impossible de charger les champs du formulaire.",
+      "openPdfFirst": "Ouvrez un PDF pour afficher ses champs de formulaire.",
+      "noFieldsFound": "Aucun champ de formulaire trouvé dans ce PDF.",
+      "fieldsCount": "{count, plural, one {champ} other {champs}}",
+      "filledCount": "remplis",
+      "emptyCount": "vides",
+      "fillSuccess": "Champs remplis avec succès.",
+      "fillFailed": "Échec du remplissage des champs.",
+      "applying": "Application…",
+      "fillAll": "Tout remplir ({count})",
+      "flattenAfterFill": "Aplatir après remplissage",
+      "enterValue": "Saisir {field}…",
+      "checked": "Cochée",
+      "unchecked": "Décochée",
+      "noOptionsDefined": "Aucune option définie",
+      "selectOption": "— Sélectionner —",
+      "signatureReadOnly": "Champ signature (lecture seule)",
+      "buttonField": "Champ bouton",
+      "readOnlyField": "Champ en lecture seule",
+      "maxChars": "Max {count} caractères",
+      "filled": "Rempli",
+      "empty": "Vide",
+      "highlightTooltip": "Champ « {field} » — cliquer pour le remplir",
+      "fieldTypes": {
+        "text": "Texte",
+        "checkbox": "Case",
+        "radio": "Radio",
+        "dropdown": "Liste",
+        "listbox": "Liste multiple",
+        "signature": "Signature",
+        "button": "Bouton"
+      }
     }
   },
   "errors": {

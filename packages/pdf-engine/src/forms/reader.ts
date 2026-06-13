@@ -79,6 +79,7 @@ export async function getFormFields(buffer: Buffer): Promise<FormFieldInfo[]> {
     };
 
     const readOnly = field.isReadOnly();
+    const required = field.isRequired();
 
     if (field instanceof PDFTextField) {
       const maxLengthRaw = field.getMaxLength();
@@ -91,7 +92,7 @@ export async function getFormFields(buffer: Buffer): Promise<FormFieldInfo[]> {
         bounds,
         options: null,
         properties: {
-          required: false,
+          required,
           readOnly,
           maxLength: maxLengthRaw !== undefined ? maxLengthRaw : null,
           multiline: field.isMultiline(),
@@ -107,7 +108,7 @@ export async function getFormFields(buffer: Buffer): Promise<FormFieldInfo[]> {
         bounds,
         options: null,
         properties: {
-          required: false,
+          required,
           readOnly,
           maxLength: null,
           multiline: false,
@@ -123,7 +124,7 @@ export async function getFormFields(buffer: Buffer): Promise<FormFieldInfo[]> {
         bounds,
         options: field.getOptions(),
         properties: {
-          required: false,
+          required,
           readOnly,
           maxLength: null,
           multiline: false,
@@ -139,7 +140,7 @@ export async function getFormFields(buffer: Buffer): Promise<FormFieldInfo[]> {
         bounds,
         options: field.getOptions(),
         properties: {
-          required: false,
+          required,
           readOnly,
           maxLength: null,
           multiline: false,
@@ -155,7 +156,7 @@ export async function getFormFields(buffer: Buffer): Promise<FormFieldInfo[]> {
         bounds,
         options: field.getOptions(),
         properties: {
-          required: false,
+          required,
           readOnly,
           maxLength: null,
           multiline: false,
@@ -171,7 +172,7 @@ export async function getFormFields(buffer: Buffer): Promise<FormFieldInfo[]> {
         bounds,
         options: null,
         properties: {
-          required: false,
+          required,
           readOnly,
           maxLength: null,
           multiline: false,
@@ -187,7 +188,7 @@ export async function getFormFields(buffer: Buffer): Promise<FormFieldInfo[]> {
         bounds,
         options: null,
         properties: {
-          required: false,
+          required,
           readOnly,
           maxLength: null,
           multiline: false,
