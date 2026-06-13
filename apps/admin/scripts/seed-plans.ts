@@ -15,7 +15,20 @@ const prisma = new PrismaClient();
 // Convert GB to bytes
 const GB = (n: number) => n * 1024 * 1024 * 1024;
 
-// Plans configuration based on landing page
+// Plans configuration based on landing page.
+//
+// Product positioning (decided 2026-06): ALL editing features are included in
+// ALL plans (including free) — the editor is identical everywhere. Plans only
+// differ by VOLUMES (storage, API calls, documents, team members) and by
+// branding/SLA/support flags. Consequently the features object carries:
+// - numeric mirrors (storageGb, apiCallsPerMonth) required by the
+//   PlanFeatures API contract (app/api/v1/plans.py), and
+// - the REAL differentiator flags only: customBranding, prioritySupport,
+//   emailSupport, sla, dedicatedAccount (= dedicated account manager).
+// Removed flags (no code ever enforced them, verified by grep 2026-06-13):
+// advancedEditing, apiAccess (REST API is available on every plan and is
+// governed by the api_calls quota), basicEditing, communitySupport,
+// customIntegrations, support247.
 const PLANS = [
   {
     slug: "free",
@@ -32,16 +45,11 @@ const PLANS = [
     features: {
       storageGb: 5,
       apiCallsPerMonth: 1000,
-      basicEditing: true,
-      advancedEditing: false,
       customBranding: false,
       prioritySupport: false,
       emailSupport: false,
-      communitySupport: true,
-      apiAccess: false,
       sla: false,
       dedicatedAccount: false,
-      customIntegrations: false,
     },
     is_active: true,
     is_popular: false,
@@ -64,16 +72,11 @@ const PLANS = [
     features: {
       storageGb: 25,
       apiCallsPerMonth: 10000,
-      basicEditing: true,
-      advancedEditing: true,
       customBranding: false,
       prioritySupport: false,
       emailSupport: true,
-      communitySupport: true,
-      apiAccess: false,
       sla: false,
       dedicatedAccount: false,
-      customIntegrations: false,
     },
     is_active: true,
     is_popular: true,
@@ -96,16 +99,11 @@ const PLANS = [
     features: {
       storageGb: 100,
       apiCallsPerMonth: 100000,
-      basicEditing: true,
-      advancedEditing: true,
       customBranding: true,
       prioritySupport: true,
       emailSupport: true,
-      communitySupport: true,
-      apiAccess: true,
       sla: false,
       dedicatedAccount: false,
-      customIntegrations: false,
     },
     is_active: true,
     is_popular: false,
@@ -128,17 +126,11 @@ const PLANS = [
     features: {
       storageGb: -1, // Unlimited
       apiCallsPerMonth: -1, // Unlimited
-      basicEditing: true,
-      advancedEditing: true,
       customBranding: true,
       prioritySupport: true,
       emailSupport: true,
-      communitySupport: true,
-      apiAccess: true,
       sla: true,
       dedicatedAccount: true,
-      customIntegrations: true,
-      support247: true,
     },
     is_active: true,
     is_popular: false,

@@ -222,7 +222,9 @@ class UserQuota(Base):
         BigInteger, default=5 * 1024 * 1024 * 1024  # 5GB free tier
     )
     document_count: Mapped[int] = mapped_column(Integer, default=0)
-    document_limit: Mapped[int] = mapped_column(Integer, default=1000)
+    # 100 documents = free plan limit (aligned with quota_service.PLANS["free"]
+    # and apps/admin/scripts/seed-plans.ts — harmonized 2026-06-13, migration 018)
+    document_limit: Mapped[int] = mapped_column(Integer, default=100)
 
     # API call quotas (monthly)
     api_calls_used: Mapped[int] = mapped_column(Integer, default=0)

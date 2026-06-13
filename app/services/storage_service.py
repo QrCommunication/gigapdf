@@ -70,13 +70,17 @@ class StorageService:
 
         file_size = len(document_bytes)
 
-        if quota.storage_used_bytes + file_size > quota.storage_limit_bytes:
+        # -1 means unlimited (enterprise plan convention, cf. quota_service.UNLIMITED)
+        if (
+            quota.storage_limit_bytes != -1
+            and quota.storage_used_bytes + file_size > quota.storage_limit_bytes
+        ):
             raise ValueError(
                 f"Storage quota exceeded. Used: {quota.storage_used_bytes}, "
                 f"Limit: {quota.storage_limit_bytes}"
             )
 
-        if quota.document_count >= quota.document_limit:
+        if quota.document_limit != -1 and quota.document_count >= quota.document_limit:
             raise ValueError(f"Document limit exceeded. Limit: {quota.document_limit}")
 
         # Calculate file hash
