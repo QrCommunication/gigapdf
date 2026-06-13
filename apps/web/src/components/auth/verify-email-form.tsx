@@ -17,8 +17,8 @@ import {
   Alert,
   AlertDescription,
 } from "@giga-pdf/ui";
-import Link from "next/link";
-import { LanguageSwitcher } from "@/components/language-switcher";
+import { Link } from "@/i18n/navigation";
+import { PublicLanguageSwitcher } from "@/components/public-language-switcher";
 import { Mail, CheckCircle2, ArrowLeft } from "lucide-react";
 
 export function VerifyEmailForm() {
@@ -132,7 +132,7 @@ export function VerifyEmailForm() {
       <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
           <CardTitle className="text-2xl font-bold">{t("title")}</CardTitle>
-          <LanguageSwitcher />
+          <PublicLanguageSwitcher />
         </div>
         <CardDescription>{t("description")}</CardDescription>
       </CardHeader>

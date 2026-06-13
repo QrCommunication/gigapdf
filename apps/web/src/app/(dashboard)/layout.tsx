@@ -13,6 +13,10 @@ import { AuthGuard } from "@/components/auth/auth-guard";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 
+// Auth par cookies + locale par cookie → rendu dynamique obligatoire.
+// Explicite depuis le retrait du force-dynamic global du root layout.
+export const dynamic = "force-dynamic";
+
 export default function DashboardLayout(props: { children?: React.ReactNode }) {
   const { children } = props;
   const t = useTranslations("nav");

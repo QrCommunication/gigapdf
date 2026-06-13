@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { JsonLd } from "@/components/seo/json-ld";
 import { CtaSection } from "@/components/seo/cta-section";
@@ -7,20 +8,37 @@ import { ToolIcon } from "@/components/seo/tool-icon";
 import { SITE_URL } from "@/lib/seo/constants";
 import { TOOLS } from "@/lib/seo/tools-data";
 import { SOLUTIONS } from "@/lib/seo/solutions-data";
+import { defaultLocale } from "@/i18n/config";
 
-export const metadata: Metadata = {
-  title: "Outils PDF en ligne gratuits : éditer, signer, convertir",
-  description:
-    "20 outils PDF gratuits et open source : édition, fusion, signature numérique, OCR, compression, conversion Office et plus. Sans filigrane, auto-hébergeable.",
-  alternates: { canonical: "/tools" },
-  openGraph: {
-    type: "website",
-    url: `${SITE_URL}/tools`,
-    title: "Outils PDF en ligne gratuits | GigaPDF",
+// Pas de generateStaticParams ici : le root layout (getLocale/getMessages,
+// résolution cookie pour le dashboard) rend tout l'arbre dynamique — une page
+// classée SSG plante en DYNAMIC_SERVER_USAGE au runtime. Le 404 de /en/tools
+// est garanti par le proxy (rewrite) + les gardes notFound() fr-only.
+
+interface ToolsHubPageProps {
+  params: Promise<{ locale: string }>;
+}
+
+export async function generateMetadata({ params }: ToolsHubPageProps): Promise<Metadata> {
+  const { locale } = await params;
+  // Garde fr-only AVANT le premier flush du stream : notFound() ici produit un
+  // vrai 404 HTTP (celle du layout (seo) arrive après l'envoi du status 200).
+  if (locale !== defaultLocale) notFound();
+
+  return {
+    title: "Outils PDF en ligne gratuits : éditer, signer, convertir",
     description:
-      "Tous les outils PDF dont vous avez besoin, gratuits et open source : édition, signature, OCR, conversion, protection.",
-  },
-};
+      "20 outils PDF gratuits et open source : édition, fusion, signature numérique, OCR, compression, conversion Office et plus. Sans filigrane, auto-hébergeable.",
+    alternates: { canonical: "/tools" },
+    openGraph: {
+      type: "website",
+      url: `${SITE_URL}/tools`,
+      title: "Outils PDF en ligne gratuits | GigaPDF",
+      description:
+        "Tous les outils PDF dont vous avez besoin, gratuits et open source : édition, signature, OCR, conversion, protection.",
+    },
+  };
+}
 
 const itemListJsonLd = {
   "@context": "https://schema.org",
@@ -34,7 +52,10 @@ const itemListJsonLd = {
   })),
 };
 
-export default function ToolsHubPage() {
+export default async function ToolsHubPage({ params }: ToolsHubPageProps) {
+  const { locale } = await params;
+  if (locale !== defaultLocale) notFound();
+
   return (
     <div className="container mx-auto max-w-6xl px-4 py-12">
       <JsonLd data={itemListJsonLd} />

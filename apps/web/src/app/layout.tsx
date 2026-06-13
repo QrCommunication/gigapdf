@@ -6,8 +6,9 @@ import { Toaster } from "@giga-pdf/ui";
 import { Providers } from "@/components/providers";
 import "@/styles/globals.css";
 
-// Force dynamic rendering for all pages
-export const dynamic = "force-dynamic";
+// Plus de force-dynamic global : le rendu dynamique est désormais déclaré
+// explicitement par les segments qui l'exigent ((dashboard), editor, embed).
+// Les pages publiques sous [locale] restent libres d'être prérendues.
 
 const geistSans = Geist({
   subsets: ["latin"],

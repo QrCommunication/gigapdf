@@ -1,12 +1,21 @@
+import { setRequestLocale } from "next-intl/server";
 import { env } from "@/lib/env";
 import { Cookie, ShieldCheck, Mail } from "lucide-react";
 
 export const metadata = {
   title: "Politique relative aux cookies | GigaPDF",
   description: "Politique GigaPDF relative aux cookies — uniquement strictement nécessaires.",
+  // Contenu fr-only : canonical fr SANS hreflang (écrase le bloc du layout [locale]).
+  alternates: { canonical: "/cookies" },
 };
 
-export default function CookiesPage() {
+export default async function CookiesPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  setRequestLocale(locale);
   return (
     <div className="max-w-none">
       <div className="mb-12 not-prose">

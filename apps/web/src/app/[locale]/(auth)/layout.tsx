@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
+import { defaultLocale } from "@/i18n/config";
 import { Logo } from "@/components/logo";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 
@@ -9,6 +10,9 @@ export default function AuthLayout(props: {
   children?: React.ReactNode;
 }) {
   const t = useTranslations();
+  const locale = useLocale();
+  // Logo (next/link interne, partagé avec le dashboard) : préfixer "/" à la main.
+  const homeHref = locale === defaultLocale ? "/" : `/${locale}`;
 
   return (
     <div className="flex min-h-screen flex-col relative overflow-hidden">
@@ -22,7 +26,7 @@ export default function AuthLayout(props: {
 
       {/* Header */}
       <header className="relative z-10 flex items-center justify-between p-4 md:p-6">
-        <Logo href="/" size="md" />
+        <Logo href={homeHref} size="md" />
         <ThemeSwitcher />
       </header>
 

@@ -1,7 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { useTranslations } from "next-intl";
+import NextLink from "next/link";
+import { useLocale, useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
+import { defaultLocale } from "@/i18n/config";
 import { Logo } from "@/components/logo";
 import { ExternalLink, Github } from "lucide-react";
 
@@ -13,13 +15,18 @@ const GITHUB_URL = "https://github.com/ronylicha/gigapdf";
  */
 export function Footer() {
   const t = useTranslations("landing.footer");
+  const locale = useLocale();
+  // Logo (next/link interne, partagé avec le dashboard) : préfixer "/" à la main.
+  const homeHref = locale === defaultLocale ? "/" : `/${locale}`;
 
+  // frOnly : /tools et /solutions n'existent qu'en fr (404 sous /en/*) →
+  // next/link brut, JAMAIS de préfixe de locale sur ces cibles.
   const productLinks = [
-    { key: "features", href: "/tools" },
-    { key: "solutions", href: "/solutions" },
-    { key: "pricing", href: "/#pricing" },
-    { key: "changelog", href: "/changelog" },
-    { key: "docs", href: "/docs" },
+    { key: "features", href: "/tools", frOnly: true },
+    { key: "solutions", href: "/solutions", frOnly: true },
+    { key: "pricing", href: "/#pricing", frOnly: false },
+    { key: "changelog", href: "/changelog", frOnly: false },
+    { key: "docs", href: "/docs", frOnly: false },
   ] as const;
 
   const legalLinks = [
@@ -35,7 +42,7 @@ export function Footer() {
         <div className="mx-auto grid max-w-6xl gap-12 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
           {/* Marque */}
           <div>
-            <Logo href="/" size="sm" />
+            <Logo href={homeHref} size="sm" />
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
               {t("tagline")}
             </p>
@@ -54,16 +61,19 @@ export function Footer() {
           <nav aria-label={t("product.title")}>
             <h4 className="lp-label mb-4">{t("product.title")}</h4>
             <ul className="space-y-3 text-sm">
-              {productLinks.map(({ key, href }) => (
-                <li key={key}>
-                  <Link
-                    href={href}
-                    className="text-muted-foreground transition-colors duration-150 hover:text-foreground"
-                  >
-                    {t(`product.${key}`)}
-                  </Link>
-                </li>
-              ))}
+              {productLinks.map(({ key, href, frOnly }) => {
+                const LinkComponent = frOnly ? NextLink : Link;
+                return (
+                  <li key={key}>
+                    <LinkComponent
+                      href={href}
+                      className="text-muted-foreground transition-colors duration-150 hover:text-foreground"
+                    >
+                      {t(`product.${key}`)}
+                    </LinkComponent>
+                  </li>
+                );
+              })}
             </ul>
           </nav>
 

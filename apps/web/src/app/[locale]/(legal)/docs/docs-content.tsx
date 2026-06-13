@@ -1,11 +1,11 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { BookOpen, FileJson, ExternalLink, Download, Braces, FileCode, Blocks, ArrowRight } from "lucide-react";
 import { Button } from "@giga-pdf/ui";
 
-export default function DocsPage() {
+export default function DocsContent() {
   const t = useTranslations("legal.docs");
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "https://giga-pdf.com";

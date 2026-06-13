@@ -1,25 +1,43 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { JsonLd } from "@/components/seo/json-ld";
 import { CtaSection } from "@/components/seo/cta-section";
 import { ToolIcon } from "@/components/seo/tool-icon";
 import { SITE_URL } from "@/lib/seo/constants";
 import { SOLUTIONS } from "@/lib/seo/solutions-data";
 import { TOOLS } from "@/lib/seo/tools-data";
+import { defaultLocale } from "@/i18n/config";
 
-export const metadata: Metadata = {
-  title: "Solutions PDF par métier : avocats, comptables, RH…",
-  description:
-    "GigaPDF appliqué à votre métier : caviardage pour avocats, OCR comptable, contrats RH, baux immobiliers, santé, éducation. Gratuit et open source.",
-  alternates: { canonical: "/solutions" },
-  openGraph: {
-    type: "website",
-    url: `${SITE_URL}/solutions`,
-    title: "Solutions PDF par métier | GigaPDF",
+// Pas de generateStaticParams ici : le root layout (getLocale/getMessages,
+// résolution cookie pour le dashboard) rend tout l'arbre dynamique — une page
+// classée SSG plante en DYNAMIC_SERVER_USAGE au runtime. Le 404 de
+// /en/solutions est garanti par le proxy (rewrite) + les gardes notFound().
+
+interface SolutionsHubPageProps {
+  params: Promise<{ locale: string }>;
+}
+
+export async function generateMetadata({ params }: SolutionsHubPageProps): Promise<Metadata> {
+  const { locale } = await params;
+  // Garde fr-only AVANT le premier flush du stream : notFound() ici produit un
+  // vrai 404 HTTP (celle du layout (seo) arrive après l'envoi du status 200).
+  if (locale !== defaultLocale) notFound();
+
+  return {
+    title: "Solutions PDF par métier : avocats, comptables, RH…",
     description:
-      "Des workflows PDF concrets pour 10 métiers : juridique, comptabilité, RH, immobilier, santé, formation et plus.",
-  },
-};
+      "GigaPDF appliqué à votre métier : caviardage pour avocats, OCR comptable, contrats RH, baux immobiliers, santé, éducation. Gratuit et open source.",
+    alternates: { canonical: "/solutions" },
+    openGraph: {
+      type: "website",
+      url: `${SITE_URL}/solutions`,
+      title: "Solutions PDF par métier | GigaPDF",
+      description:
+        "Des workflows PDF concrets pour 10 métiers : juridique, comptabilité, RH, immobilier, santé, formation et plus.",
+    },
+  };
+}
 
 const itemListJsonLd = {
   "@context": "https://schema.org",
@@ -33,7 +51,10 @@ const itemListJsonLd = {
   })),
 };
 
-export default function SolutionsHubPage() {
+export default async function SolutionsHubPage({ params }: SolutionsHubPageProps) {
+  const { locale } = await params;
+  if (locale !== defaultLocale) notFound();
+
   return (
     <div className="container mx-auto max-w-6xl px-4 py-12">
       <JsonLd data={itemListJsonLd} />
