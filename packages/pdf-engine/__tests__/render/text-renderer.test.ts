@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { loadFixture, SIMPLE_PDF } from '../helpers';
 import { openDocument, saveDocument } from '../../src/engine/document-handle';
-import { addText, updateText } from '../../src/render/text-renderer';
+import { addText } from '../../src/render/text-renderer';
+import { applyOperations } from '../../src/render/apply-operations';
 import { PDFPageOutOfRangeError } from '../../src/errors';
 import type { TextElement, Bounds } from '@giga-pdf/types';
 
@@ -130,39 +131,51 @@ describe('addText', () => {
 // updateText
 // ---------------------------------------------------------------------------
 
-describe('updateText', () => {
-  it('redraws (redacts old area, draws new text) without throwing', async () => {
-    const handle = await openDocument(makeBuffer(SIMPLE_PDF));
-
+describe('applyOperations — update text', () => {
+  it('redacts old area + redraws new text, returning valid PDF bytes', async () => {
     const oldBounds: Bounds = { x: 50, y: 50, width: 200, height: 30 };
-    const element = makeTextElement({ content: 'Updated text', bounds: { x: 50, y: 90, width: 200, height: 30 } });
+    const element = makeTextElement({
+      content: 'Updated text',
+      bounds: { x: 50, y: 90, width: 200, height: 30 },
+    });
 
-    await expect(updateText(handle, 1, oldBounds, element)).resolves.toBeUndefined();
+    const result = await applyOperations(makeBuffer(SIMPLE_PDF), [
+      { action: 'update', pageNumber: 1, oldBounds, element },
+    ]);
+
+    expect(result.bytes.length).toBeGreaterThan(100);
+    expect(result.redactionTargetsCount).toBe(1);
+    expect(result.addsApplied).toBe(1);
   });
 
-  it('marks document dirty after update', async () => {
-    const handle = await openDocument(makeBuffer(SIMPLE_PDF));
+  it('accumulates one redaction target per update op', async () => {
     const oldBounds: Bounds = { x: 10, y: 10, width: 100, height: 20 };
-
-    await updateText(handle, 1, oldBounds, makeTextElement());
-    expect(handle.isDirty).toBe(true);
+    const result = await applyOperations(makeBuffer(SIMPLE_PDF), [
+      { action: 'update', pageNumber: 1, oldBounds, element: makeTextElement() },
+    ]);
+    expect(result.redactionTargetsCount).toBe(1);
   });
 
-  it('saves a valid PDF after updating text', async () => {
-    const handle = await openDocument(makeBuffer(SIMPLE_PDF));
+  it('produces a re-openable PDF after updating text', async () => {
     const oldBounds: Bounds = { x: 0, y: 0, width: 100, height: 20 };
-
-    await updateText(handle, 1, oldBounds, makeTextElement({ content: 'Replaced' }));
-    const saved = await saveDocument(handle);
-    expect(saved).toBeInstanceOf(Buffer);
+    const result = await applyOperations(makeBuffer(SIMPLE_PDF), [
+      {
+        action: 'update',
+        pageNumber: 1,
+        oldBounds,
+        element: makeTextElement({ content: 'Replaced' }),
+      },
+    ]);
+    const saved = Buffer.from(result.bytes);
+    expect(saved.subarray(0, 5).toString('ascii')).toBe('%PDF-');
     expect(saved.length).toBeGreaterThan(100);
   });
 
-  it('throws PDFPageOutOfRangeError when page is out of range', async () => {
-    const handle = await openDocument(makeBuffer(SIMPLE_PDF));
-    const oldBounds: Bounds = { x: 0, y: 0, width: 100, height: 20 };
-    await expect(updateText(handle, 999, oldBounds, makeTextElement())).rejects.toThrow(
-      PDFPageOutOfRangeError,
-    );
+  it('throws when an update op omits oldBounds', async () => {
+    await expect(
+      applyOperations(makeBuffer(SIMPLE_PDF), [
+        { action: 'update', pageNumber: 1, element: makeTextElement() },
+      ]),
+    ).rejects.toThrow(/oldBounds is required/);
   });
 });

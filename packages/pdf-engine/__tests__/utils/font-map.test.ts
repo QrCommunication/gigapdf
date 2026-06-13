@@ -292,9 +292,9 @@ describe('mapPdfFontToStandard', () => {
       expect(result).toEqual({ fontFamily: 'Helvetica', fontWeight: 'bold', fontStyle: 'italic' });
     });
 
-    it('detects "SansCondensed" as Helvetica via "sans" keyword', () => {
+    it('maps a generic "sans" name to Arial (web-safe sans fallback)', () => {
       const result = mapPdfFontToStandard('SansCondensed');
-      expect(result.fontFamily).toBe('Helvetica');
+      expect(result.fontFamily).toBe('Arial');
     });
   });
 
@@ -335,9 +335,12 @@ describe('mapPdfFontToStandard', () => {
       });
     });
 
-    it('detects font name containing "tiro" as Times New Roman', () => {
+    it('preserves "TiroDevanagari" verbatim (\\btiro\\b only matches standalone "tiro")', () => {
+      // The font loader registers the real embedded face by name; collapsing a
+      // Devanagari serif to Times would drop its glyphs. Standalone "Tiro"
+      // still resolves to Times New Roman via the family map.
       const result = mapPdfFontToStandard('TiroDevanagari');
-      expect(result.fontFamily).toBe('Times New Roman');
+      expect(result.fontFamily).toBe('TiroDevanagari');
     });
   });
 
@@ -413,10 +416,12 @@ describe('mapPdfFontToStandard', () => {
   });
 
   describe('Unknown font fallback', () => {
-    it('falls back to Helvetica normal normal for a completely unknown font name', () => {
+    it('preserves an unrecognised family name verbatim (FontFace fallback target)', () => {
+      // Real-but-unmapped fonts (DIN, Frutiger, Avenir…) must keep their name so
+      // the embedded FontFace can match. Only a truly empty name → Helvetica.
       const result = mapPdfFontToStandard('CompletelyUnknownFont');
       expect(result).toEqual({
-        fontFamily: 'Helvetica',
+        fontFamily: 'CompletelyUnknownFont',
         fontWeight: 'normal',
         fontStyle: 'normal',
       });
