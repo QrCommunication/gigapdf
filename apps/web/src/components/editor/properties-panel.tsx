@@ -9,6 +9,10 @@ import {
   AlignStartHorizontal,
   AlignCenterHorizontal,
   AlignEndHorizontal,
+  Plus,
+  Trash2,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import type {
   Element,
@@ -32,7 +36,16 @@ export interface PropertiesPanelProps {
   };
   /** Niveau de zoom */
   zoom: number;
+  /**
+   * Noms des champs de formulaire du DOCUMENT (toutes pages), pour la
+   * validation d'unicité du nom. Les widgets radio d'un même groupe
+   * partagent légitimement leur nom — l'appelant exclut le groupe courant.
+   */
+  allFieldNames?: string[];
 }
+
+/** Charset AcroForm sûr pour un nom de champ (lettres, chiffres, _ . -). */
+const FIELD_NAME_PATTERN = /^[A-Za-z0-9_.\-]+$/;
 
 // ============= Édition batch (multi-sélection) =============
 
@@ -333,6 +346,411 @@ function BatchProperties({ elements, onElementUpdate }: BatchPropertiesProps) {
   );
 }
 
+// ============= Propriétés d'un champ de formulaire =============
+
+interface FormFieldPropertiesProps {
+  element: FormFieldElement;
+  onElementUpdate?: (elementId: string, updates: Partial<Element>) => void;
+  /** Noms des autres champs du document (unicité). */
+  otherFieldNames: string[];
+}
+
+/**
+ * Éditeur complet d'un champ de formulaire : nom (validé unique + charset),
+ * tooltip, placeholder, drapeaux (required/readOnly/multiline), valeur par
+ * défaut, éditeur d'options (dropdown/radio/listbox), taille de police et
+ * alignement. Toute édition passe par le même onElementUpdate que le reste
+ * du panel ; les objets imbriqués (properties/style) sont renvoyés ENTIERS
+ * car le merge amont est shallow.
+ *
+ * Monté avec key={elementId} : le brouillon de nom se réinitialise à chaque
+ * changement de sélection.
+ */
+function FormFieldProperties({
+  element,
+  onElementUpdate,
+  otherFieldNames,
+}: FormFieldPropertiesProps) {
+  const t = useTranslations("editor.properties.formField");
+
+  // Brouillon local du nom : un nom invalide (charset/duplicat) reste
+  // affiché avec l'erreur mais n'est PAS propagé au scene graph.
+  const [nameDraft, setNameDraft] = useState(element.fieldName);
+  const trimmedDraft = nameDraft.trim();
+  const nameCharsetValid = FIELD_NAME_PATTERN.test(trimmedDraft);
+  const nameIsDuplicate =
+    nameCharsetValid &&
+    trimmedDraft !== element.fieldName &&
+    otherFieldNames.includes(trimmedDraft);
+  const nameError = !nameCharsetValid
+    ? t("nameInvalid")
+    : nameIsDuplicate
+      ? t("nameDuplicate")
+      : null;
+
+  const commitName = (value: string) => {
+    setNameDraft(value);
+    const trimmed = value.trim();
+    if (!FIELD_NAME_PATTERN.test(trimmed)) return;
+    if (trimmed !== element.fieldName && otherFieldNames.includes(trimmed)) {
+      return;
+    }
+    if (trimmed !== element.fieldName) {
+      onElementUpdate?.(element.elementId, {
+        fieldName: trimmed,
+      } as Partial<FormFieldElement>);
+    }
+  };
+
+  const updateProperties = (
+    patch: Partial<FormFieldElement["properties"]>,
+  ) => {
+    onElementUpdate?.(element.elementId, {
+      properties: { ...element.properties, ...patch },
+    } as Partial<FormFieldElement>);
+  };
+
+  const updateStyle = (patch: Partial<FormFieldElement["style"]>) => {
+    onElementUpdate?.(element.elementId, {
+      style: { ...element.style, ...patch },
+    } as Partial<FormFieldElement>);
+  };
+
+  const updateOptions = (options: string[]) => {
+    onElementUpdate?.(element.elementId, {
+      options,
+    } as Partial<FormFieldElement>);
+  };
+
+  const isTextLike = element.fieldType === "text";
+  const hasOptions =
+    element.fieldType === "dropdown" ||
+    element.fieldType === "listbox" ||
+    element.fieldType === "radio";
+  const options = element.options ?? [];
+
+  const inputClass =
+    "w-full h-8 px-2 rounded border bg-background text-sm";
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">
+          {t("fieldType")}
+        </label>
+        <div className="text-sm capitalize">{element.fieldType}</div>
+      </div>
+
+      {/* Nom — unique par document, charset AcroForm */}
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">
+          {t("name")}
+        </label>
+        <input
+          type="text"
+          value={nameDraft}
+          onChange={(e) => commitName(e.target.value)}
+          className={`${inputClass} ${nameError ? "border-destructive" : ""}`}
+          placeholder="champ_1"
+          aria-invalid={nameError !== null}
+        />
+        {nameError ? (
+          <p className="mt-1 text-[10px] text-destructive">{nameError}</p>
+        ) : null}
+      </div>
+
+      {/* Libellé / infobulle (→ /TU AcroForm) */}
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">
+          {t("tooltip")}
+        </label>
+        <input
+          type="text"
+          value={element.tooltip ?? ""}
+          onChange={(e) =>
+            onElementUpdate?.(element.elementId, {
+              tooltip: e.target.value || null,
+            } as Partial<FormFieldElement>)
+          }
+          className={inputClass}
+        />
+      </div>
+
+      {/* Placeholder (aide visuelle éditeur) */}
+      {isTextLike ? (
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">
+            {t("placeholder")}
+          </label>
+          <input
+            type="text"
+            value={element.placeholder ?? ""}
+            onChange={(e) =>
+              onElementUpdate?.(element.elementId, {
+                placeholder: e.target.value || null,
+              } as Partial<FormFieldElement>)
+            }
+            className={inputClass}
+          />
+        </div>
+      ) : null}
+
+      {/* Drapeaux */}
+      <div className="space-y-1.5">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={element.properties.required}
+            onChange={(e) => updateProperties({ required: e.target.checked })}
+            className="w-4 h-4"
+          />
+          <span className="text-xs text-muted-foreground">{t("required")}</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={element.properties.readOnly}
+            onChange={(e) => updateProperties({ readOnly: e.target.checked })}
+            className="w-4 h-4"
+          />
+          <span className="text-xs text-muted-foreground">{t("readOnly")}</span>
+        </label>
+        {isTextLike ? (
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={element.properties.multiline}
+              onChange={(e) => updateProperties({ multiline: e.target.checked })}
+              className="w-4 h-4"
+            />
+            <span className="text-xs text-muted-foreground">
+              {t("multiline")}
+            </span>
+          </label>
+        ) : null}
+      </div>
+
+      {/* Valeur par défaut */}
+      {element.fieldType === "checkbox" ? (
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={element.defaultValue === true}
+            onChange={(e) =>
+              onElementUpdate?.(element.elementId, {
+                defaultValue: e.target.checked,
+                value: e.target.checked,
+              } as Partial<FormFieldElement>)
+            }
+            className="w-4 h-4"
+          />
+          <span className="text-xs text-muted-foreground">
+            {t("checkedByDefault")}
+          </span>
+        </label>
+      ) : element.fieldType === "dropdown" ||
+        element.fieldType === "listbox" ||
+        element.fieldType === "radio" ? (
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">
+            {t("defaultValue")}
+          </label>
+          <select
+            value={
+              typeof element.defaultValue === "string"
+                ? element.defaultValue
+                : ""
+            }
+            onChange={(e) =>
+              onElementUpdate?.(element.elementId, {
+                defaultValue: e.target.value,
+              } as Partial<FormFieldElement>)
+            }
+            className={inputClass}
+          >
+            <option value="">{t("noDefault")}</option>
+            {options.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">
+            {t("defaultValue")}
+          </label>
+          <input
+            type="text"
+            value={
+              typeof element.defaultValue === "string"
+                ? element.defaultValue
+                : ""
+            }
+            onChange={(e) =>
+              onElementUpdate?.(element.elementId, {
+                defaultValue: e.target.value,
+              } as Partial<FormFieldElement>)
+            }
+            className={inputClass}
+          />
+        </div>
+      )}
+
+      {/* Longueur max (texte) */}
+      {isTextLike ? (
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">
+            {t("maxLength")}
+          </label>
+          <input
+            type="number"
+            min={0}
+            value={element.properties.maxLength ?? ""}
+            onChange={(e) => {
+              const parsed = parseInt(e.target.value, 10);
+              updateProperties({
+                maxLength:
+                  Number.isFinite(parsed) && parsed > 0 ? parsed : null,
+              });
+            }}
+            className={inputClass}
+            placeholder="—"
+          />
+        </div>
+      ) : null}
+
+      {/* Éditeur d'options (dropdown / listbox / radio) */}
+      {hasOptions ? (
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs text-muted-foreground">
+              {t("options")}
+            </label>
+            <button
+              type="button"
+              onClick={() =>
+                updateOptions([
+                  ...options,
+                  `${t("newOption")} ${options.length + 1}`,
+                ])
+              }
+              title={t("addOption")}
+              aria-label={t("addOption")}
+              className="h-6 w-6 flex items-center justify-center rounded border hover:bg-accent transition-colors"
+            >
+              <Plus size={12} />
+            </button>
+          </div>
+          <div className="space-y-1">
+            {options.map((option, index) => (
+              <div key={`${index}-${option}`} className="flex items-center gap-1">
+                <input
+                  type="text"
+                  defaultValue={option}
+                  onBlur={(e) => {
+                    const next = [...options];
+                    next[index] = e.target.value.trim() || option;
+                    if (next[index] !== option) updateOptions(next);
+                  }}
+                  className="flex-1 h-7 px-2 rounded border bg-background text-xs min-w-0"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (index === 0) return;
+                    const next = [...options];
+                    [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
+                    updateOptions(next);
+                  }}
+                  disabled={index === 0}
+                  title={t("moveUp")}
+                  aria-label={t("moveUp")}
+                  className="h-7 w-6 flex items-center justify-center rounded border hover:bg-accent transition-colors disabled:opacity-40"
+                >
+                  <ArrowUp size={11} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (index >= options.length - 1) return;
+                    const next = [...options];
+                    [next[index], next[index + 1]] = [next[index + 1]!, next[index]!];
+                    updateOptions(next);
+                  }}
+                  disabled={index >= options.length - 1}
+                  title={t("moveDown")}
+                  aria-label={t("moveDown")}
+                  className="h-7 w-6 flex items-center justify-center rounded border hover:bg-accent transition-colors disabled:opacity-40"
+                >
+                  <ArrowDown size={11} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateOptions(options.filter((_, i) => i !== index))
+                  }
+                  title={t("removeOption")}
+                  aria-label={t("removeOption")}
+                  className="h-7 w-6 flex items-center justify-center rounded border hover:bg-accent text-destructive transition-colors"
+                >
+                  <Trash2 size={11} />
+                </button>
+              </div>
+            ))}
+            {options.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground italic">
+                {t("noOptions")}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Police + alignement */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">
+            {t("fontSize")}
+          </label>
+          <input
+            type="number"
+            min={4}
+            max={72}
+            value={element.style.fontSize}
+            onChange={(e) => {
+              const parsed = parseFloat(e.target.value);
+              if (Number.isFinite(parsed) && parsed > 0) {
+                updateStyle({ fontSize: parsed });
+              }
+            }}
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">
+            {t("textAlign")}
+          </label>
+          <select
+            value={element.style.textAlign ?? "left"}
+            onChange={(e) =>
+              updateStyle({
+                textAlign: e.target.value as "left" | "center" | "right",
+              })
+            }
+            className={inputClass}
+          >
+            <option value="left">{t("alignLeft")}</option>
+            <option value="center">{t("alignCenter")}</option>
+            <option value="right">{t("alignRight")}</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Panel affichant les propriétés de l'élément sélectionné.
  */
@@ -341,6 +759,7 @@ export function PropertiesPanel({
   onElementUpdate,
   pageInfo,
   zoom,
+  allFieldNames = [],
 }: PropertiesPanelProps) {
   const t = useTranslations("editor.properties");
 
@@ -541,62 +960,6 @@ export function PropertiesPanel({
     </div>
   );
 
-  // Render pour champ de formulaire (text, checkbox, radio, dropdown, signature)
-  const renderFormFieldProperties = (element: FormFieldElement) => (
-    <div className="space-y-3">
-      <div>
-        <label className="text-xs text-muted-foreground block mb-1">Type de champ</label>
-        <div className="text-sm capitalize">{element.fieldType}</div>
-      </div>
-      <div>
-        <label className="text-xs text-muted-foreground block mb-1">Nom du champ</label>
-        <input
-          type="text"
-          value={element.fieldName ?? ""}
-          onChange={(e) =>
-            onElementUpdate?.(element.elementId, {
-              fieldName: e.target.value,
-            } as Partial<FormFieldElement>)
-          }
-          className="w-full h-8 px-2 rounded border bg-background text-sm"
-          placeholder="champ_1"
-        />
-      </div>
-      <div>
-        <label className="text-xs text-muted-foreground block mb-1">Placeholder</label>
-        <input
-          type="text"
-          value={(element as { placeholder?: string }).placeholder ?? ""}
-          onChange={(e) =>
-            onElementUpdate?.(element.elementId, {
-              placeholder: e.target.value,
-            } as unknown as Partial<FormFieldElement>)
-          }
-          className="w-full h-8 px-2 rounded border bg-background text-sm"
-        />
-      </div>
-      <div className="flex items-center gap-2">
-        <input
-          id={`required-${element.elementId}`}
-          type="checkbox"
-          checked={Boolean((element as { required?: boolean }).required)}
-          onChange={(e) =>
-            onElementUpdate?.(element.elementId, {
-              required: e.target.checked,
-            } as unknown as Partial<FormFieldElement>)
-          }
-          className="w-4 h-4"
-        />
-        <label
-          htmlFor={`required-${element.elementId}`}
-          className="text-xs text-muted-foreground"
-        >
-          Champ obligatoire
-        </label>
-      </div>
-    </div>
-  );
-
   // Render pour élément image
   const renderImageProperties = (element: ImageElement) => (
     <div className="space-y-3">
@@ -737,7 +1100,17 @@ export function PropertiesPanel({
               {selectedElement.type === "shape" && renderShapeProperties(selectedElement as ShapeElement)}
               {selectedElement.type === "image" && renderImageProperties(selectedElement as ImageElement)}
               {selectedElement.type === "annotation" && renderAnnotationProperties(selectedElement as AnnotationElement)}
-              {selectedElement.type === "form_field" && renderFormFieldProperties(selectedElement as FormFieldElement)}
+              {selectedElement.type === "form_field" && (
+                <FormFieldProperties
+                  key={selectedElement.elementId}
+                  element={selectedElement as FormFieldElement}
+                  onElementUpdate={onElementUpdate}
+                  otherFieldNames={allFieldNames.filter(
+                    (name) =>
+                      name !== (selectedElement as FormFieldElement).fieldName,
+                  )}
+                />
+              )}
             </div>
           </div>
         ) : null}

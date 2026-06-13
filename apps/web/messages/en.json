@@ -953,7 +953,19 @@
     },
     "canvas": {
       "defaultText": "Text",
-      "textPlaceholder": "Text field"
+      "textPlaceholder": "Text field",
+      "multilinePlaceholder": "Multiline text area",
+      "dateHint": "DD/MM/YYYY",
+      "selectPlaceholder": "Select…",
+      "defaultOption": "Option",
+      "radioPrompt": {
+        "title": "New radio button group",
+        "groupName": "Group name",
+        "options": "Options",
+        "optionsHint": "One option per line — a button is created for each.",
+        "cancel": "Cancel",
+        "create": "Create group"
+      }
     },
     "error": {
       "title": "Loading Error",
@@ -1082,7 +1094,16 @@
       "metadata": "Metadata",
       "convert": "Convert",
       "flatten": "Flatten",
-      "compress": "Compress"
+      "compress": "Compress",
+      "zoomLevel": "Zoom level",
+      "fields": {
+        "text": "Text",
+        "multiline": "Multiline text",
+        "checkbox": "Checkbox",
+        "radioGroup": "Radio button group",
+        "dropdown": "Dropdown list",
+        "date": "Date"
+      }
     },
     "tools": {
       "select": "Select",
@@ -1153,6 +1174,33 @@
       "image": {
         "dimensions": "Dimensions",
         "opacity": "Opacity"
+      },
+      "formField": {
+        "fieldType": "Field type",
+        "name": "Field name",
+        "nameInvalid": "Allowed characters: letters, digits, _ . -",
+        "nameDuplicate": "This name is already used by another field.",
+        "tooltip": "Label / tooltip",
+        "placeholder": "Placeholder text",
+        "required": "Required field",
+        "readOnly": "Read-only",
+        "multiline": "Multiline",
+        "checkedByDefault": "Checked by default",
+        "defaultValue": "Default value",
+        "noDefault": "— None —",
+        "maxLength": "Maximum length",
+        "options": "Options",
+        "addOption": "Add option",
+        "removeOption": "Remove option",
+        "newOption": "Option",
+        "moveUp": "Move up",
+        "moveDown": "Move down",
+        "noOptions": "No options defined.",
+        "fontSize": "Font size",
+        "textAlign": "Alignment",
+        "alignLeft": "Left",
+        "alignCenter": "Center",
+        "alignRight": "Right"
       }
     },
     "sidebar": {
@@ -1196,6 +1244,52 @@
       "selectedPages": "Selected pages",
       "export": "Export",
       "exporting": "Exporting..."
+    },
+    "forms": {
+      "title": "Forms",
+      "modeDesign": "Design",
+      "modeFill": "Fill",
+      "designHint": "Place fields from the toolbar palette, then edit them in the Properties panel.",
+      "noDesignFields": "No form fields in this document.",
+      "tabOrderHint": "List order defines the tab order (field creation order in the PDF, per page).",
+      "pageShort": "p. {page}",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "scanning": "Scanning fields…",
+      "loadFields": "Load fields",
+      "reloadFields": "Reload fields",
+      "loadFailed": "Failed to load form fields.",
+      "openPdfFirst": "Open a PDF file to view its form fields.",
+      "noFieldsFound": "No form fields found in this PDF.",
+      "fieldsCount": "{count, plural, one {field} other {fields}}",
+      "filledCount": "filled",
+      "emptyCount": "empty",
+      "fillSuccess": "Fields filled successfully.",
+      "fillFailed": "Failed to fill form fields.",
+      "applying": "Applying…",
+      "fillAll": "Fill all ({count})",
+      "flattenAfterFill": "Flatten after filling",
+      "enterValue": "Enter {field}…",
+      "checked": "Checked",
+      "unchecked": "Unchecked",
+      "noOptionsDefined": "No options defined",
+      "selectOption": "— Select —",
+      "signatureReadOnly": "Signature field (read-only)",
+      "buttonField": "Button field",
+      "readOnlyField": "Read-only field",
+      "maxChars": "Max {count} characters",
+      "filled": "Filled",
+      "empty": "Empty",
+      "highlightTooltip": "Field “{field}” — click to fill it",
+      "fieldTypes": {
+        "text": "Text",
+        "checkbox": "Checkbox",
+        "radio": "Radio",
+        "dropdown": "Dropdown",
+        "listbox": "List box",
+        "signature": "Signature",
+        "button": "Button"
+      }
     }
   },
   "errors": {

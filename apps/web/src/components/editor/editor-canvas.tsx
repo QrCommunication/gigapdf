@@ -10,10 +10,26 @@ import type {
   AnnotationType,
   AnnotationElement,
   FieldType,
+  FieldCreationKind,
+  FormFieldElement,
   Bounds,
 } from "@giga-pdf/types";
 import type { Canvas as FabricCanvas, FabricObject } from "fabric";
 import { clientLogger } from "@/lib/client-logger";
+
+/** Zoom hard bounds (10% – 800%) shared by wheel, toolbar and fit modes. */
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 8;
+/** Multiplicative wheel/keyboard zoom step — fluid, never additive jumps. */
+const WHEEL_ZOOM_FACTOR = 1.1;
+/** Comfortable breathing room around the page inside the scroll viewport (px). */
+const CANVAS_VIEWPORT_PADDING = 32;
+/** Snap distance (canvas units) when dragging a form field near another field's edges. */
+const FIELD_SNAP_DISTANCE = 4;
+
+function clampZoom(zoom: number): number {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+}
 
 // API base URL for image loading
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -133,6 +149,27 @@ export interface EditorCanvasProps {
   annotationType?: AnnotationType;
   /** Type de champ de formulaire sélectionné (text/checkbox/radio/dropdown) */
   fieldType?: FieldType;
+  /**
+   * Variante de création du champ de formulaire (palette toolbar) : raffine
+   * fieldType avec multiline / date / radio_group. Prioritaire sur fieldType
+   * pour la création au clic.
+   */
+  fieldKind?: FieldCreationKind;
+  /**
+   * Mode de zoom adaptatif. Quand non-null, le composant recalcule le zoom
+   * au resize du viewport (ResizeObserver) et au changement de page, et le
+   * remonte via onFitZoomChange. Les interactions manuelles (wheel) passent
+   * par onZoomChanged — c'est au parent de remettre fitMode à null.
+   */
+  fitMode?: "page" | "width" | null;
+  /** Zoom recalculé par un mode fit (page/width). */
+  onFitZoomChange?: (zoom: number) => void;
+  /**
+   * Contenu superposé au canvas (ex: surlignage des champs de formulaire en
+   * mode Remplir). Rendu DANS le conteneur du canvas, donc positionné en
+   * coordonnées page×zoom et défilant avec la page.
+   */
+  overlay?: React.ReactNode;
   /** Couleur de contour */
   strokeColor?: string;
   /** Couleur de remplissage */
@@ -160,6 +197,92 @@ export interface EditorCanvasProps {
 // Génère un ID unique
 function generateId(): string {
   return `el_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/** Tailles par défaut des widgets de formulaire, par variante de création. */
+const FIELD_DEFAULT_SIZES: Record<FieldCreationKind, { width: number; height: number }> = {
+  text: { width: 200, height: 30 },
+  multiline: { width: 200, height: 80 },
+  date: { width: 200, height: 30 },
+  checkbox: { width: 20, height: 20 },
+  radio_group: { width: 18, height: 18 },
+  dropdown: { width: 200, height: 30 },
+};
+
+interface NewFormFieldParams {
+  elementId: string;
+  kind: FieldCreationKind;
+  x: number;
+  y: number;
+  /** Nom du champ — défaut généré depuis le type + timestamp. */
+  fieldName?: string;
+  /** Texte d'aide affiché dans le widget vide (éditeur uniquement). */
+  placeholder?: string | null;
+  /** Pour radio : valeur d'export de CE widget dans le groupe. */
+  exportValue?: string;
+  /** Pour radio/dropdown : liste complète des options. */
+  options?: string[];
+}
+
+/**
+ * Construit un FormFieldElement complet pour une création depuis la palette.
+ * Source de vérité unique : stocké dans data.formFieldElement de l'objet
+ * Fabric, puis re-fusionné avec les bounds réels par fabricObjectToElement.
+ */
+function createFormFieldElement(params: NewFormFieldParams): FormFieldElement {
+  const { kind, elementId, x, y } = params;
+  const size = FIELD_DEFAULT_SIZES[kind];
+  const fieldType: FieldType =
+    kind === "checkbox"
+      ? "checkbox"
+      : kind === "radio_group"
+        ? "radio"
+        : kind === "dropdown"
+          ? "dropdown"
+          : "text";
+  const isList = fieldType === "dropdown";
+  const isRadio = fieldType === "radio";
+  const isCheckbox = fieldType === "checkbox";
+
+  return {
+    elementId,
+    type: "form_field",
+    bounds: { x, y, width: size.width, height: size.height },
+    transform: { rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
+    layerId: null,
+    locked: false,
+    visible: true,
+    fieldType,
+    fieldName: params.fieldName ?? `${kind}_${Date.now()}`,
+    // radio : value = valeur d'export du widget ; checkbox : booléen ;
+    // dropdown : sélection (vide) ; text : contenu (vide).
+    value: isCheckbox ? false : isRadio ? (params.exportValue ?? "") : isList ? [] : "",
+    defaultValue: isCheckbox ? false : isList ? [] : "",
+    options: isList || isRadio ? (params.options ?? []) : null,
+    properties: {
+      required: false,
+      readOnly: false,
+      maxLength: null,
+      multiline: kind === "multiline",
+      password: false,
+      comb: false,
+    },
+    style: {
+      fontFamily: "Arial",
+      fontSize: 12,
+      textColor: "#000000",
+      backgroundColor: "#ffffff",
+      borderColor: "#cccccc",
+      borderWidth: 1,
+      textAlign: "left",
+    },
+    format:
+      kind === "date"
+        ? { type: "date", pattern: "dd/mm/yyyy" }
+        : { type: "none", pattern: null },
+    placeholder: params.placeholder ?? null,
+    tooltip: null,
+  };
 }
 
 // Fabric stocke fontWeight soit en string ("bold"/"normal"/"700"), soit en
@@ -248,6 +371,10 @@ export function EditorCanvas({
   shapeType = "rectangle",
   annotationType = "highlight",
   fieldType = "text",
+  fieldKind = "text",
+  fitMode = null,
+  onFitZoomChange,
+  overlay,
   strokeColor = "#000000",
   fillColor = "transparent",
   strokeWidth = 2,
@@ -264,6 +391,10 @@ export function EditorCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricRef = useRef<FabricCanvas | null>(null);
   const previousPageRef = useRef<string | null>(null);
+  // Conteneur scrollable (viewport) — référence directe, JAMAIS de
+  // traversée DOM upperCanvasEl.parentElement (fragile aux changements de
+  // structure JSX, et le wrapper a maintenant un niveau intermédiaire m-auto).
+  const scrollWrapperRef = useRef<HTMLDivElement>(null);
 
   // Ref pour documentId (évite les closures stale dans loadPage)
   const documentIdRef = useRef(documentId);
@@ -281,10 +412,27 @@ export function EditorCanvas({
   const shapeTypeRef = useRef(shapeType);
   const annotationTypeRef = useRef(annotationType);
   const fieldTypeRef = useRef(fieldType);
+  const fieldKindRef = useRef(fieldKind);
   const strokeColorRef = useRef(strokeColor);
   const fillColorRef = useRef(fillColor);
   const strokeWidthRef = useRef(strokeWidth);
   const zoomRef = useRef(zoom);
+  // Dimensions de la page courante (points PDF) — nécessaires au resize du
+  // canvas DOM dans les handlers Fabric enregistrés une seule fois.
+  const pageDimsRef = useRef<{ width: number; height: number }>({
+    width: width,
+    height: height,
+  });
+
+  // Invite de saisie rapide pour la création d'un GROUPE de boutons radio :
+  // le clic avec fieldKind="radio_group" ouvre ce mini-formulaire (nom du
+  // groupe + options, une par ligne) au lieu de poser un objet immédiatement.
+  const [radioPrompt, setRadioPrompt] = useState<{ x: number; y: number } | null>(null);
+  const [radioGroupName, setRadioGroupName] = useState("");
+  const [radioOptionsText, setRadioOptionsText] = useState("");
+  // Ouvert depuis le handler mouse:down de Fabric (closure d'init) — passe
+  // par une ref pour accéder au setState + aux traductions sans stale closure.
+  const openRadioPromptRef = useRef<((x: number, y: number) => void) | null>(null);
 
   // Zoom + pan refs:
   //   zoomFromWheelRef = true  → the [zoom] useEffect must skip its own
@@ -327,11 +475,25 @@ export function EditorCanvas({
     shapeTypeRef.current = shapeType;
     annotationTypeRef.current = annotationType;
     fieldTypeRef.current = fieldType;
+    fieldKindRef.current = fieldKind;
     strokeColorRef.current = strokeColor;
     fillColorRef.current = fillColor;
     strokeWidthRef.current = strokeWidth;
     zoomRef.current = zoom;
     documentDefaultFontFamilyRef.current = documentDefaultFontFamily;
+    if (page?.dimensions) {
+      pageDimsRef.current = {
+        width: page.dimensions.width,
+        height: page.dimensions.height,
+      };
+    }
+    openRadioPromptRef.current = (x: number, y: number) => {
+      setRadioGroupName(`groupe_${Date.now().toString(36)}`);
+      setRadioOptionsText(
+        [1, 2, 3].map((n) => `${t("defaultOption")} ${n}`).join("\n"),
+      );
+      setRadioPrompt({ x, y });
+    };
   });
 
   // Historique pour undo/redo
@@ -362,6 +524,120 @@ export function EditorCanvas({
       isUpdatingHistoryRef.current = false;
     }
   }, []);
+
+  // --- Architecture zoom/pan (CHOIX DOCUMENTÉ) -----------------------------
+  // viewportTransform Fabric = SCALE PUR [z,0,0,z,0,0] + canvas DOM
+  // redimensionné à page×zoom + scroll NATIF du wrapper overflow-auto.
+  // L'ancienne approche mélangeait zoomToPoint (translation dans le vpt) et
+  // resize DOM : le contenu Fabric se décalait dans sa boîte DOM et le haut
+  // de page devenait inaccessible (flex items-center + overflow). Avec un
+  // vpt scale-only : scène → pixels canvas = scène × zoom (déterministe),
+  // pan = scrollLeft/Top natifs (scrollbars visibles dans les 2 axes), et
+  // les conversions pointeur→scène de Fabric (e.scenePoint) restent exactes
+  // sous n'importe quel zoom + scroll — la création d'éléments tombe au bon
+  // endroit.
+  //
+  // applyZoomAtClientPoint : applique un zoom en préservant le point
+  // (clientX, clientY) — le pixel logique sous le curseur reste sous le
+  // curseur. anchor=null → pas de correction de scroll (cas initial).
+  const applyZoomAtClientPoint = useCallback(
+    (newZoom: number, anchor: { x: number; y: number } | null): number => {
+      const canvas = fabricRef.current;
+      if (!canvas) return newZoom;
+      const clamped = clampZoom(newZoom);
+      const oldZoom = canvas.getZoom() || 1;
+      const wrapper = scrollWrapperRef.current;
+      const upperEl = canvas.upperCanvasEl as HTMLCanvasElement | undefined;
+
+      // Point de scène sous l'ancre AVANT le changement (vpt scale pur :
+      // scène = (client - origineCanvas) / zoom).
+      let sceneAnchor: { x: number; y: number } | null = null;
+      if (anchor && wrapper && upperEl) {
+        const rect = upperEl.getBoundingClientRect();
+        sceneAnchor = {
+          x: (anchor.x - rect.left) / oldZoom,
+          y: (anchor.y - rect.top) / oldZoom,
+        };
+      }
+
+      const pageW = pageDimsRef.current.width;
+      const pageH = pageDimsRef.current.height;
+      canvas.setViewportTransform([clamped, 0, 0, clamped, 0, 0]);
+      canvas.setDimensions({ width: pageW * clamped, height: pageH * clamped });
+      // Le conteneur React garde des width/height inline : on les synchronise
+      // immédiatement pour que l'étendue scrollable soit correcte AVANT le
+      // re-render React (sinon la correction de scroll serait clampée).
+      if (containerRef.current) {
+        containerRef.current.style.width = `${pageW * clamped}px`;
+        containerRef.current.style.height = `${pageH * clamped}px`;
+      }
+      canvas.requestRenderAll();
+
+      if (anchor && wrapper && upperEl && sceneAnchor) {
+        // Re-mesure APRÈS resize (reflow synchrone) : la position du canvas
+        // dans le contenu scrollable peut changer (marges auto du centrage).
+        const rect = upperEl.getBoundingClientRect();
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const offsetLeft = rect.left - wrapperRect.left + wrapper.scrollLeft;
+        const offsetTop = rect.top - wrapperRect.top + wrapper.scrollTop;
+        wrapper.scrollLeft =
+          sceneAnchor.x * clamped + offsetLeft - (anchor.x - wrapperRect.left);
+        wrapper.scrollTop =
+          sceneAnchor.y * clamped + offsetTop - (anchor.y - wrapperRect.top);
+      }
+      return clamped;
+    },
+    [],
+  );
+  // Miroir ref : le handler mouse:wheel est enregistré une seule fois à
+  // l'init de Fabric (même pattern que toolRef).
+  const applyZoomAtClientPointRef = useRef(applyZoomAtClientPoint);
+  useEffect(() => {
+    applyZoomAtClientPointRef.current = applyZoomAtClientPoint;
+  }, [applyZoomAtClientPoint]);
+
+  // Zoom "fit" : calcule le zoom pour voir toute la page (page) ou toute la
+  // largeur (width) dans le viewport, padding confortable déduit.
+  const computeFitZoom = useCallback(
+    (mode: "page" | "width"): number | null => {
+      const wrapper = scrollWrapperRef.current;
+      if (!wrapper) return null;
+      const pageW = pageDimsRef.current.width;
+      const pageH = pageDimsRef.current.height;
+      if (pageW <= 0 || pageH <= 0) return null;
+      const availW = wrapper.clientWidth - CANVAS_VIEWPORT_PADDING * 2;
+      const availH = wrapper.clientHeight - CANVAS_VIEWPORT_PADDING * 2;
+      if (availW <= 0 || availH <= 0) return null;
+      const zoomForMode =
+        mode === "width" ? availW / pageW : Math.min(availW / pageW, availH / pageH);
+      return clampZoom(zoomForMode);
+    },
+    [],
+  );
+
+  const onFitZoomChangeRef = useRef(onFitZoomChange);
+  useEffect(() => {
+    onFitZoomChangeRef.current = onFitZoomChange;
+  });
+
+  // Tant que fitMode est actif, recalcul au resize du viewport
+  // (ResizeObserver) et au changement de page. Dès que l'utilisateur zoome
+  // manuellement, le parent remet fitMode à null et cet effet se désabonne.
+  useEffect(() => {
+    if (!fitMode) return;
+    const wrapper = scrollWrapperRef.current;
+    if (!wrapper) return;
+    const recompute = () => {
+      const fitZoom = computeFitZoom(fitMode);
+      if (fitZoom !== null && Math.abs(fitZoom - zoomRef.current) > 0.001) {
+        onFitZoomChangeRef.current?.(fitZoom);
+      }
+    };
+    recompute();
+    const observer = new ResizeObserver(recompute);
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, [fitMode, page, computeFitZoom]);
 
   // Ref pour tracker le contenu original des textes (pour detecter les vraies modifications)
   const originalContentRef = useRef<Map<string, string>>(new Map());
@@ -397,6 +673,77 @@ export function EditorCanvas({
     },
     [] // stable — lit historyIndexRef.current au moment de l'appel
   );
+
+  // Confirme la création d'un groupe de boutons radio : pose un widget radio
+  // par option (tous partagent le fieldName du groupe → un seul champ PDF à
+  // N widgets au bake) + un label texte à droite de chaque bouton (le label
+  // est du contenu de page, comme dans les éditeurs PDF pro — le widget
+  // AcroForm ne porte pas de libellé). Chaque canvas.add déclenche
+  // handleObjectAdded → onElementAdded → queue + scene graph, le flux normal.
+  const handleConfirmRadioGroup = useCallback(async () => {
+    const prompt = radioPrompt;
+    const canvas = fabricRef.current;
+    setRadioPrompt(null);
+    if (!prompt || !canvas) return;
+    const options = radioOptionsText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (options.length === 0) return;
+    // Charset AcroForm sûr pour le nom de champ.
+    const safeName =
+      radioGroupName.trim().replace(/[^A-Za-z0-9_.\-]/g, "_") ||
+      `radio_${Date.now()}`;
+    const { Group, Circle, IText } = await import("fabric");
+    const SPACING = 30;
+    options.forEach((option, index) => {
+      const elementId = generateId();
+      const widgetY = prompt.y + index * SPACING;
+      const element = createFormFieldElement({
+        elementId,
+        kind: "radio_group",
+        x: prompt.x,
+        y: widgetY,
+        fieldName: safeName,
+        exportValue: option,
+        options,
+      });
+      const widget = new Group(
+        [
+          new Circle({
+            left: 0,
+            top: 0,
+            radius: 9,
+            fill: "#ffffff",
+            stroke: "#555555",
+            strokeWidth: 1.5,
+          }),
+        ],
+        { left: prompt.x, top: widgetY },
+      );
+      (widget as FabricObjectWithData).data = {
+        elementId,
+        formFieldType: "radio",
+        fieldName: safeName,
+        exportValue: option,
+        options,
+        formFieldElement: element,
+      };
+      canvas.add(widget);
+
+      const label = new IText(option, {
+        left: prompt.x + 26,
+        top: widgetY + 1,
+        fontSize: 13,
+        fontFamily: documentDefaultFontFamilyRef.current,
+        fill: "#000000",
+      });
+      (label as FabricObjectWithData).data = { elementId: generateId() };
+      canvas.add(label);
+    });
+    canvas.renderAll();
+    saveHistory(canvas);
+  }, [radioPrompt, radioOptionsText, radioGroupName, saveHistory]);
 
   // Convertir un objet Fabric.js en Element
   const fabricObjectToElement = useCallback(
@@ -587,6 +934,26 @@ export function EditorCanvas({
         } as AnnotationElement;
       }
 
+      // Form fields — testés AVANT la branche shapes : un champ re-rendu par
+      // renderElementsOverlay est un Rect Fabric, qui matcherait sinon la
+      // branche shape et perdrait son identité de champ.
+      // Source de vérité : data.formFieldElement (élément complet stocké à
+      // la création ET par renderElementsOverlay), re-fusionné avec les
+      // bounds/transform réels de l'objet Fabric — déplacement/resize pris
+      // en compte SANS perdre les propriétés métier (options, required,
+      // multiline, format…).
+      const storedFormField = obj.data?.formFieldElement as
+        | FormFieldElement
+        | undefined;
+      if (storedFormField && storedFormField.type === "form_field") {
+        return {
+          ...storedFormField,
+          ...baseElement,
+          type: "form_field" as const,
+          fieldType: storedFormField.fieldType,
+        };
+      }
+
       if (["rect", "circle", "triangle", "ellipse", "line"].includes(typeName)) {
         let shapeTypeResult: ShapeType = "rectangle";
         if (typeName === "circle") shapeTypeResult = "circle";
@@ -614,26 +981,35 @@ export function EditorCanvas({
         };
       }
 
-      // Form fields — Group with data.formFieldType set by mouse:down.
-      // text/checkbox/radio/dropdown/signature all round-trip through the
-      // same mapping so the backend can emit the right PDF AcroForm widget.
-      if (typeName === "group" && obj.data?.formFieldType) {
+      // Fallback legacy : Groups créés avant l'introduction de
+      // data.formFieldElement (dont la zone de signature du draw tool).
+      if (obj.data?.formFieldType) {
         const ft = obj.data.formFieldType as FieldType;
-        const isBooleanField = ft === "checkbox" || ft === "radio";
+        const isBooleanField = ft === "checkbox";
+        const isRadioField = ft === "radio";
         const isListField = ft === "dropdown" || ft === "listbox";
         return {
           ...baseElement,
           type: "form_field" as const,
           fieldType: ft,
           fieldName: (obj.data.fieldName as string) ?? `${ft}_${Date.now()}`,
-          value: isBooleanField ? false : isListField ? [] : "",
+          value: isBooleanField
+            ? false
+            : isRadioField
+              ? ((obj.data.exportValue as string) ?? "")
+              : isListField
+                ? []
+                : "",
           defaultValue: isBooleanField ? false : isListField ? [] : "",
-          options: isListField ? ((obj.data.options as string[]) ?? []) : null,
+          options:
+            isListField || isRadioField
+              ? ((obj.data.options as string[]) ?? (isListField ? [] : null))
+              : null,
           properties: {
             required: Boolean(obj.data.required),
             readOnly: false,
             maxLength: null,
-            multiline: false,
+            multiline: Boolean(obj.data.multiline),
             password: false,
             comb: false,
           },
@@ -646,6 +1022,8 @@ export function EditorCanvas({
             borderWidth: 1,
           },
           format: { type: "none" as const, pattern: null },
+          placeholder: (obj.data.placeholder as string) || null,
+          tooltip: null,
         };
       }
 
@@ -1076,6 +1454,12 @@ export function EditorCanvas({
         selection: tool === "select",
         preserveObjectStacking: true,
       });
+      // Architecture scale-pur dès l'init : sans ça, un zoom initial ≠ 1
+      // (mode fit restauré) rendrait le contenu non-scalé dans un canvas
+      // DOM déjà dimensionné à page×zoom.
+      canvas.setViewportTransform([
+        zoomRef.current, 0, 0, zoomRef.current, 0, 0,
+      ]);
 
       fabricRef.current = canvas;
 
@@ -1234,13 +1618,43 @@ export function EditorCanvas({
           }
 
           case "form_field": {
-            // Crée le champ selon le fieldType sélectionné dans la toolbar.
-            // text/checkbox/radio/dropdown ont des visuels distincts pour
-            // que l'utilisateur identifie le type au coup d'œil.
-            const currentFieldType = fieldTypeRef.current;
-            let formFieldGroup: InstanceType<typeof Group>;
+            // Crée le champ selon la VARIANTE sélectionnée dans la palette
+            // (fieldKind) : text / multiligne / date / case à cocher /
+            // groupe radio / liste déroulante. Chaque variante a un visuel
+            // distinct pour être identifiable au coup d'œil.
+            const currentKind = fieldKindRef.current;
 
-            switch (currentFieldType) {
+            if (currentKind === "radio_group") {
+              // Création différée : un mini-formulaire demande le nom du
+              // groupe + les options, puis pose N boutons partageant le
+              // même fieldName (voir handleConfirmRadioGroup).
+              openRadioPromptRef.current?.(pointer.x, pointer.y);
+              break;
+            }
+
+            const fieldElementId = generateId();
+            const placeholderText =
+              currentKind === "text"
+                ? t("textPlaceholder")
+                : currentKind === "multiline"
+                  ? t("multilinePlaceholder")
+                  : currentKind === "date"
+                    ? t("dateHint")
+                    : null;
+            const fieldElement = createFormFieldElement({
+              elementId: fieldElementId,
+              kind: currentKind,
+              x: pointer.x,
+              y: pointer.y,
+              placeholder: placeholderText,
+              options:
+                currentKind === "dropdown"
+                  ? [1, 2, 3].map((n) => `${t("defaultOption")} ${n}`)
+                  : undefined,
+            });
+
+            let formFieldGroup: InstanceType<typeof Group>;
+            switch (currentKind) {
               case "checkbox": {
                 formFieldGroup = new Group(
                   [
@@ -1260,24 +1674,7 @@ export function EditorCanvas({
                 );
                 break;
               }
-              case "radio": {
-                formFieldGroup = new Group(
-                  [
-                    new Circle({
-                      left: 0,
-                      top: 0,
-                      radius: 10,
-                      fill: "#ffffff",
-                      stroke: "#555555",
-                      strokeWidth: 1.5,
-                    }),
-                  ],
-                  { left: pointer.x, top: pointer.y },
-                );
-                break;
-              }
-              case "dropdown":
-              case "listbox": {
+              case "dropdown": {
                 formFieldGroup = new Group(
                   [
                     new Rect({
@@ -1291,7 +1688,7 @@ export function EditorCanvas({
                       rx: 4,
                       ry: 4,
                     }),
-                    new FabricText("Sélectionner…", {
+                    new FabricText(t("selectPlaceholder"), {
                       left: 10,
                       top: 8,
                       fontSize: 12,
@@ -1302,6 +1699,69 @@ export function EditorCanvas({
                       left: 175,
                       top: 6,
                       fontSize: 14,
+                      fontFamily: "Arial",
+                      fill: "#666666",
+                    }),
+                  ],
+                  { left: pointer.x, top: pointer.y },
+                );
+                break;
+              }
+              case "multiline": {
+                formFieldGroup = new Group(
+                  [
+                    new Rect({
+                      left: 0,
+                      top: 0,
+                      width: 200,
+                      height: 80,
+                      fill: "#ffffff",
+                      stroke: "#cccccc",
+                      strokeWidth: 1,
+                      rx: 4,
+                      ry: 4,
+                    }),
+                    new FabricText(t("multilinePlaceholder"), {
+                      left: 10,
+                      top: 8,
+                      fontSize: 12,
+                      fontFamily: "Arial",
+                      fill: "#999999",
+                    }),
+                    // Lignes d'écriture simulées — identifie la zone
+                    // multiligne au premier regard.
+                    new Line([10, 40, 190, 40], { stroke: "#e5e7eb", strokeWidth: 1 }),
+                    new Line([10, 58, 190, 58], { stroke: "#e5e7eb", strokeWidth: 1 }),
+                  ],
+                  { left: pointer.x, top: pointer.y },
+                );
+                break;
+              }
+              case "date": {
+                formFieldGroup = new Group(
+                  [
+                    new Rect({
+                      left: 0,
+                      top: 0,
+                      width: 200,
+                      height: 30,
+                      fill: "#ffffff",
+                      stroke: "#cccccc",
+                      strokeWidth: 1,
+                      rx: 4,
+                      ry: 4,
+                    }),
+                    new FabricText(t("dateHint"), {
+                      left: 10,
+                      top: 8,
+                      fontSize: 12,
+                      fontFamily: "Arial",
+                      fill: "#999999",
+                    }),
+                    new FabricText("📅", {
+                      left: 176,
+                      top: 7,
+                      fontSize: 13,
                       fontFamily: "Arial",
                       fill: "#666666",
                     }),
@@ -1340,11 +1800,14 @@ export function EditorCanvas({
             }
 
             (formFieldGroup as FabricObjectWithData).data = {
-              elementId: generateId(),
-              formFieldType: currentFieldType,
-              fieldName: `${currentFieldType}_${Date.now()}`,
+              elementId: fieldElementId,
+              formFieldType: fieldElement.fieldType,
+              fieldName: fieldElement.fieldName,
               required: false,
-              placeholder: currentFieldType === "text" ? t("textPlaceholder") : "",
+              placeholder: fieldElement.placeholder ?? "",
+              // Source de vérité complète pour le round-trip Fabric→Element
+              // (multiline, format date, options, style…).
+              formFieldElement: fieldElement,
             };
             newObj = formFieldGroup;
             break;
@@ -1409,47 +1872,45 @@ export function EditorCanvas({
         }
       });
 
-      // Mouse wheel for zoom - centered on the cursor (Fabric idiom).
-      // The screen-position of the pointer is preserved across zoom levels:
-      //   1. Fabric's zoomToPoint translates viewportTransform around the
-      //      pointer so the canvas content stays under the cursor.
-      //   2. The wrapper scroll is then adjusted by the zoom ratio so that,
-      //      now that the canvas DOM grew/shrank, the same pixel still sits
-      //      under the user's cursor.
-      // Without (2), the canvas DOM growth would shift content visually
-      // even though Fabric did the right thing internally.
+      // Molette :
+      //   - Ctrl/Cmd + molette → zoom centré sur le curseur (le point sous
+      //     la souris reste sous la souris — applyZoomAtClientPoint ajuste
+      //     le scroll après le resize DOM).
+      //   - Shift + molette → scroll horizontal (les navigateurs ne
+      //     convertissent pas tous deltaY→horizontal sur un canvas).
+      //   - Molette seule → scroll vertical NATIF du wrapper (on ne
+      //     preventDefault pas : l'événement bulle jusqu'au overflow-auto).
       canvas.on("mouse:wheel", (opt) => {
         const event = opt.e as WheelEvent;
-        if (!event.ctrlKey && !event.metaKey) return;
-        event.preventDefault();
-        event.stopPropagation();
 
-        const currentZoom = canvas.getZoom();
-        const delta = event.deltaY > 0 ? -0.1 : 0.1;
-        const newZoom = Math.min(4, Math.max(0.25, currentZoom + delta));
-        if (newZoom === currentZoom) return;
-
-        // Fabric v6 renamed getPointer(e, ignoreVptTransform) into the
-        // explicit getScenePoint() (transformed) / getViewportPoint() pair.
-        // We want the SCENE coordinate so zoomToPoint anchors on the
-        // logical pixel under the cursor, regardless of the current vpt.
-        const pointer = canvas.getScenePoint(event);
-        canvas.zoomToPoint(pointer, newZoom);
-        zoomFromWheelRef.current = true;
-        onZoomChangedRef.current?.(newZoom);
-
-        // Adjust wrapper scroll so the cursor still hovers over the same
-        // logical pixel. canvas.upperCanvasEl is wrapped inside a
-        // .canvas-container div which itself is inside .editor-canvas-wrapper.
-        const wrapper =
-          canvas.upperCanvasEl?.parentElement?.parentElement ?? null;
-        if (wrapper) {
-          const ratio = newZoom / currentZoom;
-          wrapper.scrollLeft =
-            wrapper.scrollLeft * ratio + pointer.x * (ratio - 1);
-          wrapper.scrollTop =
-            wrapper.scrollTop * ratio + pointer.y * (ratio - 1);
+        if (event.ctrlKey || event.metaKey) {
+          event.preventDefault();
+          event.stopPropagation();
+          const currentZoom = canvas.getZoom();
+          const factor =
+            event.deltaY > 0 ? 1 / WHEEL_ZOOM_FACTOR : WHEEL_ZOOM_FACTOR;
+          const newZoom = clampZoom(currentZoom * factor);
+          if (newZoom === currentZoom) return;
+          applyZoomAtClientPointRef.current(newZoom, {
+            x: event.clientX,
+            y: event.clientY,
+          });
+          // Le useEffect [zoom] ne doit pas ré-appliquer (déjà fait ici) ;
+          // le parent remet aussi fitMode à null (zoom manuel).
+          zoomFromWheelRef.current = true;
+          onZoomChangedRef.current?.(newZoom);
+          return;
         }
+
+        if (event.shiftKey) {
+          const wrapper = scrollWrapperRef.current;
+          if (wrapper && event.deltaY !== 0 && event.deltaX === 0) {
+            event.preventDefault();
+            wrapper.scrollLeft += event.deltaY;
+          }
+          return;
+        }
+        // Pas de preventDefault : scroll vertical natif.
       });
 
       // Pan handlers — activated by:
@@ -1466,8 +1927,7 @@ export function EditorCanvas({
           isSpaceDownRef.current ||
           toolRef.current === "hand";
         if (!shouldPan) return;
-        const wrapper =
-          canvas.upperCanvasEl?.parentElement?.parentElement ?? null;
+        const wrapper = scrollWrapperRef.current;
         isPanningRef.current = true;
         panStartRef.current = {
           clientX: e.clientX,
@@ -1483,13 +1943,64 @@ export function EditorCanvas({
       canvas.on("mouse:move", (opt) => {
         if (!isPanningRef.current || !panStartRef.current) return;
         const e = opt.e as MouseEvent;
-        const wrapper =
-          canvas.upperCanvasEl?.parentElement?.parentElement ?? null;
+        const wrapper = scrollWrapperRef.current;
         if (!wrapper) return;
         wrapper.scrollLeft =
           panStartRef.current.scrollLeft - (e.clientX - panStartRef.current.clientX);
         wrapper.scrollTop =
           panStartRef.current.scrollTop - (e.clientY - panStartRef.current.clientY);
+      });
+
+      // Snap léger (4 px) des champs de formulaire sur les bords des autres
+      // champs pendant le drag — alignement rapide sans système de guides.
+      canvas.on("object:moving", (opt) => {
+        const target = opt.target as FabricObjectWithData | undefined;
+        if (!target?.data) return;
+        const isFormField = (d: FabricObjectWithData["data"]): boolean =>
+          Boolean(d && (d.formFieldElement || d.formFieldType || d.type === "form_field"));
+        if (!isFormField(target.data)) return;
+        const others = canvas.getObjects().filter((o) => {
+          if (o === target) return false;
+          return isFormField((o as FabricObjectWithData).data);
+        });
+        // Garde perf : au-delà de 200 champs le snap n'apporte plus rien.
+        if (others.length === 0 || others.length > 200) return;
+        const targetW = (target.width ?? 0) * (target.scaleX ?? 1);
+        const targetH = (target.height ?? 0) * (target.scaleY ?? 1);
+        const left = target.left ?? 0;
+        const top = target.top ?? 0;
+        let bestDx: number | null = null;
+        let bestDy: number | null = null;
+        for (const other of others) {
+          const ol = other.left ?? 0;
+          const ot = other.top ?? 0;
+          const ow = (other.width ?? 0) * (other.scaleX ?? 1);
+          const oh = (other.height ?? 0) * (other.scaleY ?? 1);
+          for (const edge of [ol, ol + ow]) {
+            for (const myEdge of [left, left + targetW]) {
+              const delta = edge - myEdge;
+              if (
+                Math.abs(delta) <= FIELD_SNAP_DISTANCE &&
+                (bestDx === null || Math.abs(delta) < Math.abs(bestDx))
+              ) {
+                bestDx = delta;
+              }
+            }
+          }
+          for (const edge of [ot, ot + oh]) {
+            for (const myEdge of [top, top + targetH]) {
+              const delta = edge - myEdge;
+              if (
+                Math.abs(delta) <= FIELD_SNAP_DISTANCE &&
+                (bestDy === null || Math.abs(delta) < Math.abs(bestDy))
+              ) {
+                bestDy = delta;
+              }
+            }
+          }
+        }
+        if (bestDx !== null) target.set({ left: left + bestDx });
+        if (bestDy !== null) target.set({ top: top + bestDy });
       });
 
       const endPan = () => {
@@ -2007,6 +2518,9 @@ export function EditorCanvas({
             type: "form_field",
             fieldName: formElement.fieldName,
             fieldType: formElement.fieldType,
+            // Élément complet : fabricObjectToElement le re-fusionne avec
+            // les bounds réels → aucune propriété métier perdue au move.
+            formFieldElement: formElement,
           };
           break;
         }
@@ -2136,36 +2650,28 @@ export function EditorCanvas({
     });
   }, [page, loadPage]);
 
-  // Mettre à jour le zoom
+  // Mettre à jour le zoom (changement venant du store : toolbar, presets,
+  // raccourcis, modes fit).
   //
-  // - When the change comes from the wheel handler (zoomFromWheelRef=true),
-  //   Fabric's viewportTransform was already updated by zoomToPoint — only
-  //   resize the canvas DOM dimensions so scrollbars reflect the new content
-  //   size, and reset the flag for the next cycle.
-  // - When the change comes from the toolbar (+/-, fit-to-width, reset),
-  //   apply zoomToPoint around the visible viewport center so the user's
-  //   focal point is preserved instead of jumping to (0,0).
+  // - Changement issu de la molette (zoomFromWheelRef=true) : le handler a
+  //   déjà tout appliqué de façon ancrée sur le curseur — on consomme juste
+  //   le flag.
+  // - Sinon : zoom ancré sur le CENTRE du viewport visible, pour que le
+  //   point focal de l'utilisateur ne saute pas au coin (0,0).
   useEffect(() => {
     if (!fabricRef.current || !page) return;
-    const canvas = fabricRef.current;
-    if (!zoomFromWheelRef.current) {
-      // Toolbar +/- : anchor on the visible viewport center so the focal
-      // point doesn't jump to (0,0). Fabric v6 types zoomToPoint as
-      // (Point, value) but the runtime accepts any { x, y } literal —
-      // we cast to satisfy the type without importing Point dynamically.
-      const center = {
-        x: canvas.getWidth() / 2,
-        y: canvas.getHeight() / 2,
-      } as Parameters<typeof canvas.zoomToPoint>[0];
-      canvas.zoomToPoint(center, zoom);
+    if (zoomFromWheelRef.current) {
+      zoomFromWheelRef.current = false;
+      return;
     }
-    canvas.setDimensions({
-      width: (page.dimensions?.width || width) * zoom,
-      height: (page.dimensions?.height || height) * zoom,
-    });
-    canvas.renderAll();
-    zoomFromWheelRef.current = false;
-  }, [zoom, page, width, height]);
+    const wrapper = scrollWrapperRef.current;
+    let anchor: { x: number; y: number } | null = null;
+    if (wrapper) {
+      const rect = wrapper.getBoundingClientRect();
+      anchor = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }
+    applyZoomAtClientPoint(zoom, anchor);
+  }, [zoom, page, applyZoomAtClientPoint]);
 
   // Mettre à jour les options de l'outil
   useEffect(() => {
@@ -2216,11 +2722,26 @@ export function EditorCanvas({
       canvas.selection = t === "select";
     };
 
+    // Perte de focus fenêtre pendant un Espace maintenu (Alt+Tab, devtools) :
+    // sans ce reset le keyup est raté et le curseur reste bloqué en "grab".
+    const onWindowBlur = () => {
+      if (!isSpaceDownRef.current) return;
+      isSpaceDownRef.current = false;
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const t = toolRef.current;
+      canvas.defaultCursor =
+        t === "hand" ? "grab" : t === "select" ? "default" : "crosshair";
+      canvas.selection = t === "select";
+    };
+
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onWindowBlur);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onWindowBlur);
     };
   }, []);
 
@@ -2744,18 +3265,93 @@ export function EditorCanvas({
   const canvasHeight = page?.dimensions?.height || height;
 
   return (
-    <div className="editor-canvas-wrapper h-full w-full flex items-center justify-center bg-gray-100 dark:bg-gray-900 overflow-auto p-8">
-      <div
-        ref={containerRef}
-        className="canvas-container bg-white shadow-lg rounded-sm"
-        style={{
-          width: canvasWidth * zoom,
-          height: canvasHeight * zoom,
-          minWidth: canvasWidth * zoom,
-          minHeight: canvasHeight * zoom,
-        }}
-      >
-        <canvas ref={canvasRef} />
+    // Viewport scrollable : le contenu interne prend page×zoom (+ padding),
+    // les scrollbars natives apparaissent dans les 2 axes dès que la page
+    // déborde. PAS de items-center/justify-center ici : avec un contenu en
+    // overflow, le centrage flex rend le haut/gauche de page inatteignable
+    // au scroll (c'était le bug « impossible de bouger dans la page »).
+    <div
+      ref={scrollWrapperRef}
+      className="editor-canvas-wrapper h-full w-full flex overflow-auto bg-gray-100 dark:bg-gray-900"
+    >
+      {/* m-auto : centre la page quand elle est plus petite que le viewport
+          (les marges auto se replient à 0 en cas d'overflow → coin haut-
+          gauche toujours accessible). Le padding vit ICI pour faire partie
+          de la zone scrollable : marge confortable aux 4 bords, même
+          zoomé à fond. */}
+      <div className="m-auto" style={{ padding: CANVAS_VIEWPORT_PADDING }}>
+        <div
+          ref={containerRef}
+          className="canvas-container relative bg-white shadow-lg rounded-sm"
+          style={{
+            width: canvasWidth * zoom,
+            height: canvasHeight * zoom,
+          }}
+        >
+          <canvas ref={canvasRef} />
+
+          {/* Overlay applicatif (ex: surlignage des champs en mode Remplir).
+              Positionné dans le repère page×zoom, défile avec la page. */}
+          {overlay ? (
+            <div className="absolute inset-0 z-10 pointer-events-none">
+              {overlay}
+            </div>
+          ) : null}
+
+          {/* Mini-formulaire de création d'un groupe de boutons radio. */}
+          {radioPrompt ? (
+            <div
+              className="absolute z-20 w-64 rounded-lg border bg-background p-3 shadow-xl"
+              style={{
+                left: Math.max(0, radioPrompt.x * zoom),
+                top: Math.max(0, radioPrompt.y * zoom),
+              }}
+            >
+              <h4 className="text-sm font-medium mb-2">
+                {t("radioPrompt.title")}
+              </h4>
+              <label className="block text-xs text-muted-foreground mb-1">
+                {t("radioPrompt.groupName")}
+              </label>
+              <input
+                type="text"
+                value={radioGroupName}
+                onChange={(e) => setRadioGroupName(e.target.value)}
+                className="w-full h-8 px-2 mb-2 rounded border bg-background text-sm"
+              />
+              <label className="block text-xs text-muted-foreground mb-1">
+                {t("radioPrompt.options")}
+              </label>
+              <textarea
+                value={radioOptionsText}
+                onChange={(e) => setRadioOptionsText(e.target.value)}
+                rows={4}
+                className="w-full px-2 py-1 mb-1 rounded border bg-background text-sm resize-y"
+              />
+              <p className="text-[10px] text-muted-foreground mb-2">
+                {t("radioPrompt.optionsHint")}
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRadioPrompt(null)}
+                  className="px-2.5 py-1.5 rounded text-xs border hover:bg-muted transition-colors"
+                >
+                  {t("radioPrompt.cancel")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleConfirmRadioGroup();
+                  }}
+                  className="px-2.5 py-1.5 rounded text-xs bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  {t("radioPrompt.create")}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

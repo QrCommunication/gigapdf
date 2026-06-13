@@ -2,7 +2,15 @@
  * Internal store types for the editor package
  */
 
-import type { UUID, PageObject, Tool, ShapeType, AnnotationType, FieldType } from "@giga-pdf/types";
+import type {
+  UUID,
+  PageObject,
+  Tool,
+  ShapeType,
+  AnnotationType,
+  FieldType,
+  FieldCreationKind,
+} from "@giga-pdf/types";
 import type { Socket } from "socket.io-client";
 
 // Document Store Types
@@ -27,6 +35,13 @@ export interface CanvasState {
   zoom: number;
   minZoom: number;
   maxZoom: number;
+  /**
+   * Adaptive zoom mode. "page" keeps the whole page visible, "width" fits
+   * the page width to the viewport. null = manual zoom. The fit zoom is
+   * recomputed on viewport resize / page change until the user zooms
+   * manually (callers reset fitMode to null on manual zoom).
+   */
+  fitMode: "page" | "width" | null;
   panOffset: { x: number; y: number };
   activeTool: Tool;
   activeSubtype: string | null;
@@ -40,6 +55,8 @@ export interface CanvasState {
   shapeType: ShapeType;
   annotationType: AnnotationType;
   fieldType: FieldType;
+  /** Creation palette entry for the form-field tool (richer than fieldType). */
+  fieldKind: FieldCreationKind;
   strokeColor: string;
   fillColor: string;
   strokeWidth: number;
