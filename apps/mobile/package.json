@@ -8,7 +8,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test": "jest",
+    "test": "echo \"[gigapdf-mobile] no test suite configured yet (jest-expo planned with Expo 56)\" && exit 0",
     "lint": "eslint . --no-error-on-unmatched-pattern",
     "type-check": "tsc --noEmit"
   },

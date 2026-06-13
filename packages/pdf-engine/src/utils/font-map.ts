@@ -130,11 +130,17 @@ export function mapPdfFontToStandard(pdfFontName: string): {
   // Detect weight from name suffix or numeric tag. Medium/Semibold treated
   // as not-bold for CSS fontWeight (the actual weight number is more useful
   // but the editor doesn't currently surface it).
+  // Weight keywords appear either word-bounded ("Arial-Bold") or glued to an
+  // adjacent token ("Helvetica-BoldOblique", "TimesNewRomanPS-BoldMT",
+  // "GothamHeavy", "FuturaBlack"). The second pattern anchors the keyword to
+  // the end of the name (optionally trailed by a style/PostScript suffix) and
+  // excludes "SemiBold"/"DemiBold" (medium weights → not bold). The end-anchor
+  // also avoids false positives like "Blackbird" (keyword mid-name).
   const isBold =
-    /\bbold\b/i.test(pdfFontName) ||
-    /\bheavy\b/i.test(pdfFontName) ||
-    /\bblack\b/i.test(pdfFontName) ||
-    /\bextrabold\b/i.test(pdfFontName) ||
+    /\b(?:bold|heavy|black|extrabold)\b/i.test(pdfFontName) ||
+    /(?<!semi)(?<!demi)(?:bold|heavy|black|extrabold)(?:oblique|italic)?(?:mt|ps|std)?$/i.test(
+      pdfFontName,
+    ) ||
     /\bw[6-9]\d{2}\b/i.test(pdfFontName); // W700, W800, W900
   const isItalic = /italic|oblique/i.test(pdfFontName);
 

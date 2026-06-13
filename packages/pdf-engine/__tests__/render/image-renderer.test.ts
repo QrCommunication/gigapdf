@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { loadFixture, SIMPLE_PDF } from '../helpers';
 import { openDocument, saveDocument } from '../../src/engine/document-handle';
-import { addImage, updateImage } from '../../src/render/image-renderer';
+import { addImage } from '../../src/render/image-renderer';
+import { applyOperations } from '../../src/render/apply-operations';
 import { PDFPageOutOfRangeError } from '../../src/errors';
 import type { ImageElement, Bounds } from '@giga-pdf/types';
 
@@ -173,53 +174,61 @@ describe('addImage (JPEG detection)', () => {
 // updateImage
 // ---------------------------------------------------------------------------
 
-describe('updateImage', () => {
-  it('replaces image at old bounds and draws new image', async () => {
-    const handle = await openDocument(makeBuffer(SIMPLE_PDF));
+describe('applyOperations — update image', () => {
+  const PNG_DATA_URL = `data:image/png;base64,${Buffer.from(PNG_1x1).toString('base64')}`;
+
+  function makeEmbeddedImage(overrides: Partial<ImageElement> = {}): ImageElement {
+    return makeImageElement({
+      source: {
+        type: 'embedded',
+        dataUrl: PNG_DATA_URL,
+        originalFormat: 'png',
+        originalDimensions: { width: 1, height: 1 },
+      },
+      ...overrides,
+    });
+  }
+
+  it('redacts old area + embeds new image, returning valid PDF bytes', async () => {
     const oldBounds: Bounds = { x: 0, y: 0, width: 100, height: 100 };
-    const element = makeImageElement({ bounds: { x: 100, y: 100, width: 100, height: 100 } });
+    const element = makeEmbeddedImage({ bounds: { x: 100, y: 100, width: 100, height: 100 } });
 
-    await expect(updateImage(handle, 1, oldBounds, element, PNG_1x1)).resolves.toBeUndefined();
+    const result = await applyOperations(makeBuffer(SIMPLE_PDF), [
+      { action: 'update', pageNumber: 1, oldBounds, element },
+    ]);
 
-    const saved = await saveDocument(handle);
-    expect(saved).toBeInstanceOf(Buffer);
-    expect(saved.length).toBeGreaterThan(0);
+    expect(result.bytes.length).toBeGreaterThan(100);
+    expect(result.redactionTargetsCount).toBe(1);
+    expect(result.addsApplied).toBe(1);
   });
 
-  it('redacts old area without adding a new image when imageData is omitted', async () => {
-    const handle = await openDocument(makeBuffer(SIMPLE_PDF));
-    const oldBounds: Bounds = { x: 50, y: 50, width: 100, height: 100 };
-
-    // No imageData supplied — should only paint the white rectangle
-    await expect(updateImage(handle, 1, oldBounds, makeImageElement())).resolves.toBeUndefined();
-
-    // Document is still dirty because markDirty is called
-    expect(handle.isDirty).toBe(true);
+  it('redacts via a delete op without embedding a new image', async () => {
+    const result = await applyOperations(makeBuffer(SIMPLE_PDF), [
+      {
+        action: 'delete',
+        pageNumber: 1,
+        element: makeImageElement({ bounds: { x: 50, y: 50, width: 100, height: 100 } }),
+      },
+    ]);
+    expect(result.redactionTargetsCount).toBe(1);
+    expect(result.addsApplied).toBe(0);
   });
 
-  it('marks document dirty when imageData is omitted', async () => {
-    const handle = await openDocument(makeBuffer(SIMPLE_PDF));
+  it('produces a re-openable PDF after replacing an image', async () => {
     const oldBounds: Bounds = { x: 0, y: 0, width: 50, height: 50 };
-
-    await updateImage(handle, 1, oldBounds, makeImageElement());
-    expect(handle.isDirty).toBe(true);
-  });
-
-  it('saves successfully after replace', async () => {
-    const handle = await openDocument(makeBuffer(SIMPLE_PDF));
-    const oldBounds: Bounds = { x: 0, y: 0, width: 50, height: 50 };
-
-    await updateImage(handle, 1, oldBounds, makeImageElement(), PNG_1x1);
-    const saved = await saveDocument(handle);
+    const result = await applyOperations(makeBuffer(SIMPLE_PDF), [
+      { action: 'update', pageNumber: 1, oldBounds, element: makeEmbeddedImage() },
+    ]);
+    const saved = Buffer.from(result.bytes);
+    expect(saved.subarray(0, 5).toString('ascii')).toBe('%PDF-');
     expect(saved.length).toBeGreaterThan(100);
   });
 
-  it('throws PDFPageOutOfRangeError when page is out of range', async () => {
-    const handle = await openDocument(makeBuffer(SIMPLE_PDF));
-    const oldBounds: Bounds = { x: 0, y: 0, width: 50, height: 50 };
-
-    await expect(updateImage(handle, 999, oldBounds, makeImageElement(), PNG_1x1)).rejects.toThrow(
-      PDFPageOutOfRangeError,
-    );
+  it('throws when an update op omits oldBounds', async () => {
+    await expect(
+      applyOperations(makeBuffer(SIMPLE_PDF), [
+        { action: 'update', pageNumber: 1, element: makeEmbeddedImage() },
+      ]),
+    ).rejects.toThrow(/oldBounds is required/);
   });
 });
