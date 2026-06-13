@@ -12,12 +12,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: "./assets/icon.png",
   userInterfaceStyle: "automatic",
   scheme: "gigapdf",
-  newArchEnabled: true,
-  splash: {
-    image: "./assets/splash-icon.png",
-    resizeMode: "contain",
-    backgroundColor: "#1a1a1a",
-  },
   ios: {
     supportsTablet: true,
     bundleIdentifier: "com.gigapdf.mobile",
@@ -29,7 +23,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: "#1a1a1a",
     },
     package: "com.gigapdf.mobile",
-    edgeToEdgeEnabled: true,
     permissions: [
       "android.permission.READ_EXTERNAL_STORAGE",
       "android.permission.WRITE_EXTERNAL_STORAGE",
@@ -47,6 +40,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       "expo-router",
       {
         origin: "https://giga-pdf.com",
+      },
+    ],
+    [
+      "expo-splash-screen",
+      {
+        image: "./assets/splash-icon.png",
+        resizeMode: "contain",
+        backgroundColor: "#1a1a1a",
       },
     ],
     "expo-secure-store",

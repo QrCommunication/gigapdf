@@ -73,7 +73,7 @@ export async function getAndStoreJwt(): Promise<string | null> {
 
     await getSession({
       fetchOptions: {
-        onSuccess: (ctx) => {
+        onSuccess: (ctx: { response: Response }) => {
           jwt = ctx.response.headers.get('set-auth-jwt');
           if (jwt) {
             SecureStore.setItemAsync(JWT_TOKEN_KEY, jwt);

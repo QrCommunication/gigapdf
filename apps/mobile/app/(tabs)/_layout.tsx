@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { StyleSheet, Platform, View } from 'react-native';
+import { StyleSheet, Platform, View, type ColorValue } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +13,7 @@ import { IconSizes, Typography } from '../../src/constants/spacing';
 
 type TabBarIconProps = {
   focused: boolean;
-  color: string;
+  color: ColorValue;
   size: number;
 };
 
