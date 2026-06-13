@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { PDFDocumentProxy } from 'pdfjs-dist/types/src/display/api';
 import { OPS } from 'pdfjs-dist/legacy/build/pdf.mjs';
@@ -11,29 +10,7 @@ import {
   POINTS_PER_INCH,
 } from '../constants';
 import { renderPage as mupdfRenderPage } from '../render/mupdf-render';
-
-/**
- * Ensure pdfjs workerSrc points to a resolvable file:// path before each
- * getDocument(). With disableWorker: true pdfjs runs the worker in-thread
- * ("fake worker"), which STILL needs a valid workerSrc — an empty string throws
- * "Setting up fake worker failed". Mirrors parse/parser.ts ensureWorkerSrc().
- * createRequire from process.cwd() survives Turbopack/webpack bundling (a
- * literal require.resolve() gets statically rewritten and breaks).
- *
- * NOTE: this duplicates parse/parser.ts ensureWorkerSrc() — to consolidate into
- * a shared util (src/utils/pdfjs-worker.ts) in a follow-up.
- */
-function ensureWorkerSrc(): void {
-  const current = pdfjsLib.GlobalWorkerOptions.workerSrc;
-  if (typeof current === 'string' && current.startsWith('file://')) return;
-  try {
-    const requireFn = createRequire(`${process.cwd()}/package.json`);
-    const absPath = requireFn.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `file://${absPath}`;
-  } catch {
-    // Leave as-is — pdfjs may still resolve via its default.
-  }
-}
+import { ensureWorkerSrc } from '../utils/pdfjs-worker';
 
 export type PreviewFormat = 'png' | 'jpeg' | 'webp';
 
