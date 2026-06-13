@@ -26,8 +26,8 @@
   "dependencies": {
     "@giga-pdf/logger": "workspace:*",
     "@giga-pdf/types": "workspace:*",
-    "immer": "^11.1.3",
-    "zustand": "^5.0.10"
+    "immer": "^11.1.8",
+    "zustand": "^5.0.14"
   },
   "peerDependencies": {
     "react": "^19.0.0",

@@ -142,11 +142,11 @@
     "eslint": "^9.39.2",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
-    "prettier": "^3.8.0",
-    "prettier-plugin-tailwindcss": "^0.7.2",
-    "tailwindcss": "^4.0.0",
-    "tsx": "^4.21.0",
-    "turbo": "^2.7.4",
+    "prettier": "^3.8.4",
+    "prettier-plugin-tailwindcss": "^0.8.0",
+    "tailwindcss": "^4.3.1",
+    "tsx": "^4.22.4",
+    "turbo": "^2.9.18",
     "typescript": "^5.9.3"
   },
   "engines": {

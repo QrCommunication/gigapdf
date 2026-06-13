@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@giga-pdf/types": "workspace:*",
-    "fabric": "^7.1.0",
+    "fabric": "^7.4.0",
     "pdfjs-dist": "^5.4.530"
   },
   "devDependencies": {
