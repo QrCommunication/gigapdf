@@ -23,6 +23,44 @@ from app.models.tenant import Tenant, TenantMember, TenantStatus
 
 logger = logging.getLogger(__name__)
 
+# Sentinel for unlimited quotas (mirrors the plans table convention where
+# storage_limit_bytes / api_calls_limit / document_limit == -1 means
+# "no limit", e.g. the enterprise plan seeded by
+# apps/admin/scripts/seed-plans.ts).
+UNLIMITED = -1
+
+
+def is_unlimited(limit: int) -> bool:
+    """Return True when a quota limit means 'unlimited' (-1 sentinel)."""
+    return limit == UNLIMITED
+
+
+def has_capacity(used: int, limit: int, additional: int = 0) -> bool:
+    """
+    Decide whether a quota allows `additional` more units.
+
+    -1 (UNLIMITED) always allows. Comparison is `used + additional <= limit`
+    for byte-style quotas; callers wanting strict "next call" semantics pass
+    additional=1 (count-style quotas).
+    """
+    if is_unlimited(limit):
+        return True
+    return used + additional <= limit
+
+
+def remaining_amount(used: int, limit: int) -> int:
+    """Remaining units for a quota. Returns UNLIMITED (-1) when unlimited."""
+    if is_unlimited(limit):
+        return UNLIMITED
+    return max(0, limit - used)
+
+
+def usage_percentage(used: int, limit: int) -> float:
+    """Usage percentage. 0.0 for unlimited (-1) or unset (0) limits."""
+    if limit <= 0:
+        return 0.0
+    return (used / limit) * 100
+
 
 @dataclass
 class EffectiveLimits:
@@ -41,23 +79,21 @@ class EffectiveLimits:
 
     @property
     def storage_available_bytes(self) -> int:
-        return max(0, self.storage_limit_bytes - self.storage_used_bytes)
+        """Available storage. UNLIMITED (-1) when the limit is unlimited."""
+        return remaining_amount(self.storage_used_bytes, self.storage_limit_bytes)
 
     @property
     def api_calls_remaining(self) -> int:
-        return max(0, self.api_calls_limit - self.api_calls_used)
+        """Remaining API calls. UNLIMITED (-1) when the limit is unlimited."""
+        return remaining_amount(self.api_calls_used, self.api_calls_limit)
 
     @property
     def storage_percentage(self) -> float:
-        if self.storage_limit_bytes == 0:
-            return 0
-        return (self.storage_used_bytes / self.storage_limit_bytes) * 100
+        return usage_percentage(self.storage_used_bytes, self.storage_limit_bytes)
 
     @property
     def api_percentage(self) -> float:
-        if self.api_calls_limit == 0:
-            return 0
-        return (self.api_calls_used / self.api_calls_limit) * 100
+        return usage_percentage(self.api_calls_used, self.api_calls_limit)
 
     def to_dict(self) -> dict:
         return {
@@ -87,7 +123,8 @@ class EffectiveLimits:
         }
 
 
-# Plan configurations (synchronized with frontend packages/billing/src/plans.ts)
+# Plan configurations (synchronized with the seed source of truth:
+# apps/admin/scripts/seed-plans.ts — harmonized 2026-06-13).
 PLANS = {
     "free": {
         "storage_limit_bytes": 5 * 1024 * 1024 * 1024,  # 5GB
@@ -105,9 +142,9 @@ PLANS = {
         "document_limit": 2000,
     },
     "enterprise": {
-        "storage_limit_bytes": 500 * 1024 * 1024 * 1024,  # 500GB
-        "api_calls_limit": 1000000,  # per month
-        "document_limit": -1,  # unlimited
+        "storage_limit_bytes": UNLIMITED,  # unlimited (matches seed + landing)
+        "api_calls_limit": UNLIMITED,  # unlimited
+        "document_limit": UNLIMITED,  # unlimited
     },
 }
 
@@ -168,12 +205,16 @@ class QuotaService:
         quota = await self.get_or_create_quota(user_id)
 
         new_total = quota.storage_used_bytes + additional_bytes
-        is_allowed = new_total <= quota.storage_limit_bytes
+        is_allowed = has_capacity(
+            quota.storage_used_bytes, quota.storage_limit_bytes, additional_bytes
+        )
 
         return is_allowed, {
             "storage_used_bytes": quota.storage_used_bytes,
             "storage_limit_bytes": quota.storage_limit_bytes,
-            "storage_available_bytes": max(0, quota.storage_limit_bytes - quota.storage_used_bytes),
+            "storage_available_bytes": remaining_amount(
+                quota.storage_used_bytes, quota.storage_limit_bytes
+            ),
             "would_use_bytes": new_total,
             "is_allowed": is_allowed,
             "plan_type": quota.plan_type,
@@ -199,8 +240,8 @@ class QuotaService:
             await self._reset_api_quota(user_id)
             quota = await self.get_or_create_quota(user_id)
 
-        is_allowed = quota.api_calls_used < quota.api_calls_limit
-        remaining = max(0, quota.api_calls_limit - quota.api_calls_used)
+        is_allowed = has_capacity(quota.api_calls_used, quota.api_calls_limit, 1)
+        remaining = remaining_amount(quota.api_calls_used, quota.api_calls_limit)
 
         return is_allowed, {
             "api_calls_used": quota.api_calls_used,
@@ -244,7 +285,7 @@ class QuotaService:
 
             await session.commit()
 
-            remaining = max(0, quota.api_calls_limit - quota.api_calls_used)
+            remaining = remaining_amount(quota.api_calls_used, quota.api_calls_limit)
 
             return {
                 "api_calls_used": quota.api_calls_used,
@@ -285,7 +326,9 @@ class QuotaService:
             return {
                 "storage_used_bytes": quota.storage_used_bytes,
                 "storage_limit_bytes": quota.storage_limit_bytes,
-                "storage_available_bytes": max(0, quota.storage_limit_bytes - quota.storage_used_bytes),
+                "storage_available_bytes": remaining_amount(
+                    quota.storage_used_bytes, quota.storage_limit_bytes
+                ),
                 "document_count": quota.document_count,
                 "document_limit": quota.document_limit,
             }
@@ -355,16 +398,10 @@ class QuotaService:
             await self._reset_api_quota(user_id)
             quota = await self.get_or_create_quota(user_id)
 
-        storage_percentage = (
-            (quota.storage_used_bytes / quota.storage_limit_bytes * 100)
-            if quota.storage_limit_bytes > 0
-            else 0
+        storage_percentage = usage_percentage(
+            quota.storage_used_bytes, quota.storage_limit_bytes
         )
-        api_percentage = (
-            (quota.api_calls_used / quota.api_calls_limit * 100)
-            if quota.api_calls_limit > 0
-            else 0
-        )
+        api_percentage = usage_percentage(quota.api_calls_used, quota.api_calls_limit)
 
         return {
             "user_id": user_id,
@@ -375,7 +412,9 @@ class QuotaService:
             "storage": {
                 "used_bytes": quota.storage_used_bytes,
                 "limit_bytes": quota.storage_limit_bytes,
-                "available_bytes": max(0, quota.storage_limit_bytes - quota.storage_used_bytes),
+                "available_bytes": remaining_amount(
+                    quota.storage_used_bytes, quota.storage_limit_bytes
+                ),
                 "usage_percentage": round(storage_percentage, 2),
             },
             "documents": {
@@ -385,7 +424,7 @@ class QuotaService:
             "api_calls": {
                 "used": quota.api_calls_used,
                 "limit": quota.api_calls_limit,
-                "remaining": max(0, quota.api_calls_limit - quota.api_calls_used),
+                "remaining": remaining_amount(quota.api_calls_used, quota.api_calls_limit),
                 "usage_percentage": round(api_percentage, 2),
                 "reset_at": quota.api_calls_reset_at.isoformat(),
             },
@@ -541,12 +580,16 @@ class QuotaService:
                 return False, {"error": "Tenant not found"}
 
             new_total = tenant.storage_used_bytes + additional_bytes
-            is_allowed = new_total <= tenant.storage_limit_bytes
+            is_allowed = has_capacity(
+                tenant.storage_used_bytes, tenant.storage_limit_bytes, additional_bytes
+            )
 
             return is_allowed, {
                 "storage_used_bytes": tenant.storage_used_bytes,
                 "storage_limit_bytes": tenant.storage_limit_bytes,
-                "storage_available_bytes": max(0, tenant.storage_limit_bytes - tenant.storage_used_bytes),
+                "storage_available_bytes": remaining_amount(
+                    tenant.storage_used_bytes, tenant.storage_limit_bytes
+                ),
                 "would_use_bytes": new_total,
                 "is_allowed": is_allowed,
                 "tenant_id": str(tenant.id),
@@ -583,7 +626,9 @@ class QuotaService:
             return {
                 "storage_used_bytes": tenant.storage_used_bytes,
                 "storage_limit_bytes": tenant.storage_limit_bytes,
-                "storage_available_bytes": max(0, tenant.storage_limit_bytes - tenant.storage_used_bytes),
+                "storage_available_bytes": remaining_amount(
+                    tenant.storage_used_bytes, tenant.storage_limit_bytes
+                ),
                 "document_count": tenant.document_count,
                 "document_limit": tenant.document_limit,
                 "tenant_id": str(tenant.id),
@@ -623,7 +668,9 @@ class QuotaService:
             return {
                 "api_calls_used": tenant.api_calls_used,
                 "api_calls_limit": tenant.api_calls_limit,
-                "api_calls_remaining": max(0, tenant.api_calls_limit - tenant.api_calls_used),
+                "api_calls_remaining": remaining_amount(
+                    tenant.api_calls_used, tenant.api_calls_limit
+                ),
                 "reset_at": tenant.api_calls_reset_at.isoformat() if tenant.api_calls_reset_at else None,
                 "tenant_id": str(tenant.id),
             }

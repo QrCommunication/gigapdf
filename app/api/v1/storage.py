@@ -389,7 +389,10 @@ async def save_document(
     # ── 4. Quota check ──────────────────────────────────────────────────
     effective_limits = await quota_service.get_effective_limits(user.user_id)
 
-    if effective_limits.storage_used_bytes + file_size > effective_limits.storage_limit_bytes:
+    if (
+        effective_limits.storage_limit_bytes != -1
+        and effective_limits.storage_used_bytes + file_size > effective_limits.storage_limit_bytes
+    ):
         raise InvalidOperationError(
             f"Storage quota exceeded. Used: {effective_limits.storage_used_bytes}, "
             f"Limit: {effective_limits.storage_limit_bytes}"
@@ -1166,7 +1169,10 @@ async def duplicate_stored_document(
     # ── 2. Quota check — same rules as an upload ─────────────────────────
     effective_limits = await quota_service.get_effective_limits(user.user_id)
 
-    if effective_limits.storage_used_bytes + file_size > effective_limits.storage_limit_bytes:
+    if (
+        effective_limits.storage_limit_bytes != -1
+        and effective_limits.storage_used_bytes + file_size > effective_limits.storage_limit_bytes
+    ):
         raise InvalidOperationError(
             f"Storage quota exceeded. Used: {effective_limits.storage_used_bytes}, "
             f"Limit: {effective_limits.storage_limit_bytes}"

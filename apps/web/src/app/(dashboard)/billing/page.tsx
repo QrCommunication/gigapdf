@@ -186,9 +186,13 @@ export default function BillingPage() {
   const getPlanFeatures = (plan: Plan): string[] => {
     const features: string[] = [];
 
-    // Storage
-    const storageGB = plan.storage_limit_bytes / (1024 * 1024 * 1024);
-    features.push(`${storageGB >= 1 ? storageGB + "GB" : plan.storage_limit_bytes / (1024 * 1024) + "MB"} ${t("storage").toLowerCase()}`);
+    // Storage (-1 = unlimited, enterprise convention)
+    if (plan.storage_limit_bytes === -1) {
+      features.push(t("features.unlimitedStorage"));
+    } else {
+      const storageGB = plan.storage_limit_bytes / (1024 * 1024 * 1024);
+      features.push(`${storageGB >= 1 ? storageGB + "GB" : plan.storage_limit_bytes / (1024 * 1024) + "MB"} ${t("storage").toLowerCase()}`);
+    }
 
     // Documents
     if (plan.document_limit === -1) {
@@ -204,13 +208,42 @@ export default function BillingPage() {
       features.push(t("features.apiCallsPerMonth", { count: plan.api_calls_limit.toLocaleString() }));
     }
 
-    // Additional features from plan.features
+    // Team members (-1 = unlimited). max_members is returned by the plans
+    // API (PlanResponse) but not yet declared on the local Plan interface —
+    // read it defensively.
+    const maxMembers = (plan as Plan & { max_members?: number }).max_members;
+    if (typeof maxMembers === "number") {
+      if (maxMembers === -1) {
+        features.push(t("features.unlimitedTeamMembers"));
+      } else if (maxMembers > 0) {
+        features.push(t("features.teamMembers", { count: maxMembers }));
+      }
+    }
+
+    // Real differentiator flags from plan.features (customBranding,
+    // prioritySupport, emailSupport, sla, dedicatedAccount). Numeric mirrors
+    // (storageGb, apiCallsPerMonth) never match `value === true` — volumes
+    // are rendered from the plan columns above.
+    const flagLabels: Record<string, string> = {
+      customBranding: t("features.customBranding"),
+      prioritySupport: t("features.prioritySupport"),
+      emailSupport: t("features.emailSupport"),
+      sla: t("features.sla"),
+      dedicatedAccount: t("features.dedicatedAccount"),
+    };
+
     if (plan.features) {
       Object.entries(plan.features).forEach(([key, value]) => {
         if (value === true) {
-          const readable = key
-            .replace(/_/g, " ")
-            .replace(/\b\w/g, (l) => l.toUpperCase());
+          // Known flags get a translated label; unknown ones are humanized
+          // from camelCase/snake_case as a fallback.
+          const readable =
+            flagLabels[key] ??
+            key
+              .replace(/_/g, " ")
+              .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+              .toLowerCase()
+              .replace(/^\w/, (l) => l.toUpperCase());
           features.push(readable);
         }
       });
