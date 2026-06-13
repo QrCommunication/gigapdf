@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import {
   ArrowLeft,
   Code2,
@@ -47,7 +47,7 @@ function CodeBlock({ code, lang: _lang = "bash" }: { code: string; lang?: string
   );
 }
 
-export default function EmbedDocsPage() {
+export default function EmbedDocsContent() {
   const t = useTranslations("legal.docs.embed");
 
   return (

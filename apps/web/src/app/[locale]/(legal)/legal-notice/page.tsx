@@ -1,12 +1,21 @@
+import { setRequestLocale } from "next-intl/server";
 import { env } from "@/lib/env";
 import { Building2, Server, ShieldCheck, Mail } from "lucide-react";
 
 export const metadata = {
   title: "Mentions légales | GigaPDF",
   description: "Mentions légales de l'éditeur du service GigaPDF, conformément à la LCEN.",
+  // Contenu fr-only : canonical fr SANS hreflang (écrase le bloc du layout [locale]).
+  alternates: { canonical: "/legal-notice" },
 };
 
-export default function LegalNoticePage() {
+export default async function LegalNoticePage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  setRequestLocale(locale);
   return (
     <div className="max-w-none">
       <div className="mb-12 not-prose">

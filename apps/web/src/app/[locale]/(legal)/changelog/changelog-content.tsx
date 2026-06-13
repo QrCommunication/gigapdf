@@ -141,7 +141,7 @@ const versionTypeConfig = {
   patch: { color: "muted-foreground", label: "Patch" },
 };
 
-export default function ChangelogPage() {
+export default function ChangelogContent() {
   const t = useTranslations("legal.changelog");
 
   return (

@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { FileText, Scale, ShieldCheck, CreditCard, AlertTriangle, Gavel, Code2, Mail, Server, Ban } from "lucide-react";
 import { env } from "@/lib/env";
 
-export default function TermsPage() {
+export default function TermsContent() {
   const t = useTranslations("legal.terms");
 
   return (

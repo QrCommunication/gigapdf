@@ -8,11 +8,11 @@ import { Input } from "@giga-pdf/ui";
 import { Label } from "@giga-pdf/ui";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@giga-pdf/ui";
 import { Alert, AlertDescription } from "@giga-pdf/ui";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { ArrowLeft } from "lucide-react";
-import { LanguageSwitcher } from "@/components/language-switcher";
+import { PublicLanguageSwitcher } from "@/components/public-language-switcher";
 
-export default function ForgotPasswordPage() {
+export function ForgotPasswordForm() {
   const t = useTranslations("auth.forgotPassword");
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
@@ -53,7 +53,7 @@ export default function ForgotPasswordPage() {
       <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
           <CardTitle className="text-2xl font-bold">{t("title")}</CardTitle>
-          <LanguageSwitcher />
+          <PublicLanguageSwitcher />
         </div>
         <CardDescription>
           {t("description")}

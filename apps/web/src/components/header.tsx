@@ -1,21 +1,26 @@
 "use client";
 
-import Link from "next/link";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
+import { defaultLocale } from "@/i18n/config";
 import { Logo } from "@/components/logo";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { LanguageSwitcher } from "@/components/language-switcher";
+import { PublicLanguageSwitcher } from "@/components/public-language-switcher";
 import { Button } from "@giga-pdf/ui";
 import { Github } from "lucide-react";
 
 export function Header() {
   const t = useTranslations();
+  const locale = useLocale();
+  // Logo (next/link interne, partagé avec le dashboard) : préfixer la cible
+  // publique "/" manuellement pour conserver la locale courante (/en).
+  const homeHref = locale === defaultLocale ? "/" : `/${locale}`;
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <div className="flex items-center gap-8">
-          <Logo href="/" size="md" />
+          <Logo href={homeHref} size="md" />
           <nav className="hidden lg:flex items-center gap-1">
             <Link
               href="/#features"
@@ -48,7 +53,7 @@ export function Header() {
         </div>
         <div className="flex items-center gap-2">
           <ThemeSwitcher />
-          <LanguageSwitcher />
+          <PublicLanguageSwitcher />
           <div className="hidden sm:flex items-center gap-2 ml-2">
             <Link href="/login">
               <Button variant="ghost" size="sm">

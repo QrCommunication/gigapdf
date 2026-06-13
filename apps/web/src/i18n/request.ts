@@ -1,20 +1,38 @@
+import { hasLocale } from 'next-intl';
 import { getRequestConfig } from 'next-intl/server';
 import { cookies, headers } from 'next/headers';
 import { defaultLocale, locales, type Locale } from './config';
+import { routing } from './routing';
 
-export default getRequestConfig(async () => {
-  // Try to get locale from cookie first
+async function loadMessages(locale: Locale) {
+  return (await import(`../../messages/${locale}.json`)).default;
+}
+
+export default getRequestConfig(async ({ requestLocale }) => {
+  // 1. Périmètre public sous [locale] : la locale du segment d'URL prime.
+  //    `requestLocale` est résolu via setRequestLocale() (rendu statique) ou
+  //    via le header X-NEXT-INTL-LOCALE posé par le proxy next-intl (runtime).
+  const requested = await requestLocale;
+  if (requested && hasLocale(routing.locales, requested)) {
+    return {
+      locale: requested,
+      messages: await loadMessages(requested),
+    };
+  }
+
+  // 2. Hors périmètre [locale] (dashboard, editor, embed…) : résolution
+  //    historique par cookie, inchangée.
   const cookieStore = await cookies();
   const localeCookie = cookieStore.get('locale')?.value;
 
   if (localeCookie && locales.includes(localeCookie as Locale)) {
     return {
       locale: localeCookie as Locale,
-      messages: (await import(`../../messages/${localeCookie}.json`)).default,
+      messages: await loadMessages(localeCookie as Locale),
     };
   }
 
-  // Then try to get from Accept-Language header
+  // 3. Puis l'en-tête Accept-Language.
   const headersList = await headers();
   const acceptLanguage = headersList.get('Accept-Language');
 
@@ -25,15 +43,15 @@ export default getRequestConfig(async () => {
       if (code && locales.includes(code as Locale)) {
         return {
           locale: code as Locale,
-          messages: (await import(`../../messages/${code}.json`)).default,
+          messages: await loadMessages(code as Locale),
         };
       }
     }
   }
 
-  // Fallback to default locale
+  // 4. Fallback sur la locale par défaut.
   return {
     locale: defaultLocale,
-    messages: (await import(`../../messages/${defaultLocale}.json`)).default,
+    messages: await loadMessages(defaultLocale),
   };
 });

@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { Shield, Database, Lock, Eye, Cookie, Bell, Code2, Mail, Scale } from "lucide-react";
 import { env } from "@/lib/env";
 
-export default function PrivacyPage() {
+export default function PrivacyContent() {
   const t = useTranslations("legal.privacy");
 
   return (

@@ -6,7 +6,7 @@ import { Button, Input, Label, Textarea } from "@giga-pdf/ui";
 import { Mail, Phone, MapPin, Github, Send, CheckCircle } from "lucide-react";
 import { env } from "@/lib/env";
 
-export default function ContactPage() {
+export default function ContactContent() {
   const t = useTranslations("legal.contact");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);

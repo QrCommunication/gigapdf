@@ -11,19 +11,23 @@ import {
 } from "@/components/seo/seo-breadcrumb";
 import { ToolIcon } from "@/components/seo/tool-icon";
 import { SITE_URL } from "@/lib/seo/constants";
-import { getAllToolSlugs, getToolBySlug, type ToolData } from "@/lib/seo/tools-data";
+import { getToolBySlug, type ToolData } from "@/lib/seo/tools-data";
 import { getSolutionBySlug } from "@/lib/seo/solutions-data";
+import { defaultLocale } from "@/i18n/config";
 
 interface ToolPageProps {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ locale: string; slug: string }>;
 }
 
-export function generateStaticParams() {
-  return getAllToolSlugs().map((slug) => ({ slug }));
-}
+// Pas de generateStaticParams : le root layout (résolution cookie) rend tout
+// l'arbre dynamique — une page classée SSG plante en DYNAMIC_SERVER_USAGE au
+// runtime. /en/tools/* : 404 via le proxy (rewrite) + gardes notFound() fr-only.
 
 export async function generateMetadata({ params }: ToolPageProps): Promise<Metadata> {
-  const { slug } = await params;
+  const { locale, slug } = await params;
+  // Garde fr-only AVANT le premier flush du stream : notFound() ici produit un
+  // vrai 404 HTTP (celle du layout (seo) arrive après l'envoi du status 200).
+  if (locale !== defaultLocale) notFound();
   const tool = getToolBySlug(slug);
   if (!tool) return {};
 
@@ -85,7 +89,8 @@ function buildToolJsonLd(tool: ToolData): Record<string, unknown>[] {
 }
 
 export default async function ToolPage({ params }: ToolPageProps) {
-  const { slug } = await params;
+  const { locale, slug } = await params;
+  if (locale !== defaultLocale) notFound();
   const tool = getToolBySlug(slug);
   if (!tool) notFound();
 

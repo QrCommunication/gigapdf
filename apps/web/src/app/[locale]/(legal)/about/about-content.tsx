@@ -2,10 +2,10 @@
 
 import { useTranslations } from "next-intl";
 import { Building2, Code2, Globe, Heart, Mail, MapPin, Phone, Users } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { env } from "@/lib/env";
 
-export default function AboutPage() {
+export default function AboutContent() {
   const t = useTranslations("legal.about");
 
   return (

@@ -1,15 +1,25 @@
 import { VerifyEmailForm } from "@/components/auth/verify-email-form";
 import type { Metadata } from "next";
-import { getTranslations } from "next-intl/server";
+import { getTranslations, setRequestLocale } from "next-intl/server";
+import { publicPageAlternates } from "@/lib/seo/hreflang";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations("auth.verifyEmail.meta");
+interface VerifyEmailPageProps {
+  params: Promise<{ locale: string }>;
+}
+
+export async function generateMetadata({ params }: VerifyEmailPageProps): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "auth.verifyEmail.meta" });
   return {
     title: t("title"),
     description: t("description"),
+    alternates: publicPageAlternates("/verify-email", locale),
   };
 }
 
-export default function VerifyEmailPage() {
+export default async function VerifyEmailPage({ params }: VerifyEmailPageProps) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+
   return <VerifyEmailForm />;
 }

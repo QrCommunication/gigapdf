@@ -11,23 +11,23 @@ import {
 } from "@/components/seo/seo-breadcrumb";
 import { ToolIcon } from "@/components/seo/tool-icon";
 import { SITE_URL } from "@/lib/seo/constants";
-import {
-  getAllSolutionSlugs,
-  getSolutionBySlug,
-  type SolutionData,
-} from "@/lib/seo/solutions-data";
+import { getSolutionBySlug, type SolutionData } from "@/lib/seo/solutions-data";
 import { getToolBySlug, type ToolData } from "@/lib/seo/tools-data";
+import { defaultLocale } from "@/i18n/config";
 
 interface SolutionPageProps {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ locale: string; slug: string }>;
 }
 
-export function generateStaticParams() {
-  return getAllSolutionSlugs().map((slug) => ({ slug }));
-}
+// Pas de generateStaticParams : le root layout (résolution cookie) rend tout
+// l'arbre dynamique — une page classée SSG plante en DYNAMIC_SERVER_USAGE au
+// runtime. /en/solutions/* : 404 via le proxy (rewrite) + gardes notFound().
 
 export async function generateMetadata({ params }: SolutionPageProps): Promise<Metadata> {
-  const { slug } = await params;
+  const { locale, slug } = await params;
+  // Garde fr-only AVANT le premier flush du stream : notFound() ici produit un
+  // vrai 404 HTTP (celle du layout (seo) arrive après l'envoi du status 200).
+  if (locale !== defaultLocale) notFound();
   const solution = getSolutionBySlug(slug);
   if (!solution) return {};
 
@@ -78,7 +78,8 @@ function buildSolutionJsonLd(solution: SolutionData): Record<string, unknown>[] 
 }
 
 export default async function SolutionPage({ params }: SolutionPageProps) {
-  const { slug } = await params;
+  const { locale, slug } = await params;
+  if (locale !== defaultLocale) notFound();
   const solution = getSolutionBySlug(slug);
   if (!solution) notFound();
 
