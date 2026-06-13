@@ -782,7 +782,7 @@ export async function extractImages(
     elapsedMs,
   });
 
-  await pdfDoc.destroy();
+  await pdfDoc.loadingTask.destroy();
 
   return allImages;
 }

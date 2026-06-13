@@ -81,7 +81,7 @@ export async function extractImage(
 
   const pageCount = doc.numPages;
   if (pageNumber < 1 || pageNumber > pageCount) {
-    await doc.destroy();
+    await doc.loadingTask.destroy();
     throw new PDFPageOutOfRangeError(pageNumber, pageCount);
   }
 
@@ -151,6 +151,6 @@ export async function extractImage(
       return { data: outBuffer, mimeType: 'image/png' };
     }
   } finally {
-    await doc.destroy();
+    await doc.loadingTask.destroy();
   }
 }
