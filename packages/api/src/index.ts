@@ -26,7 +26,6 @@ export {
   elementService,
   uploadService,
   exportService,
-  ocrService,
   jobService,
   storageService,
   billingService,
@@ -136,16 +135,6 @@ export {
   useExportDownloadUrl,
   useExportAndDownload,
   exportKeys,
-
-  // OCR hooks
-  useStartOcr,
-  useOcrStatus,
-  useOcrLanguages,
-  useOcrResults,
-  useCancelOcr,
-  useOcrJobs,
-  useApplyOcrResults,
-  ocrKeys,
 
   // Job hooks
   useJob,

@@ -299,6 +299,26 @@ class APIClient {
   }
 
   /**
+   * Retrieve a single stored document owned by the authenticated user.
+   * Returns the same serialized shape as listDocuments items.
+   * Backend: GET /api/v1/storage/documents/{id}.
+   * 404 when the document does not exist, belongs to another user, or is
+   * trashed (pass include_trashed=true to fetch a soft-deleted document).
+   */
+  async getStoredDocument(
+    storedDocumentId: string,
+    options: { includeTrashed?: boolean } = {}
+  ): Promise<StoredDocument> {
+    const searchParams = new URLSearchParams();
+    if (options.includeTrashed) searchParams.set("include_trashed", "true");
+    const qs = searchParams.toString();
+    const response = await this.request<APIResponse<StoredDocument>>(
+      `/api/v1/storage/documents/${storedDocumentId}${qs ? `?${qs}` : ""}`
+    );
+    return response.data;
+  }
+
+  /**
    * Update stored document metadata: tags (full replacement, max 20) and/or
    * extracted text (full-text search material, truncated server-side).
    * Backend: PATCH /api/v1/storage/documents/{id} — at least one field.

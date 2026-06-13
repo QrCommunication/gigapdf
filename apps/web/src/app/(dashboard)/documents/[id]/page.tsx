@@ -49,7 +49,7 @@ import {
   Tags,
   Trash2,
 } from "lucide-react";
-import { api, type StoredDocument } from "@/lib/api";
+import { api } from "@/lib/api";
 import { formatBytes, formatDate } from "@/lib/utils";
 import { ShareDialog } from "@/components/sharing";
 import { ManageTagsDialog } from "@/components/dashboard/manage-tags-dialog";
@@ -103,24 +103,6 @@ function activityKey(storedDocumentId: string) {
  */
 function metaKey(storedDocumentId: string) {
   return [...storageKeys.documents(), storedDocumentId, "meta"] as const;
-}
-
-/**
- * Resolve the StoredDocument row (tags + thumbnail_url) for a given id.
- * The storage API has no unitary GET endpoint, so the listing is narrowed
- * by an exact-name search and matched by id client-side. Returns null when
- * the document cannot be located (the tags section degrades gracefully).
- */
-async function fetchStoredDocumentMeta(
-  storedDocumentId: string,
-  name: string,
-): Promise<StoredDocument | null> {
-  const response = await api.listDocuments({ search: name, per_page: 100 });
-  return (
-    response.items.find(
-      (item) => item.stored_document_id === storedDocumentId,
-    ) ?? null
-  );
 }
 
 const ACTIVITY_PAGE_SIZE = 10;
@@ -187,8 +169,7 @@ export default function DocumentPage({ params }: DocumentPageProps) {
     staleTime: 30 * 1000,
   });
 
-  // Version history (also provides size + created/modified dates since the
-  // storage API has no unitary metadata getter).
+  // Version history: provides size + created/modified dates for the document.
   const versionsQuery = useQuery({
     queryKey: storageKeys.versions(id),
     queryFn: () => api.getDocumentVersions(id),
@@ -196,12 +177,15 @@ export default function DocumentPage({ params }: DocumentPageProps) {
     staleTime: 30 * 1000,
   });
 
-  // Stored metadata: tags + thumbnail_url (resolved from the listing,
-  // narrowed by the session name — no unitary GET endpoint exists).
+  // Stored metadata: tags + thumbnail_url — fetched via GET /api/v1/storage/documents/{id}.
+  // Fires in parallel with sessionQuery (no dependency on the session name).
   const metaQuery = useQuery({
     queryKey: metaKey(id),
-    queryFn: () => fetchStoredDocumentMeta(id, sessionQuery.data?.name ?? ""),
-    enabled: sessionQuery.isSuccess,
+    queryFn: () => api.getStoredDocument(id),
+    retry: (failureCount, error) => {
+      if (getErrorStatus(error) === 404) return false;
+      return failureCount < 1;
+    },
     staleTime: 30 * 1000,
   });
 
