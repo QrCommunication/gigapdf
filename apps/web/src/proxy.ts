@@ -2,25 +2,6 @@ import createIntlMiddleware from "next-intl/middleware";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { routing } from "./i18n/routing";
-import { solutionSlugMap, toolSlugMap } from "./lib/seo/slug-map";
-
-// Ensembles de slugs SEO valides PAR LOCALE (clés = slugs fr, valeurs = slugs en).
-// Servent à produire de VRAIS 404 sur les slugs croisés/inconnus : notFound()
-// dans une page dynamique [slug] ne renvoie qu'un soft-404 (HTTP 200) sous le
-// streaming Next 16, toxique pour le SEO. Le proxy réécrit donc vers un chemin
-// sans route → 404 natif (statut correct + page not-found rendue).
-const SEO_SLUGS: Record<"fr" | "en", Record<"tools" | "solutions", Set<string>>> = {
-  fr: {
-    tools: new Set(Object.keys(toolSlugMap)),
-    solutions: new Set(Object.keys(solutionSlugMap)),
-  },
-  en: {
-    tools: new Set(Object.values(toolSlugMap)),
-    solutions: new Set(Object.values(solutionSlugMap)),
-  },
-};
-
-const SEO_DETAIL_RE = /^\/(tools|solutions)\/([^/]+)\/?$/;
 
 /**
  * Proxy Next.js 16 — périmètre PUBLIC uniquement.
@@ -82,22 +63,12 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  // Validation des slugs SEO → 404 natif sur slug croisé (fr sous /en ou
-  // inversement) ou inconnu. La page [slug] appelle bien notFound(), mais en
-  // dynamique Next 16 cela ne donne qu'un 200 « soft-404 ». On réécrit vers
-  // /{locale}/__not-found__ : [locale] est valide mais aucun enfant ne matche
-  // → 404 natif (cf. /foobar). Les hubs /tools et /solutions ne matchent pas
-  // la regex (pas de segment slug) et passent normalement.
-  const seoMatch = pathname.match(SEO_DETAIL_RE);
-  if (seoMatch) {
-    const kind = seoMatch[1] as "tools" | "solutions";
-    const slug = seoMatch[2]!;
-    const locale: "fr" | "en" =
-      original === "/en" || original.startsWith("/en/") ? "en" : "fr";
-    if (!SEO_SLUGS[locale][kind].has(slug)) {
-      return NextResponse.rewrite(new URL(`/${locale}/__not-found__`, request.url));
-    }
-  }
+  // Les slugs SEO inconnus/croisés (fr sous /en et inversement) donnent un 404
+  // NATIF : les pages (seo)/tools/[slug] et solutions/[slug] sont prérendues
+  // (generateStaticParams par locale) avec `dynamicParams = false`, donc tout
+  // slug hors-liste n'est jamais matché → 404 statique (validé en E2E). Plus
+  // besoin du hack de réécriture vers /{locale}/__not-found__ qui compensait le
+  // soft-404 du rendu dynamique d'avant.
 
   return intlMiddleware(request);
 }
@@ -107,10 +78,9 @@ export const config = {
   // 1. Le périmètre public (landing, auth, legal, seo, /(fr|en)/*) doit passer
   //    par le routing i18n next-intl.
   // 2. Toute URL inconnue (/foobar, /xx/login) doit AUSSI passer par le proxy :
-  //    next-intl la réécrit vers /fr/<path>, qui ne matche aucune route → 404
-  //    routing natif. Sans cela, /foobar tombe sur le segment [locale]
-  //    (locale="foobar") et la garde hasLocale() du layout throw APRÈS le
-  //    premier flush du stream → soft-404 en status 200 (toxique SEO).
+  //    next-intl la réécrit vers /fr/<path>. Le root layout (site)/[locale]
+  //    étant statique (generateStaticParams + dynamicParams=false), un segment
+  //    de locale inconnu ou un chemin sans route → 404 NATIF (plus de soft-404).
   // Exclusions = routes app ((dashboard), editor, embed), API, assets : elles
   // conservent la résolution de locale par cookie (request.ts) et ne sont
   // JAMAIS préfixées.

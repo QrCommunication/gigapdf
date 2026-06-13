@@ -1,6 +1,6 @@
 import { Link } from "@/i18n/navigation";
 import type { ReactNode } from "react";
-import { getTranslations } from "next-intl/server";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Button } from "@giga-pdf/ui";
 import { cn } from "@giga-pdf/ui/lib/utils";
 import {
@@ -58,7 +58,16 @@ const INCLUDED_EVERYWHERE = [
   { key: "office", icon: FileInput },
 ] as const;
 
-export default async function HomePage() {
+export default async function HomePage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  // Opt-in au rendu statique : sans setRequestLocale, getTranslations bascule
+  // la page en dynamique (lecture de la locale hors contexte de params).
+  const { locale } = await params;
+  setRequestLocale(locale);
+
   const t = await getTranslations("landing");
 
   const trustItems = [

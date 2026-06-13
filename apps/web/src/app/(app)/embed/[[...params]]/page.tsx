@@ -5,6 +5,7 @@ import {
   useCallback,
   useRef,
   useEffect,
+  useMemo,
 } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { AlertCircle, Loader2 } from "lucide-react";
@@ -259,14 +260,30 @@ export default function EmbedPage() {
     };
   }, [sessionToken]);
 
+  // Origine du parent qui héberge l'iframe, dérivée du referrer (la page
+  // d'intégration). Sert à (1) rejeter les commandes postMessage d'une autre
+  // origine et (2) cibler les réponses (dont le Blob du fichier) au seul
+  // parent légitime au lieu de "*". Durcissement futur possible : signer
+  // l'origine autorisée dans le JWT embed plutôt que se fier au referrer.
+  const expectedParentOrigin = useMemo<string | null>(() => {
+    if (typeof document === "undefined" || !document.referrer) return null;
+    try {
+      return new URL(document.referrer).origin;
+    } catch {
+      return null;
+    }
+  }, []);
+
   // --- postMessage helper ---
   const sendToParent = useCallback(
     (message: GigaPdfInboundMessage) => {
       if (typeof window !== "undefined" && window.parent !== window) {
-        window.parent.postMessage(message, "*");
+        // Cible l'origine du parent quand elle est connue ; "*" seulement en
+        // dernier recours (referrer indisponible — politique stricte).
+        window.parent.postMessage(message, expectedParentOrigin ?? "*");
       }
     },
-    []
+    [expectedParentOrigin]
   );
 
   // --- Editor state (only mounted when key is valid) ---
@@ -523,6 +540,14 @@ export default function EmbedPage() {
   // --- Listen for postMessage commands from parent SDK ---
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
+      // Rejeter les commandes d'une origine autre que le parent intégrateur
+      // (anti-clickjacking / injection cross-origin de commandes save/export).
+      if (expectedParentOrigin && event.origin !== expectedParentOrigin) {
+        embedLogger.warn("Dropped postMessage from unexpected origin", {
+          origin: event.origin,
+        });
+        return;
+      }
       const message = event.data as GigaPdfOutboundMessage;
       if (!message || message.type !== "gigapdf:command") return;
 
@@ -562,7 +587,7 @@ export default function EmbedPage() {
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [save, handleExport, handleGetFile, sendToParent]);
+  }, [save, handleExport, handleGetFile, sendToParent, expectedParentOrigin]);
 
   // --- Element handlers ---
   const handleElementAdded = useCallback(

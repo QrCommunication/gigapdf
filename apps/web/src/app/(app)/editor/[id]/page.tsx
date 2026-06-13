@@ -1720,7 +1720,19 @@ export default function EditorPage() {
   // Handler pour les clics sur les liens hypertexte
   const handleHyperlinkClick = useCallback((linkUrl?: string | null, linkPage?: number | null) => {
     if (linkUrl) {
-      window.open(linkUrl, "_blank");
+      // Un lien provient du PDF (source non fiable) : n'ouvrir QUE du http(s).
+      // Bloque les schemes dangereux (javascript:, data:, file:…) → anti-XSS,
+      // + noopener,noreferrer pour couper l'accès à window.opener.
+      try {
+        const parsed = new URL(linkUrl, window.location.href);
+        if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+          window.open(parsed.toString(), "_blank", "noopener,noreferrer");
+        } else {
+          clientLogger.warn("[editor] Blocked non-http(s) hyperlink", parsed.protocol);
+        }
+      } catch {
+        clientLogger.warn("[editor] Invalid hyperlink URL", linkUrl);
+      }
     } else if (linkPage) {
       goToPage(linkPage - 1); // linkPage is 1-indexed
     }
