@@ -10,7 +10,7 @@ import {
   DEFAULT_JPEG_QUALITY,
   POINTS_PER_INCH,
 } from '../constants';
-import { acquireCanvas } from './pool';
+import { renderPage as mupdfRenderPage } from '../render/mupdf-render';
 
 /**
  * Ensure pdfjs workerSrc points to a resolvable file:// path before each
@@ -67,74 +67,22 @@ export async function renderPage(
   pageNumber: number,
   options?: RenderOptions,
 ): Promise<Buffer> {
-  let doc: PDFDocumentProxy | null = null;
-  try {
-    doc = await loadDocument(buffer);
-  } catch (err) {
-    // Preserve the underlying pdfjs error message — a bare `catch {}` here
-    // masked the real cause and turned every render into an opaque 500.
-    throw new PDFParseError(
-      `Failed to load PDF document: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-
-  const pageCount = doc.numPages;
-  if (pageNumber < 1 || pageNumber > pageCount) {
-    await doc.destroy();
-    throw new PDFPageOutOfRangeError(pageNumber, pageCount);
-  }
-
-  const page = await doc.getPage(pageNumber);
-
-  let scale: number;
-  if (options?.scale !== undefined) {
-    scale = options.scale;
-  } else {
-    const clampedDpi = Math.min(options?.dpi ?? DEFAULT_PREVIEW_DPI, MAX_PREVIEW_DPI);
-    scale = clampedDpi / POINTS_PER_INCH;
-  }
-
-  const viewport = page.getViewport({ scale });
-  const width = Math.ceil(viewport.width);
-  const height = Math.ceil(viewport.height);
-
-  const { canvas, ctx, release } = await acquireCanvas(width, height);
-
-  try {
-    const renderContext = {
-      canvasContext: ctx,
-      canvas,
-      viewport,
-    };
-    await page.render(renderContext as Parameters<typeof page.render>[0]).promise;
-
-    const rawBuffer = canvas.toBuffer('image/png');
-    const format = options?.format ?? 'png';
-
-    if (format === 'png') {
-      if (!options?.alpha) {
-        return sharp(rawBuffer)
-          .flatten({ background: { r: 255, g: 255, b: 255 } })
-          .png()
-          .toBuffer();
-      }
-      return sharp(rawBuffer).png().toBuffer();
-    } else if (format === 'jpeg') {
-      return sharp(rawBuffer)
-        .flatten({ background: { r: 255, g: 255, b: 255 } })
-        .jpeg({ quality: options?.quality ?? DEFAULT_JPEG_QUALITY })
-        .toBuffer();
-    } else {
-      return sharp(rawBuffer)
-        .flatten({ background: { r: 255, g: 255, b: 255 } })
-        .webp({ quality: options?.quality ?? DEFAULT_JPEG_QUALITY })
-        .toBuffer();
-    }
-  } finally {
-    release();
-    page.cleanup();
-    await doc.destroy();
-  }
+  // Rasterise via MuPDF (native, in-process). pdfjs + node-canvas cannot draw
+  // bitmap images in Node — page.render() throws "Image or Canvas expected" on
+  // any PDF containing raster images, and needs workerSrc/canvasFactory glue
+  // that still fails on images. MuPDF renders images, fonts, rotation and
+  // transparency natively (see render/mupdf-render.ts, which is documented as
+  // the replacement for pdfjs page.render() in preview/export endpoints).
+  const scale =
+    options?.scale ??
+    Math.min(options?.dpi ?? DEFAULT_PREVIEW_DPI, MAX_PREVIEW_DPI) / POINTS_PER_INCH;
+  const data = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  const rendered = await mupdfRenderPage(data, pageNumber, {
+    scale,
+    format: options?.format ?? 'png',
+    quality: options?.quality ?? DEFAULT_JPEG_QUALITY,
+  });
+  return Buffer.from(rendered.bytes);
 }
 
 export async function extractImage(

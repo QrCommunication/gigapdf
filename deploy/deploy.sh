@@ -44,7 +44,14 @@ chmod +x "$APP_DIR/scripts/rollback.sh" 2>/dev/null || true
 # 0.5 Fix permissions
 # =============================================================================
 log_info "Fixing permissions..."
-sudo chown -R ubuntu:ubuntu /var/lib/gigapdf 2>/dev/null || true
+# /var/lib/gigapdf is written at runtime by the services (User=gigapdf) — the
+# celery export task does os.makedirs(storage_path/exports). Owner=ubuntu keeps
+# it deployer-editable; group=gigapdf + setgid (2) makes new files/dirs
+# group-writable by the worker. Plain ubuntu:ubuntu made exports fail with
+# PermissionError ([Errno 13]).
+sudo mkdir -p /var/lib/gigapdf/documents/exports
+sudo chown -R ubuntu:gigapdf /var/lib/gigapdf 2>/dev/null || true
+sudo chmod -R 2775 /var/lib/gigapdf 2>/dev/null || true
 sudo chown -R ubuntu:ubuntu /var/log/gigapdf 2>/dev/null || true
 # Reclaim turbo / next caches written by the systemd service user. Without
 # this, the upcoming "rm -rf .turbo" fails with EPERM and `set -e` kills
