@@ -158,31 +158,27 @@ def _get_document_bytes(document_id: str) -> bytes | None:
     import asyncio
 
     async def _load_from_storage():
-        """Load document from storage service."""
+        """Load document from the storage service (S3, decrypting if needed)."""
         from sqlalchemy import select
 
         from app.core.database import get_db_session
-        from app.models.database import DocumentVersion, StoredDocument
+        from app.models.database import StoredDocument
         from app.services.storage_service import storage_service
 
         async with get_db_session() as session:
-            # First try to find stored document by session ID (document_id)
-            # Check if this is a session ID or a stored document ID
             stmt = select(StoredDocument).where(StoredDocument.id == document_id)
             result = await session.execute(stmt)
             doc = result.scalar_one_or_none()
 
-            if doc:
-                # Get latest version
-                version_stmt = select(DocumentVersion).where(
-                    DocumentVersion.document_id == document_id
-                ).order_by(DocumentVersion.version_number.desc()).limit(1)
-                version_result = await session.execute(version_stmt)
-                version = version_result.scalar_one_or_none()
-
-                if version and version.file_path:
-                    # Load from storage
-                    return await storage_service.load_document(version.file_path)
+            if doc is not None:
+                # load_document_file resolves the current version, downloads from
+                # S3 and decrypts when needed. (The previous code called a
+                # non-existent storage_service.load_document(file_path) →
+                # AttributeError → every export of a document not already cached
+                # in a Redis session failed silently with "Document not found".)
+                return await storage_service.load_document_file(
+                    session, document_id, doc.owner_id
+                )
 
         return None
 
