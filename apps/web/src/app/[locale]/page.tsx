@@ -1,9 +1,8 @@
-"use client";
-
 import { Link } from "@/i18n/navigation";
 import type { ReactNode } from "react";
-import { useTranslations } from "next-intl";
-import { Button, cn } from "@giga-pdf/ui";
+import { getTranslations } from "next-intl/server";
+import { Button } from "@giga-pdf/ui";
+import { cn } from "@giga-pdf/ui/lib/utils";
 import {
   ArrowRight,
   Check,
@@ -59,8 +58,8 @@ const INCLUDED_EVERYWHERE = [
   { key: "office", icon: FileInput },
 ] as const;
 
-export default function HomePage() {
-  const t = useTranslations("landing");
+export default async function HomePage() {
+  const t = await getTranslations("landing");
 
   const trustItems = [
     { key: "openSource", icon: Scale },

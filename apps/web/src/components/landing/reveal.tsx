@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
-import { cn } from "@giga-pdf/ui";
+import { cn } from "@giga-pdf/ui/lib/utils";
 
 interface RevealProps {
   children: ReactNode;

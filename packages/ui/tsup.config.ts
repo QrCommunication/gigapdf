@@ -56,14 +56,20 @@ export default defineConfig({
     options.jsx = "automatic";
   },
   async onSuccess() {
-    // Add "use client" directive to all component files
+    // Add "use client" directive to all COMPONENT output files.
+    // The `lib/` directory holds framework-agnostic pure utilities (cn, …)
+    // that MUST stay server-safe: tainting them with "use client" turns them
+    // into client references and makes Server Components crash when they call
+    // cn() (e.g. the marketing landing). Skip `lib/` entirely.
     const distDir = resolve("./dist");
+    const SERVER_SAFE_DIRS = new Set(["lib"]);
     const addUseClient = (dir: string) => {
       try {
         const items = readdirSync(dir);
         for (const item of items) {
           const fullPath = join(dir, item);
           if (statSync(fullPath).isDirectory()) {
+            if (SERVER_SAFE_DIRS.has(item)) continue;
             addUseClient(fullPath);
           } else if (item.endsWith(".js") || item.endsWith(".mjs")) {
             const content = readFileSync(fullPath, "utf-8");
@@ -77,6 +83,6 @@ export default defineConfig({
       }
     };
     addUseClient(distDir);
-    console.log("Added 'use client' directive to all output files");
+    console.log("Added 'use client' directive to all component output files (lib/ kept server-safe)");
   },
 });

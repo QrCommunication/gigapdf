@@ -14,7 +14,7 @@ import {
   Search,
   Underline,
 } from "lucide-react";
-import { cn } from "@giga-pdf/ui";
+import { cn } from "@giga-pdf/ui/lib/utils";
 import { CropMarks } from "./crop-marks";
 
 /* ──────────────────────────────────────────────────────────────────────────
