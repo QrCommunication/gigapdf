@@ -237,7 +237,7 @@ export function DocumentCard({
     setShareDialogOpen(true);
   };
 
-  const handleExport = async (format: "png" | "jpeg" | "html" | "txt" | "docx" | "xlsx") => {
+  const handleExport = async (format: "png" | "jpeg" | "webp" | "html" | "txt" | "docx" | "xlsx") => {
     try {
       setExporting(true);
       setExportDialogOpen(true);
@@ -274,6 +274,7 @@ export function DocumentCard({
       const extensionMap: Record<string, string> = {
         png: "zip",
         jpeg: "zip",
+        webp: "zip",
         html: "html",
         txt: "txt",
         docx: "docx",
@@ -404,6 +405,14 @@ export function DocumentCard({
                   <DropdownMenuItem onClick={() => handleExport("png")}>
                     <Image className="mr-2 h-4 w-4" />
                     {t("menu.exportImages")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("jpeg")}>
+                    <Image className="mr-2 h-4 w-4" />
+                    {t("menu.exportJpeg")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("webp")}>
+                    <Image className="mr-2 h-4 w-4" />
+                    {t("menu.exportWebp")}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleExport("html")}>
                     <FileType className="mr-2 h-4 w-4" />
