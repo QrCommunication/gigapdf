@@ -11,10 +11,12 @@ import {
 import { ToolIcon } from "@/components/seo/tool-icon";
 import { Link } from "@/i18n/navigation";
 import { SITE_URL } from "@/lib/seo/constants";
+import { routing } from "@/i18n/routing";
 import {
   buildSlugAlternates,
   getSolutionAlternatePaths,
   getSolutionBySlugForLocale,
+  getSolutionsData,
   getToolBySlugForLocale,
   isSeoLocale,
   localizePath,
@@ -27,11 +29,19 @@ interface SolutionPageProps {
   params: Promise<{ locale: string; slug: string }>;
 }
 
-// Pas de generateStaticParams : le root layout (résolution cookie) rend tout
-// l'arbre dynamique — une page classée SSG plante en DYNAMIC_SERVER_USAGE au
-// runtime. Slug inconnu DANS la locale (slug fr sous /en et inversement) :
-// notFound() dans generateMetadata, AVANT le premier flush du stream → vrai
-// 404 HTTP.
+// SSG : un (locale, slug) par solution DANS sa locale. Combiné à
+// dynamicParams=false, un slug inconnu OU croisé (slug fr sous /en et
+// inversement) n'est jamais matché → 404 NATIF statique, sans dépendre du proxy
+// ni d'un soft-404 notFound().
+export function generateStaticParams() {
+  return routing.locales.flatMap((locale) =>
+    isSeoLocale(locale)
+      ? getSolutionsData(locale).map((solution) => ({ locale, slug: solution.slug }))
+      : [],
+  );
+}
+
+export const dynamicParams = false;
 
 const STRINGS: Record<
   SeoLocale,

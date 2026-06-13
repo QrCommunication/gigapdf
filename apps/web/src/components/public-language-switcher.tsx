@@ -8,10 +8,11 @@ import { setLocale } from "@/lib/actions/locale";
 import { Globe } from "lucide-react";
 
 /**
- * Variante PUBLIQUE du sélecteur de langue — pages sous app/[locale] uniquement
- * (landing, (auth), (legal)). Elle bascule l'URL via le routing next-intl
- * (/x ↔ /en/x) ET synchronise le cookie `locale` (setLocale) pour que le
- * dashboard — résolu par cookie, hors [locale] — reste dans la même langue.
+ * Variante PUBLIQUE du sélecteur de langue — pages sous app/(site)/[locale]
+ * uniquement (landing, (auth), (legal), (seo)). Elle bascule l'URL via le
+ * routing next-intl (/x ↔ /en/x) ET synchronise le cookie `locale` (setLocale)
+ * pour que le dashboard — résolu par cookie, sous app/(app) — reste dans la
+ * même langue.
  *
  * Le dashboard, lui, continue d'utiliser LanguageSwitcher (cookie seul).
  */

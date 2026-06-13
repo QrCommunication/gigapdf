@@ -77,9 +77,17 @@ const nextConfig: NextConfig = {
     // with mupdf.js at runtime. Bundling it would lose the .wasm sibling.
     "mupdf",
   ],
-  // Force dynamic rendering to avoid SSG issues with client components
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
+  // next-intl `as-needed` + SSG : sans cela, une requête `/login` (locale par
+  // défaut, non préfixée) est réécrite par le proxy vers le prerender `/fr/login`,
+  // que le serveur standalone re-normalise en 307 → `/login` (le strip `/fr` de
+  // `as-needed`), créant une BOUCLE de redirection. En rendu dynamique (dev/prod
+  // actuel) la page est servie en place sur la réécriture → pas de boucle ; le
+  // bug n'apparaît qu'une fois les pages publiques prérendues (SSG). Désactiver
+  // la normalisation d'URL par le middleware fait servir la cible de réécriture
+  // sans re-déclencher le strip. Le proxy continue de voir le chemin public.
+  skipMiddlewareUrlNormalize: true,
   // Force pdfjs-dist worker file to be included in standalone bundle
   // (needed for server-side PDF parsing in /api/pdf/parse-from-s3)
   outputFileTracingIncludes: {

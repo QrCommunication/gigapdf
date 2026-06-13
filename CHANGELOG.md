@@ -5,6 +5,31 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-06-13
+
+### Added
+- Public site is now statically generated (SSG): the landing, auth, legal
+  and SEO pages prerender per locale (fr + en) with the correct
+  `<html lang>` — faster TTFB and fully crawlable HTML. Implemented via
+  Next.js multiple root layouts (route groups `(site)` for the localized
+  public perimeter, `(app)` for the authenticated app which stays dynamic).
+- `/docs`: detailed self-hosting guide (Docker and native — Python venv +
+  `pip install -r requirements.txt`, pnpm, system dependencies, Alembic
+  migrations, nginx routing) and an API & developers section linking
+  Swagger (`/api/docs`), Redoc (`/api/redoc`) and the OpenAPI schema.
+- OpenAPI metadata: title, version 1.4.0, AGPL license, contact, grouped
+  tags.
+
+### Fixed
+- Security: PDF hyperlinks in the editor now open only `http(s)` URLs with
+  `noopener,noreferrer` (blocks `javascript:`/`data:` URI XSS).
+- Security: the embed page validates the postMessage origin against the
+  embedding parent and targets replies (including the file Blob) to that
+  origin instead of `*`.
+- SEO 404s for unknown/cross-locale tool & solution slugs are now native
+  HTTP 404 (static `dynamicParams = false`), replacing the proxy rewrite.
+- GitHub URLs corrected to `QrCommunication/gigapdf` across the public site.
+
 ## [1.3.0] - 2026-06-13
 
 ### Added

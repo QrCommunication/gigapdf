@@ -14,9 +14,10 @@ import {
   type SeoLocale,
 } from "@/lib/seo";
 
-// Pas de generateStaticParams ici : le root layout (getLocale/getMessages,
-// résolution cookie pour le dashboard) rend tout l'arbre dynamique — une page
-// classée SSG plante en DYNAMIC_SERVER_USAGE au runtime.
+// SSG : le root layout (site)/[locale] fournit les params de locale
+// (generateStaticParams [{fr},{en}]) et le (seo)/layout pose setRequestLocale.
+// Le hub n'a pas de segment dynamique propre → il est pré-rendu pour chaque
+// locale sans generateStaticParams local.
 
 interface SolutionsHubPageProps {
   params: Promise<{ locale: string }>;
