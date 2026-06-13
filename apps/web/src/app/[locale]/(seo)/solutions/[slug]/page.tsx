@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, Check } from "lucide-react";
 import { JsonLd } from "@/components/seo/json-ld";
@@ -10,10 +9,19 @@ import {
   type BreadcrumbItem,
 } from "@/components/seo/seo-breadcrumb";
 import { ToolIcon } from "@/components/seo/tool-icon";
+import { Link } from "@/i18n/navigation";
 import { SITE_URL } from "@/lib/seo/constants";
-import { getSolutionBySlug, type SolutionData } from "@/lib/seo/solutions-data";
-import { getToolBySlug, type ToolData } from "@/lib/seo/tools-data";
-import { defaultLocale } from "@/i18n/config";
+import {
+  buildSlugAlternates,
+  getSolutionAlternatePaths,
+  getSolutionBySlugForLocale,
+  getToolBySlugForLocale,
+  isSeoLocale,
+  localizePath,
+  type SeoLocale,
+  type SolutionData,
+  type ToolData,
+} from "@/lib/seo";
 
 interface SolutionPageProps {
   params: Promise<{ locale: string; slug: string }>;
@@ -21,38 +29,92 @@ interface SolutionPageProps {
 
 // Pas de generateStaticParams : le root layout (résolution cookie) rend tout
 // l'arbre dynamique — une page classée SSG plante en DYNAMIC_SERVER_USAGE au
-// runtime. /en/solutions/* : 404 via le proxy (rewrite) + gardes notFound().
+// runtime. Slug inconnu DANS la locale (slug fr sous /en et inversement) :
+// notFound() dans generateMetadata, AVANT le premier flush du stream → vrai
+// 404 HTTP.
+
+const STRINGS: Record<
+  SeoLocale,
+  {
+    home: string;
+    solutionsHub: string;
+    workflows: string;
+    capabilities: string;
+    faq: string;
+    relatedTools: string;
+    seeAlso: string;
+    allToolsLink: string;
+    and: string;
+    otherSolutionsLink: string;
+    cta: (solutionName: string) => string;
+  }
+> = {
+  fr: {
+    home: "Accueil",
+    solutionsHub: "Solutions métiers",
+    workflows: "Workflows concrets",
+    capabilities: "Capacités clés pour ce métier",
+    faq: "Questions fréquentes",
+    relatedTools: "Les outils utilisés dans ces workflows",
+    seeAlso: "Voir aussi",
+    allToolsLink: "les 20 outils PDF de GigaPDF",
+    and: "et",
+    otherSolutionsLink: "les autres solutions métiers",
+    cta: (solutionName) =>
+      `GigaPDF pour ${solutionName.toLowerCase()} : démarrez gratuitement`,
+  },
+  en: {
+    home: "Home",
+    solutionsHub: "Business solutions",
+    workflows: "Concrete workflows",
+    capabilities: "Key capabilities for this profession",
+    faq: "Frequently asked questions",
+    relatedTools: "The tools used in these workflows",
+    seeAlso: "See also",
+    allToolsLink: "the 20 GigaPDF PDF tools",
+    and: "and",
+    otherSolutionsLink: "the other business solutions",
+    cta: (solutionName) =>
+      `GigaPDF for ${solutionName.toLowerCase()}: get started for free`,
+  },
+};
 
 export async function generateMetadata({ params }: SolutionPageProps): Promise<Metadata> {
   const { locale, slug } = await params;
-  // Garde fr-only AVANT le premier flush du stream : notFound() ici produit un
-  // vrai 404 HTTP (celle du layout (seo) arrive après l'envoi du status 200).
-  if (locale !== defaultLocale) notFound();
-  const solution = getSolutionBySlug(slug);
-  if (!solution) return {};
+  if (!isSeoLocale(locale)) notFound();
+  const solution = getSolutionBySlugForLocale(locale, slug);
+  // Slug inconnu dans CETTE locale → vrai 404 HTTP (avant le stream).
+  if (!solution) notFound();
+
+  const paths = getSolutionAlternatePaths(slug);
 
   return {
     title: { absolute: solution.metaTitle },
     description: solution.metaDescription,
-    alternates: { canonical: `/solutions/${solution.slug}` },
+    alternates: paths ? buildSlugAlternates(paths, locale) : undefined,
     openGraph: {
       type: "website",
-      url: `${SITE_URL}/solutions/${solution.slug}`,
+      url: `${SITE_URL}${localizePath(`/solutions/${solution.slug}`, locale)}`,
       title: solution.metaTitle,
       description: solution.metaDescription,
     },
   };
 }
 
-function buildSolutionJsonLd(solution: SolutionData): Record<string, unknown>[] {
-  const pageUrl = `${SITE_URL}/solutions/${solution.slug}`;
+function buildSolutionJsonLd(
+  solution: SolutionData,
+  locale: SeoLocale,
+): Record<string, unknown>[] {
+  const pageUrl = `${SITE_URL}${localizePath(`/solutions/${solution.slug}`, locale)}`;
+  const namePrefix = locale === "en" ? "GigaPDF for" : "GigaPDF pour";
 
   return [
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
-      name: `GigaPDF pour ${solution.name}`,
+      name: `${namePrefix} ${solution.name}`,
       url: pageUrl,
+      inLanguage: locale,
       description: solution.metaDescription,
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
@@ -65,6 +127,7 @@ function buildSolutionJsonLd(solution: SolutionData): Record<string, unknown>[] 
     {
       "@context": "https://schema.org",
       "@type": "FAQPage",
+      inLanguage: locale,
       mainEntity: solution.faq.map((item) => ({
         "@type": "Question",
         name: item.question,
@@ -79,28 +142,30 @@ function buildSolutionJsonLd(solution: SolutionData): Record<string, unknown>[] 
 
 export default async function SolutionPage({ params }: SolutionPageProps) {
   const { locale, slug } = await params;
-  if (locale !== defaultLocale) notFound();
-  const solution = getSolutionBySlug(slug);
+  if (!isSeoLocale(locale)) notFound();
+  const solution = getSolutionBySlugForLocale(locale, slug);
   if (!solution) notFound();
 
+  const strings = STRINGS[locale];
+
   const breadcrumbItems: BreadcrumbItem[] = [
-    { label: "Accueil", href: "/" },
-    { label: "Solutions métiers", href: "/solutions" },
+    { label: strings.home, href: "/" },
+    { label: strings.solutionsHub, href: "/solutions" },
     { label: solution.name, href: `/solutions/${solution.slug}` },
   ];
 
   const relatedTools = solution.relatedTools
-    .map((relatedSlug) => getToolBySlug(relatedSlug))
+    .map((relatedSlug) => getToolBySlugForLocale(locale, relatedSlug))
     .filter((tool): tool is ToolData => tool !== undefined);
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-12">
-      {buildSolutionJsonLd(solution).map((data, index) => (
+      {buildSolutionJsonLd(solution, locale).map((data, index) => (
         <JsonLd key={index} data={data} />
       ))}
-      <JsonLd data={buildBreadcrumbJsonLd(SITE_URL, breadcrumbItems)} />
+      <JsonLd data={buildBreadcrumbJsonLd(SITE_URL, breadcrumbItems, locale)} />
 
-      <SeoBreadcrumb items={breadcrumbItems} />
+      <SeoBreadcrumb items={breadcrumbItems} locale={locale} />
 
       <article className="max-w-[68ch]">
         <header>
@@ -124,7 +189,7 @@ export default async function SolutionPage({ params }: SolutionPageProps) {
 
         <section className="mt-10">
           <h2 className="text-2xl font-bold tracking-tight text-foreground">
-            Workflows concrets
+            {strings.workflows}
           </h2>
           <div className="mt-4 space-y-6">
             {solution.workflows.map((workflow, index) => (
@@ -140,7 +205,7 @@ export default async function SolutionPage({ params }: SolutionPageProps) {
 
         <section className="mt-10">
           <h2 className="text-2xl font-bold tracking-tight text-foreground">
-            Capacités clés pour ce métier
+            {strings.capabilities}
           </h2>
           <ul className="mt-4 space-y-2">
             {solution.capabilities.map((capability, index) => (
@@ -156,7 +221,7 @@ export default async function SolutionPage({ params }: SolutionPageProps) {
 
         <section className="mt-10">
           <h2 className="text-2xl font-bold tracking-tight text-foreground">
-            Questions fréquentes
+            {strings.faq}
           </h2>
           <div className="mt-4 space-y-6">
             {solution.faq.map((item, index) => (
@@ -173,7 +238,7 @@ export default async function SolutionPage({ params }: SolutionPageProps) {
 
       <section className="mt-12">
         <h2 className="text-xl font-bold tracking-tight text-foreground">
-          Les outils utilisés dans ces workflows
+          {strings.relatedTools}
         </h2>
         <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {relatedTools.map((tool) => (
@@ -198,25 +263,25 @@ export default async function SolutionPage({ params }: SolutionPageProps) {
         </ul>
 
         <p className="mt-6 text-sm text-muted-foreground">
-          Voir aussi{" "}
+          {strings.seeAlso}{" "}
           <Link
             href="/tools"
             className="font-medium text-primary underline-offset-4 hover:underline"
           >
-            les 20 outils PDF de GigaPDF
+            {strings.allToolsLink}
           </Link>{" "}
-          et{" "}
+          {strings.and}{" "}
           <Link
             href="/solutions"
             className="font-medium text-primary underline-offset-4 hover:underline"
           >
-            les autres solutions métiers
+            {strings.otherSolutionsLink}
           </Link>
           .
         </p>
       </section>
 
-      <CtaSection title={`GigaPDF pour ${solution.name.toLowerCase()} : démarrez gratuitement`} />
+      <CtaSection title={strings.cta(solution.name)} locale={locale} />
     </div>
   );
 }

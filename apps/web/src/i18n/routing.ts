@@ -9,14 +9,14 @@ import { defaultLocale, locales } from "./config";
  * - `as-needed` : fr (défaut) sans préfixe → URLs historiques inchangées ;
  *   en = /en/*.
  * - `localeDetection: false` : l'URL est la SEULE source de vérité publique.
- *   Indispensable car /tools et /solutions sont fr-only (404 en /en/*) — une
- *   détection cookie/Accept-Language redirigerait les visiteurs EN vers des
- *   404 (/tools → /en/tools) et ferait fuir les crawlers de / vers /en.
+ *   Une détection cookie/Accept-Language ferait fuir les crawlers de / vers
+ *   /en et rendrait les URLs publiques instables (cache, partage).
  * - `localeCookie: false` : le cookie `locale` reste écrit exclusivement par
  *   l'action serveur setLocale() (source unique, partagée avec le dashboard).
- * - `alternateLinks: false` : les en-têtes Link automatiques annonceraient
- *   /en/tools et /en/solutions qui répondent 404 ; les hreflang sont gérés
- *   explicitement (sitemap.ts + metadata des pages bilingues).
+ * - `alternateLinks: false` : les en-têtes Link automatiques supposeraient un
+ *   chemin IDENTIQUE dans les deux locales — faux pour (seo) où les slugs
+ *   sont traduits (/tools/editer-pdf ↔ /en/tools/edit-pdf). Les hreflang
+ *   restent gérés explicitement (sitemap.ts + metadata des pages, slug-map).
  */
 export const routing = defineRouting({
   locales,

@@ -5,9 +5,11 @@ import type { Metadata } from "next";
  * fr/en/x-default) d'une page publique BILINGUE servie sous le segment
  * [locale] avec le préfixe `as-needed` (fr = sans préfixe, en = /en/*).
  *
- * À n'utiliser QUE pour les pages réellement traduites (messages fr/en).
- * Les pages fr-only ((seo), cookies, legal-notice) gardent un canonical fr
- * sans `languages`.
+ * À n'utiliser QUE pour les pages réellement traduites dont le chemin est
+ * IDENTIQUE dans les deux locales (landing, (auth), (legal), hubs (seo)).
+ * Les pages fr-only (cookies, legal-notice) gardent un canonical fr sans
+ * `languages` ; les pages (seo) à slug traduit ([slug]) passent par
+ * buildSlugAlternates (lib/seo/index.ts) qui croise les slugs via slug-map.
  *
  * @param path   Chemin non préfixé, commençant par "/" (ex: "/login").
  * @param locale Locale de la page rendue (détermine le canonical).

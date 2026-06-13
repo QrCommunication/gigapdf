@@ -1,85 +1,137 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { JsonLd } from "@/components/seo/json-ld";
 import { CtaSection } from "@/components/seo/cta-section";
 import { ToolIcon } from "@/components/seo/tool-icon";
+import { Link } from "@/i18n/navigation";
 import { SITE_URL } from "@/lib/seo/constants";
-import { TOOLS } from "@/lib/seo/tools-data";
-import { SOLUTIONS } from "@/lib/seo/solutions-data";
-import { defaultLocale } from "@/i18n/config";
+import { publicPageAlternates } from "@/lib/seo/hreflang";
+import {
+  getSolutionsData,
+  getToolsData,
+  isSeoLocale,
+  localizePath,
+  type SeoLocale,
+} from "@/lib/seo";
 
 // Pas de generateStaticParams ici : le root layout (getLocale/getMessages,
 // résolution cookie pour le dashboard) rend tout l'arbre dynamique — une page
-// classée SSG plante en DYNAMIC_SERVER_USAGE au runtime. Le 404 de /en/tools
-// est garanti par le proxy (rewrite) + les gardes notFound() fr-only.
+// classée SSG plante en DYNAMIC_SERVER_USAGE au runtime.
 
 interface ToolsHubPageProps {
   params: Promise<{ locale: string }>;
 }
 
+const COPY: Record<
+  SeoLocale,
+  {
+    metaTitle: string;
+    metaDescription: string;
+    ogTitle: string;
+    ogDescription: string;
+    itemListName: string;
+    listAria: string;
+    h1: string;
+    intro: string;
+    solutionsTitle: string;
+    solutionsText: string;
+    ctaTitle: string;
+  }
+> = {
+  fr: {
+    metaTitle: "Outils PDF en ligne gratuits : éditer, signer, convertir",
+    metaDescription:
+      "20 outils PDF gratuits et open source : édition, fusion, signature numérique, OCR, compression, conversion Office et plus. Sans filigrane, auto-hébergeable.",
+    ogTitle: "Outils PDF en ligne gratuits | GigaPDF",
+    ogDescription:
+      "Tous les outils PDF dont vous avez besoin, gratuits et open source : édition, signature, OCR, conversion, protection.",
+    itemListName: "Outils PDF GigaPDF",
+    listAria: "Liste des outils PDF",
+    h1: "Outils PDF en ligne : tout faire sur vos documents, gratuitement",
+    intro:
+      "GigaPDF réunit en une seule plateforme les vingt opérations qui composent la vie réelle d'un document PDF : éditer le texte avec les polices d'origine, fusionner et diviser des dossiers, signer numériquement avec votre certificat, reconnaître le texte des scans, protéger par chiffrement AES-256, convertir depuis et vers Word, Excel, PowerPoint et OpenDocument. Chaque outil est complet dans le plan gratuit — pas de version bridée, pas de filigrane publicitaire — et le code, open source sous licence AGPL, peut tourner sur vos propres serveurs.",
+    solutionsTitle: "Des outils pensés pour votre métier",
+    solutionsText:
+      "Au-delà des opérations unitaires, GigaPDF s'organise en workflows métiers : caviardage à valeur probante pour les avocats, OCR de pièces comptables pour les cabinets, signature de contrats pour les RH, dossiers de subvention pour les associations. Découvrez comment les outils s'assemblent pour votre activité.",
+    ctaTitle: "Commencez à travailler vos PDF dès maintenant",
+  },
+  en: {
+    metaTitle: "Free Online PDF Tools: Edit, Sign, Convert",
+    metaDescription:
+      "20 free, open-source PDF tools: editing, merging, digital signing, OCR, compression, Office conversion and more. No watermark, self-hostable.",
+    ogTitle: "Free Online PDF Tools | GigaPDF",
+    ogDescription:
+      "Every PDF tool you need, free and open source: editing, signing, OCR, conversion, protection.",
+    itemListName: "GigaPDF PDF Tools",
+    listAria: "List of PDF tools",
+    h1: "Online PDF tools: do everything with your documents, for free",
+    intro:
+      "GigaPDF brings together, on a single platform, the twenty operations that make up the real life of a PDF document: editing text with the original fonts, merging and splitting files, signing digitally with your certificate, recognizing text in scans, protecting with AES-256 encryption, converting to and from Word, Excel, PowerPoint and OpenDocument. Every tool is complete in the free plan — no crippled version, no advertising watermark — and the code, open source under the AGPL license, can run on your own servers.",
+    solutionsTitle: "Tools designed around your profession",
+    solutionsText:
+      "Beyond individual operations, GigaPDF is organized into business workflows: evidence-grade redaction for lawyers, OCR of accounting documents for firms, contract signing for HR teams, grant application files for nonprofits. Discover how the tools fit together for your line of work.",
+    ctaTitle: "Start working on your PDFs right now",
+  },
+};
+
 export async function generateMetadata({ params }: ToolsHubPageProps): Promise<Metadata> {
   const { locale } = await params;
-  // Garde fr-only AVANT le premier flush du stream : notFound() ici produit un
-  // vrai 404 HTTP (celle du layout (seo) arrive après l'envoi du status 200).
-  if (locale !== defaultLocale) notFound();
+  if (!isSeoLocale(locale)) notFound();
+  const copy = COPY[locale];
 
   return {
-    title: "Outils PDF en ligne gratuits : éditer, signer, convertir",
-    description:
-      "20 outils PDF gratuits et open source : édition, fusion, signature numérique, OCR, compression, conversion Office et plus. Sans filigrane, auto-hébergeable.",
-    alternates: { canonical: "/tools" },
+    title: copy.metaTitle,
+    description: copy.metaDescription,
+    alternates: publicPageAlternates("/tools", locale),
     openGraph: {
       type: "website",
-      url: `${SITE_URL}/tools`,
-      title: "Outils PDF en ligne gratuits | GigaPDF",
-      description:
-        "Tous les outils PDF dont vous avez besoin, gratuits et open source : édition, signature, OCR, conversion, protection.",
+      url: `${SITE_URL}${localizePath("/tools", locale)}`,
+      title: copy.ogTitle,
+      description: copy.ogDescription,
     },
   };
 }
 
-const itemListJsonLd = {
-  "@context": "https://schema.org",
-  "@type": "ItemList",
-  name: "Outils PDF GigaPDF",
-  itemListElement: TOOLS.map((tool, index) => ({
-    "@type": "ListItem",
-    position: index + 1,
-    name: tool.name,
-    url: `${SITE_URL}/tools/${tool.slug}`,
-  })),
-};
+function buildItemListJsonLd(locale: SeoLocale): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: COPY[locale].itemListName,
+    inLanguage: locale,
+    itemListElement: getToolsData(locale).map((tool, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: tool.name,
+      url: `${SITE_URL}${localizePath(`/tools/${tool.slug}`, locale)}`,
+    })),
+  };
+}
 
 export default async function ToolsHubPage({ params }: ToolsHubPageProps) {
   const { locale } = await params;
-  if (locale !== defaultLocale) notFound();
+  if (!isSeoLocale(locale)) notFound();
+
+  const copy = COPY[locale];
+  const tools = getToolsData(locale);
+  const solutions = getSolutionsData(locale);
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-12">
-      <JsonLd data={itemListJsonLd} />
+      <JsonLd data={buildItemListJsonLd(locale)} />
 
       <header className="max-w-[68ch]">
         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          Outils PDF en ligne : tout faire sur vos documents, gratuitement
+          {copy.h1}
         </h1>
         <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-          GigaPDF réunit en une seule plateforme les vingt opérations qui
-          composent la vie réelle d&apos;un document PDF : éditer le texte avec
-          les polices d&apos;origine, fusionner et diviser des dossiers, signer
-          numériquement avec votre certificat, reconnaître le texte des scans,
-          protéger par chiffrement AES-256, convertir depuis et vers Word,
-          Excel, PowerPoint et OpenDocument. Chaque outil est complet dans le
-          plan gratuit — pas de version bridée, pas de filigrane publicitaire —
-          et le code, open source sous licence AGPL, peut tourner sur vos
-          propres serveurs.
+          {copy.intro}
         </p>
       </header>
 
-      <section className="mt-10" aria-label="Liste des outils PDF">
+      <section className="mt-10" aria-label={copy.listAria}>
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {TOOLS.map((tool) => (
+          {tools.map((tool) => (
             <li key={tool.slug}>
               <Link
                 href={`/tools/${tool.slug}`}
@@ -104,17 +156,13 @@ export default async function ToolsHubPage({ params }: ToolsHubPageProps) {
 
       <section className="mt-14 max-w-[68ch]">
         <h2 className="text-2xl font-bold tracking-tight text-foreground">
-          Des outils pensés pour votre métier
+          {copy.solutionsTitle}
         </h2>
         <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-          Au-delà des opérations unitaires, GigaPDF s&apos;organise en
-          workflows métiers : caviardage à valeur probante pour les avocats,
-          OCR de pièces comptables pour les cabinets, signature de contrats
-          pour les RH, dossiers de subvention pour les associations. Découvrez
-          comment les outils s&apos;assemblent pour votre activité.
+          {copy.solutionsText}
         </p>
         <ul className="mt-5 flex flex-wrap gap-2">
-          {SOLUTIONS.map((solution) => (
+          {solutions.map((solution) => (
             <li key={solution.slug}>
               <Link
                 href={`/solutions/${solution.slug}`}
@@ -128,7 +176,7 @@ export default async function ToolsHubPage({ params }: ToolsHubPageProps) {
         </ul>
       </section>
 
-      <CtaSection title="Commencez à travailler vos PDF dès maintenant" />
+      <CtaSection title={copy.ctaTitle} locale={locale} />
     </div>
   );
 }

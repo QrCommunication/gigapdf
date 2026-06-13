@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, Check } from "lucide-react";
 import { JsonLd } from "@/components/seo/json-ld";
@@ -10,10 +9,18 @@ import {
   type BreadcrumbItem,
 } from "@/components/seo/seo-breadcrumb";
 import { ToolIcon } from "@/components/seo/tool-icon";
+import { Link } from "@/i18n/navigation";
 import { SITE_URL } from "@/lib/seo/constants";
-import { getToolBySlug, type ToolData } from "@/lib/seo/tools-data";
-import { getSolutionBySlug } from "@/lib/seo/solutions-data";
-import { defaultLocale } from "@/i18n/config";
+import {
+  buildSlugAlternates,
+  getSolutionBySlugForLocale,
+  getToolAlternatePaths,
+  getToolBySlugForLocale,
+  isSeoLocale,
+  localizePath,
+  type SeoLocale,
+  type ToolData,
+} from "@/lib/seo";
 
 interface ToolPageProps {
   params: Promise<{ locale: string; slug: string }>;
@@ -21,31 +28,73 @@ interface ToolPageProps {
 
 // Pas de generateStaticParams : le root layout (résolution cookie) rend tout
 // l'arbre dynamique — une page classée SSG plante en DYNAMIC_SERVER_USAGE au
-// runtime. /en/tools/* : 404 via le proxy (rewrite) + gardes notFound() fr-only.
+// runtime. Slug inconnu DANS la locale (slug fr sous /en et inversement) :
+// notFound() dans generateMetadata, AVANT le premier flush du stream → vrai
+// 404 HTTP.
+
+const STRINGS: Record<
+  SeoLocale,
+  {
+    home: string;
+    toolsHub: string;
+    step: (position: number) => string;
+    capabilities: string;
+    useCases: string;
+    faq: string;
+    relatedTools: string;
+    relatedSolutions: string;
+    cta: (toolName: string) => string;
+  }
+> = {
+  fr: {
+    home: "Accueil",
+    toolsHub: "Outils PDF",
+    step: (position) => `Étape ${position}`,
+    capabilities: "Ce que l'outil sait faire",
+    useCases: "Cas d'usage courants",
+    faq: "Questions fréquentes",
+    relatedTools: "Outils associés",
+    relatedSolutions: "Pour votre métier",
+    cta: (toolName) => `${toolName} : essayez gratuitement`,
+  },
+  en: {
+    home: "Home",
+    toolsHub: "PDF Tools",
+    step: (position) => `Step ${position}`,
+    capabilities: "What the tool can do",
+    useCases: "Common use cases",
+    faq: "Frequently asked questions",
+    relatedTools: "Related tools",
+    relatedSolutions: "For your profession",
+    cta: (toolName) => `${toolName}: try it for free`,
+  },
+};
 
 export async function generateMetadata({ params }: ToolPageProps): Promise<Metadata> {
   const { locale, slug } = await params;
-  // Garde fr-only AVANT le premier flush du stream : notFound() ici produit un
-  // vrai 404 HTTP (celle du layout (seo) arrive après l'envoi du status 200).
-  if (locale !== defaultLocale) notFound();
-  const tool = getToolBySlug(slug);
-  if (!tool) return {};
+  if (!isSeoLocale(locale)) notFound();
+  const tool = getToolBySlugForLocale(locale, slug);
+  // Slug inconnu dans CETTE locale → vrai 404 HTTP (avant le stream).
+  if (!tool) notFound();
+
+  const paths = getToolAlternatePaths(slug);
 
   return {
     title: { absolute: tool.metaTitle },
     description: tool.metaDescription,
-    alternates: { canonical: `/tools/${tool.slug}` },
+    alternates: paths ? buildSlugAlternates(paths, locale) : undefined,
     openGraph: {
       type: "website",
-      url: `${SITE_URL}/tools/${tool.slug}`,
+      url: `${SITE_URL}${localizePath(`/tools/${tool.slug}`, locale)}`,
       title: tool.metaTitle,
       description: tool.metaDescription,
     },
   };
 }
 
-function buildToolJsonLd(tool: ToolData): Record<string, unknown>[] {
-  const pageUrl = `${SITE_URL}/tools/${tool.slug}`;
+function buildToolJsonLd(tool: ToolData, locale: SeoLocale): Record<string, unknown>[] {
+  const pageUrl = `${SITE_URL}${localizePath(`/tools/${tool.slug}`, locale)}`;
+  const strings = STRINGS[locale];
 
   return [
     {
@@ -53,6 +102,7 @@ function buildToolJsonLd(tool: ToolData): Record<string, unknown>[] {
       "@type": "SoftwareApplication",
       name: `GigaPDF — ${tool.name}`,
       url: pageUrl,
+      inLanguage: locale,
       description: tool.metaDescription,
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
@@ -66,16 +116,18 @@ function buildToolJsonLd(tool: ToolData): Record<string, unknown>[] {
       "@context": "https://schema.org",
       "@type": "HowTo",
       name: tool.howTo.title,
+      inLanguage: locale,
       step: tool.howTo.steps.map((step, index) => ({
         "@type": "HowToStep",
         position: index + 1,
-        name: `Étape ${index + 1}`,
+        name: strings.step(index + 1),
         text: step,
       })),
     },
     {
       "@context": "https://schema.org",
       "@type": "FAQPage",
+      inLanguage: locale,
       mainEntity: tool.faq.map((item) => ({
         "@type": "Question",
         name: item.question,
@@ -90,31 +142,33 @@ function buildToolJsonLd(tool: ToolData): Record<string, unknown>[] {
 
 export default async function ToolPage({ params }: ToolPageProps) {
   const { locale, slug } = await params;
-  if (locale !== defaultLocale) notFound();
-  const tool = getToolBySlug(slug);
+  if (!isSeoLocale(locale)) notFound();
+  const tool = getToolBySlugForLocale(locale, slug);
   if (!tool) notFound();
 
+  const strings = STRINGS[locale];
+
   const breadcrumbItems: BreadcrumbItem[] = [
-    { label: "Accueil", href: "/" },
-    { label: "Outils PDF", href: "/tools" },
+    { label: strings.home, href: "/" },
+    { label: strings.toolsHub, href: "/tools" },
     { label: tool.name, href: `/tools/${tool.slug}` },
   ];
 
   const relatedTools = tool.relatedTools
-    .map((relatedSlug) => getToolBySlug(relatedSlug))
+    .map((relatedSlug) => getToolBySlugForLocale(locale, relatedSlug))
     .filter((related): related is ToolData => related !== undefined);
   const relatedSolutions = tool.relatedSolutions
-    .map((relatedSlug) => getSolutionBySlug(relatedSlug))
+    .map((relatedSlug) => getSolutionBySlugForLocale(locale, relatedSlug))
     .filter((solution) => solution !== undefined);
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-12">
-      {buildToolJsonLd(tool).map((data, index) => (
+      {buildToolJsonLd(tool, locale).map((data, index) => (
         <JsonLd key={index} data={data} />
       ))}
-      <JsonLd data={buildBreadcrumbJsonLd(SITE_URL, breadcrumbItems)} />
+      <JsonLd data={buildBreadcrumbJsonLd(SITE_URL, breadcrumbItems, locale)} />
 
-      <SeoBreadcrumb items={breadcrumbItems} />
+      <SeoBreadcrumb items={breadcrumbItems} locale={locale} />
 
       <article className="max-w-[68ch]">
         <header>
@@ -152,7 +206,7 @@ export default async function ToolPage({ params }: ToolPageProps) {
 
         <section className="mt-10">
           <h2 className="text-2xl font-bold tracking-tight text-foreground">
-            Ce que l&apos;outil sait faire
+            {strings.capabilities}
           </h2>
           <ul className="mt-4 space-y-2">
             {tool.capabilities.map((capability, index) => (
@@ -168,7 +222,7 @@ export default async function ToolPage({ params }: ToolPageProps) {
 
         <section className="mt-10">
           <h2 className="text-2xl font-bold tracking-tight text-foreground">
-            Cas d&apos;usage courants
+            {strings.useCases}
           </h2>
           <ul className="mt-4 list-disc space-y-2 pl-5">
             {tool.useCases.map((useCase, index) => (
@@ -181,7 +235,7 @@ export default async function ToolPage({ params }: ToolPageProps) {
 
         <section className="mt-10">
           <h2 className="text-2xl font-bold tracking-tight text-foreground">
-            Questions fréquentes
+            {strings.faq}
           </h2>
           <div className="mt-4 space-y-6">
             {tool.faq.map((item, index) => (
@@ -197,7 +251,9 @@ export default async function ToolPage({ params }: ToolPageProps) {
       </article>
 
       <section className="mt-12">
-        <h2 className="text-xl font-bold tracking-tight text-foreground">Outils associés</h2>
+        <h2 className="text-xl font-bold tracking-tight text-foreground">
+          {strings.relatedTools}
+        </h2>
         <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {relatedTools.map((related) => (
             <li key={related.slug}>
@@ -223,7 +279,7 @@ export default async function ToolPage({ params }: ToolPageProps) {
         {relatedSolutions.length > 0 && (
           <>
             <h2 className="mt-8 text-xl font-bold tracking-tight text-foreground">
-              Pour votre métier
+              {strings.relatedSolutions}
             </h2>
             <ul className="mt-4 flex flex-wrap gap-2">
               {relatedSolutions.map((solution) => (
@@ -242,7 +298,7 @@ export default async function ToolPage({ params }: ToolPageProps) {
         )}
       </section>
 
-      <CtaSection title={`${tool.name} : essayez gratuitement`} />
+      <CtaSection title={strings.cta(tool.name)} locale={locale} />
     </div>
   );
 }
