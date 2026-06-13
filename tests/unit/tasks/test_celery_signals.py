@@ -9,11 +9,16 @@ for all tracked task families:
 
 Note: app.tasks.ocr_tasks.* was removed on 2026-06-13 (OCR is handled by the
 TypeScript pdf-engine via /api/pdf/ocr — the Celery task had no dispatcher).
+
+Note: the signal handlers were migrated from async (``_run_async`` + asyncpg) to
+synchronous DB updates (``_update_job_completed_sync`` / ``_update_job_failed_sync``
+via ``get_sync_session`` / psycopg2) on 2026-06-13 to avoid corrupting the asyncpg
+event-loop pool from Celery's throwaway loops. These tests patch the sync helpers.
 """
 
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 
 from app.models.database import AsyncJob
 from app.tasks.celery_app import task_postrun_handler, task_failure_handler
@@ -45,9 +50,9 @@ class TestTaskPostrunSignal:
         ("other.task.name", False),
         ("untracked.task", False),
     ])
-    @patch("app.tasks.celery_app._run_async")
+    @patch("app.tasks.celery_app._update_job_completed_sync")
     def test_postrun_handler_covers_all_tasks(
-        self, mock_run_async, task_name, should_handle
+        self, mock_update_completed, task_name, should_handle
     ):
         """Verify task_postrun handler covers all task families."""
         mock_task = Mock()
@@ -62,12 +67,12 @@ class TestTaskPostrunSignal:
         )
 
         if should_handle:
-            assert mock_run_async.called, f"Should have handled {task_name}"
+            assert mock_update_completed.called, f"Should have handled {task_name}"
         else:
-            assert not mock_run_async.called, f"Should not have handled {task_name}"
+            assert not mock_update_completed.called, f"Should not have handled {task_name}"
 
-    @patch("app.tasks.celery_app._run_async")
-    def test_postrun_handler_ignores_none_task(self, mock_run_async):
+    @patch("app.tasks.celery_app._update_job_completed_sync")
+    def test_postrun_handler_ignores_none_task(self, mock_update_completed):
         """Verify handler gracefully handles None task."""
         task_postrun_handler(
             sender=None,
@@ -76,10 +81,10 @@ class TestTaskPostrunSignal:
             retval={},
             state="SUCCESS",
         )
-        assert not mock_run_async.called
+        assert not mock_update_completed.called
 
-    @patch("app.tasks.celery_app._run_async")
-    def test_postrun_handler_ignores_none_task_id(self, mock_run_async):
+    @patch("app.tasks.celery_app._update_job_completed_sync")
+    def test_postrun_handler_ignores_none_task_id(self, mock_update_completed):
         """Verify handler gracefully handles None task_id."""
         mock_task = Mock()
         mock_task.name = "app.tasks.export_tasks.export_document"
@@ -91,15 +96,14 @@ class TestTaskPostrunSignal:
             retval={},
             state="SUCCESS",
         )
-        assert not mock_run_async.called
+        assert not mock_update_completed.called
 
 
 class TestTaskFailureSignal:
     """Test task_failure signal handler for all task families."""
 
-    @patch("app.tasks.celery_app._update_job_failed")
-    @patch("app.tasks.celery_app._run_async")
-    def test_failure_handler_catches_exceptions(self, mock_run_async, mock_update_failed):
+    @patch("app.tasks.celery_app._update_job_failed_sync")
+    def test_failure_handler_catches_exceptions(self, mock_update_failed):
         """Verify task_failure handler processes exceptions."""
         mock_exception = ValueError("Task processing failed")
 
@@ -109,28 +113,29 @@ class TestTaskFailureSignal:
             exception=mock_exception,
         )
 
-        assert mock_run_async.called
-        # Verify async coroutine was called with the failed job update
+        assert mock_update_failed.called
+        # The handler forwards the stringified exception to the sync updater.
+        mock_update_failed.assert_called_once_with("test-task-id", "Task processing failed")
 
-    @patch("app.tasks.celery_app._run_async")
-    def test_failure_handler_ignores_none_task_id(self, mock_run_async):
+    @patch("app.tasks.celery_app._update_job_failed_sync")
+    def test_failure_handler_ignores_none_task_id(self, mock_update_failed):
         """Verify handler gracefully handles None task_id."""
         task_failure_handler(
             sender=None,
             task_id=None,
             exception=ValueError("error"),
         )
-        assert not mock_run_async.called
+        assert not mock_update_failed.called
 
-    @patch("app.tasks.celery_app._run_async")
-    def test_failure_handler_ignores_none_exception(self, mock_run_async):
+    @patch("app.tasks.celery_app._update_job_failed_sync")
+    def test_failure_handler_ignores_none_exception(self, mock_update_failed):
         """Verify handler gracefully handles None exception."""
         task_failure_handler(
             sender=None,
             task_id="test-task-id",
             exception=None,
         )
-        assert not mock_run_async.called
+        assert not mock_update_failed.called
 
 
 class TestWatchdogPendingTasks:

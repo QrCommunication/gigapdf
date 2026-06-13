@@ -35,7 +35,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -71,6 +71,9 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
 
+      - name: Upgrade pip (clear pip's own CVEs before audit)
+        run: python -m pip install --upgrade pip
+
       - name: Install pip-audit
         run: pip install pip-audit
 
@@ -96,7 +99,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Verify lockfile is up-to-date
