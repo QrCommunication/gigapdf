@@ -222,54 +222,77 @@ def create_application() -> FastAPI:
             "name": "activity",
             "description": "User activity logs",
         },
+        {
+            "name": "embed",
+            "description": "Embeddable editor sessions and API-key validation",
+        },
+        {
+            "name": "Webhooks",
+            "description": "Inbound webhooks (e.g. Stripe billing events)",
+        },
+        {
+            "name": "Health",
+            "description": "Service health and readiness probes",
+        },
     ]
 
     app = FastAPI(
-        title="Giga-PDF API",
+        title="GigaPDF API",
         description="""
-# Giga-PDF - WYSIWYG PDF Editing Engine
+# GigaPDF — Open-Source WYSIWYG PDF Engine
 
-A comprehensive REST API for PDF manipulation, enabling visual editing
-of PDF documents like a web canvas editor.
+A comprehensive REST API for PDF manipulation, powering a visual,
+canvas-based PDF editor, a document management system (GED) and
+real-time collaboration.
+
+GigaPDF is **open source**, licensed under the
+[GNU AGPL-3.0](https://github.com/QrCommunication/gigapdf/blob/main/LICENSE),
+and fully self-hostable. Source code:
+[github.com/QrCommunication/gigapdf](https://github.com/QrCommunication/gigapdf).
 
 ## Features
 
-- **Document Management**: Upload, parse, download, and manage PDF documents
+- **Document Management**: Upload, parse, download, organize (GED), and version PDF documents
 - **Page Operations**: Add, remove, reorder, rotate, and resize pages
-- **Element Editing**: Manipulate text, images, shapes, and annotations
-- **Form Handling**: Fill, create, and flatten PDF forms
-- **OCR Integration**: Extract text from scanned documents
-- **Collaboration**: Real-time multi-user editing via WebSocket
-- **Export**: Convert PDFs to various formats (PNG, JPEG, DOCX, etc.)
-- **Security**: Encrypt/decrypt PDFs, manage permissions
+- **Element Editing**: True in-place editing of text, images, shapes, and annotations
+- **Forms**: Create, fill, and flatten AcroForm fields
+- **OCR**: Searchable text layer extraction from scanned documents (Tesseract)
+- **Office Conversions**: Import and export 9 Office formats (DOCX/XLSX/PPTX, ODF, legacy OLE2) via LibreOffice
+- **Digital Signatures**: PKCS#7 / CAdES signing
+- **Collaboration**: Real-time multi-user editing over WebSocket
+- **Export**: Render PDFs to PNG, JPEG, HTML, and Office formats
+- **Security**: Encrypt/decrypt PDFs, manage permissions, true redaction
+
+## Authentication
+
+Endpoints accept either of two credentials:
+
+- **JWT Bearer token** — `Authorization: Bearer <token>`, validated against the
+  configured authentication service (Better Auth session or external JWKS/PEM).
+- **API key** — `X-API-Key: <key>` for server-to-server and embed integrations.
+  Keys are created from the dashboard, scoped, and SHA-256 hashed at rest.
 
 ## Organizations / Tenants
 
 Users can create or join organizations (tenants) to share documents and quotas:
 
-- **Tenant Plans**: Enterprise plans provide shared storage and API limits for all members
-- **Document Sharing**: Share documents with team members (read or write access)
+- **Tenant Plans**: shared storage and API limits across all members
+- **Document Sharing**: share documents with team members (read or write access)
 - **Role-based Permissions**: Owner, Admin, Manager, Member, Viewer roles
-- **Quota Inheritance**: Members inherit organization limits while keeping file ownership
+- **Quota Inheritance**: members inherit organization limits while keeping file ownership
 
 ## Billing & Subscriptions
 
-GigaPDF uses Stripe for payment processing:
-
-- **14-day Free Trial**: Try Starter or Pro plans without a credit card
-- **Flexible Plans**: Free, Starter (9 EUR/mo), Pro (29 EUR/mo), Enterprise
-- **Organization Billing**: Only owners can manage billing for organizations
-- **Trial Freedom**: Change plans freely during trial with no charges
-
-## Authentication
-
-All endpoints require JWT authentication via the `Authorization: Bearer <token>` header.
-The JWT is validated against an external authentication service.
+When billing is enabled, GigaPDF integrates Stripe. Every feature ships on every
+plan (free included) — plans differ by volume (storage, documents, API calls,
+team members), branding and support. Self-hosted instances can run entirely
+without Stripe.
 
 ## Async Operations
 
-Large file operations (OCR, export, merge) are processed asynchronously.
-Use the `/jobs/{job_id}` endpoint to track progress.
+Large file operations (OCR, export, Office conversion, merge) are processed
+asynchronously by Celery workers. Use the `/api/v1/jobs/{job_id}` endpoint to
+track progress.
 
 ## API Responses
 
@@ -287,30 +310,25 @@ All responses follow a standard format:
 
 ## Rate Limits
 
-API rate limits vary by plan:
-- **Free**: 100 requests/hour
-- **Starter**: 1,000 requests/hour
-- **Pro**: 10,000 requests/hour
-- **Enterprise**: Custom limits
+Rate limits vary by plan. Rate limit headers are included in every response:
 
-Rate limit headers are included in all responses:
-- `X-RateLimit-Limit`: Maximum requests allowed
-- `X-RateLimit-Remaining`: Requests remaining in current window
+- `X-RateLimit-Limit`: maximum requests allowed
+- `X-RateLimit-Remaining`: requests remaining in the current window
 - `X-RateLimit-Reset`: Unix timestamp when the limit resets
         """,
-        version="1.0.0",
+        version="1.3.0",
         openapi_url="/api/v1/openapi.json",
         docs_url="/api/docs",
         redoc_url="/api/redoc",
         terms_of_service="https://giga-pdf.com/terms",
         contact={
-            "name": "Giga-PDF Support",
-            "url": "https://giga-pdf.com/support",
+            "name": "GigaPDF",
+            "url": "https://github.com/QrCommunication/gigapdf",
             "email": "support@giga-pdf.com",
         },
         license_info={
-            "name": "Proprietary",
-            "url": "https://giga-pdf.com/license",
+            "name": "AGPL-3.0-or-later",
+            "url": "https://github.com/QrCommunication/gigapdf/blob/main/LICENSE",
         },
         servers=openapi_servers,
         lifespan=lifespan,
@@ -416,7 +434,7 @@ Rate limit headers are included in all responses:
         return JSONResponse(
             content={
                 "status": "healthy",
-                "version": "1.0.0",
+                "version": "1.3.0",
                 "service": "giga-pdf",
             }
         )

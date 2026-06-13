@@ -41,7 +41,7 @@ export function Header() {
               {t("nav.pricing")}
             </Link>
             <a
-              href="https://github.com/ronylicha/gigapdf"
+              href="https://github.com/QrCommunication/gigapdf"
               target="_blank"
               rel="noopener noreferrer"
               className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted flex items-center gap-1.5"

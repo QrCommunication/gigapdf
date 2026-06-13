@@ -1723,54 +1723,119 @@
       }
     },
     "docs": {
-      "title": "API Documentation",
-      "description": "Complete documentation for the GigaPDF REST API. Build powerful PDF workflows with our comprehensive endpoints.",
-      "interactive": {
-        "title": "Interactive Documentation",
-        "swagger": {
-          "description": "Try out API endpoints directly in your browser with the interactive Swagger UI."
-        },
-        "redoc": {
-          "description": "Clean, responsive documentation with detailed request/response schemas."
-        }
-      },
-      "openapi": {
-        "title": "OpenAPI Specification",
-        "description": "Download the OpenAPI 3.0 spec to generate clients in any language or import into Postman.",
-        "download": "Download JSON"
-      },
-      "quickstart": {
-        "title": "Quick Start",
-        "auth": {
-          "title": "Authentication",
-          "description": "All API requests require a JWT token in the Authorization header."
-        },
-        "example": {
-          "title": "Example Request",
-          "description": "Upload a PDF document to start editing."
-        }
+      "title": "Documentation",
+      "subtitle": "Everything to use, integrate and self-host GigaPDF — the open-source WYSIWYG PDF editor.",
+      "overview": {
+        "title": "Overview",
+        "p1": "GigaPDF is an open-source WYSIWYG PDF editor: true in-place editing of text, images and forms, a document management system (DMS), and real-time collaboration. The code is released under the GNU AGPL-3.0 license and is fully self-hostable.",
+        "p2": "The cloud version (giga-pdf.com) and the self-hosted version share the exact same code base. Use it as-is, embed it into your product via the embed widget and REST API, or host it on your own infrastructure.",
+        "repo": "Source code (GitHub)",
+        "license": "AGPL-3.0 license",
+        "badge": "Open source · AGPLv3"
       },
       "features": {
-        "title": "API Features",
-        "documents": "Document upload, download, and management",
-        "pages": "Page operations: add, remove, reorder, rotate",
-        "elements": "Text, images, shapes, and annotations",
-        "export": "Export to PNG, JPEG, DOCX, HTML",
-        "ocr": "OCR text extraction from scanned PDFs",
-        "realtime": "Real-time collaboration via WebSocket"
+        "title": "Features (v1.3.0)",
+        "editing": "In-place editing of text, images and shapes (true redaction, not a white mask)",
+        "forms": "AcroForm form designer: text, date, checkbox and dropdown fields — create, fill, flatten",
+        "signature": "PKCS#7 / CAdES digital signatures with your own P12/PFX certificate",
+        "ocr": "OCR (Tesseract fra+eng): searchable text layer on scanned PDFs",
+        "office": "Office conversions: import/export of 9 formats (DOCX/XLSX/PPTX, OpenDocument, legacy OLE2) via LibreOffice",
+        "ged": "DMS: folders, trash, full-text search, tags, deduplication",
+        "realtime": "Real-time multi-user collaboration over WebSocket",
+        "api": "Full REST API, scoped API keys, and an embed widget to integrate the editor"
       },
       "selfhost": {
         "title": "Self-hosting",
-        "description": "GigaPDF is fully self-hostable (AGPLv3). Two deployment modes are supported:",
+        "intro": "GigaPDF is built for self-hosting from day one. Two methods are supported: Docker (recommended) or a native install. The self-hosted version runs the exact same code base as the cloud.",
+        "envNote": "Before starting, copy the example environment file and fill in the key variables:",
+        "envVars": {
+          "title": "Key environment variables (.env)",
+          "postgres": "PostgreSQL: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB (or DATABASE_URL)",
+          "redis": "Redis: REDIS_URL (cache, Celery broker, WebSocket queue)",
+          "secret": "APP_SECRET_KEY: backend secret key (min. 32 chars — openssl rand -hex 32)",
+          "auth": "BETTER_AUTH_SECRET: frontend authentication secret (web + admin)",
+          "s3": "S3: S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET (document storage)",
+          "smtp": "SMTP: MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD (auth emails)",
+          "stripe": "Stripe (optional): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET — leave empty to disable billing",
+          "legal": "Legal notice (prod): NEXT_PUBLIC_LEGAL_* (the app refuses to start without these, except on localhost)"
+        },
         "docker": {
           "title": "Docker (recommended)",
-          "description": "The compose stack starts PostgreSQL 17, Redis 7, the FastAPI backend, Celery worker + beat, the web app (:3000) and the admin dashboard (:3001). The web image ships LibreOffice, fontforge, Tesseract OCR (fra+eng) and Playwright Chromium — no extra setup."
+          "description": "The simplest path. The web image already ships every PDF system dependency — no extra setup.",
+          "prereq": "Prerequisites: Docker 24+ and Docker Compose 2.20+.",
+          "servicesTitle": "Services started by docker compose:",
+          "services": {
+            "postgres": "postgres — PostgreSQL 17 (database)",
+            "redis": "redis — Redis 7 (cache + Celery broker)",
+            "api": "api — FastAPI backend (:8000)",
+            "worker": "celery-worker — async processing (OCR, export, Office conversions)",
+            "beat": "celery-beat — scheduled tasks (trash purge, billing sync)",
+            "web": "web — Next.js app + TypeScript PDF engine (:3000)",
+            "admin": "admin — admin dashboard (:3001)"
+          },
+          "bundledNote": "The web image (Debian) ships LibreOffice, fontforge, Tesseract OCR (fra+eng) and Playwright Chromium. No manual install of these binaries is required.",
+          "migrateNote": "After the first start (and after every update), apply the database migrations:"
         },
         "native": {
           "title": "Native (bare-metal / VPS)",
-          "description": "Node.js 22 + pnpm 10.28, Python 3.12, PostgreSQL 17 and Redis 7, behind Nginx with systemd units. /api/pdf/* is served by Next.js (TypeScript PDF engine), other /api/* routes by FastAPI."
+          "description": "A direct install on a server, behind Nginx with systemd units. Gives fine-grained control over each service.",
+          "prereqTitle": "Exact prerequisites:",
+          "prereq": {
+            "node": "Node.js 22+ and pnpm 10.28 (pinned via packageManager)",
+            "python": "Python 3.12+",
+            "postgres": "PostgreSQL 17+",
+            "redis": "Redis 7+"
+          },
+          "sysdepsTitle": "PDF system dependencies (Debian/Ubuntu):",
+          "sysdepsNote": "LibreOffice (Office conversions), fontforge (faithful font rendering), Tesseract OCR + fra + eng, and Chromium for HTML → PDF.",
+          "backendTitle": "Backend (FastAPI + Celery)",
+          "backendNote": "The pip install -r requirements.txt step installs the backend dependencies (the Python equivalent of a dependency install — this project does NOT use Composer). Then alembic upgrade head creates the schema.",
+          "frontendTitle": "Frontend (Next.js web + admin + packages)",
+          "frontendNote": "pnpm install installs the monorepo's Node dependencies, pnpm build compiles the packages and apps (Turbo orders internal packages first).",
+          "runTitle": "Running the services",
+          "runNote": "Each service runs in its own process (in production: systemd units): uvicorn serves the API, two Celery processes (worker + beat) handle async and scheduled work, and the Next.js standalone server serves the web app.",
+          "rolesTitle": "Role of each service",
+          "roles": {
+            "uvicorn": "uvicorn (app.main:app) — FastAPI REST API + WebSocket",
+            "worker": "celery worker — OCR, export, Office conversions, heavy jobs",
+            "beat": "celery beat — scheduled tasks (30-day trash purge, Stripe plan sync)",
+            "web": "node server.js (Next.js standalone) — public site + dashboard + TypeScript PDF engine"
+          }
+        },
+        "nginx": {
+          "title": "Reverse proxy (Nginx)",
+          "description": "Nginx routes requests to the right service. The versioned FastAPI backend is the enumerable side; Next.js is the safe default for /api/.",
+          "v1": "/api/v1/ → FastAPI (versioned REST API)",
+          "docs": "/api/docs, /api/redoc, /api/v1/openapi.json → FastAPI (interactive docs)",
+          "default": "/api/ (default) → Next.js (auth, PDF engine /api/pdf/*, office, fonts, health)",
+          "root": "/ → Next.js (web app)",
+          "ref": "Reference config: deploy/nginx.conf"
+        },
+        "migrate": {
+          "title": "Database migrations (required on every update)",
+          "description": "After every git pull / update, re-run the Alembic migrations from the project root (venv activated), then verify the applied revision. v1.3.0 ships migration 018_free_doc_limit.",
+          "verifyNote": "alembic current must report the latest revision (018_free_doc_limit for v1.3.0)."
         },
         "readme": "Full instructions in the README"
+      },
+      "api": {
+        "title": "API & developers",
+        "intro": "GigaPDF exposes a full REST API and an embed widget to integrate the editor into your own product.",
+        "authTitle": "Authentication",
+        "authDescription": "Two access modes are accepted: a JWT token (Authorization: Bearer <token>) for signed-in users, or an API key (X-API-Key) for server-to-server and embed integrations. API keys are created from your dashboard, scoped, and SHA-256 hashed at rest.",
+        "keysTitle": "API keys",
+        "keysDescription": "Generate and manage your API keys from the developers page in your dashboard. Configure allowed domains and scopes to enforce least privilege.",
+        "keysLink": "Manage my API keys",
+        "embedTitle": "Embed widget",
+        "embedDescription": "Embed the PDF editor into any website in a few lines (Vanilla JS, React, or CDN).",
+        "embedLink": "Embed SDK documentation",
+        "interactiveTitle": "Interactive API documentation",
+        "swagger": "Try the endpoints directly in your browser with Swagger UI.",
+        "redoc": "Clean, responsive reference with detailed request/response schemas (Redoc).",
+        "openapi": "OpenAPI specification — generate clients in any language or import into Postman.",
+        "exampleTitle": "Example request",
+        "exampleDescription": "Upload a PDF document with your API key or token.",
+        "download": "Download JSON"
       },
       "embedSdk": {
         "title": "Embed SDK",

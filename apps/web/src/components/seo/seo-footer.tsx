@@ -8,7 +8,7 @@
 import { Link } from "@/i18n/navigation";
 import type { SeoLocale } from "@/lib/seo";
 
-const GITHUB_URL = "https://github.com/ronylicha/gigapdf";
+const GITHUB_URL = "https://github.com/QrCommunication/gigapdf";
 
 interface FooterLink {
   href: string;
