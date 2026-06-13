@@ -38,7 +38,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run lint
-        run: pnpm lint
+        # turbo --concurrency=1: lint's `^build` rebuilds every package (tsup
+        # DTS). Serial keeps peak RSS below the shared runner's RAM (OOM/137 fix).
+        # Call turbo directly: `pnpm lint -- <flag>` forwards to the task, not turbo.
+        run: pnpm exec turbo run lint --concurrency=1
 
   # ─────────────────────────────────────────────
   # JS/TS — Type-check (Turbo)
@@ -63,7 +66,11 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run type-check
-        run: pnpm type-check
+        # turbo --concurrency=1: type-check's `^build` rebuilds every package
+        # (tsup DTS). Serial keeps peak RSS below the runner's RAM (OOM/137 fix —
+        # pdf-engine#build was SIGKILLed building DTS concurrently with editor).
+        # Call turbo directly: `pnpm type-check -- <flag>` forwards to tsc, not turbo.
+        run: pnpm exec turbo run type-check --concurrency=1
 
   # ─────────────────────────────────────────────
   # JS/TS — Tests packages (pdf-engine + editor)
@@ -88,7 +95,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build packages (required by Turbo dependency graph)
-        run: pnpm build:packages
+        # turbo --concurrency=1: serial package builds keep peak RSS below the
+        # runner's RAM (tsup DTS is memory-heavy; concurrent builds → OOM/137).
+        run: pnpm exec turbo run build --filter='./packages/*' --concurrency=1
 
       - name: Run package tests
         run: pnpm test --filter=@giga-pdf/pdf-engine --filter=@giga-pdf/editor
@@ -116,7 +125,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build packages (required by Turbo dependency graph)
-        run: pnpm build:packages
+        # turbo --concurrency=1: serial package builds keep peak RSS below the
+        # runner's RAM (tsup DTS is memory-heavy; concurrent builds → OOM/137).
+        run: pnpm exec turbo run build --filter='./packages/*' --concurrency=1
 
       - name: Run web tests
         run: pnpm test --filter=web
@@ -218,4 +229,6 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build all
-        run: pnpm build
+        # turbo --concurrency=1: serial build keeps peak RSS below the runner's
+        # RAM. Mirrors deploy.sh's documented `turbo build --concurrency=1`.
+        run: pnpm exec turbo run build --concurrency=1
