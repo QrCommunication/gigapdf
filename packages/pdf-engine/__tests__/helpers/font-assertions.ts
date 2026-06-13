@@ -208,7 +208,7 @@ export async function extractFontsFromPdf(pdfBytes: Uint8Array | Buffer): Promis
     }
   }
 
-  await pdfDoc.destroy();
+  await pdfDoc.loadingTask.destroy();
   return Array.from(fontMap.values());
 }
 
@@ -227,7 +227,7 @@ export async function extractTextRunsFromPage(
   const pdfDoc: PDFDocumentProxy = await loadPdfJsDoc(pdfBytes);
 
   if (pageNumber < 1 || pageNumber > pdfDoc.numPages) {
-    await pdfDoc.destroy();
+    await pdfDoc.loadingTask.destroy();
     throw new RangeError(`Page ${pageNumber} hors limites (doc: ${pdfDoc.numPages} pages)`);
   }
 
@@ -272,7 +272,7 @@ export async function extractTextRunsFromPage(
       };
     });
 
-  await pdfDoc.destroy();
+  await pdfDoc.loadingTask.destroy();
   return runs;
 }
 
@@ -320,7 +320,7 @@ export async function assertRoundTripFidelity(
   if (mustReopenClean) {
     const reopenedDoc = await loadPdfJsDoc(savedBytes);
     expect(reopenedDoc.numPages).toBeGreaterThan(0);
-    await reopenedDoc.destroy();
+    await reopenedDoc.loadingTask.destroy();
   }
 
   // 4. Polices préservées

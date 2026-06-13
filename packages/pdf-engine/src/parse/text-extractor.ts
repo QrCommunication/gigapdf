@@ -670,11 +670,12 @@ export async function extractTextElements(
   for (const item of textContent.items) {
     if (!isTextItem(item)) continue;
     if (!item.str) continue;
-    // Keep whitespace-only items when they carry positional width — pdfjs
-    // emits them between adjacent TJ runs ("BOULEVARD" + " " + "EUGENE") and
-    // dropping them collapses the gap, producing visual overlap. We still
-    // skip pure-empty strings (zero-width markers) to avoid noise.
-    if (item.str.trim() === '' && (item.width ?? 0) <= 0) continue;
+    // Skip whitespace-only items. Each run is emitted below as an
+    // independently, absolutely-positioned element (bounds.x = vpE), so
+    // adjacent runs keep their gap without a phantom blank element. pdfjs 6
+    // surfaces more whitespace-with-width markers than v5; emitting them as
+    // empty-content text elements only adds selectable noise in the editor.
+    if (item.str.trim() === '') continue;
     // Type3 fonts encode glyphs as PDF content streams (paths). pdfjs reports
     // the codepoint as text but the character has no Unicode mapping — it
     // would render as garbage like "*[3887|437]*" in the substitute font.
@@ -1044,7 +1045,7 @@ export async function extractTextBlocks(
     return Math.abs(dy) > 1 ? dy : a.bounds.x - b.bounds.x;
   });
 
-  await pdfDoc.destroy();
+  await pdfDoc.loadingTask.destroy();
 
   return allBlocks;
 }

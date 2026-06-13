@@ -225,7 +225,7 @@ export async function extractAnnotations(
 
     return results;
   } finally {
-    doc.destroy();
+    doc.loadingTask.destroy();
   }
 }
 
