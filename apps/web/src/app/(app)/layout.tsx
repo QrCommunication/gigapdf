@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Bricolage_Grotesque, Geist, Geist_Mono } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
@@ -17,6 +18,14 @@ import "@/styles/globals.css";
 // ---------------------------------------------------------------------------
 
 export const dynamic = "force-dynamic";
+
+// Périmètre authentifié (dashboard / editor / embed) : jamais indexé.
+// Défense en profondeur au-delà du Disallow robots.txt — le Disallow empêche
+// le crawl mais une URL liée ailleurs peut être indexée sans snippet ; le
+// noindex meta est le signal le plus fort pour exclure ces pages des SERP.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 const geistSans = Geist({
   subsets: ["latin"],
