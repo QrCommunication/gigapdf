@@ -43,103 +43,161 @@
   },
   "meta": {
     "title": {
-      "default": "GigaPDF - Open Source, Collaborative PDF Editor",
+      "default": "GigaPDF — Edit your PDFs like a Word document. Open source.",
       "template": "%s | GigaPDF"
     },
-    "description": "Free open source PDF editor with real-time collaboration. Edit, annotate and merge PDFs easily. Intuitive WYSIWYG interface. Self-hostable under MIT license.",
-    "keywords": "free PDF editor, online PDF editor, edit PDF, annotate PDF, merge PDF, collaborative PDF, open source PDF, WYSIWYG PDF, professional PDF editing, free PDF tool, convert PDF, sign PDF, GigaPDF",
-    "ogTitle": "GigaPDF - Open Source Collaborative PDF Editor",
-    "ogDescription": "Edit your PDFs for free with GigaPDF. Real-time collaboration, annotations, document merging. 100% open source.",
-    "twitterTitle": "GigaPDF - The Open Source PDF Editor",
-    "twitterDescription": "Edit, annotate and collaborate on your PDFs in real-time. Free and open source."
+    "description": "Open-source PDF editor (AGPL) with real-time collaboration: edit text with the original fonts, sign (PKCS#7), OCR your scans, convert 9 Office formats. Self-hostable, AES-256 encrypted, GDPR compliant.",
+    "keywords": "open source PDF editor, edit PDF online, free PDF editor, edit PDF text, sign PDF PKCS#7, searchable OCR PDF, convert Word to PDF, convert PDF to Word, real-time collaborative PDF, self-hosted PDF, open source DMS, PDF compression, PDF/A, GigaPDF",
+    "ogTitle": "GigaPDF — Edit your PDFs like a Word document. Really.",
+    "ogDescription": "Open-source PDF editor: editable text with faithful fonts, live collaboration, PKCS#7 signature, OCR, 9 Office formats. Self-hostable.",
+    "twitterTitle": "GigaPDF — The open-source PDF editor",
+    "twitterDescription": "Edit your PDFs like a Word document: faithful fonts, live collaboration, signing, OCR. AGPL open source, self-hostable."
   },
   "landing": {
-    "badge": "Open Source PDF Editor",
-    "starOnGithub": "Star on GitHub",
     "hero": {
-      "title": "Professional PDF Editing",
-      "titleHighlight": "Made Simple",
-      "description": "Create, edit, and collaborate on PDF documents with our powerful WYSIWYG editor. Real-time collaboration, advanced features, and enterprise-grade security. 100% open source."
-    },
-    "cta": {
-      "startFreeTrial": "Start Free Trial",
-      "viewOnGithub": "View on GitHub",
-      "readDocs": "Read Documentation",
-      "contactSales": "Contact Sales"
-    },
-    "features": {
-      "title": "Everything you need to work with PDFs",
-      "description": "Powerful features for individuals and teams, from simple edits to complex document workflows.",
-      "wysiwyg": {
-        "title": "WYSIWYG Editor",
-        "description": "Edit PDFs with a visual editor that shows exactly what you'll get. Real text formatting (bold, italic, underline, alignment) with faithful fonts: the original fonts are identified and downloaded automatically, then embedded in the saved PDF."
-      },
-      "collaboration": {
-        "title": "Collaboration & Sharing",
-        "description": "Work together with your team in real-time: edits from other participants appear live on the canvas. Share documents from the editor and browse version history with one-click restore."
-      },
-      "security": {
-        "title": "Enterprise Security",
-        "description": "Your documents are encrypted and secure. Digitally sign PDFs (PKCS#7) with your own P12 certificate — processed in memory, never stored. SOC 2 compliant with enterprise-grade security features."
-      },
-      "api": {
-        "title": "REST API",
-        "description": "Full programmatic access to all features. Automate document workflows with our comprehensive API."
-      },
-      "export": {
-        "title": "Conversions & Export",
-        "description": "Export to PNG, JPEG, DOCX, HTML and more. Office and OpenDocument conversions (Word, Excel, PowerPoint, ODT/ODS/ODP), PDF/A, compression, and OCR that makes scanned documents searchable."
-      },
-      "selfHostable": {
-        "title": "Self-hostable",
-        "description": "Deploy on your own infrastructure with a single docker compose up. Keep complete control over your documents and data."
-      },
-      "pdfModification": {
-        "title": "PDF Modification",
-        "description": "Add, update, or remove text, images, shapes, and annotations. Apply watermarks to a page or the whole document. Batch modify PDFs programmatically via API."
+      "kicker": "Open-source PDF editor — AGPL-3.0",
+      "title": "Edit your PDFs like a Word document.",
+      "titleAccent": "Really.",
+      "description": "Text, images and layouts are edited right inside the PDF, with the original fonts. Live collaboration on the same canvas, full version history — and your files stay yours: GigaPDF is open source and self-hostable.",
+      "ctaPrimary": "Create a free account",
+      "ctaSecondary": "View the code on GitHub",
+      "mockup": {
+        "ariaLabel": "Preview of the GigaPDF editor: toolbar, A4 page canvas with a selected text block, and properties panel",
+        "filename": "annual-report.pdf",
+        "saved": "Saved",
+        "panel": "Text",
+        "pageIndicator": "Page 1 / 3"
       }
     },
-    "openSource": {
-      "title": "Built by the community, for the community",
-      "description": "GigaPDF is 100% open source under the MIT license. Inspect the code, self-host, contribute features, or customize it to your needs.",
-      "badge": "Open Source",
-      "mitLicense": {
-        "title": "MIT License",
-        "description": "Use it however you want, commercially or personally. No strings attached."
+    "trust": {
+      "label": "Guarantees",
+      "openSource": "Open source — AGPL-3.0",
+      "selfHost": "Self-hostable",
+      "encryption": "AES-256 encryption",
+      "gdpr": "GDPR compliant"
+    },
+    "sections": {
+      "editing": {
+        "label": "Editing",
+        "title": "Text gets fixed. The layout doesn't move.",
+        "description": "A WYSIWYG editor that works inside the PDF, not on top of it: you click, you type, the document stays pixel-faithful.",
+        "points": {
+          "wysiwyg": "Direct visual editing: what you see is exactly what gets saved",
+          "fonts": "Faithful fonts: originals are identified, fetched from Google Fonts and embedded automatically",
+          "formatting": "Real formatting — bold, italic, underline, alignment, size and color",
+          "layers": "Layers to organize text, images and shapes without overwriting anything",
+          "multiselect": "Multi-selection to move, align or delete several elements in one gesture"
+        }
       },
-      "selfHostable": {
-        "title": "Self-Hostable",
-        "description": "Run GigaPDF on your own infrastructure with full control over your data."
+      "collaboration": {
+        "label": "Collaboration",
+        "title": "Several hands on the same proof.",
+        "description": "The canvas is shared live: everyone sees each other's cursors, selections and edits — no exports, no attachments.",
+        "versionsLabel": "Versions",
+        "points": {
+          "live": "Edits appear in real time on every participant's canvas",
+          "sharing": "Share by link or e-mail, with view / comment / edit roles",
+          "versions": "Full version history with one-click restore",
+          "activity": "Activity feed: who changed what, and when"
+        }
       },
-      "contribute": {
-        "title": "Contribute",
-        "description": "Join our community of contributors and help make GigaPDF even better."
+      "trust": {
+        "label": "Trust",
+        "title": "Documents that hold up.",
+        "description": "Electronic signature, encryption and archival formats: everything you need for binding, long-lived PDFs.",
+        "stamp": "Signed",
+        "points": {
+          "signature": "PKCS#7 digital signature with your P12 certificate — processed in memory, never stored",
+          "encryption": "AES-256 encryption for documents, at rest and in transit",
+          "pdfa": "PDF/A export for long-term legal archiving",
+          "ocr": "Built-in OCR: your scans become searchable and copyable"
+        }
       },
-      "documentation": {
-        "title": "Full Documentation",
-        "description": "Comprehensive docs, API reference, and guides to get you started quickly."
+      "formats": {
+        "label": "Formats",
+        "title": "Everything in. Everything out.",
+        "description": "Word, Excel, PowerPoint, OpenDocument: 9 formats import to PDF — and the way back works too.",
+        "points": {
+          "imports": "Import 9 Office and OpenDocument formats: DOCX, XLSX, PPTX, ODT, ODS, ODP, RTF, TXT, HTML",
+          "exports": "Export to DOCX, XLSX, PPTX, ODT, ODP — plus PNG, JPEG, HTML",
+          "compression": "Smart compression: lighter files with no visible quality loss"
+        }
       },
-      "contributionGuide": "Contribution Guide",
-      "readTheDocs": "Read the Docs"
+      "ged": {
+        "label": "DMS",
+        "title": "Your document archive, in order.",
+        "description": "A real document management system behind the editor: organize, find and restore your documents without leaving GigaPDF.",
+        "searchPlaceholder": "invoice march 2026",
+        "points": {
+          "folders": "Folders and subfolders to structure your workspaces",
+          "tags": "Colored tags for cross-cutting classification",
+          "search": "Full-text search inside document contents — OCRed scans included",
+          "trash": "Trash with restore: nothing gets lost by accident",
+          "thumbnails": "Auto-generated thumbnails to recognize your pages at a glance"
+        }
+      }
+    },
+    "bento": {
+      "label": "Flagship capabilities",
+      "title": "Five capabilities, in motion.",
+      "description": "What GigaPDF does best — shown rather than told.",
+      "collaboration": {
+        "title": "Live collaboration",
+        "description": "Your team's cursors, live on the document.",
+        "you": "You",
+        "guest": "Camille"
+      },
+      "signature": {
+        "title": "PKCS#7 signature",
+        "description": "A digital stamp that binds, certificate attached.",
+        "stamp": "Signed"
+      },
+      "ocr": {
+        "title": "Searchable OCR",
+        "description": "The scan line turns images into text."
+      },
+      "formats": {
+        "title": "9 Office formats",
+        "description": "Imports and exports on a loop."
+      },
+      "compression": {
+        "title": "Compression",
+        "description": "The same document, much lighter.",
+        "before": "24.8 MB",
+        "after": "3.1 MB"
+      }
     },
     "pricing": {
-      "title": "Simple, transparent pricing",
-      "description": "Start for free, upgrade when you need. No hidden fees, cancel anytime. Self-hosting is always free.",
-      "mostPopular": "Most Popular",
+      "label": "Pricing",
+      "title": "Plans that never cripple the editor.",
+      "description": "Start for free, upgrade when your volumes grow. No hidden fees, cancel anytime — and self-hosting stays free forever.",
+      "banner": {
+        "title": "Every feature, on every plan — including free.",
+        "subtitle": "You pay for volumes, not for features."
+      },
+      "included": {
+        "signature": "PKCS#7 signature",
+        "ocr": "Searchable OCR",
+        "collaboration": "Live collaboration",
+        "tools": "23 PDF tools",
+        "office": "9-format Office import"
+      },
+      "mostPopular": "Popular",
       "perMonth": "/month",
       "free": "Free",
-      "contactUs": "Contact Us",
-      "selfHostNote": "Want to self-host?",
+      "contactUs": "Custom quote",
+      "comingSoonBadge": "Soon",
+      "comingSoon": "Coming soon",
+      "comingSoonNote": "Paid plans are coming soon. Until then, the free plan gives access to the full editor.",
+      "notifyMe": "Get notified",
+      "selfHostNote": "Prefer to self-host?",
       "selfHostLink": "Deploy GigaPDF on your own infrastructure",
       "forFree": "for free.",
-      "comingSoon": "Coming Soon",
-      "comingSoonBadge": "Soon",
-      "comingSoonNote": "Paid plans are coming soon. In the meantime, enjoy the full editor on the free plan.",
       "plans": {
         "free": {
           "name": "Free",
-          "description": "Perfect for trying out GigaPDF",
-          "cta": "Get Started",
+          "description": "For discovering GigaPDF",
+          "cta": "Create an account",
           "features": {
             "storage": "5 GB storage",
             "apiCalls": "1,000 API calls/month",
@@ -150,35 +208,35 @@
         },
         "starter": {
           "name": "Starter",
-          "description": "For individuals and small teams",
-          "cta": "Start Free Trial",
+          "description": "For freelancers and small teams",
+          "cta": "Start free trial",
           "features": {
             "storage": "25 GB storage",
             "apiCalls": "10,000 API calls/month",
             "documents": "500 documents",
-            "editing": "Advanced PDF editing",
-            "support": "Email support",
+            "members": "5 team members",
+            "support": "E-mail support",
             "trial": "14-day free trial"
           }
         },
         "pro": {
           "name": "Pro",
-          "description": "For growing businesses and teams",
-          "cta": "Start Free Trial",
+          "description": "For growing teams",
+          "cta": "Start free trial",
           "features": {
             "storage": "100 GB storage",
             "apiCalls": "100,000 API calls/month",
             "documents": "2,000 documents",
             "branding": "Custom branding",
             "support": "Priority support",
-            "api": "API access",
+            "api": "Extended API access",
             "trial": "14-day free trial"
           }
         },
         "enterprise": {
           "name": "Enterprise",
-          "description": "For large organizations with custom needs",
-          "cta": "Contact Sales",
+          "description": "For organizations with specific needs",
+          "cta": "Contact sales",
           "features": {
             "storage": "Unlimited storage",
             "apiCalls": "Unlimited API calls",
@@ -193,26 +251,35 @@
       }
     },
     "finalCta": {
-      "title": "Ready to get started?",
-      "description": "Join thousands of users who trust GigaPDF for their PDF editing needs. Start for free today."
+      "label": "Press proof",
+      "title": "Your next PDF gets edited here.",
+      "description": "Create a free account in a minute, or clone the repository and host GigaPDF yourself. Either way: the full editor.",
+      "ctaPrimary": "Create a free account",
+      "ctaSecondary": "View the code on GitHub"
     },
     "footer": {
-      "tagline": "Open source PDF editor for professionals. Built with love by the community.",
-      "madeWith": "Made with",
-      "byOpenSource": "by the open source community.",
+      "tagline": "The open-source PDF editor that treats your documents like a print shop: precision, fidelity, traceability.",
+      "baseline": "Typeset, proofed and pressed by the open-source community.",
       "product": {
         "title": "Product",
         "features": "Features",
+        "solutions": "Industry solutions",
         "pricing": "Pricing",
-        "documentation": "Documentation",
-        "changelog": "Changelog"
+        "changelog": "Changelog",
+        "docs": "Documentation"
       },
       "openSource": {
-        "title": "Open Source",
-        "repository": "GitHub Repository",
-        "contributing": "Contributing Guide",
-        "license": "MIT License",
-        "selfHosting": "Self-Hosting Guide"
+        "title": "Open source",
+        "github": "GitHub repository",
+        "license": "AGPL-3.0 license",
+        "selfHosting": "Self-hosting guide"
+      },
+      "legal": {
+        "title": "Legal",
+        "legalNotice": "Legal notice",
+        "privacy": "Privacy policy",
+        "terms": "Terms of service",
+        "cookies": "Cookies"
       },
       "company": {
         "title": "Company",
@@ -853,7 +920,15 @@
       "unlimitedDocuments": "Unlimited documents",
       "upToDocuments": "Up to {count} documents",
       "unlimitedApiCalls": "Unlimited API calls",
-      "apiCallsPerMonth": "{count} API calls/month"
+      "apiCallsPerMonth": "{count} API calls/month",
+      "unlimitedStorage": "Unlimited storage",
+      "teamMembers": "Team members: {count}",
+      "unlimitedTeamMembers": "Unlimited team members",
+      "customBranding": "Custom branding",
+      "prioritySupport": "Priority support",
+      "emailSupport": "Email support",
+      "sla": "Guaranteed SLA",
+      "dedicatedAccount": "Dedicated account manager"
     }
   },
   "editor": {

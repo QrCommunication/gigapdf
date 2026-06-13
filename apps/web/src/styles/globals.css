@@ -126,6 +126,9 @@
   --radius-lg: calc(var(--radius) + 2px);
   --radius-xl: calc(var(--radius) + 6px);
 
+  /* Display font (landing — Bricolage Grotesque, injected by next/font) */
+  --font-display: var(--font-bricolage), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+
   /* Terminal colors */
   --color-terminal-green: var(--terminal-green);
   --color-terminal-cyan: var(--terminal-cyan);
@@ -433,4 +436,173 @@
 .focus-glow:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--primary), var(--glow-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LANDING — « ATELIER D'IMPRESSION ÉDITORIAL »
+   Tokens, keyframes et utilitaires préfixés `lp-`, réservés à la landing.
+   Ne modifie AUCUN token consommé par le dashboard/éditeur.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  /* Étiquette mono uppercase façon cahier d'impression */
+  .lp-label {
+    @apply font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground;
+  }
+
+  /* Filet typographique fin */
+  .lp-rule {
+    @apply h-px bg-border;
+  }
+
+  /* Bouton : pression tactile (:active scale) + transition property-specific */
+  .lp-press {
+    transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .lp-press:active {
+    transform: scale(0.97);
+  }
+
+  /* Graduations de la règle de scroll (petits ticks + ticks majeurs) */
+  .lp-ruler-ticks {
+    background-image:
+      repeating-linear-gradient(
+        to bottom,
+        var(--border) 0,
+        var(--border) 1px,
+        transparent 1px,
+        transparent 12px
+      ),
+      repeating-linear-gradient(
+        to bottom,
+        var(--border) 0,
+        var(--border) 1px,
+        transparent 1px,
+        transparent 60px
+      );
+    background-size: 8px 100%, 14px 100%;
+    background-position: right top, right top;
+    background-repeat: no-repeat;
+  }
+
+  /* Reveal à l'entrée (IntersectionObserver ajoute .lp-visible) */
+  .lp-reveal {
+    opacity: 0;
+    transform: translateY(14px);
+    transition:
+      opacity 280ms cubic-bezier(0.23, 1, 0.32, 1),
+      transform 280ms cubic-bezier(0.23, 1, 0.32, 1);
+    will-change: opacity, transform;
+  }
+  .lp-reveal.lp-visible {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── Micro-animations perpétuelles (transform/opacity uniquement) ── */
+
+/* Curseurs de collaboration : tracks pleine taille animés en % d'eux-mêmes */
+@keyframes lp-cursor-a {
+  0%   { transform: translate(8%, 62%); }
+  22%  { transform: translate(48%, 18%); }
+  48%  { transform: translate(70%, 52%); }
+  74%  { transform: translate(30%, 70%); }
+  100% { transform: translate(8%, 62%); }
+}
+
+@keyframes lp-cursor-b {
+  0%   { transform: translate(72%, 22%); }
+  28%  { transform: translate(34%, 48%); }
+  55%  { transform: translate(58%, 72%); }
+  80%  { transform: translate(80%, 40%); }
+  100% { transform: translate(72%, 22%); }
+}
+
+.lp-anim-cursor-a {
+  animation: lp-cursor-a 11s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+.lp-anim-cursor-b {
+  animation: lp-cursor-b 13s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+/* Ligne de scan OCR : aller-retour sur un faux document */
+@keyframes lp-ocr-scan {
+  0%   { transform: translateY(-96%); }
+  44%  { transform: translateY(0); }
+  50%  { transform: translateY(0); }
+  94%  { transform: translateY(-96%); }
+  100% { transform: translateY(-96%); }
+}
+
+.lp-anim-ocr {
+  animation: lp-ocr-scan 7s ease-in-out infinite;
+}
+
+/* Tampon « SIGNÉ » : apposition, tenue, disparition */
+@keyframes lp-stamp {
+  0%       { opacity: 0; transform: scale(1.7) rotate(-14deg); }
+  8%       { opacity: 1; transform: scale(0.94) rotate(-8deg); }
+  11%      { transform: scale(1.02) rotate(-8deg); }
+  14%, 78% { opacity: 1; transform: scale(1) rotate(-8deg); }
+  92%, 100% { opacity: 0; transform: scale(1) rotate(-8deg); }
+}
+
+.lp-anim-stamp {
+  animation: lp-stamp 6s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+
+/* Marquee des formats : translation de -50% (contenu dupliqué 2×) */
+@keyframes lp-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.lp-anim-marquee {
+  animation: lp-marquee 26s linear infinite;
+}
+
+/* Jauge de compression : oscillation du remplissage */
+@keyframes lp-gauge {
+  0%   { transform: scaleX(0.96); }
+  42%  { transform: scaleX(0.24); }
+  52%  { transform: scaleX(0.3); }
+  60%  { transform: scaleX(0.26); }
+  100% { transform: scaleX(0.96); }
+}
+
+.lp-anim-gauge {
+  transform-origin: left center;
+  animation: lp-gauge 8s ease-in-out infinite;
+}
+
+/* ── Accessibilité : tout est figé si l'utilisateur le demande ── */
+@media (prefers-reduced-motion: reduce) {
+  .lp-anim-cursor-a,
+  .lp-anim-cursor-b,
+  .lp-anim-ocr,
+  .lp-anim-stamp,
+  .lp-anim-marquee,
+  .lp-anim-gauge {
+    animation: none !important;
+  }
+
+  .lp-anim-stamp {
+    opacity: 1;
+    transform: scale(1) rotate(-8deg);
+  }
+
+  .lp-anim-ocr {
+    transform: translateY(-50%);
+  }
+
+  .lp-anim-gauge {
+    transform: scaleX(0.3);
+  }
+
+  .lp-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
 }

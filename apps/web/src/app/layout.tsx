@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Geist, Geist_Mono } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import { Toaster } from "@giga-pdf/ui";
@@ -17,6 +17,13 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
+});
+
+const bricolage = Bricolage_Grotesque({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-bricolage",
+  display: "swap",
 });
 
 const appIcons = {
@@ -48,12 +55,11 @@ export async function generateMetadata(): Promise<Metadata> {
     creator: "GigaPDF",
     publisher: "GigaPDF",
     metadataBase: new URL(baseUrl),
+    // Pas de hreflang : le routing next-intl est par cookie (une seule URL
+    // par page) — /fr et /en n'existent pas et renvoyaient 404 aux crawlers.
+    // À réintroduire seulement si un routing par préfixe de locale est ajouté.
     alternates: {
       canonical: "/",
-      languages: {
-        "fr": "/fr",
-        "en": "/en",
-      },
     },
     openGraph: {
       type: "website",
@@ -105,7 +111,7 @@ export default async function RootLayout(props: {
   return (
     <html lang={locale} suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} font-sans antialiased`}
       >
         <NextIntlClientProvider messages={messages}>
           <Providers>{children}</Providers>

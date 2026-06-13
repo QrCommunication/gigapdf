@@ -56,7 +56,7 @@ export function Header() {
               </Button>
             </Link>
             <Link href="/register">
-              <Button size="sm" className="btn-glow">
+              <Button size="sm" className="lp-press">
                 {t("nav.getStarted")}
               </Button>
             </Link>
