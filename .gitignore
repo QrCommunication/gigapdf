@@ -112,7 +112,13 @@ out/
 # Turbo
 .turbo/
 
-# Package manager lock (keep pnpm-lock.yaml in git)
+# Package manager lock (keep pnpm-lock.yaml in git).
+# This monorepo is pnpm-only: a stray `npm`/`yarn install` in any workspace
+# generates a lockfile used by nothing, drifts stale, and feeds Dependabot
+# phantom CVEs (apps/mobile/package-lock.json caused 76 such alerts, 2026-06-13).
+**/package-lock.json
+**/yarn.lock
+**/npm-shrinkwrap.json
 
 # Testing
 coverage/
