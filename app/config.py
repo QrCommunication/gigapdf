@@ -120,6 +120,11 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     nextjs_internal_url: str = "http://localhost:3000"
 
+    # Shared secret for internal server-to-server calls (Celery worker → Next.js
+    # TS engine on /api/pdf/preview). Must match INTERNAL_API_SECRET in the
+    # Next.js environment. Empty disables the internal-auth header.
+    internal_api_secret: str = ""
+
     # -------------------------------------------------------------------------
     # Stripe Configuration
     # -------------------------------------------------------------------------

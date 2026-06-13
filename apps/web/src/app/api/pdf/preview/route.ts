@@ -29,7 +29,7 @@ import {
 } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError, PDFPageOutOfRangeError } from '@giga-pdf/pdf-engine';
 import type { PreviewFormat, ThumbnailOptions, RenderOptions } from '@giga-pdf/pdf-engine';
-import { requireSession } from '@/lib/auth-helpers';
+import { requireSession, isInternalServiceRequest } from '@/lib/auth-helpers';
 import { serverLogger } from '@/lib/server-logger';
 import { validatePdfFile } from '@/lib/request-validation';
 
@@ -40,8 +40,13 @@ const CONTENT_TYPES: Record<PreviewFormat, string> = {
 };
 
 export async function POST(request: Request): Promise<Response> {
-  const authResult = await requireSession();
-  if (!authResult.ok) return authResult.response;
+  // Allow trusted internal callers (the Celery export worker renders pages
+  // here server-to-server with no user session) via the shared secret;
+  // otherwise require a normal authenticated user session.
+  if (!isInternalServiceRequest(request)) {
+    const authResult = await requireSession();
+    if (!authResult.ok) return authResult.response;
+  }
 
   try {
     const formData = await request.formData();
