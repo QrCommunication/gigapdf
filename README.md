@@ -17,8 +17,11 @@
   <a href="https://github.com/QrCommunication/gigapdf/blob/main/TRADEMARK.md">
     <img src="https://img.shields.io/badge/trademark-protected-orange.svg" alt="Trademark Protected" />
   </a>
-  <a href="https://github.com/QrCommunication/gigapdf/actions">
-    <img src="https://img.shields.io/github/actions/workflow/status/QrCommunication/gigapdf/ci.yml?branch=main" alt="CI Status" />
+  <a href="https://github.com/QrCommunication/gigapdf/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/QrCommunication/gigapdf/ci.yml?branch=main&label=CI" alt="CI" />
+  </a>
+  <a href="https://github.com/QrCommunication/gigapdf/actions/workflows/security.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/QrCommunication/gigapdf/security.yml?branch=main&label=security%20audit" alt="Security Audit" />
   </a>
   <a href="https://github.com/QrCommunication/gigapdf/stargazers">
     <img src="https://img.shields.io/github/stars/QrCommunication/gigapdf" alt="GitHub Stars" />
@@ -71,7 +74,7 @@ The compose stack starts six services:
 | Service | Image / build | Port |
 |---|---|---|
 | `postgres` | `postgres:17-alpine` | 5432 |
-| `redis` | `redis:7-alpine` | 6379 |
+| `redis` | `redis:8-alpine` | 6379 |
 | `api` | FastAPI backend (`Dockerfile.api`) | 8000 |
 | `celery-worker` + `celery-beat` | Background jobs (`Dockerfile.api`) | — |
 | `web` | Next.js frontend (`Dockerfile.web`) | 3000 |
@@ -93,9 +96,9 @@ system dependency the PDF engine needs — no extra setup:
 
 Prerequisites:
 
-- **Node.js 22** + **pnpm 10.28**
+- **Node.js 24** + **pnpm 10.28**
 - **Python 3.12** + venv (backend API, `requirements.txt`)
-- **PostgreSQL 17** and **Redis 7**
+- **PostgreSQL 17** and **Redis 8**
 
 Install the system dependencies used by the PDF engine (Ubuntu/Debian):
 

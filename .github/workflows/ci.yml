@@ -237,3 +237,60 @@ jobs:
         # turbo --concurrency=1: serial build keeps peak RSS below the runner's
         # RAM. Mirrors deploy.sh's documented `turbo build --concurrency=1`.
         run: pnpm exec turbo run build --concurrency=1
+
+  # ─────────────────────────────────────────────
+  # Auto-deploy en production (push main, après CI vert, hors changements mobile-only)
+  # ─────────────────────────────────────────────
+  deploy:
+    name: Deploy to production
+    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    timeout-minutes: 15
+    # Uniquement push direct sur main + APRÈS que tout le CI soit vert (needs: build).
+    needs: [build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # historique requis pour diff la portée du push (gate mobile)
+
+      - name: Gate — ne pas déployer si le push ne touche QUE apps/mobile/
+        id: gate
+        env:
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            echo "Pas de base SHA (nouvelle branche) → deploy"
+            echo "deploy=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || echo __DIFF_FAILED__)"
+          if [ "$changed" = "__DIFF_FAILED__" ] || [ -z "$changed" ]; then
+            echo "Diff indisponible → deploy (défaut sûr)"
+            echo "deploy=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "Fichiers modifiés :"; printf '%s\n' "$changed"
+          if printf '%s\n' "$changed" | grep -qvE '^apps/mobile/'; then
+            echo "→ changements hors mobile : DEPLOY"
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "→ changements mobile-only : SKIP deploy"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Déploiement SSH (clé à commande forcée → /usr/local/bin/gigapdf-ci-deploy.sh)
+        if: steps.gate.outputs.deploy == 'true'
+        env:
+          DEPLOY_KEY: ${{ secrets.PROD_DEPLOY_SSH_KEY }}
+          PROD_HOST: "51.159.105.179"
+        run: |
+          set -euo pipefail
+          KEY_FILE="$(mktemp)"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          mkdir -p "$HOME/.ssh"
+          ssh-keyscan -H "$PROD_HOST" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
+          # Clé restreinte côté serveur (command="..." dans authorized_keys) : l'argument
+          # ci-dessous est ignoré, la clé ne peut QUE lancer git reset origin/main + deploy.sh.
+          ssh -T -i "$KEY_FILE" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 \
+            -o BatchMode=yes ubuntu@"$PROD_HOST" deploy
