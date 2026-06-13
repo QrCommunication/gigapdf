@@ -1,85 +1,138 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { JsonLd } from "@/components/seo/json-ld";
 import { CtaSection } from "@/components/seo/cta-section";
 import { ToolIcon } from "@/components/seo/tool-icon";
+import { Link } from "@/i18n/navigation";
 import { SITE_URL } from "@/lib/seo/constants";
-import { SOLUTIONS } from "@/lib/seo/solutions-data";
-import { TOOLS } from "@/lib/seo/tools-data";
-import { defaultLocale } from "@/i18n/config";
+import { publicPageAlternates } from "@/lib/seo/hreflang";
+import {
+  getSolutionsData,
+  getToolsData,
+  isSeoLocale,
+  localizePath,
+  type SeoLocale,
+} from "@/lib/seo";
 
 // Pas de generateStaticParams ici : le root layout (getLocale/getMessages,
 // résolution cookie pour le dashboard) rend tout l'arbre dynamique — une page
-// classée SSG plante en DYNAMIC_SERVER_USAGE au runtime. Le 404 de
-// /en/solutions est garanti par le proxy (rewrite) + les gardes notFound().
+// classée SSG plante en DYNAMIC_SERVER_USAGE au runtime.
 
 interface SolutionsHubPageProps {
   params: Promise<{ locale: string }>;
 }
 
-export async function generateMetadata({ params }: SolutionsHubPageProps): Promise<Metadata> {
+const COPY: Record<
+  SeoLocale,
+  {
+    metaTitle: string;
+    metaDescription: string;
+    ogTitle: string;
+    ogDescription: string;
+    itemListName: string;
+    listAria: string;
+    h1: string;
+    intro: string;
+    toolsTitle: string;
+    toolsText: string;
+    ctaTitle: string;
+  }
+> = {
+  fr: {
+    metaTitle: "Solutions PDF par métier : avocats, comptables, RH…",
+    metaDescription:
+      "GigaPDF appliqué à votre métier : caviardage pour avocats, OCR comptable, contrats RH, baux immobiliers, santé, éducation. Gratuit et open source.",
+    ogTitle: "Solutions PDF par métier | GigaPDF",
+    ogDescription:
+      "Des workflows PDF concrets pour 10 métiers : juridique, comptabilité, RH, immobilier, santé, formation et plus.",
+    itemListName: "Solutions métiers GigaPDF",
+    listAria: "Liste des solutions métiers",
+    h1: "GigaPDF appliqué à votre métier",
+    intro:
+      "Un avocat ne demande pas la même chose à un PDF qu'un expert-comptable ou qu'un architecte : le premier exige un caviardage qui supprime réellement le texte, le deuxième veut retrouver une facture scannée par son montant, le troisième annote des plans de plusieurs dizaines de mégaoctets. Ces pages décrivent, métier par métier, les workflows concrets que GigaPDF outille — avec les mêmes fonctions pour tous, car le plan gratuit n'ampute rien : signature numérique PKCS#7, OCR, chiffrement AES-256, GED complète et collaboration en temps réel, le tout open source et auto-hébergeable.",
+    toolsTitle: "Les outils derrière les workflows",
+    toolsText:
+      "Chaque solution métier s'appuie sur les mêmes briques : les vingt outils PDF de la plateforme, utilisables individuellement et tous documentés.",
+    ctaTitle: "Adoptez GigaPDF pour votre activité",
+  },
+  en: {
+    metaTitle: "PDF Solutions by Profession: Lawyers, Accountants, HR",
+    metaDescription:
+      "GigaPDF applied to your profession: redaction for lawyers, accounting OCR, HR contracts, real-estate leases, healthcare, education. Free and open source.",
+    ogTitle: "PDF Solutions by Profession | GigaPDF",
+    ogDescription:
+      "Concrete PDF workflows for 10 professions: legal, accounting, HR, real estate, healthcare, training and more.",
+    itemListName: "GigaPDF Business Solutions",
+    listAria: "List of business solutions",
+    h1: "GigaPDF applied to your profession",
+    intro:
+      "A lawyer does not ask the same things of a PDF as an accountant or an architect: the first demands redaction that genuinely removes the text, the second wants to find a scanned invoice by its amount, the third annotates plans weighing tens of megabytes. These pages describe, profession by profession, the concrete workflows GigaPDF equips — with the same features for everyone, because the free plan cuts nothing out: PKCS#7 digital signing, OCR, AES-256 encryption, full document management and real-time collaboration, all open source and self-hostable.",
+    toolsTitle: "The tools behind the workflows",
+    toolsText:
+      "Every business solution relies on the same building blocks: the platform's twenty PDF tools, usable individually and all documented.",
+    ctaTitle: "Adopt GigaPDF for your business",
+  },
+};
+
+export async function generateMetadata({
+  params,
+}: SolutionsHubPageProps): Promise<Metadata> {
   const { locale } = await params;
-  // Garde fr-only AVANT le premier flush du stream : notFound() ici produit un
-  // vrai 404 HTTP (celle du layout (seo) arrive après l'envoi du status 200).
-  if (locale !== defaultLocale) notFound();
+  if (!isSeoLocale(locale)) notFound();
+  const copy = COPY[locale];
 
   return {
-    title: "Solutions PDF par métier : avocats, comptables, RH…",
-    description:
-      "GigaPDF appliqué à votre métier : caviardage pour avocats, OCR comptable, contrats RH, baux immobiliers, santé, éducation. Gratuit et open source.",
-    alternates: { canonical: "/solutions" },
+    title: copy.metaTitle,
+    description: copy.metaDescription,
+    alternates: publicPageAlternates("/solutions", locale),
     openGraph: {
       type: "website",
-      url: `${SITE_URL}/solutions`,
-      title: "Solutions PDF par métier | GigaPDF",
-      description:
-        "Des workflows PDF concrets pour 10 métiers : juridique, comptabilité, RH, immobilier, santé, formation et plus.",
+      url: `${SITE_URL}${localizePath("/solutions", locale)}`,
+      title: copy.ogTitle,
+      description: copy.ogDescription,
     },
   };
 }
 
-const itemListJsonLd = {
-  "@context": "https://schema.org",
-  "@type": "ItemList",
-  name: "Solutions métiers GigaPDF",
-  itemListElement: SOLUTIONS.map((solution, index) => ({
-    "@type": "ListItem",
-    position: index + 1,
-    name: solution.name,
-    url: `${SITE_URL}/solutions/${solution.slug}`,
-  })),
-};
+function buildItemListJsonLd(locale: SeoLocale): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: COPY[locale].itemListName,
+    inLanguage: locale,
+    itemListElement: getSolutionsData(locale).map((solution, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: solution.name,
+      url: `${SITE_URL}${localizePath(`/solutions/${solution.slug}`, locale)}`,
+    })),
+  };
+}
 
 export default async function SolutionsHubPage({ params }: SolutionsHubPageProps) {
   const { locale } = await params;
-  if (locale !== defaultLocale) notFound();
+  if (!isSeoLocale(locale)) notFound();
+
+  const copy = COPY[locale];
+  const solutions = getSolutionsData(locale);
+  const tools = getToolsData(locale);
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-12">
-      <JsonLd data={itemListJsonLd} />
+      <JsonLd data={buildItemListJsonLd(locale)} />
 
       <header className="max-w-[68ch]">
         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          GigaPDF appliqué à votre métier
+          {copy.h1}
         </h1>
         <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-          Un avocat ne demande pas la même chose à un PDF qu&apos;un
-          expert-comptable ou qu&apos;un architecte : le premier exige un
-          caviardage qui supprime réellement le texte, le deuxième veut
-          retrouver une facture scannée par son montant, le troisième annote
-          des plans de plusieurs dizaines de mégaoctets. Ces pages décrivent,
-          métier par métier, les workflows concrets que GigaPDF outille — avec
-          les mêmes fonctions pour tous, car le plan gratuit n&apos;ampute
-          rien : signature numérique PKCS#7, OCR, chiffrement AES-256, GED
-          complète et collaboration en temps réel, le tout open source et
-          auto-hébergeable.
+          {copy.intro}
         </p>
       </header>
 
-      <section className="mt-10" aria-label="Liste des solutions métiers">
+      <section className="mt-10" aria-label={copy.listAria}>
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {SOLUTIONS.map((solution) => (
+          {solutions.map((solution) => (
             <li key={solution.slug}>
               <Link
                 href={`/solutions/${solution.slug}`}
@@ -104,15 +157,13 @@ export default async function SolutionsHubPage({ params }: SolutionsHubPageProps
 
       <section className="mt-14 max-w-[68ch]">
         <h2 className="text-2xl font-bold tracking-tight text-foreground">
-          Les outils derrière les workflows
+          {copy.toolsTitle}
         </h2>
         <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-          Chaque solution métier s&apos;appuie sur les mêmes briques : les
-          vingt outils PDF de la plateforme, utilisables individuellement et
-          tous documentés.
+          {copy.toolsText}
         </p>
         <ul className="mt-5 flex flex-wrap gap-2">
-          {TOOLS.map((tool) => (
+          {tools.map((tool) => (
             <li key={tool.slug}>
               <Link
                 href={`/tools/${tool.slug}`}
@@ -125,7 +176,7 @@ export default async function SolutionsHubPage({ params }: SolutionsHubPageProps
         </ul>
       </section>
 
-      <CtaSection title="Adoptez GigaPDF pour votre activité" />
+      <CtaSection title={copy.ctaTitle} locale={locale} />
     </div>
   );
 }
