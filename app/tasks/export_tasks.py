@@ -211,6 +211,17 @@ def _get_document_bytes(document_id: str) -> bytes | None:
                 return pdf_bytes
 
         finally:
+            # Dispose the async SQLAlchemy engine bound to THIS loop before
+            # closing it, so the next export on this worker gets a fresh engine
+            # on its own loop. Otherwise the module-level asyncpg engine keeps
+            # connections tied to the first loop and subsequent exports fail with
+            # "Future attached to a different loop" → swallowed → "Document not
+            # found" on every other export in a burst.
+            try:
+                from app.core.database import close_database
+                loop.run_until_complete(close_database())
+            except Exception:
+                pass
             loop.close()
 
     except Exception as e:
