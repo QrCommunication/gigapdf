@@ -9,7 +9,7 @@ Group=gigapdf
 WorkingDirectory=/opt/gigapdf
 Environment="PATH=/opt/gigapdf/.venv/bin"
 EnvironmentFile=/opt/gigapdf/.env
-ExecStart=/opt/gigapdf/.venv/bin/celery -A app.tasks.celery_app worker --loglevel=info --concurrency=4
+ExecStart=/opt/gigapdf/.venv/bin/celery -A app.tasks.celery_app worker --loglevel=info --concurrency=4 --queues=default,export,infra
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=10

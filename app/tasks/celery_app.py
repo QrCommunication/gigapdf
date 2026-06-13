@@ -8,7 +8,6 @@ Note: the legacy OCR task (app.tasks.ocr_tasks.process_ocr) was removed on
 2026-06-13 — OCR is handled by the TypeScript pdf-engine via /api/pdf/ocr.
 """
 
-import asyncio
 import logging
 from datetime import UTC, datetime
 
@@ -124,36 +123,26 @@ celery_app.conf.update(
 )
 
 
-# Signal handlers for updating job status in database
-def _run_async(coro):
-    """Run async coroutine in sync context."""
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If loop is already running, create task
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, coro)
-                return future.result(timeout=30)
-        else:
-            return loop.run_until_complete(coro)
-    except RuntimeError:
-        # No event loop, create new one
-        return asyncio.run(coro)
-
-
-async def _update_job_completed(celery_task_id: str, result: dict, state: str):
-    """Update job status in database after task completion."""
+# Signal handlers for updating job status in database.
+#
+# These run inside the synchronous Celery worker process and MUST use the
+# synchronous SQLAlchemy session (get_sync_session / psycopg2) — exactly like
+# storage_tasks and infra_tasks. The async engine (asyncpg) must NOT be used
+# here: the export task spins up per-call event loops (_render_page_via_ts_sync),
+# and reusing asyncpg connections across those loops raised
+# "Event loop is closed" / "Future attached to a different loop", silently
+# leaving finished jobs stuck in "processing".
+def _update_job_completed_sync(celery_task_id: str, result: dict, state: str) -> None:
+    """Update job status in database after task completion (sync, for Celery)."""
     from sqlalchemy import select
 
-    from app.core.database import get_db_session
+    from app.core.database import get_sync_session
     from app.models.database import AsyncJob
 
     try:
-        async with get_db_session() as session:
+        with get_sync_session() as session:
             stmt = select(AsyncJob).where(AsyncJob.celery_task_id == celery_task_id)
-            db_result = await session.execute(stmt)
-            job = db_result.scalar_one_or_none()
+            job = session.execute(stmt).scalar_one_or_none()
 
             if job:
                 job.status = "completed" if state == "SUCCESS" else "failed"
@@ -163,38 +152,36 @@ async def _update_job_completed(celery_task_id: str, result: dict, state: str):
                 # Store result (file_path instead of binary data)
                 if isinstance(result, dict):
                     # Remove binary data from result, keep file_path
-                    clean_result = {
+                    job.result = {
                         k: v for k, v in result.items()
-                        if k != "data" or not isinstance(v, bytes)
+                        if not (k == "data" and isinstance(v, bytes))
                     }
-                    job.result = clean_result
                 else:
                     job.result = {"status": "completed"}
 
-                await session.commit()
+                # get_sync_session commits on context exit
                 logger.info(f"Updated job {job.id} status to {job.status}")
     except Exception as e:
         logger.error(f"Failed to update job status for task {celery_task_id}: {e}")
 
 
-async def _update_job_failed(celery_task_id: str, error_message: str):
-    """Update job status when task fails."""
+def _update_job_failed_sync(celery_task_id: str, error_message: str) -> None:
+    """Update job status when task fails (sync, for Celery)."""
     from sqlalchemy import select
 
-    from app.core.database import get_db_session
+    from app.core.database import get_sync_session
     from app.models.database import AsyncJob
 
     try:
-        async with get_db_session() as session:
+        with get_sync_session() as session:
             stmt = select(AsyncJob).where(AsyncJob.celery_task_id == celery_task_id)
-            db_result = await session.execute(stmt)
-            job = db_result.scalar_one_or_none()
+            job = session.execute(stmt).scalar_one_or_none()
 
             if job:
                 job.status = "failed"
                 job.error_message = error_message[:1000] if error_message else "Unknown error"
                 job.completed_at = datetime.now(UTC)
-                await session.commit()
+                # get_sync_session commits on context exit
                 logger.error(f"Marked job {job.id} as failed: {error_message[:100]}")
     except Exception as e:
         logger.error(f"Failed to update job failure for task {celery_task_id}: {e}")
@@ -224,7 +211,7 @@ def task_postrun_handler(sender=None, task_id=None, task=None, retval=None, stat
 
     if any(task_name.startswith(prefix) for prefix in tracked_prefixes):
         logger.debug(f"Task {task_name} ({task_id}) completed with state {state}")
-        _run_async(_update_job_completed(task_id, retval or {}, state))
+        _update_job_completed_sync(task_id, retval or {}, state)
 
 
 @task_failure.connect
@@ -241,4 +228,4 @@ def task_failure_handler(sender=None, task_id=None, exception=None, **kwargs):
         return
 
     logger.error(f"Task {task_id} failed: {exception}")
-    _run_async(_update_job_failed(task_id, str(exception)))
+    _update_job_failed_sync(task_id, str(exception))

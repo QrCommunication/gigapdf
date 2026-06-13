@@ -10,6 +10,7 @@
  */
 
 import 'server-only';
+import { timingSafeEqual } from 'node:crypto';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
@@ -82,4 +83,32 @@ export async function requireSession(): Promise<RequireSessionResult> {
       ),
     };
   }
+}
+
+// ─── Internal service-to-service auth ───────────────────────────────────────
+
+/**
+ * Checks whether the request carries the shared internal-service secret.
+ *
+ * Some routes must be callable both by authenticated users AND by trusted
+ * backend services that have no user session — notably the Celery export
+ * worker rendering pages via POST /api/pdf/preview. The worker sends the
+ * secret in the `X-Internal-Secret` header; it must match `INTERNAL_API_SECRET`.
+ *
+ * Fail-closed: returns false when the secret is unset or too short, so the
+ * caller falls back to requireSession() and the route never becomes public.
+ * Uses a constant-time comparison to avoid timing attacks.
+ */
+export function isInternalServiceRequest(request: Request): boolean {
+  const expected = process.env.INTERNAL_API_SECRET;
+  if (!expected || expected.length < 16) return false;
+
+  const provided = request.headers.get('x-internal-secret');
+  if (!provided) return false;
+
+  const expectedBuf = Buffer.from(expected);
+  const providedBuf = Buffer.from(provided);
+  if (expectedBuf.length !== providedBuf.length) return false;
+
+  return timingSafeEqual(expectedBuf, providedBuf);
 }

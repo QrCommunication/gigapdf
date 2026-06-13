@@ -61,9 +61,18 @@ async def _render_page_via_ts(
     base_url = settings.nextjs_internal_url.rstrip("/")
     url = f"{base_url}{_NEXTJS_PREVIEW_PATH}"
 
+    # /api/pdf/preview requires authentication (requireSession). As a
+    # server-to-server caller the worker has no user session, so it
+    # authenticates with the shared internal secret instead. Must match
+    # INTERNAL_API_SECRET in the Next.js environment.
+    headers: dict[str, str] = {}
+    if settings.internal_api_secret:
+        headers["X-Internal-Secret"] = settings.internal_api_secret
+
     async with httpx.AsyncClient(timeout=_TS_ENGINE_TIMEOUT) as client:
         response = await client.post(
             url,
+            headers=headers,
             files={"file": ("document.pdf", pdf_bytes, "application/pdf")},
             data={
                 "mode": "page",
@@ -91,15 +100,17 @@ def _render_page_via_ts_sync(
     dpi: int,
     quality: int,
 ) -> bytes:
-    """Synchronous wrapper around _render_page_via_ts for use in Celery tasks."""
-    loop = asyncio.new_event_loop()
-    try:
-        asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            _render_page_via_ts(pdf_bytes, page_num, fmt, dpi, quality)
-        )
-    finally:
-        loop.close()
+    """Synchronous wrapper around _render_page_via_ts for use in Celery tasks.
+
+    Uses asyncio.run so each call gets an isolated event loop that is fully
+    torn down afterwards (and the thread's current loop reset). The previous
+    new_event_loop()/set_event_loop()/close() pattern left a *closed* loop as
+    the thread's current loop, which later broke the async DB work in the
+    completion signal handlers ("Event loop is closed").
+    """
+    return asyncio.run(
+        _render_page_via_ts(pdf_bytes, page_num, fmt, dpi, quality)
+    )
 
 
 # Export files directory
