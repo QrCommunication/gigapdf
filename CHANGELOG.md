@@ -5,6 +5,39 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-06-14
+
+### Added
+- Export: every output format is now selectable directly from the editor and
+  the dashboard — rasterized images (PNG / JPEG / WebP) and Office documents
+  (DOCX / XLSX / PPTX / ODT / ODP).
+- Mobile app upgraded to **Expo SDK 56** (React Native 0.85).
+- Continuous deployment: every push to `main` now auto-deploys to production
+  once CI is green (pushes that touch only the mobile app are skipped, since it
+  ships via EAS). The README shows live **CI** and **Security Audit** status
+  badges.
+
+### Changed
+- Runtime modernized to **Node.js 24**, **Redis 8** and **pnpm 10.28**
+  (PostgreSQL stays at 17), with a full sweep of dependency major upgrades
+  across the toolchain (Vitest 3.2, Fabric 7.4, and the rest).
+- Authenticated areas (dashboard, editor, embed) are now explicitly `noindex`
+  — defense in depth on top of `robots.txt`.
+- OpenAPI version aligned to the product version (1.5.0).
+
+### Fixed
+- PDF → image export pipeline unblocked: pages are rasterized with MuPDF
+  (fixes HTTP 500 on documents containing images), the pdf.js worker is
+  configured for in-thread rendering on the server, export directory
+  permissions and the queue / internal-auth / job-status wiring are corrected,
+  and "Document not found" on rapid export bursts is resolved.
+- Page thumbnails are now generated with MuPDF.
+
+### Security
+- All open Dependabot alerts cleared (**76 → 0**): CRITICAL/HIGH transitive
+  bumps via `pnpm.overrides`, removal of a stale npm lockfile in `apps/mobile`,
+  and Python dependency CVE fixes.
+
 ## [1.4.0] - 2026-06-13
 
 ### Added
