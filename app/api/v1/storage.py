@@ -856,6 +856,86 @@ async def list_document_tags(
     )
 
 
+@router.get(
+    "/documents/{stored_document_id}",
+    response_model=APIResponse[dict],
+    summary="Get stored document",
+    description="""
+Retrieve a single document from persistent storage by its UUID.
+
+Returns the same serialized shape as the listing endpoint (id, name, size,
+tags, thumbnail_url, page_count, folder_id, version, created_at,
+modified_at, deleted_at).
+
+## Permissions
+- **Owner**: always allowed.
+- **Non-owner**: 404 (storage documents are private).
+
+## Trashed documents
+By default, a soft-deleted document returns **404**. Pass
+`?include_trashed=true` (owner only) to retrieve it anyway.
+""",
+    responses={
+        200: {
+            "description": "Document retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "stored_document_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "name": "Contract Q4 2025.pdf",
+                            "page_count": 12,
+                            "version": 3,
+                            "folder_id": None,
+                            "tags": ["contract", "legal"],
+                            "file_size_bytes": 204800,
+                            "created_at": "2025-11-01T09:00:00Z",
+                            "modified_at": "2025-11-15T14:30:00Z",
+                            "thumbnail_url": "https://cdn.example.com/thumb.jpg",
+                            "deleted_at": None,
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2025-11-15T14:30:00Z"},
+                    }
+                }
+            },
+        },
+        404: {"description": "Document not found or belongs to another user"},
+    },
+)
+async def get_stored_document(
+    stored_document_id: str,
+    user: AuthenticatedUser,
+    include_trashed: bool = False,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[dict]:
+    """Return a single stored document owned by the authenticated user."""
+    start = time.perf_counter()
+
+    query = select(StoredDocument).where(
+        StoredDocument.id == stored_document_id,
+        StoredDocument.owner_id == user.user_id,
+    )
+    if not include_trashed:
+        query = query.where(~StoredDocument.is_deleted)
+
+    result = await db.execute(query)
+    stored_doc = result.scalar_one_or_none()
+    if not stored_doc:
+        raise NotFoundError(f"Document not found: {stored_document_id}")
+
+    processing_time = int((time.perf_counter() - start) * 1000)
+    return APIResponse(
+        success=True,
+        data=_serialize_stored_document(stored_doc),
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
+
+
 @router.post(
     "/documents/{stored_document_id}/load",
     response_model=APIResponse[dict],

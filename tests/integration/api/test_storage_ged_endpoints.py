@@ -616,3 +616,75 @@ class TestUploadThumbnail:
         assert resp.status_code == 200
         assert doc.thumbnail_path == f"thumbnails/{TEST_USER_ID}/{DOC_ID}.webp"
         services.delete_file.assert_called_once_with(old_key)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/storage/documents/{stored_document_id}
+# ---------------------------------------------------------------------------
+
+class TestGetStoredDocument:
+    """Unit-level integration tests for the single-document GET endpoint."""
+
+    def test_owner_receives_document_200(self, client, fake_db, services):
+        """Owner of an active document gets 200 with the serialized payload."""
+        doc = _make_doc(tags=["legal", "archive"], thumbnail_path=None)
+        fake_db._results = [FakeResult(scalar=doc)]
+
+        resp = client.get(f"/api/v1/storage/documents/{DOC_ID}")
+
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["stored_document_id"] == DOC_ID
+        assert data["name"] == "Contrat.pdf"
+        assert data["tags"] == ["legal", "archive"]
+        assert data["page_count"] == 3
+        # No thumbnail_path → thumbnail_url should be None (no presigned URL call)
+        assert data["thumbnail_url"] is None
+        services.get_presigned_url.assert_not_called()
+
+    def test_stranger_receives_404(self, client, fake_db, services):
+        """A request for a document owned by another user returns 404.
+
+        The WHERE clause (owner_id == current_user.user_id) means the query
+        returns None; the endpoint must not leak whether the document exists.
+        """
+        fake_db._results = [FakeResult(scalar=None)]
+
+        resp = client.get(f"/api/v1/storage/documents/{DOC_ID}")
+
+        assert resp.status_code == 404
+
+    def test_trashed_document_returns_404_by_default(self, client, fake_db, services):
+        """Soft-deleted documents are excluded unless include_trashed=true.
+
+        The ``~StoredDocument.is_deleted`` filter means the DB query returns
+        no row — from the handler's perspective this is identical to
+        "document not found", preserving the same 404 contract.
+        """
+        # FakeSession simulates the filter excluding the trashed document
+        fake_db._results = [FakeResult(scalar=None)]
+
+        resp = client.get(f"/api/v1/storage/documents/{DOC_ID}")
+
+        assert resp.status_code == 404
+
+    def test_trashed_document_visible_with_include_trashed(self, client, fake_db, services):
+        """Owner can retrieve a trashed document by passing include_trashed=true.
+
+        The handler omits the ``~is_deleted`` filter when the flag is set,
+        so the query finds the row and returns it with the deleted_at timestamp.
+        """
+        from datetime import UTC, datetime
+        deleted_at = datetime(2026, 6, 1, 12, 0, 0, tzinfo=UTC)
+        doc = _make_doc(is_deleted=True, deleted_at=deleted_at)
+        fake_db._results = [FakeResult(scalar=doc)]
+
+        resp = client.get(
+            f"/api/v1/storage/documents/{DOC_ID}",
+            params={"include_trashed": "true"},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["stored_document_id"] == DOC_ID
+        assert data["deleted_at"] is not None  # trashed document exposes deletion timestamp
