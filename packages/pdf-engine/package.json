@@ -82,7 +82,7 @@
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "5.7.284",
     "playwright": "^1.60.0",
-    "sharp": "^0.35.1"
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@giga-pdf/eslint-config": "workspace:*",
