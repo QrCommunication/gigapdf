@@ -1,4 +1,13 @@
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import type { Browser, BrowserContext, Page } from 'playwright';
+
+// Lazy-load the Playwright runtime. Importing this module transitively via the
+// pdf-engine barrel must NOT eagerly pull Playwright + its browsers.json: the
+// preview/render route imports the barrel yet never launches Chromium, and an
+// eager import breaks Next.js standalone module tracing (ERR_DLOPEN / missing
+// browsers.json). Only HTML/URL→PDF conversion actually launches a browser.
+async function getChromium() {
+  return (await import('playwright')).chromium;
+}
 
 let poolSize = 2;
 let browsers: Browser[] = [];
@@ -15,7 +24,7 @@ async function ensureInitialized(): Promise<void> {
 
   initPromise = (async () => {
     for (let i = 0; i < poolSize; i++) {
-      const browser = await chromium.launch({
+      const browser = await (await getChromium()).launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
       });
@@ -47,7 +56,7 @@ export async function acquireBrowser(): Promise<{ browser: Browser; release: () 
 
   if (!browser!.isConnected()) {
     const index = browsers.indexOf(browser!);
-    browser = await chromium.launch({
+    browser = await (await getChromium()).launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
@@ -126,7 +135,7 @@ export async function acquirePage(): Promise<PooledPage> {
 
   if (!slot!.browser.isConnected()) {
     const deadIndex = pageSlots.findIndex(s => s.browser === slot!.browser);
-    const newBrowser = await chromium.launch({
+    const newBrowser = await (await getChromium()).launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
