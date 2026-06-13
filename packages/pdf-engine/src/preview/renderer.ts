@@ -25,7 +25,17 @@ export interface RenderOptions {
 
 async function loadDocument(buffer: Buffer): Promise<PDFDocumentProxy> {
   const data = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-  const loadingTask = pdfjsLib.getDocument({ data, useSystemFonts: true });
+  // disableWorker: true is REQUIRED in Node. Without it pdfjs tries to spin up a
+  // fake worker and throws "Setting up fake worker failed" (no workerSrc), which
+  // made every server-side render fail with an opaque 500. The parser
+  // (parse/parser.ts) loads documents the same way.
+  const loadingTask = pdfjsLib.getDocument({
+    data,
+    useSystemFonts: true,
+    disableWorker: true,
+    // disableWorker exists at runtime but isn't in pdfjs 4.10's
+    // DocumentInitParameters type — cast like parse/parser.ts does.
+  } as Parameters<typeof pdfjsLib.getDocument>[0]);
   return loadingTask.promise;
 }
 
@@ -37,8 +47,12 @@ export async function renderPage(
   let doc: PDFDocumentProxy | null = null;
   try {
     doc = await loadDocument(buffer);
-  } catch {
-    throw new PDFParseError('Failed to load PDF document');
+  } catch (err) {
+    // Preserve the underlying pdfjs error message — a bare `catch {}` here
+    // masked the real cause and turned every render into an opaque 500.
+    throw new PDFParseError(
+      `Failed to load PDF document: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   const pageCount = doc.numPages;
@@ -109,8 +123,12 @@ export async function extractImage(
   let doc: PDFDocumentProxy | null = null;
   try {
     doc = await loadDocument(buffer);
-  } catch {
-    throw new PDFParseError('Failed to load PDF document');
+  } catch (err) {
+    // Preserve the underlying pdfjs error message — a bare `catch {}` here
+    // masked the real cause and turned every render into an opaque 500.
+    throw new PDFParseError(
+      `Failed to load PDF document: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   const pageCount = doc.numPages;
