@@ -35,6 +35,9 @@ import {
   FileText,
   Sheet,
   Presentation,
+  FileImage,
+  FileCode,
+  FileType,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -1395,6 +1398,10 @@ export default function EditorPage() {
   const [exportingOfficeFormat, setExportingOfficeFormat] = useState<
     "docx" | "xlsx" | "pptx" | null
   >(null);
+  // Backend (Celery) export for raster/text/html formats — png/jpeg/webp/txt/html.
+  const [exportingFormat, setExportingFormat] = useState<
+    "png" | "jpeg" | "webp" | "txt" | "html" | null
+  >(null);
   const handleExportOffice = useCallback(
     async (format: "docx" | "xlsx" | "pptx") => {
       if (!documentId || exportingOfficeFormat) return;
@@ -1430,6 +1437,42 @@ export default function EditorPage() {
       }
     },
     [documentId, exportingOfficeFormat, isDirty, save],
+  );
+
+  // Export via the backend (Celery) pipeline for raster/text/html formats.
+  // Saves the current state first, then polls the export job and downloads the
+  // result (images come back as a .zip, txt/html as their own file).
+  const handleExportFormat = useCallback(
+    async (format: "png" | "jpeg" | "webp" | "txt" | "html") => {
+      if (!documentId || exportingFormat) return;
+      setExportingFormat(format);
+      try {
+        if (isDirty) await save();
+        const isImage =
+          format === "png" || format === "jpeg" || format === "webp";
+        const job = await api.exportDocument(documentId, format, {
+          single_file: true,
+          dpi: isImage ? 150 : undefined,
+          quality: format === "jpeg" || format === "webp" ? 85 : undefined,
+        });
+        let status = await api.getJobStatus(job.job_id);
+        while (status.status !== "completed" && status.status !== "failed") {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          status = await api.getJobStatus(job.job_id);
+        }
+        if (status.status === "failed") {
+          throw new Error(status.error || "Export failed");
+        }
+        const blob = await api.getExportResult(documentId, job.job_id);
+        const ext = isImage ? "zip" : format;
+        downloadBlob(blob, `${name || "document"}.${ext}`);
+      } catch (err) {
+        clientLogger.error(`[editor] export ${format} failed:`, err);
+      } finally {
+        setExportingFormat(null);
+      }
+    },
+    [documentId, exportingFormat, isDirty, save, name],
   );
 
   // Re-parse the PDF binary to refresh the scene graph after a page op.
@@ -2166,6 +2209,62 @@ export default function EditorPage() {
                   <Presentation className="mr-2 h-4 w-4" />
                 )}
                 <span>{t("office.exportPowerPoint")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => handleExportFormat("png")}
+                disabled={!documentId || exportingFormat !== null}
+              >
+                {exportingFormat === "png" ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileImage className="mr-2 h-4 w-4" />
+                )}
+                <span>{t("office.exportPng")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleExportFormat("jpeg")}
+                disabled={!documentId || exportingFormat !== null}
+              >
+                {exportingFormat === "jpeg" ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileImage className="mr-2 h-4 w-4" />
+                )}
+                <span>{t("office.exportJpeg")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleExportFormat("webp")}
+                disabled={!documentId || exportingFormat !== null}
+              >
+                {exportingFormat === "webp" ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileImage className="mr-2 h-4 w-4" />
+                )}
+                <span>{t("office.exportWebp")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleExportFormat("txt")}
+                disabled={!documentId || exportingFormat !== null}
+              >
+                {exportingFormat === "txt" ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileType className="mr-2 h-4 w-4" />
+                )}
+                <span>{t("office.exportText")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleExportFormat("html")}
+                disabled={!documentId || exportingFormat !== null}
+              >
+                {exportingFormat === "html" ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileCode className="mr-2 h-4 w-4" />
+                )}
+                <span>{t("office.exportHtml")}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

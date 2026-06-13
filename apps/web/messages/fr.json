@@ -486,6 +486,8 @@
         "exportWord": "Word (.docx)",
         "exportExcel": "Excel (.xlsx)",
         "exportImages": "Images (.png)",
+        "exportJpeg": "Images (.jpeg)",
+        "exportWebp": "Images (.webp)",
         "exportHtml": "HTML",
         "exportText": "Texte (.txt)",
         "duplicate": "Dupliquer",
@@ -672,7 +674,12 @@
       "exportPowerPoint": "Exporter en PowerPoint (.pptx)",
       "exporting": "Export en cours...",
       "exportSuccess": "Export Office réussi",
-      "exportError": "Échec de l'export Office"
+      "exportError": "Échec de l'export Office",
+      "exportPng": "Exporter en PNG (.zip)",
+      "exportJpeg": "Exporter en JPEG (.zip)",
+      "exportWebp": "Exporter en WebP (.zip)",
+      "exportText": "Exporter en Texte (.txt)",
+      "exportHtml": "Exporter en HTML (.html)"
     },
     "delete": {
       "title": "Supprimer le document",

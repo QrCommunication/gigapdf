@@ -292,7 +292,7 @@ export function DocumentTable({
 
   const handleExport = async (
     doc: Document,
-    format: "png" | "jpeg" | "html" | "txt" | "docx" | "xlsx"
+    format: "png" | "jpeg" | "webp" | "html" | "txt" | "docx" | "xlsx"
   ) => {
     try {
       setExporting(true);
@@ -326,6 +326,7 @@ export function DocumentTable({
       const extensionMap: Record<string, string> = {
         png: "zip",
         jpeg: "zip",
+        webp: "zip",
         html: "html",
         txt: "txt",
         docx: "docx",
@@ -683,6 +684,14 @@ export function DocumentTable({
                           <DropdownMenuItem onClick={() => handleExport(doc, "png")}>
                             <Image className="mr-2 h-4 w-4" />
                             {tCard("menu.exportImages")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleExport(doc, "jpeg")}>
+                            <Image className="mr-2 h-4 w-4" />
+                            {tCard("menu.exportJpeg")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleExport(doc, "webp")}>
+                            <Image className="mr-2 h-4 w-4" />
+                            {tCard("menu.exportWebp")}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleExport(doc, "html")}>
                             <FileType className="mr-2 h-4 w-4" />
