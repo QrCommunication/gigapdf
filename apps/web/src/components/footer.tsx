@@ -3,176 +3,133 @@
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Logo } from "@/components/logo";
-import { Heart, Github, ExternalLink } from "lucide-react";
+import { ExternalLink, Github } from "lucide-react";
 
+const GITHUB_URL = "https://github.com/ronylicha/gigapdf";
+
+/**
+ * Pied de page marketing — 4 colonnes façon achevé d'imprimer :
+ * marque + Produit + Open source + Légal, baseline mono en colophon.
+ */
 export function Footer() {
-  const t = useTranslations();
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "https://giga-pdf.com";
+  const t = useTranslations("landing.footer");
+
+  const productLinks = [
+    { key: "features", href: "/tools" },
+    { key: "solutions", href: "/solutions" },
+    { key: "pricing", href: "/#pricing" },
+    { key: "changelog", href: "/changelog" },
+    { key: "docs", href: "/docs" },
+  ] as const;
+
+  const legalLinks = [
+    { key: "legalNotice", href: "/legal-notice" },
+    { key: "privacy", href: "/privacy" },
+    { key: "terms", href: "/terms" },
+    { key: "cookies", href: "/cookies" },
+  ] as const;
 
   return (
-    <footer className="border-t border-border py-16 bg-muted/30">
+    <footer className="border-t border-border bg-muted/30 py-16">
       <div className="container mx-auto px-4">
-        <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-4 max-w-6xl mx-auto">
-          {/* Brand */}
-          <div className="lg:col-span-1">
+        <div className="mx-auto grid max-w-6xl gap-12 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+          {/* Marque */}
+          <div>
             <Logo href="/" size="sm" />
-            <p className="text-sm text-muted-foreground mt-4 mb-6 max-w-xs">
-              {t("landing.footer.tagline")}
+            <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
+              {t("tagline")}
             </p>
-            <div className="flex gap-4">
-              <a
-                href="https://github.com/QrCommunication/gigapdf"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Github className="h-5 w-5" />
-              </a>
-            </div>
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="GitHub"
+              className="mt-6 inline-flex text-muted-foreground transition-colors duration-150 hover:text-foreground"
+            >
+              <Github className="h-5 w-5" />
+            </a>
           </div>
 
-          {/* Product Links */}
-          <div>
-            <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider text-muted-foreground">
-              {t("landing.footer.product.title")}
-            </h4>
+          {/* Produit */}
+          <nav aria-label={t("product.title")}>
+            <h4 className="lp-label mb-4">{t("product.title")}</h4>
             <ul className="space-y-3 text-sm">
-              <li>
-                <Link href="/#features" className="text-muted-foreground hover:text-foreground transition-colors">
-                  {t("landing.footer.product.features")}
-                </Link>
-              </li>
-              <li>
-                <Link href="/#pricing" className="text-muted-foreground hover:text-foreground transition-colors">
-                  {t("landing.footer.product.pricing")}
-                </Link>
-              </li>
-              <li>
-                <Link href="/docs" className="text-muted-foreground hover:text-foreground transition-colors">
-                  {t("landing.footer.product.documentation")}
-                </Link>
-              </li>
-              <li>
-                <Link href="/changelog" className="text-muted-foreground hover:text-foreground transition-colors">
-                  {t("landing.footer.product.changelog")}
-                </Link>
-              </li>
+              {productLinks.map(({ key, href }) => (
+                <li key={key}>
+                  <Link
+                    href={href}
+                    className="text-muted-foreground transition-colors duration-150 hover:text-foreground"
+                  >
+                    {t(`product.${key}`)}
+                  </Link>
+                </li>
+              ))}
             </ul>
-          </div>
+          </nav>
 
-          {/* Open Source Links */}
-          <div>
-            <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider text-muted-foreground">
-              {t("landing.footer.openSource.title")}
-            </h4>
+          {/* Open source */}
+          <nav aria-label={t("openSource.title")}>
+            <h4 className="lp-label mb-4">{t("openSource.title")}</h4>
             <ul className="space-y-3 text-sm">
               <li>
                 <a
-                  href="https://github.com/QrCommunication/gigapdf"
+                  href={GITHUB_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+                  className="inline-flex items-center gap-1 text-muted-foreground transition-colors duration-150 hover:text-foreground"
                 >
-                  {t("landing.footer.openSource.repository")}
+                  {t("openSource.github")}
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </li>
               <li>
                 <a
-                  href="https://github.com/QrCommunication/gigapdf/blob/main/CONTRIBUTING.md"
+                  href={`${GITHUB_URL}/blob/main/LICENSE`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+                  className="inline-flex items-center gap-1 text-muted-foreground transition-colors duration-150 hover:text-foreground"
                 >
-                  {t("landing.footer.openSource.contributing")}
+                  {t("openSource.license")}
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </li>
               <li>
-                <a
-                  href="https://github.com/QrCommunication/gigapdf/blob/main/LICENSE"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+                <Link
+                  href="/docs"
+                  className="text-muted-foreground transition-colors duration-150 hover:text-foreground"
                 >
-                  {t("landing.footer.openSource.license")}
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              </li>
-              <li>
-                <a
-                  href={`${apiBaseUrl}/api/docs`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
-                >
-                  Swagger UI
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              </li>
-              <li>
-                <a
-                  href={`${apiBaseUrl}/api/redoc`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
-                >
-                  ReDoc
-                  <ExternalLink className="h-3 w-3" />
-                </a>
+                  {t("openSource.selfHosting")}
+                </Link>
               </li>
             </ul>
-          </div>
+          </nav>
 
-          {/* Legal Links */}
-          <div>
-            <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider text-muted-foreground">
-              Légal
-            </h4>
+          {/* Légal */}
+          <nav aria-label={t("legal.title")}>
+            <h4 className="lp-label mb-4">{t("legal.title")}</h4>
             <ul className="space-y-3 text-sm">
-              <li>
-                <Link href="/legal-notice" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Mentions légales
-                </Link>
-              </li>
-              <li>
-                <Link href="/privacy" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Confidentialité
-                </Link>
-              </li>
-              <li>
-                <Link href="/terms" className="text-muted-foreground hover:text-foreground transition-colors">
-                  CGU
-                </Link>
-              </li>
-              <li>
-                <Link href="/cookies" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Cookies
-                </Link>
-              </li>
-              <li>
-                <a
-                  href="https://github.com/QrCommunication/gigapdf/blob/main/LICENSE"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
-                >
-                  AGPL-3.0
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              </li>
+              {legalLinks.map(({ key, href }) => (
+                <li key={key}>
+                  <Link
+                    href={href}
+                    className="text-muted-foreground transition-colors duration-150 hover:text-foreground"
+                  >
+                    {t(`legal.${key}`)}
+                  </Link>
+                </li>
+              ))}
             </ul>
-          </div>
+          </nav>
         </div>
 
-        {/* Bottom Bar */}
-        <div className="mt-16 pt-8 border-t border-border text-center max-w-6xl mx-auto">
-          <p className="text-sm text-muted-foreground font-mono">
-            <span className="text-terminal-green">$</span> GigaPDF © {new Date().getFullYear()}{" "}
-            <span className="text-muted-foreground/60">|</span>{" "}
-            {t("landing.footer.madeWith")}{" "}
-            <Heart className="h-3.5 w-3.5 inline text-red-500 fill-red-500" />{" "}
-            {t("landing.footer.byOpenSource")}
+        {/* Colophon */}
+        <div className="mx-auto mt-16 max-w-6xl border-t border-border pt-8">
+          <p className="text-center font-mono text-xs text-muted-foreground">
+            GigaPDF © {new Date().getFullYear()}
+            <span aria-hidden="true" className="mx-3 text-muted-foreground/50">
+              —
+            </span>
+            {t("baseline")}
           </p>
         </div>
       </div>

@@ -1,627 +1,534 @@
 "use client";
 
 import Link from "next/link";
-import { Button } from "@giga-pdf/ui";
+import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
+import { Button, cn } from "@giga-pdf/ui";
 import {
   ArrowRight,
-  FileText,
-  Zap,
-  Shield,
-  Github,
   Check,
-  Code2,
-  Users,
-  BookOpen,
-  Heart,
-  Star,
-  GitFork,
-  Terminal,
-  Cpu,
+  FileInput,
+  Github,
+  LayoutGrid,
   Lock,
-  Layers,
-  Braces,
-  Download,
-  ExternalLink,
-  ChevronRight,
-  Sparkles,
-  Pencil,
+  Mail,
+  Scale,
+  ScanText,
+  Server,
+  ShieldCheck,
+  Signature,
+  Users,
 } from "lucide-react";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
+import { AnimCollaboration } from "@/components/landing/anim-collaboration";
+import { AnimCompression } from "@/components/landing/anim-compression";
+import { AnimFormats } from "@/components/landing/anim-formats";
+import { AnimOcr } from "@/components/landing/anim-ocr";
+import { AnimSignature } from "@/components/landing/anim-signature";
+import { CropMarks } from "@/components/landing/crop-marks";
+import { EditorMockup } from "@/components/landing/editor-mockup";
+import { Reveal } from "@/components/landing/reveal";
+import { ScrollRuler } from "@/components/landing/scroll-ruler";
+import { SectionHeading } from "@/components/landing/section-heading";
+import {
+  VignetteCollaboration,
+  VignetteEditing,
+  VignetteFormats,
+  VignetteGed,
+  VignetteTrust,
+} from "@/components/landing/section-vignettes";
+
+const GITHUB_URL = "https://github.com/ronylicha/gigapdf";
+const CONTACT_EMAIL = "contact@giga-pdf.com";
+
+/** Les 5 sections numérotées du cahier (zigzag 2 colonnes alternées). */
+const NOTEBOOK_SECTIONS = [
+  { id: "features", number: "01", key: "editing", points: ["wysiwyg", "fonts", "formatting", "layers", "multiselect"] },
+  { id: "collaboration", number: "02", key: "collaboration", points: ["live", "sharing", "versions", "activity"] },
+  { id: "confiance", number: "03", key: "trust", points: ["signature", "encryption", "pdfa", "ocr"] },
+  { id: "formats", number: "04", key: "formats", points: ["imports", "exports", "compression"] },
+  { id: "ged", number: "05", key: "ged", points: ["folders", "tags", "search", "trash", "thumbnails"] },
+] as const;
+
+const INCLUDED_EVERYWHERE = [
+  { key: "signature", icon: Signature },
+  { key: "ocr", icon: ScanText },
+  { key: "collaboration", icon: Users },
+  { key: "tools", icon: LayoutGrid },
+  { key: "office", icon: FileInput },
+] as const;
 
 export default function HomePage() {
-  const t = useTranslations();
+  const t = useTranslations("landing");
+
+  const trustItems = [
+    { key: "openSource", icon: Scale },
+    { key: "selfHost", icon: Server },
+    { key: "encryption", icon: Lock },
+    { key: "gdpr", icon: ShieldCheck },
+  ] as const;
 
   const plans = [
     {
       id: "free",
-      name: t("landing.pricing.plans.free.name"),
-      description: t("landing.pricing.plans.free.description"),
       price: 0,
-      currency: "EUR",
-      interval: "month",
-      features: [
-        t("landing.pricing.plans.free.features.storage"),
-        t("landing.pricing.plans.free.features.apiCalls"),
-        t("landing.pricing.plans.free.features.documents"),
-        t("landing.pricing.plans.free.features.editing"),
-        t("landing.pricing.plans.free.features.support"),
-      ],
-      cta: t("landing.pricing.plans.free.cta"),
       popular: false,
+      features: ["storage", "apiCalls", "documents", "editing", "support"],
     },
     {
       id: "starter",
-      name: t("landing.pricing.plans.starter.name"),
-      description: t("landing.pricing.plans.starter.description"),
       price: 9,
-      currency: "EUR",
-      interval: "month",
-      features: [
-        t("landing.pricing.plans.starter.features.storage"),
-        t("landing.pricing.plans.starter.features.apiCalls"),
-        t("landing.pricing.plans.starter.features.documents"),
-        t("landing.pricing.plans.starter.features.editing"),
-        t("landing.pricing.plans.starter.features.support"),
-        t("landing.pricing.plans.starter.features.trial"),
-      ],
-      cta: t("landing.pricing.plans.starter.cta"),
       popular: true,
+      features: ["storage", "apiCalls", "documents", "members", "support", "trial"],
     },
     {
       id: "pro",
-      name: t("landing.pricing.plans.pro.name"),
-      description: t("landing.pricing.plans.pro.description"),
       price: 29,
-      currency: "EUR",
-      interval: "month",
-      features: [
-        t("landing.pricing.plans.pro.features.storage"),
-        t("landing.pricing.plans.pro.features.apiCalls"),
-        t("landing.pricing.plans.pro.features.documents"),
-        t("landing.pricing.plans.pro.features.branding"),
-        t("landing.pricing.plans.pro.features.support"),
-        t("landing.pricing.plans.pro.features.api"),
-        t("landing.pricing.plans.pro.features.trial"),
-      ],
-      cta: t("landing.pricing.plans.pro.cta"),
       popular: false,
+      features: ["storage", "apiCalls", "documents", "branding", "support", "api", "trial"],
     },
     {
       id: "enterprise",
-      name: t("landing.pricing.plans.enterprise.name"),
-      description: t("landing.pricing.plans.enterprise.description"),
-      price: 0,
-      currency: "EUR",
-      interval: "month",
-      features: [
-        t("landing.pricing.plans.enterprise.features.storage"),
-        t("landing.pricing.plans.enterprise.features.apiCalls"),
-        t("landing.pricing.plans.enterprise.features.documents"),
-        t("landing.pricing.plans.enterprise.features.branding"),
-        t("landing.pricing.plans.enterprise.features.sla"),
-        t("landing.pricing.plans.enterprise.features.accountManager"),
-        t("landing.pricing.plans.enterprise.features.support"),
-        t("landing.pricing.plans.enterprise.features.integrations"),
-      ],
-      cta: t("landing.pricing.plans.enterprise.cta"),
+      price: null,
       popular: false,
+      features: ["storage", "apiCalls", "documents", "branding", "sla", "accountManager", "support", "integrations"],
     },
-  ];
+  ] as const;
+
+  const sectionVignettes: Record<string, ReactNode> = {
+    editing: <VignetteEditing />,
+    collaboration: (
+      <VignetteCollaboration versionLabel={t("sections.collaboration.versionsLabel")} />
+    ),
+    trust: <VignetteTrust stampText={t("sections.trust.stamp")} />,
+    formats: <VignetteFormats />,
+    ged: <VignetteGed searchPlaceholder={t("sections.ged.searchPlaceholder")} />,
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      <ScrollRuler />
       <Header />
 
       <main className="flex-1">
-        {/* ═══════════════════════════════════════════════════════════════════
-            HERO SECTION - Terminal-Grade Design
-            ═══════════════════════════════════════════════════════════════════ */}
-        <section className="relative overflow-hidden">
-          {/* Background Effects */}
-          <div className="absolute inset-0 bg-grid-dots opacity-50" />
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background" />
-
-          {/* Animated gradient orbs */}
-          <div className="absolute top-1/4 -left-1/4 w-1/2 h-1/2 bg-primary/20 rounded-full blur-3xl animate-float" />
-          <div className="absolute bottom-1/4 -right-1/4 w-1/2 h-1/2 bg-accent/20 rounded-full blur-3xl animate-float" style={{ animationDelay: "-3s" }} />
-
-          <div className="container relative mx-auto px-4 py-24 md:py-32 lg:py-40">
-            <div className="flex flex-col items-center text-center max-w-4xl mx-auto">
-              {/* Badge */}
-              <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-1.5 text-sm mb-8 animate-fade-in">
-                <Terminal className="h-4 w-4 text-primary" />
-                <span className="font-mono text-primary">{t("landing.badge")}</span>
-                <span className="text-muted-foreground">|</span>
-                <a
-                  href="https://github.com/ronylicha/gigapdf"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-foreground hover:text-primary transition-colors flex items-center gap-1"
-                >
-                  <Star className="h-3.5 w-3.5" />
-                  {t("landing.starOnGithub")}
-                </a>
-              </div>
-
-              {/* Main Heading */}
-              <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6 animate-slide-up">
-                <span className="block">{t("landing.hero.title")}</span>
-                <span className="block text-gradient mt-2">
-                  {t("landing.hero.titleHighlight")}
-                </span>
-              </h1>
-
-              {/* Description */}
-              <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mb-10 animate-slide-up stagger-1">
-                {t("landing.hero.description")}
-              </p>
-
-              {/* CTA Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 animate-slide-up stagger-2">
-                <Link href="/register">
-                  <Button size="lg" className="gap-2 btn-glow text-base px-8">
-                    {t("landing.cta.startFreeTrial")}
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </Link>
-                <a
-                  href="https://github.com/ronylicha/gigapdf"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Button size="lg" variant="outline" className="gap-2 text-base px-8">
-                    <Github className="h-4 w-4" />
-                    {t("landing.cta.viewOnGithub")}
-                  </Button>
-                </a>
-              </div>
-
-              {/* Terminal Preview */}
-              <div className="mt-16 w-full max-w-3xl animate-slide-up stagger-3">
-                <div className="rounded-xl border border-border bg-card/80 backdrop-blur-sm overflow-hidden shadow-2xl">
-                  {/* Terminal Header */}
-                  <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/50">
-                    <div className="flex gap-1.5">
-                      <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                      <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                      <div className="w-3 h-3 rounded-full bg-green-500/80" />
-                    </div>
-                    <span className="text-xs text-muted-foreground font-mono ml-2">terminal</span>
-                  </div>
-                  {/* Terminal Content */}
-                  <div className="p-6 font-mono text-sm space-y-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-terminal-green">$</span>
-                      <span className="text-foreground">npx gigapdf init my-project</span>
-                    </div>
-                    <div className="text-muted-foreground pl-4">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-terminal-amber" />
-                        <span>Creating project structure...</span>
-                      </div>
-                    </div>
-                    <div className="text-muted-foreground pl-4">
-                      <div className="flex items-center gap-2">
-                        <Download className="h-4 w-4 text-terminal-cyan" />
-                        <span>Installing dependencies...</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-terminal-green">
-                      <Check className="h-4 w-4" />
-                      <span>Ready! Run `cd my-project && pnpm dev`</span>
-                    </div>
+        {/* ════════════════════════════════════════════════════════════════
+            HERO — split asymétrique 55/45, texte gauche, épreuve à droite
+            ════════════════════════════════════════════════════════════════ */}
+        <section className="border-b border-border">
+          <div className="container mx-auto flex min-h-[calc(100dvh-4rem)] items-center px-4 py-16 lg:py-20">
+            <div className="grid w-full items-center gap-16 lg:grid-cols-[55fr_45fr] lg:gap-12">
+              <Reveal>
+                <div className="max-w-2xl">
+                  <p className="lp-label mb-6 flex items-center gap-3">
+                    <span aria-hidden="true" className="h-1.5 w-1.5 bg-primary" />
+                    {t("hero.kicker")}
+                  </p>
+                  <h1 className="font-display text-4xl font-extrabold leading-[1.05] tracking-tight text-balance sm:text-5xl lg:text-6xl">
+                    {t("hero.title")}{" "}
+                    <span className="text-primary">{t("hero.titleAccent")}</span>
+                  </h1>
+                  <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
+                    {t("hero.description")}
+                  </p>
+                  <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+                    <Link href="/register">
+                      <Button size="lg" className="lp-press w-full gap-2 px-7 text-base sm:w-auto">
+                        {t("hero.ctaPrimary")}
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                    <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
+                      <Button
+                        size="lg"
+                        variant="outline"
+                        className="lp-press w-full gap-2 px-7 text-base sm:w-auto"
+                      >
+                        <Github className="h-4 w-4" />
+                        {t("hero.ctaSecondary")}
+                      </Button>
+                    </a>
                   </div>
                 </div>
-              </div>
+              </Reveal>
+
+              <Reveal delay={100}>
+                <div className="px-6 pt-6 lg:px-4">
+                  <EditorMockup />
+                </div>
+              </Reveal>
             </div>
           </div>
         </section>
 
-        {/* ═══════════════════════════════════════════════════════════════════
-            FEATURES SECTION - Tech Cards
-            ═══════════════════════════════════════════════════════════════════ */}
-        <section id="features" className="py-24 md:py-32 relative">
-          <div className="absolute inset-0 bg-grid-dots opacity-30" />
+        {/* ════════════════════════════════════════════════════════════════
+            BANDEAU CONFIANCE — AGPL · auto-hébergeable · AES-256 · RGPD
+            ════════════════════════════════════════════════════════════════ */}
+        <section id="open-source" aria-label={t("trust.label")} className="border-b border-border bg-muted/30">
+          <div className="container mx-auto px-4 py-5">
+            <ul className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3">
+              {trustItems.map(({ key, icon: Icon }) => (
+                <li key={key} className="flex items-center gap-2.5">
+                  <Icon aria-hidden="true" className="h-4 w-4 text-primary" />
+                  <span className="font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                    {t(`trust.${key}`)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
 
-          <div className="container relative mx-auto px-4">
-            <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/50 px-4 py-1.5 text-sm mb-6">
-                <Cpu className="h-4 w-4 text-primary" />
-                <span className="font-mono">features</span>
+        {/* ════════════════════════════════════════════════════════════════
+            CAHIER 01 → 05 — sections zigzag 2 colonnes alternées
+            ════════════════════════════════════════════════════════════════ */}
+        {NOTEBOOK_SECTIONS.map(({ id, number, key, points }, index) => {
+          const flip = index % 2 === 1;
+          return (
+            <section key={key} id={id} className="border-b border-border">
+              <div className="container mx-auto grid items-center gap-12 px-4 py-20 md:py-28 lg:grid-cols-2 lg:gap-20">
+                <Reveal className={flip ? "lg:order-2" : undefined}>
+                  <SectionHeading
+                    number={number}
+                    label={t(`sections.${key}.label`)}
+                    title={t(`sections.${key}.title`)}
+                    description={t(`sections.${key}.description`)}
+                  />
+                  <ul className="mt-8 space-y-3.5">
+                    {points.map((point) => (
+                      <li
+                        key={point}
+                        className="flex items-start gap-3 text-sm leading-relaxed md:text-base"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="mt-[0.6em] h-px w-4 shrink-0 bg-primary"
+                        />
+                        <span>{t(`sections.${key}.points.${point}`)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Reveal>
+                <Reveal delay={100} className={cn("px-6", flip ? "lg:order-1" : undefined)}>
+                  {sectionVignettes[key]}
+                </Reveal>
               </div>
-              <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4">
-                {t("landing.features.title")}
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                {t("landing.features.description")}
-              </p>
-            </div>
+            </section>
+          );
+        })}
 
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
-              {/* Feature Card 1 - WYSIWYG Editor */}
-              <div className="group relative rounded-xl border border-border bg-card/50 backdrop-blur-sm p-8 card-hover">
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-6 group-hover:glow-green transition-shadow">
-                    <FileText className="h-6 w-6 text-primary" />
-                  </div>
-                  <h3 className="text-xl font-semibold mb-3">{t("landing.features.wysiwyg.title")}</h3>
-                  <p className="text-muted-foreground leading-relaxed">
-                    {t("landing.features.wysiwyg.description")}
-                  </p>
+        {/* ════════════════════════════════════════════════════════════════
+            BENTO — 5 capacités phares, grid asymétrique 2fr/1fr animée
+            ════════════════════════════════════════════════════════════════ */}
+        <section id="capabilities" className="border-b border-border bg-muted/20">
+          <div className="container mx-auto px-4 py-20 md:py-28">
+            <Reveal>
+              <div className="mb-14 max-w-xl">
+                <div className="mb-5 flex items-center gap-4">
+                  <span aria-hidden="true" className="lp-rule w-10 shrink-0" />
+                  <span className="lp-label">{t("bento.label")}</span>
                 </div>
+                <h2 className="font-display text-3xl font-bold tracking-tight text-balance sm:text-4xl">
+                  {t("bento.title")}
+                </h2>
+                <p className="mt-4 text-base leading-relaxed text-muted-foreground md:text-lg">
+                  {t("bento.description")}
+                </p>
               </div>
+            </Reveal>
 
-              {/* Feature Card 2 - Real-time Collaboration */}
-              <div className="group relative rounded-xl border border-border bg-card/50 backdrop-blur-sm p-8 card-hover">
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center mb-6 group-hover:glow-cyan transition-shadow">
-                    <Zap className="h-6 w-6 text-accent" />
-                  </div>
-                  <h3 className="text-xl font-semibold mb-3">{t("landing.features.collaboration.title")}</h3>
-                  <p className="text-muted-foreground leading-relaxed">
-                    {t("landing.features.collaboration.description")}
-                  </p>
-                </div>
-              </div>
-
-              {/* Feature Card 3 - Enterprise Security */}
-              <div className="group relative rounded-xl border border-border bg-card/50 backdrop-blur-sm p-8 card-hover">
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-terminal-purple/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-lg bg-terminal-purple/10 flex items-center justify-center mb-6">
-                    <Shield className="h-6 w-6 text-terminal-purple" />
-                  </div>
-                  <h3 className="text-xl font-semibold mb-3">{t("landing.features.security.title")}</h3>
-                  <p className="text-muted-foreground leading-relaxed">
-                    {t("landing.features.security.description")}
-                  </p>
-                </div>
-              </div>
-
-              {/* Feature Card 4 - REST API */}
-              <div className="group relative rounded-xl border border-border bg-card/50 backdrop-blur-sm p-8 card-hover">
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-terminal-amber/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-lg bg-terminal-amber/10 flex items-center justify-center mb-6">
-                    <Braces className="h-6 w-6 text-terminal-amber" />
-                  </div>
-                  <h3 className="text-xl font-semibold mb-3">{t("landing.features.api.title")}</h3>
-                  <p className="text-muted-foreground leading-relaxed">
-                    {t("landing.features.api.description")}
-                  </p>
-                </div>
-              </div>
-
-              {/* Feature Card 5 - Multi-format Export */}
-              <div className="group relative rounded-xl border border-border bg-card/50 backdrop-blur-sm p-8 card-hover">
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-terminal-cyan/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-lg bg-terminal-cyan/10 flex items-center justify-center mb-6">
-                    <Layers className="h-6 w-6 text-terminal-cyan" />
-                  </div>
-                  <h3 className="text-xl font-semibold mb-3">{t("landing.features.export.title")}</h3>
-                  <p className="text-muted-foreground leading-relaxed">
-                    {t("landing.features.export.description")}
-                  </p>
-                </div>
-              </div>
-
-              {/* Feature Card 6 - Self-hostable */}
-              <div className="group relative rounded-xl border border-border bg-card/50 backdrop-blur-sm p-8 card-hover">
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-terminal-green/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-lg bg-terminal-green/10 flex items-center justify-center mb-6">
-                    <Lock className="h-6 w-6 text-terminal-green" />
-                  </div>
-                  <h3 className="text-xl font-semibold mb-3">{t("landing.features.selfHostable.title")}</h3>
-                  <p className="text-muted-foreground leading-relaxed">
-                    {t("landing.features.selfHostable.description")}
-                  </p>
-                </div>
-              </div>
-
-              {/* Feature Card 7 - PDF Modification */}
-              <div className="group relative rounded-xl border border-border bg-card/50 backdrop-blur-sm p-8 card-hover md:col-span-2 lg:col-span-3">
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary/5 via-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="relative flex flex-col md:flex-row md:items-center gap-6">
-                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 group-hover:glow-green transition-shadow">
-                    <Pencil className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold mb-2">{t("landing.features.pdfModification.title")}</h3>
-                    <p className="text-muted-foreground leading-relaxed">
-                      {t("landing.features.pdfModification.description")}
+            <div className="relative">
+              <CropMarks />
+              <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+                {/* Collaboration live — grande cellule */}
+                <Reveal className="h-full lg:row-span-2">
+                  <article className="flex h-full flex-col rounded-md border border-border bg-card p-5 sm:p-6">
+                    <h3 className="font-display text-lg font-semibold">
+                      {t("bento.collaboration.title")}
+                    </h3>
+                    <p className="mb-5 mt-1.5 text-sm text-muted-foreground">
+                      {t("bento.collaboration.description")}
                     </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ═══════════════════════════════════════════════════════════════════
-            OPEN SOURCE SECTION - Terminal Style
-            ═══════════════════════════════════════════════════════════════════ */}
-        <section id="open-source" className="py-24 md:py-32 border-y border-border bg-muted/30 relative overflow-hidden">
-          <div className="absolute inset-0 bg-grid-lines opacity-30" />
-
-          <div className="container relative mx-auto px-4">
-            <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 rounded-full border border-terminal-green/30 bg-terminal-green/10 px-4 py-1.5 text-sm mb-6">
-                <Heart className="h-4 w-4 text-terminal-green" />
-                <span className="font-mono text-terminal-green">{t("landing.openSource.badge")}</span>
-              </div>
-              <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4">
-                {t("landing.openSource.title")}
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                {t("landing.openSource.description")}
-              </p>
-            </div>
-
-            {/* Code Block Showcase */}
-            <div className="max-w-4xl mx-auto mb-16">
-              <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xl">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/50">
-                  <div className="flex items-center gap-3">
-                    <div className="flex gap-1.5">
-                      <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                      <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                      <div className="w-3 h-3 rounded-full bg-green-500/80" />
+                    <div className="flex-1">
+                      <AnimCollaboration
+                        labelA={t("bento.collaboration.you")}
+                        labelB={t("bento.collaboration.guest")}
+                      />
                     </div>
-                    <span className="text-xs text-muted-foreground font-mono">quickstart.sh</span>
-                  </div>
-                  <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
-                    <ExternalLink className="h-3 w-3" />
-                    View on GitHub
-                  </Button>
-                </div>
-                <div className="p-6 font-mono text-sm space-y-2 overflow-x-auto">
-                  <div className="text-muted-foreground"># Clone the repository</div>
-                  <div><span className="text-terminal-green">$</span> git clone https://github.com/ronylicha/gigapdf.git</div>
-                  <div className="text-muted-foreground mt-4"># Install dependencies</div>
-                  <div><span className="text-terminal-green">$</span> cd gigapdf && pnpm install</div>
-                  <div className="text-muted-foreground mt-4"># Start development server</div>
-                  <div><span className="text-terminal-green">$</span> pnpm dev:all</div>
-                  <div className="mt-4 text-terminal-cyan">
-                    # API: http://localhost:8000 | Web: http://localhost:3000
-                  </div>
-                </div>
-              </div>
-            </div>
+                  </article>
+                </Reveal>
 
-            {/* Stats Grid */}
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-12 max-w-5xl mx-auto">
-              <div className="rounded-xl border border-border bg-card/50 backdrop-blur-sm p-6 text-center card-hover">
-                <Code2 className="h-8 w-8 text-primary mx-auto mb-4" />
-                <h3 className="font-semibold mb-1">{t("landing.openSource.mitLicense.title")}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {t("landing.openSource.mitLicense.description")}
-                </p>
-              </div>
-              <div className="rounded-xl border border-border bg-card/50 backdrop-blur-sm p-6 text-center card-hover">
-                <Users className="h-8 w-8 text-accent mx-auto mb-4" />
-                <h3 className="font-semibold mb-1">{t("landing.openSource.selfHostable.title")}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {t("landing.openSource.selfHostable.description")}
-                </p>
-              </div>
-              <div className="rounded-xl border border-border bg-card/50 backdrop-blur-sm p-6 text-center card-hover">
-                <GitFork className="h-8 w-8 text-terminal-amber mx-auto mb-4" />
-                <h3 className="font-semibold mb-1">{t("landing.openSource.contribute.title")}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {t("landing.openSource.contribute.description")}
-                </p>
-              </div>
-              <div className="rounded-xl border border-border bg-card/50 backdrop-blur-sm p-6 text-center card-hover">
-                <BookOpen className="h-8 w-8 text-terminal-purple mx-auto mb-4" />
-                <h3 className="font-semibold mb-1">{t("landing.openSource.documentation.title")}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {t("landing.openSource.documentation.description")}
-                </p>
-              </div>
-            </div>
+                {/* Signature PKCS#7 */}
+                <Reveal delay={50} className="h-full">
+                  <article className="flex h-full flex-col rounded-md border border-border bg-card p-5 sm:p-6">
+                    <h3 className="font-display text-lg font-semibold">
+                      {t("bento.signature.title")}
+                    </h3>
+                    <p className="mb-5 mt-1.5 text-sm text-muted-foreground">
+                      {t("bento.signature.description")}
+                    </p>
+                    <div className="flex-1">
+                      <AnimSignature stampText={t("bento.signature.stamp")} />
+                    </div>
+                  </article>
+                </Reveal>
 
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <a
-                href="https://github.com/ronylicha/gigapdf"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button size="lg" variant="outline" className="gap-2">
-                  <Github className="h-5 w-5" />
-                  {t("landing.starOnGithub")}
-                </Button>
-              </a>
-              <a
-                href="https://github.com/ronylicha/gigapdf/blob/main/CONTRIBUTING.md"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button size="lg" variant="outline" className="gap-2">
-                  <Heart className="h-5 w-5" />
-                  {t("landing.openSource.contributionGuide")}
-                </Button>
-              </a>
-              <Link href="/docs">
-                <Button size="lg" variant="outline" className="gap-2">
-                  <BookOpen className="h-5 w-5" />
-                  {t("landing.openSource.readTheDocs")}
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </section>
+                {/* OCR cherchable */}
+                <Reveal delay={100} className="h-full">
+                  <article className="flex h-full flex-col rounded-md border border-border bg-card p-5 sm:p-6">
+                    <h3 className="font-display text-lg font-semibold">
+                      {t("bento.ocr.title")}
+                    </h3>
+                    <p className="mb-5 mt-1.5 text-sm text-muted-foreground">
+                      {t("bento.ocr.description")}
+                    </p>
+                    <div className="flex-1">
+                      <AnimOcr />
+                    </div>
+                  </article>
+                </Reveal>
 
-        {/* ═══════════════════════════════════════════════════════════════════
-            PRICING SECTION - Glowing Cards
-            ═══════════════════════════════════════════════════════════════════ */}
-        <section id="pricing" className="py-24 md:py-32 relative">
-          <div className="absolute inset-0 bg-grid-dots opacity-30" />
-
-          <div className="container relative mx-auto px-4">
-            <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/50 px-4 py-1.5 text-sm mb-6">
-                <Sparkles className="h-4 w-4 text-primary" />
-                <span className="font-mono">pricing</span>
-              </div>
-              <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4">
-                {t("landing.pricing.title")}
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                {t("landing.pricing.description")}
-              </p>
-            </div>
-
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 max-w-6xl mx-auto">
-              {plans.map((plan) => {
-                const isComingSoon = plan.id !== "free";
-                return (
-                  <div
-                    key={plan.id}
-                    className={`relative rounded-xl border bg-card/50 backdrop-blur-sm p-6 flex flex-col transition-all duration-300 ${
-                      plan.popular && !isComingSoon
-                        ? "border-primary shadow-lg scale-[1.02] lg:scale-105"
-                        : "border-border hover:border-primary/50"
-                    } ${isComingSoon ? "opacity-75" : ""}`}
-                  >
-                    {/* Coming Soon Badge (replaces Popular badge for paid plans) */}
-                    {isComingSoon ? (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <span className="rounded-full bg-muted border border-border px-4 py-1 text-xs font-medium text-muted-foreground shadow-lg">
-                          {t("landing.pricing.comingSoonBadge")}
-                        </span>
-                      </div>
-                    ) : plan.popular ? (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <span className="rounded-full bg-primary px-4 py-1 text-xs font-medium text-primary-foreground shadow-lg">
-                          {t("landing.pricing.mostPopular")}
-                        </span>
-                      </div>
-                    ) : null}
-
-                    {/* Plan Header */}
-                    <div className="mb-6">
-                      <h3 className="text-xl font-bold">{plan.name}</h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {plan.description}
+                {/* Formats — bande marquee */}
+                <Reveal delay={150} className="h-full">
+                  <article className="flex h-full flex-col justify-between rounded-md border border-border bg-card p-5 sm:p-6">
+                    <div>
+                      <h3 className="font-display text-lg font-semibold">
+                        {t("bento.formats.title")}
+                      </h3>
+                      <p className="mb-5 mt-1.5 text-sm text-muted-foreground">
+                        {t("bento.formats.description")}
                       </p>
                     </div>
+                    <AnimFormats />
+                  </article>
+                </Reveal>
 
-                    {/* Price */}
-                    <div className="mb-6">
-                      <div className="flex items-baseline gap-1">
-                        {plan.price === 0 && plan.id === "free" ? (
-                          <span className="text-4xl font-bold font-mono">{t("landing.pricing.free")}</span>
-                        ) : plan.price === 0 && plan.id === "enterprise" ? (
-                          <span className="text-2xl font-bold">{t("landing.pricing.contactUs")}</span>
+                {/* Compression */}
+                <Reveal delay={200} className="h-full">
+                  <article className="flex h-full flex-col justify-between rounded-md border border-border bg-card p-5 sm:p-6">
+                    <div>
+                      <h3 className="font-display text-lg font-semibold">
+                        {t("bento.compression.title")}
+                      </h3>
+                      <p className="mb-5 mt-1.5 text-sm text-muted-foreground">
+                        {t("bento.compression.description")}
+                      </p>
+                    </div>
+                    <AnimCompression
+                      before={t("bento.compression.before")}
+                      after={t("bento.compression.after")}
+                    />
+                  </article>
+                </Reveal>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ════════════════════════════════════════════════════════════════
+            TARIFS — l'éditeur complet partout, on paie les volumes
+            ════════════════════════════════════════════════════════════════ */}
+        <section id="pricing" className="border-b border-border">
+          <div className="container mx-auto px-4 py-20 md:py-28">
+            <Reveal>
+              <div className="max-w-xl">
+                <div className="mb-5 flex items-center gap-4">
+                  <span aria-hidden="true" className="lp-rule w-10 shrink-0" />
+                  <span className="lp-label">{t("pricing.label")}</span>
+                </div>
+                <h2 className="font-display text-3xl font-bold tracking-tight text-balance sm:text-4xl">
+                  {t("pricing.title")}
+                </h2>
+                <p className="mt-4 text-base leading-relaxed text-muted-foreground md:text-lg">
+                  {t("pricing.description")}
+                </p>
+              </div>
+            </Reveal>
+
+            {/* Bandeau règle produit : toutes les fonctions, partout */}
+            <Reveal>
+              <div className="relative mb-10 mt-14">
+                <CropMarks />
+                <div className="rounded-md border border-primary/40 bg-primary/5 px-6 py-6">
+                  <p className="font-display text-lg font-bold tracking-tight md:text-xl">
+                    {t("pricing.banner.title")}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground md:text-base">
+                    {t("pricing.banner.subtitle")}
+                  </p>
+                  <ul className="mt-5 flex flex-wrap gap-x-7 gap-y-2.5">
+                    {INCLUDED_EVERYWHERE.map(({ key, icon: Icon }) => (
+                      <li key={key} className="flex items-center gap-2 text-sm">
+                        <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-primary" />
+                        <span>{t(`pricing.included.${key}`)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* Grille des forfaits */}
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {plans.map((plan, planIndex) => {
+                const isComingSoon = plan.id !== "free";
+                const mailtoHref = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
+                  `GigaPDF — ${t(`pricing.plans.${plan.id}.name`)}`,
+                )}`;
+
+                return (
+                  <Reveal key={plan.id} delay={50 * planIndex} className="h-full">
+                    <article
+                      className={cn(
+                        "relative flex h-full flex-col rounded-md border bg-card p-6",
+                        plan.popular ? "border-primary" : "border-border",
+                      )}
+                    >
+                      {/* Étiquette d'angle façon cahier */}
+                      <div className="mb-5 flex items-start justify-between gap-2">
+                        <div>
+                          <h3 className="font-display text-xl font-bold">
+                            {t(`pricing.plans.${plan.id}.name`)}
+                          </h3>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {t(`pricing.plans.${plan.id}.description`)}
+                          </p>
+                        </div>
+                        {isComingSoon ? (
+                          <span className="shrink-0 rounded-sm border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                            {t("pricing.comingSoonBadge")}
+                          </span>
+                        ) : plan.popular ? (
+                          <span className="shrink-0 rounded-sm border border-primary px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-primary">
+                            {t("pricing.mostPopular")}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="mb-6 flex items-baseline gap-1">
+                        {plan.id === "free" ? (
+                          <span className="font-mono text-4xl font-bold">
+                            {t("pricing.free")}
+                          </span>
+                        ) : plan.price === null ? (
+                          <span className="font-display text-2xl font-bold">
+                            {t("pricing.contactUs")}
+                          </span>
                         ) : (
                           <>
-                            <span className="text-4xl font-bold font-mono">{plan.price}</span>
+                            <span className="font-mono text-4xl font-bold tabular-nums">
+                              {plan.price}
+                            </span>
                             <span className="text-muted-foreground">
-                              {plan.currency}{t("landing.pricing.perMonth")}
+                              €{t("pricing.perMonth")}
                             </span>
                           </>
                         )}
                       </div>
-                    </div>
 
-                    {/* Features List */}
-                    <ul className="mb-8 space-y-3 flex-1">
-                      {plan.features.map((feature, featureIndex) => (
-                        <li key={featureIndex} className="flex items-start gap-2">
-                          <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                          <span className="text-sm">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
+                      <ul className="mb-8 flex-1 space-y-2.5">
+                        {plan.features.map((feature) => (
+                          <li key={feature} className="flex items-start gap-2.5 text-sm">
+                            <Check
+                              aria-hidden="true"
+                              className="mt-0.5 h-4 w-4 shrink-0 text-primary"
+                            />
+                            <span>{t(`pricing.plans.${plan.id}.features.${feature}`)}</span>
+                          </li>
+                        ))}
+                      </ul>
 
-                    {/* CTA Button — disabled for paid plans until launch */}
-                    {isComingSoon ? (
-                      <Button
-                        className="w-full gap-2"
-                        variant="outline"
-                        disabled
-                        aria-disabled="true"
-                      >
-                        {t("landing.pricing.comingSoon")}
-                      </Button>
-                    ) : (
-                      <Link href="/register" className="w-full">
-                        <Button
-                          className={`w-full gap-2 ${plan.popular ? "btn-glow" : ""}`}
-                          variant={plan.popular ? "default" : "outline"}
-                        >
-                          {plan.cta}
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
+                      {isComingSoon ? (
+                        <div className="space-y-2.5">
+                          <Button
+                            className="w-full"
+                            variant="outline"
+                            disabled
+                            aria-disabled="true"
+                          >
+                            {t("pricing.comingSoon")}
+                          </Button>
+                          <a
+                            href={mailtoHref}
+                            className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground underline underline-offset-4 transition-colors duration-150 hover:text-foreground"
+                          >
+                            <Mail aria-hidden="true" className="h-3.5 w-3.5" />
+                            {t("pricing.notifyMe")}
+                          </a>
+                        </div>
+                      ) : (
+                        <Link href="/register" className="w-full">
+                          <Button className="lp-press w-full gap-2">
+                            {t(`pricing.plans.${plan.id}.cta`)}
+                            <ArrowRight className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      )}
+                    </article>
+                  </Reveal>
                 );
               })}
             </div>
 
-            {/* Coming soon explanatory note */}
-            <div className="mt-8 text-center">
-              <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
-                {t("landing.pricing.comingSoonNote")}
-              </p>
-            </div>
-
-            {/* Self-host Note */}
-            <div className="mt-12 text-center">
-              <p className="text-muted-foreground inline-flex items-center gap-2 flex-wrap justify-center">
-                <Terminal className="h-4 w-4" />
-                {t("landing.pricing.selfHostNote")}{" "}
-                <a
-                  href="https://github.com/ronylicha/gigapdf#self-hosting"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline inline-flex items-center gap-1"
-                >
-                  {t("landing.pricing.selfHostLink")}
-                  <ExternalLink className="h-3 w-3" />
-                </a>{" "}
-                {t("landing.pricing.forFree")}
-              </p>
-            </div>
+            <Reveal>
+              <div className="mt-10 space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  {t("pricing.comingSoonNote")}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {t("pricing.selfHostNote")}{" "}
+                  <a
+                    href={`${GITHUB_URL}#self-hosting`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-4 transition-colors duration-150 hover:text-primary/80"
+                  >
+                    {t("pricing.selfHostLink")}
+                  </a>{" "}
+                  {t("pricing.forFree")}
+                </p>
+              </div>
+            </Reveal>
           </div>
         </section>
 
-        {/* ═══════════════════════════════════════════════════════════════════
-            FINAL CTA SECTION
-            ═══════════════════════════════════════════════════════════════════ */}
-        <section className="py-24 md:py-32 border-t border-border relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-t from-primary/5 to-transparent" />
-          <div className="absolute inset-0 bg-grid-dots opacity-30" />
-
-          <div className="container relative mx-auto px-4 text-center">
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4">
-              {t("landing.finalCta.title")}
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-xl mx-auto mb-10">
-              {t("landing.finalCta.description")}
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link href="/register">
-                <Button size="lg" className="gap-2 btn-glow text-base px-8">
-                  {t("landing.cta.startFreeTrial")}
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-              <Link href="/docs">
-                <Button size="lg" variant="outline" className="gap-2 text-base px-8">
-                  <BookOpen className="h-4 w-4" />
-                  {t("landing.cta.readDocs")}
-                </Button>
-              </Link>
-            </div>
+        {/* ════════════════════════════════════════════════════════════════
+            BON À TIRER — CTA final
+            ════════════════════════════════════════════════════════════════ */}
+        <section>
+          <div className="container mx-auto px-4 py-24 md:py-32">
+            <Reveal>
+              <div className="relative mx-auto max-w-3xl py-4 text-center">
+                <CropMarks />
+                <div className="border-y border-border px-4 py-14">
+                  <p className="lp-label mb-5">{t("finalCta.label")}</p>
+                  <h2 className="font-display text-3xl font-extrabold tracking-tight text-balance sm:text-4xl md:text-5xl">
+                    {t("finalCta.title")}
+                  </h2>
+                  <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
+                    {t("finalCta.description")}
+                  </p>
+                  <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                    <Link href="/register">
+                      <Button size="lg" className="lp-press w-full gap-2 px-7 text-base sm:w-auto">
+                        {t("finalCta.ctaPrimary")}
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                    <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
+                      <Button
+                        size="lg"
+                        variant="outline"
+                        className="lp-press w-full gap-2 px-7 text-base sm:w-auto"
+                      >
+                        <Github className="h-4 w-4" />
+                        {t("finalCta.ctaSecondary")}
+                      </Button>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
           </div>
         </section>
       </main>
