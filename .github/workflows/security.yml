@@ -29,10 +29,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v6
-        # No `version:` input — pnpm reads it from package.json's
-        # `packageManager: pnpm@10.28.0` (single source of truth, avoids the
-        # "Multiple versions of pnpm specified" error in action-setup v5+).
+      - uses: pnpm/action-setup@v4
+        # Pinned to v4 (Node-20 action) on purpose: v6 bootstraps @pnpm/exe via
+        # the runner's SYSTEM node, which is 18.19.1 on the self-hosted qrcom
+        # runner — too old for npm 11 (needs >=20.17 || >=22.9) → v6 crashes with
+        # ERR_INVALID_ARG_TYPE in @pnpm/exe/setup.js. v4 uses a node-independent
+        # install and stays green. Revisit once the runner's system Node is bumped.
+        with:
+          version: 10.28.0
 
       - uses: actions/setup-node@v6
         with:
@@ -94,10 +98,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v6
-        # No `version:` input — pnpm reads it from package.json's
-        # `packageManager: pnpm@10.28.0` (single source of truth, avoids the
-        # "Multiple versions of pnpm specified" error in action-setup v5+).
+      - uses: pnpm/action-setup@v4
+        # Pinned to v4 (Node-20 action) on purpose: v6 bootstraps @pnpm/exe via
+        # the runner's SYSTEM node, which is 18.19.1 on the self-hosted qrcom
+        # runner — too old for npm 11 (needs >=20.17 || >=22.9) → v6 crashes with
+        # ERR_INVALID_ARG_TYPE in @pnpm/exe/setup.js. v4 uses a node-independent
+        # install and stays green. Revisit once the runner's system Node is bumped.
+        with:
+          version: 10.28.0
 
       - uses: actions/setup-node@v6
         with:
