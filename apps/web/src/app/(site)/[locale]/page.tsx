@@ -3,11 +3,11 @@ import type { ReactNode } from "react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Button } from "@giga-pdf/ui";
 import { cn } from "@giga-pdf/ui/lib/utils";
+import { GithubIcon as Github } from "@/components/icons/github-icon";
 import {
   ArrowRight,
   Check,
   FileInput,
-  Github,
   LayoutGrid,
   Lock,
   Mail,

@@ -260,12 +260,13 @@ export default withSentryConfig(nextConfigWithIntl, {
   // Tunnel Sentry requests through /monitoring to avoid ad-blockers
   tunnelRoute: "/monitoring",
 
-  // Tree-shake Sentry debug statements in production
-  disableLogger: true,
-
-  // Automatically annotate React components for readable error stacks
-  reactComponentAnnotation: {
-    enabled: true,
+  // Webpack-only options (Sentry v10 relocated these under `webpack`).
+  // No-ops under Turbopack (Next 16 default); retained for any webpack fallback.
+  webpack: {
+    // Tree-shake Sentry debug statements in production
+    treeshake: { removeDebugLogging: true },
+    // Automatically annotate React components for readable error stacks
+    reactComponentAnnotation: { enabled: true },
   },
 
   // Source maps upload configuration (v9+ API)

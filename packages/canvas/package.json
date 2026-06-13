@@ -25,17 +25,17 @@
   "dependencies": {
     "@giga-pdf/types": "workspace:*",
     "fabric": "^7.4.0",
-    "pdfjs-dist": "^5.4.530"
+    "pdfjs-dist": "5.7.284"
   },
   "devDependencies": {
     "@giga-pdf/eslint-config": "workspace:*",
     "@giga-pdf/types": "workspace:*",
     "@giga-pdf/typescript-config": "workspace:*",
-    "@types/react": "^19.2.8",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "react": "19.2.3",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.3"
   },
   "peerDependencies": {
     "react": "^19.0.0",

@@ -24,16 +24,11 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { logger } from '@giga-pdf/logger';
 import { defaultFontCache, type FontCache } from '../utils/font-cache';
 
-// ─── Type augmentation ────────────────────────────────────────────────────────
-// TypeScript 5.9 lib.dom.d.ts does not yet expose FontFaceSet.add/delete
-// even though all modern browsers implement them (WHATWG FontFaceSet extends Set).
-// We cast via this interface to keep the code typesafe while avoiding `as any`.
-interface FontFaceSetWithMutation extends FontFaceSet {
-  add(font: FontFace): FontFaceSetWithMutation;
-  delete(font: FontFace): boolean;
-}
-function getFontSet(): FontFaceSetWithMutation {
-  return document.fonts as unknown as FontFaceSetWithMutation;
+// ─── Font set accessor ────────────────────────────────────────────────────────
+// TypeScript 6 lib.dom.d.ts exposes FontFaceSet.add/delete natively
+// (FontFaceSet extends Set<FontFace>), so no augmentation is required.
+function getFontSet(): FontFaceSet {
+  return document.fonts;
 }
 
 // ─── Feature Flag ─────────────────────────────────────────────────────────────

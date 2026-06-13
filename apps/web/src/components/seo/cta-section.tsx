@@ -5,7 +5,8 @@
  * automatique selon la locale courante).
  */
 
-import { ArrowRight, Github } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { GithubIcon as Github } from "@/components/icons/github-icon";
 import { Button } from "@giga-pdf/ui";
 import { Link } from "@/i18n/navigation";
 import type { SeoLocale } from "@/lib/seo";

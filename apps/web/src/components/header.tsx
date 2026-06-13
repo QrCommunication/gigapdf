@@ -7,7 +7,7 @@ import { Logo } from "@/components/logo";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { PublicLanguageSwitcher } from "@/components/public-language-switcher";
 import { Button } from "@giga-pdf/ui";
-import { Github } from "lucide-react";
+import { GithubIcon as Github } from "@/components/icons/github-icon";
 
 export function Header() {
   const t = useTranslations();

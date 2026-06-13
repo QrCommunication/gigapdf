@@ -16,8 +16,8 @@
   },
   "pnpm": {
     "overrides": {
-      "react": "19.2.3",
-      "react-dom": "19.2.3",
+      "react": "19.2.7",
+      "react-dom": "19.2.7",
       "hono@<4.11.4": ">=4.11.4",
       "lodash@>=4.0.0 <=4.17.22": ">=4.17.23",
       "next@>=15.6.0-canary.0 <16.1.5": ">=16.1.5",
@@ -140,18 +140,18 @@
   "devDependencies": {
     "@giga-pdf/eslint-config": "workspace:*",
     "@giga-pdf/typescript-config": "workspace:*",
-    "@types/node": "^25.0.9",
-    "autoprefixer": "^10.4.23",
-    "concurrently": "^9.2.1",
-    "eslint": "^9.39.2",
+    "@types/node": "^25.9.3",
+    "autoprefixer": "^10.5.0",
+    "concurrently": "^10.0.3",
+    "eslint": "^9.39.4",
     "husky": "^9.1.7",
-    "lint-staged": "^16.2.7",
-    "prettier": "^3.8.0",
-    "prettier-plugin-tailwindcss": "^0.7.2",
-    "tailwindcss": "^4.0.0",
-    "tsx": "^4.21.0",
-    "turbo": "^2.7.4",
-    "typescript": "^5.9.3"
+    "lint-staged": "^17.0.7",
+    "prettier": "^3.8.4",
+    "prettier-plugin-tailwindcss": "^0.8.0",
+    "tailwindcss": "^4.3.1",
+    "tsx": "^4.22.4",
+    "turbo": "^2.9.18",
+    "typescript": "^6.0.3"
   },
   "engines": {
     "node": ">=20.0.0",
