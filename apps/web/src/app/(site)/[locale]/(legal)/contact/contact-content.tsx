@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Input, Label, Textarea } from "@giga-pdf/ui";
-import { Mail, Phone, MapPin, Github, Send, CheckCircle } from "lucide-react";
+import { Mail, Phone, MapPin, Send, CheckCircle } from "lucide-react";
+import { GithubIcon as Github } from "@/components/icons/github-icon";
 import { env } from "@/lib/env";
 
 export default function ContactContent() {

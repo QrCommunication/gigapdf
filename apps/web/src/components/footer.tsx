@@ -5,7 +5,8 @@ import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { defaultLocale } from "@/i18n/config";
 import { Logo } from "@/components/logo";
-import { ExternalLink, Github } from "lucide-react";
+import { ExternalLink } from "lucide-react";
+import { GithubIcon as Github } from "@/components/icons/github-icon";
 
 const GITHUB_URL = "https://github.com/QrCommunication/gigapdf";
 

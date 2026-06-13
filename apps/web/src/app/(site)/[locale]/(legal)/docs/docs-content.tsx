@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
+import { GithubIcon as Github } from "@/components/icons/github-icon";
 import {
   BookOpen,
   FileJson,
@@ -11,7 +12,6 @@ import {
   FileCode,
   Blocks,
   ArrowRight,
-  Github,
   Scale,
   Container,
   Server,
