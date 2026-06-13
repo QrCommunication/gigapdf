@@ -15,6 +15,21 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.3.0",
+    date: "2026-06-13",
+    type: "minor",
+    changes: [
+      { type: "feature", description: "The public site is now available in English under /en/* — French stays the default with unchanged URLs" },
+      { type: "feature", description: "32 new guide pages in French and English: 20 PDF tools (edit, merge, compress, sign, OCR…) and 10 professions, with localized URLs" },
+      { type: "feature", description: "Redesigned home page with a 'print-shop editorial' look: crop marks, scroll ruler, numbered sections and subtle animations" },
+      { type: "feature", description: "Pro canvas navigation: scroll naturally while zoomed, Ctrl+wheel zooms to your cursor, presets from 50% to 400%, Fit page / Fit width (Ctrl+0 / Ctrl+1), pan with Space or middle-click" },
+      { type: "feature", description: "Pro form designer: multiline text, dates, radio groups and dropdowns with editable options; required fields, defaults and max length; Design/Fill modes with highlighting of existing fields; tab-order reordering and flattening after filling" },
+      { type: "improvement", description: "Honest pricing: every feature on every plan, including free — you pay for volumes, not features" },
+      { type: "fix", description: "Signing up with Google no longer fails with 'unable_to_create_user'" },
+      { type: "fix", description: "Plan quotas are now consistent everywhere, and unlimited plans are truly unlimited" },
+    ],
+  },
+  {
     version: "1.2.0",
     date: "2026-06-13",
     type: "minor",

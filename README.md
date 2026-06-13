@@ -152,7 +152,10 @@ The self-hosted version uses the exact same code base.
 ## Features
 
 ### PDF Editing
-- **Visual WYSIWYG editor** — Canvas-based editing with drag-and-drop
+- **Visual WYSIWYG editor** — Canvas-based editing with drag-and-drop and
+  professional navigation: native scrolling while zoomed, cursor-anchored
+  Ctrl+wheel zoom, 50–400% presets, Fit page / Fit width (Ctrl+0 / Ctrl+1),
+  Space or middle-click panning
 - **Text manipulation** — Add, edit, format text (bold, italic, underline,
   alignment); new text adopts the document's dominant font
 - **Faithful fonts** — Automatic identification of the PDF's fonts with
@@ -161,7 +164,11 @@ The self-hosted version uses the exact same code base.
   Google); the downloaded font is embedded in the final PDF
 - **Images & shapes** — Insert, resize, position visual elements
 - **Annotations** — Highlights, comments, stamps, freehand drawings
-- **Form builder** — Create and fill interactive PDF forms
+- **Form designer** — Design and fill interactive PDF forms: text,
+  multiline, date, checkbox, radio groups and dropdowns with editable
+  options; required / read-only fields, defaults, max length and tab-order
+  reordering; Design / Fill modes with highlighting of the document's
+  existing fields and flattening after filling
 - **Layers & multi-selection** — Per-element visibility and locking in a
   layers panel; batch-edit opacity, colors and alignment across a
   multi-selection
@@ -193,6 +200,14 @@ The self-hosted version uses the exact same code base.
 - Real thumbnails generated at upload and refreshed after editing
 - Document duplication, folder organization & renaming
 - Parallel uploads (3 concurrent)
+
+### Public site & localization
+- Bilingual app — interface in French and English; public pages are served
+  under locale-prefixed URLs (French by default, English under `/en/*`)
+  with per-page canonical and `fr`/`en`/`x-default` hreflang
+- 32 SEO guide pages (20 PDF tools, 10 professions, 2 hubs) written in
+  both languages with localized slugs and JSON-LD structured data
+  (SoftwareApplication, HowTo, FAQPage)
 
 ### Developer tools
 - **REST API** — Complete OpenAPI spec, see `docs/api/`
