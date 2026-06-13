@@ -71,9 +71,13 @@ alembic upgrade head     # idempotent — depuis la racine (alembic.ini)
 alembic current          # doit afficher la dernière révision
 ```
 
+- **v1.3.0** introduit la migration `018_free_doc_limit` (migration de
+  données : ramène à 100 la limite de documents des quotas du plan
+  gratuit créés avec l'ancien défaut 1000 ; les limites personnalisées
+  par un admin ne sont pas touchées). `alembic current` doit afficher
+  `018_free_doc_limit`.
 - **v1.2.0** introduit la migration `017_ged_features` (colonnes de
   recherche plein texte + index corbeille sur `stored_documents`).
-  `alembic current` doit afficher `017_ged_features`.
 - Les versions antérieures à v1.2.0 contenaient un bug dans
   `migrations/env.py` : sur toute base où la table `alembic_version`
   existait déjà, les migrations étaient **silencieusement annulées**

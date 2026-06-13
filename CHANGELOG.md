@@ -5,6 +5,78 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-06-13
+
+### Added
+
+**Public site**
+- English version of the public pages with locale-prefix routing —
+  French URLs are unchanged (default locale, no prefix), English lives
+  under `/en/*`, with per-page canonical URLs and valid
+  `fr`/`en`/`x-default` hreflang alternates. Dashboard, editor and
+  embed keep their cookie-based locale and stay unprefixed.
+- 32 programmatic SEO pages, each written in both French and English
+  with localized slugs (e.g. `/tools/editer-pdf` ↔
+  `/en/tools/edit-pdf`): 20 tool guides, 10 profession pages and the
+  2 hub pages, with JSON-LD structured data (SoftwareApplication,
+  HowTo, FAQPage, BreadcrumbList). The sitemap now lists both locales
+  (~73 URLs).
+- Landing page redesign — "print-shop editorial" direction: crop
+  marks, fixed scroll ruler, numbered sections, asymmetric hero with a
+  pure-CSS editor mockup, and an animated bento grid
+  (reduced-motion safe).
+
+**Editor**
+- Professional canvas navigation: native scrolling when zoomed (fixes
+  the "cannot move around the page once zoomed in" lock-up),
+  Ctrl+wheel zoom anchored at the cursor, presets from 50% to 400%,
+  Fit page / Fit width, Ctrl+0 / Ctrl+1 shortcuts, and panning with
+  Space-hold or middle-click.
+- Professional form designer: multiline text, date fields, radio
+  groups and dropdowns with editable options; rich field properties
+  (unique-name validation, tooltip, required, read-only, defaults,
+  max length, font size, alignment); Design / Fill modes with
+  highlighting of the document's existing fields; flattening after
+  filling; field list with tab-order reordering; 4 px edge snapping.
+  The server-side bake honors required, defaults, maxLength, password,
+  fontSize, alignment and tooltip.
+
+### Changed
+- Honest pricing: every feature ships on every plan, free included —
+  plans differ by volumes (storage, documents, API calls, team
+  members), branding and support. The fake "advanced editing"
+  differentiator is gone.
+
+### Fixed
+- **Google OAuth: every sign-up failed** with `unable_to_create_user`.
+  better-auth declared the additional field `is_admin` (snake_case)
+  while the Prisma client field is `isAdmin`, so each
+  `prisma.user.create()` triggered by a Google sign-up threw a
+  validation error.
+- Plan quotas: the three plan sources of truth (seed script, quota
+  service, ORM defaults) are now aligned; enterprise "unlimited" is
+  consistently encoded as `-1`; two `-1` quota comparisons that were
+  always true / always false are fixed; the free plan's document-limit
+  default is now 100 (was 1000).
+- Removed hreflang alternates that pointed to 404 URLs.
+
+### Notes for self-hosters
+- **Database migration required** after updating:
+  ```bash
+  source venv/bin/activate
+  alembic upgrade head
+  ```
+  v1.3.0 ships migration `018_free_doc_limit`, a data migration that
+  resets free-plan quota rows created with the stale 1000
+  document-limit default back to 100 (custom limits set by an admin
+  are left untouched). Verify with `alembic current` that
+  `018_free_doc_limit` is applied.
+- The public site now serves English pages under `/en/*`. The
+  reference nginx config routes everything outside `/api/*` to
+  Next.js, so no change is needed there — but if you maintain a custom
+  path allow-list in front of the web app, make sure `/en/*` reaches
+  Next.js.
+
 ## [1.2.0] - 2026-06-13
 
 ### Added

@@ -523,15 +523,16 @@ GRANT ALL PRIVILEGES ON DATABASE gigapdf_celery TO gigapdf;
 
 > ⚠️ **Updating an existing install? Database migration is mandatory.**
 > After every `git pull`, re-run `alembic upgrade head` from the project
-> root (where `alembic.ini` lives), with the venv activated. v1.2.0 ships
-> migration `017_ged_features` (full-text search columns + trash index on
-> `stored_documents`).
+> root (where `alembic.ini` lives), with the venv activated. v1.3.0 ships
+> migration `018_free_doc_limit` (data migration: free-plan document
+> limit back to 100); v1.2.0 shipped `017_ged_features` (full-text search
+> columns + trash index on `stored_documents`).
 >
 > Versions before v1.2.0 had a bug in `migrations/env.py` that **silently
 > rolled back migrations** on databases where the `alembic_version` table
 > already existed (exit code 0, "Running upgrade …" logged, no schema
 > change). After updating, verify the revision is really applied:
-> `alembic current` must report `017_ged_features`.
+> `alembic current` must report `018_free_doc_limit`.
 
 ```bash
 # Activate virtual environment
