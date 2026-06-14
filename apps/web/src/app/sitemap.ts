@@ -45,6 +45,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...bilingualEntries("/login", "monthly", 0.8),
     ...bilingualEntries("/register", "monthly", 0.8),
     ...bilingualEntries("/about", "monthly", 0.7),
+    ...bilingualEntries("/open-source", "monthly", 0.7),
     ...bilingualEntries("/docs", "weekly", 0.7),
     ...bilingualEntries("/changelog", "weekly", 0.6),
     ...bilingualEntries("/privacy", "yearly", 0.5),
