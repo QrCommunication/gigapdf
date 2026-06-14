@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>The self-hostable WYSIWYG PDF editor — edit text, images and forms
-  in your browser, with a complete REST API and embeddable widget.<br>
+  in your browser, with a complete REST API.<br>
   Open source under AGPLv3.</strong>
 </p>
 
@@ -48,8 +48,8 @@
   re-embedding for accurate output.
 - **Self-hostable from day one** — `docker compose up` and you're running.
   No cloud lock-in, no telemetry, your data stays on your infrastructure.
-- **API-first design** — Complete REST API (OpenAPI documented) plus an
-  embeddable widget so you can integrate PDF editing into your own apps.
+- **API-first design** — Complete REST API (OpenAPI documented) so you can
+  integrate PDF editing into your own apps.
 
 ## Quick start (self-hosting)
 
@@ -214,7 +214,6 @@ The self-hosted version uses the exact same code base.
 
 ### Developer tools
 - **REST API** — Complete OpenAPI spec, see `docs/api/`
-- **Embed widget** — `<script src=".../embed.js">` integration
 - **Webhooks** — Document lifecycle events
 - **Real-time collaboration** — WebSocket-based: live element sync on the
   canvas, multiple cursors

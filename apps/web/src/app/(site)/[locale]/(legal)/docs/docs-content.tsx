@@ -10,7 +10,6 @@ import {
   Download,
   Braces,
   FileCode,
-  Blocks,
   ArrowRight,
   Scale,
   Container,
@@ -334,8 +333,11 @@ export default function DocsContent() {
           </div>
         </div>
 
-        {/* API keys + Embed widget */}
-        <div className="grid gap-6 md:grid-cols-2 mb-6 not-prose">
+        {/* API keys. La carte « Embed widget » est masquée tant que l'embed
+            SDK (@giga-pdf/embed) n'est pas publié — /docs/embed redirige vers
+            /docs en attendant. Restaurer la grille md:grid-cols-2 + le <Link
+            href="/docs/embed"> quand le SDK sera dispo. */}
+        <div className="mb-6 not-prose">
           <div className="rounded-xl border border-border bg-card/50 p-6 flex flex-col">
             <div className="flex items-center gap-2 mb-2">
               <KeyRound className="h-5 w-5 text-terminal-amber" />
@@ -350,21 +352,6 @@ export default function DocsContent() {
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
-
-          <Link
-            href="/docs/embed"
-            className="group rounded-xl border border-terminal-purple/30 bg-gradient-to-r from-terminal-purple/5 to-primary/5 p-6 hover:border-terminal-purple/50 transition-all flex flex-col"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <Blocks className="h-5 w-5 text-terminal-purple" />
-              <h3 className="font-semibold text-lg">{t("api.embedTitle")}</h3>
-              <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-terminal-purple group-hover:translate-x-1 transition-all ml-auto" />
-            </div>
-            <p className="text-sm text-muted-foreground mb-4 flex-1">{t("api.embedDescription")}</p>
-            <span className="inline-flex items-center gap-2 text-sm text-terminal-purple">
-              {t("api.embedLink")}
-            </span>
-          </Link>
         </div>
 
         {/* Interactive docs */}
