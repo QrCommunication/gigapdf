@@ -22,24 +22,27 @@ export function Header() {
         <div className="flex items-center gap-8">
           <Logo href={homeHref} size="md" />
           <nav className="hidden lg:flex items-center gap-1">
-            <Link
-              href="/#features"
+            {/* Ancres in-page : <a> natif (scroll hash fiable, même page ET
+                cross-page) préfixé par la locale courante. Le <Link> next-intl
+                ne déclenche pas le scroll vers un hash same-page. */}
+            <a
+              href={`${homeHref}#features`}
               className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted"
             >
               {t("nav.features")}
-            </Link>
+            </a>
             <Link
-              href="/#open-source"
+              href="/open-source"
               className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted"
             >
               {t("nav.openSource")}
             </Link>
-            <Link
-              href="/#pricing"
+            <a
+              href={`${homeHref}#pricing`}
               className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted"
             >
               {t("nav.pricing")}
-            </Link>
+            </a>
             <a
               href="https://github.com/QrCommunication/gigapdf"
               target="_blank"

@@ -243,6 +243,8 @@
 
   html {
     scroll-behavior: smooth;
+    /* Décale les ancres (#features, #pricing…) sous le header sticky (h-16). */
+    scroll-padding-top: 5rem;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

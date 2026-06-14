@@ -53,6 +53,82 @@
     "twitterTitle": "GigaPDF — L'éditeur PDF open source",
     "twitterDescription": "Modifiez vos PDF comme un document Word : polices fidèles, collaboration live, signature, OCR. Open source AGPL, auto-hébergeable."
   },
+  "openSource": {
+    "meta": {
+      "title": "Open source",
+      "description": "GigaPDF est un éditeur PDF 100 % open source sous licence AGPL-3.0 : code transparent et auditable, auto-hébergeable, sans verrouillage. Contribuez sur GitHub."
+    },
+    "hero": {
+      "kicker": "Code ouvert · AGPL-3.0",
+      "title": "Un éditeur PDF",
+      "titleAccent": "vraiment open source",
+      "description": "Tout le code de GigaPDF est public, auditable et auto-hébergeable. Pas de boîte noire, pas de verrouillage : la version cloud et la version que vous hébergez partagent exactement la même base de code.",
+      "ctaGithub": "Voir le code sur GitHub",
+      "ctaSelfHost": "Guide d'auto-hébergement"
+    },
+    "pillars": {
+      "label": "Pourquoi open source",
+      "title": "Construit en public, pour durer",
+      "transparency": {
+        "title": "Transparence totale",
+        "description": "Chaque ligne est lisible sur GitHub. Auditez la sécurité, le traitement de vos fichiers et la conformité RGPD par vous-même."
+      },
+      "selfHost": {
+        "title": "Auto-hébergeable",
+        "description": "Un simple docker compose up et c'est en ligne. Vos documents restent sur votre infrastructure, sans télémétrie."
+      },
+      "noLockIn": {
+        "title": "Zéro verrouillage",
+        "description": "Formats ouverts, API documentée, export complet. Vous ne dépendez jamais du cloud et pouvez partir quand vous voulez."
+      },
+      "community": {
+        "title": "Ouvert aux contributions",
+        "description": "Issues, discussions et pull requests bienvenues : la feuille de route se construit avec la communauté."
+      }
+    },
+    "license": {
+      "label": "Licence",
+      "title": "GNU AGPL-3.0-or-later",
+      "description": "Le code est sous AGPL-3.0. Vous êtes libre de l'utiliser, l'étudier, le modifier et le redistribuer — à condition de publier le code source de toute version modifiée fournie comme service en réseau.",
+      "points": {
+        "use": "Utilisez, étudiez et modifiez le code librement.",
+        "network": "Toute version modifiée exploitée en service réseau doit publier ses sources.",
+        "trademark": "Le nom et le logo « GigaPDF » sont des marques de QR Communication SAS : un fork modifié doit se renommer entièrement."
+      },
+      "linkLicense": "Lire la licence",
+      "linkTrademark": "Politique de marque"
+    },
+    "stack": {
+      "label": "Stack",
+      "title": "Une stack moderne et auditable",
+      "description": "GigaPDF est un monorepo pnpm + Turbo. Front Next.js 16 / React 19, moteur PDF en TypeScript (pdf.js, pdf-lib, MuPDF), API FastAPI / Python, le tout sur Node.js 24 et PostgreSQL 17.",
+      "items": {
+        "frontend": "Next.js 16 · React 19 · Tailwind v4",
+        "engine": "Moteur PDF TypeScript · pdf.js · pdf-lib · MuPDF",
+        "backend": "FastAPI · Python 3.12 · Celery",
+        "data": "PostgreSQL 17 · Redis 8 · S3"
+      }
+    },
+    "contribute": {
+      "label": "Contribuer",
+      "title": "Envie de mettre les mains dedans ?",
+      "description": "Un bug, une idée ou du code : tout est le bienvenu.",
+      "steps": {
+        "fork": "Forkez le dépôt et lisez le guide de contribution.",
+        "dco": "Signez vos commits (DCO) avec git commit -s.",
+        "pr": "Ouvrez une pull request — la CI valide tout automatiquement."
+      },
+      "ctaContributing": "Guide de contribution",
+      "ctaIssues": "Parcourir les issues",
+      "ctaDiscussions": "Rejoindre les discussions"
+    },
+    "cta": {
+      "title": "Le code vous attend",
+      "description": "Étoilez le dépôt, auto-hébergez en quelques minutes, ou essayez la version cloud.",
+      "ctaGithub": "Voir sur GitHub",
+      "ctaTry": "Essayer gratuitement"
+    }
+  },
   "landing": {
     "hero": {
       "kicker": "Éditeur PDF open source — AGPL-3.0",

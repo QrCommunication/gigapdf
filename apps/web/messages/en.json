@@ -53,6 +53,82 @@
     "twitterTitle": "GigaPDF — The open-source PDF editor",
     "twitterDescription": "Edit your PDFs like a Word document: faithful fonts, live collaboration, signing, OCR. AGPL open source, self-hostable."
   },
+  "openSource": {
+    "meta": {
+      "title": "Open source",
+      "description": "GigaPDF is a 100% open-source PDF editor licensed under AGPL-3.0: transparent, auditable code, self-hostable, no lock-in. Contribute on GitHub."
+    },
+    "hero": {
+      "kicker": "Open code · AGPL-3.0",
+      "title": "A PDF editor that is",
+      "titleAccent": "truly open source",
+      "description": "Every line of GigaPDF is public, auditable and self-hostable. No black box, no lock-in: the cloud version and the one you host run the exact same code base.",
+      "ctaGithub": "View the code on GitHub",
+      "ctaSelfHost": "Self-hosting guide"
+    },
+    "pillars": {
+      "label": "Why open source",
+      "title": "Built in the open, built to last",
+      "transparency": {
+        "title": "Full transparency",
+        "description": "Every line is readable on GitHub. Audit the security, how your files are processed and GDPR compliance yourself."
+      },
+      "selfHost": {
+        "title": "Self-hostable",
+        "description": "A single docker compose up and you're live. Your documents stay on your infrastructure, with no telemetry."
+      },
+      "noLockIn": {
+        "title": "Zero lock-in",
+        "description": "Open formats, a documented API, full export. You never depend on the cloud and can leave whenever you want."
+      },
+      "community": {
+        "title": "Open to contributions",
+        "description": "Issues, discussions and pull requests welcome: the roadmap is built together with the community."
+      }
+    },
+    "license": {
+      "label": "License",
+      "title": "GNU AGPL-3.0-or-later",
+      "description": "The code is licensed under AGPL-3.0. You are free to use, study, modify and redistribute it — provided you publish the source code of any modified version offered as a network service.",
+      "points": {
+        "use": "Use, study and modify the code freely.",
+        "network": "Any modified version run as a network service must publish its sources.",
+        "trademark": "The \"GigaPDF\" name and logo are trademarks of QR Communication SAS: a modified fork must rebrand entirely."
+      },
+      "linkLicense": "Read the license",
+      "linkTrademark": "Trademark policy"
+    },
+    "stack": {
+      "label": "Stack",
+      "title": "A modern, auditable stack",
+      "description": "GigaPDF is a pnpm + Turbo monorepo. Next.js 16 / React 19 front end, a TypeScript PDF engine (pdf.js, pdf-lib, MuPDF), a FastAPI / Python API, all on Node.js 24 and PostgreSQL 17.",
+      "items": {
+        "frontend": "Next.js 16 · React 19 · Tailwind v4",
+        "engine": "TypeScript PDF engine · pdf.js · pdf-lib · MuPDF",
+        "backend": "FastAPI · Python 3.12 · Celery",
+        "data": "PostgreSQL 17 · Redis 8 · S3"
+      }
+    },
+    "contribute": {
+      "label": "Contribute",
+      "title": "Want to get your hands dirty?",
+      "description": "A bug, an idea or some code: it's all welcome.",
+      "steps": {
+        "fork": "Fork the repository and read the contributing guide.",
+        "dco": "Sign your commits (DCO) with git commit -s.",
+        "pr": "Open a pull request — CI validates everything automatically."
+      },
+      "ctaContributing": "Contributing guide",
+      "ctaIssues": "Browse the issues",
+      "ctaDiscussions": "Join the discussions"
+    },
+    "cta": {
+      "title": "The code is waiting for you",
+      "description": "Star the repo, self-host in minutes, or try the cloud version.",
+      "ctaGithub": "View on GitHub",
+      "ctaTry": "Try it free"
+    }
+  },
   "landing": {
     "hero": {
       "kicker": "Open-source PDF editor — AGPL-3.0",
