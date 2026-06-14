@@ -22,21 +22,22 @@ export function Header() {
         <div className="flex items-center gap-8">
           <Logo href={homeHref} size="md" />
           <nav className="hidden lg:flex items-center gap-1">
-            {/* Ancres in-page : <a> natif (scroll hash fiable, même page ET
-                cross-page) préfixé par la locale courante. Le <Link> next-intl
-                ne déclenche pas le scroll vers un hash same-page. */}
-            <a
-              href={`${homeHref}#features`}
+            {/* « Fonctionnalités » pointe vers le hub d'outils SEO /tools
+                (page réelle bilingue) plutôt qu'une ancre de section. */}
+            <Link
+              href="/tools"
               className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted"
             >
               {t("nav.features")}
-            </a>
+            </Link>
             <Link
               href="/open-source"
               className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted"
             >
               {t("nav.openSource")}
             </Link>
+            {/* Ancre in-page : <a> natif locale-aware (le <Link> next-intl ne
+                scrolle pas vers un hash same-page). */}
             <a
               href={`${homeHref}#pricing`}
               className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted"
