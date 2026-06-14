@@ -233,6 +233,17 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // Embed widget docs masquée tant que le SDK @giga-pdf/embed n'est pas publié :
+  // 307 vers /docs au niveau ROUTING (s'exécute avant le middleware), donc une
+  // vraie redirection serveur — un redirect() de page sous SSG ne produit qu'une
+  // redirection client-side servie en 200 (mauvais pour le SEO).
+  async redirects() {
+    return [
+      { source: "/docs/embed", destination: "/docs", permanent: false },
+      { source: "/en/docs/embed", destination: "/en/docs", permanent: false },
+    ];
+  },
+
   // Proxy API calls to avoid mixed content (HTTPS frontend -> HTTP backend)
   async rewrites() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
