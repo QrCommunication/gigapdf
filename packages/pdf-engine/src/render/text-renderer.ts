@@ -209,19 +209,40 @@ export async function addText(
   const fontObj = await resolveFont(handle, element, fontBytes);
   const color = hexToPackedRgb(element.style.color);
 
+  // Sub/superscript: the unified model carries `verticalAlign` per text box
+  // (e.g. footnote refs from a DOCX import), so we bake the whole run at a
+  // reduced size with a shifted baseline (CSS-like: ~0.583x size, raised ~1/3 em
+  // for superscript, lowered ~1/6 em for subscript). PDF user space is bottom-up
+  // so +y raises the baseline.
+  const baseSize = element.style.fontSize;
+  const vAlign = element.style.verticalAlign;
+  const renderSize = vAlign === "baseline" ? baseSize : baseSize * 0.583;
+  const baselineShift =
+    vAlign === "superscript"
+      ? baseSize * 0.33
+      : vAlign === "subscript"
+        ? -baseSize * 0.16
+        : 0;
+
   // Baseline anchor: the engine draws from the text baseline at (x, y), so we
   // place the baseline one fontSize below the box top — the same offset the old
-  // pdf-lib path used (drawText y = top - fontSize).
+  // pdf-lib path used (drawText y = top - fontSize) — plus the vertical-align
+  // shift. Underline/strikethrough are baked by the engine itself (the rule
+  // follows the text rotation and is sized from the run's real glyph advances).
   handle._doc.addText(
     pageNumber,
     pdfRect.x,
-    pdfRect.y + pdfRect.height - element.style.fontSize,
-    element.style.fontSize,
+    pdfRect.y + pdfRect.height - baseSize + baselineShift,
+    renderSize,
     element.content,
     fontObj,
     color,
     element.style.opacity,
     element.transform.rotation,
+    {
+      underline: element.style.underline,
+      strikethrough: element.style.strikethrough,
+    },
   );
 
   markDirty(handle._doc);
