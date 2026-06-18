@@ -1,10 +1,13 @@
 # GigaPDF - Web Frontend (Next.js 16) + moteur PDF TypeScript
 #
-# Base Debian (bookworm) OBLIGATOIRE — pas Alpine :
-#   - Playwright ne fournit aucun build Chromium pour musl (HTML/URL → PDF)
-#   - LibreOffice (conversions Office ↔ PDF) indisponible en headless fiable sur Alpine
-#   - fontforge (conversion Type1/CFF → TTF pour la fidélité des polices) absent d'Alpine
+# Base Debian (bookworm) — image glibc :
 #   - node-canvas et sharp disposent de prebuilds glibc (aucune toolchain requise)
+#
+# AUCUN binaire système tiers n'est requis : le moteur PDF (gigapdf-lib, WebAssembly)
+# est autonome. Il gère en interne les conversions Office ↔ PDF et HTML/URL → PDF,
+# l'OCR multi-langues, l'embarquement et la conversion des polices, la rasterisation,
+# les signatures et le chiffrement — sans LibreOffice, Chromium/Playwright, Tesseract,
+# fontforge ni poppler.
 
 FROM node:22-bookworm-slim AS base
 
@@ -41,11 +44,6 @@ RUN pnpm --filter web db:generate
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm exec turbo run build --filter=web...
 
-# Navigateur Chromium de Playwright (binaire seul ; les bibliothèques système
-# sont installées au stage production, où le navigateur s'exécute réellement)
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN pnpm --filter @giga-pdf/pdf-engine exec playwright install chromium
-
 # ============================================
 # Production stage
 # ============================================
@@ -53,32 +51,15 @@ FROM node:22-bookworm-slim AS production
 
 WORKDIR /app
 
-# Dépendances système des fonctionnalités PDF :
-#   - libreoffice-{writer,calc,impress,draw} : conversions DOCX/XLSX/PPTX ↔ PDF
-#     (draw fournit le filtre d'import PDF utilisé par convertPdfToOffice)
-#   - fontforge-nox : conversion Type1/CFF → TTF (rendu fidèle des polices au bake)
-#   - tesseract-ocr (+fra +eng) : OCR (/api/pdf/ocr)
-#   - fonts-liberation/dejavu : substituts métriques pour LibreOffice et Chromium
+# Dépendances système minimales (le moteur PDF wasm n'exige aucun binaire tiers) :
+#   - ca-certificates : TLS sortant (téléchargement des Google Fonts, accès S3)
 #   - dumb-init : gestion des signaux en PID 1
-#   - `playwright install-deps` : bibliothèques partagées requises par Chromium
-ARG PLAYWRIGHT_VERSION=1.50.1
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libreoffice-writer \
-    libreoffice-calc \
-    libreoffice-impress \
-    libreoffice-draw \
-    fontforge-nox \
-    tesseract-ocr \
-    tesseract-ocr-fra \
-    tesseract-ocr-eng \
-    fonts-liberation \
-    fonts-dejavu-core \
     ca-certificates \
     dumb-init \
-    && npx -y playwright@${PLAYWRIGHT_VERSION} install-deps chromium \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /root/.npm
 
-# Utilisateur non-root avec HOME inscriptible (profil LibreOffice headless)
+# Utilisateur non-root avec HOME inscriptible
 RUN addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 --ingroup nodejs --home /home/nextjs nextjs
 
@@ -86,11 +67,7 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME="0.0.0.0" \
-    HOME=/home/nextjs \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-
-# Navigateur Chromium pré-téléchargé
-COPY --from=builder --chown=nextjs:nodejs /ms-playwright /ms-playwright
+    HOME=/home/nextjs
 
 # Build standalone Next.js (outputFileTracingRoot = racine monorepo, donc
 # server.js vit sous apps/web/). public/ et .next/static doivent être des

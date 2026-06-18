@@ -1,21 +1,16 @@
 # GigaPDF - FastAPI Backend
-# Python 3.12 with system dependencies for PDF processing and OCR
+# Python 3.12 — le traitement PDF, l'OCR et les conversions sont assurés par le
+# moteur PDF (gigapdf-lib, WebAssembly). Aucun binaire tiers (poppler, Tesseract,
+# LibreOffice…) n'est requis côté API.
 
 FROM python:3.12-slim-bookworm AS base
 
-# System dependencies for PDF processing, OCR, and image handling
+# System dependencies — réduites au strict nécessaire :
+#   - libmagic1 : détection de type de fichier par magic bytes (python-magic)
+#   - libpq5    : client PostgreSQL (psycopg)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # PDF processing
-    poppler-utils \
-    # OCR
-    tesseract-ocr \
-    tesseract-ocr-fra \
-    tesseract-ocr-eng \
-    # Image processing
     libmagic1 \
-    # PostgreSQL client
     libpq5 \
-    # Build dependencies (temporary)
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
