@@ -56,14 +56,14 @@
   },
   "engine": {
     "meta": {
-      "title": "Le moteur PDF GigaPDF — 100 % maison, zéro dépendance tierce",
-      "description": "Découvrez le moteur PDF maison de GigaPDF : lecture/écriture bas niveau, édition réelle du contenu, rendu haute fidélité, formulaires, signature numérique, OCR et conversion Office. Compilé en WebAssembly, zéro dépendance tierce."
+      "title": "Le moteur PDF GigaPDF — 100 % maison, zéro bibliothèque PDF tierce",
+      "description": "Découvrez le moteur PDF maison de GigaPDF : lecture/écriture bas niveau, édition réelle du contenu, rendu haute fidélité, formulaires, signature numérique, OCR et conversion Office. Compilé en WebAssembly, sans aucune bibliothèque PDF, Office ou image tierce."
     },
     "hero": {
       "kicker": "Le moteur PDF maison",
       "title": "Un moteur PDF complet,",
       "titleAccent": "écrit de zéro.",
-      "description": "La plupart des outils PDF assemblent des briques tierces. GigaPDF a fait le choix inverse : un moteur PDF intégral, conçu et écrit en interne, qui lit, écrit, édite, rend, signe et convertit vos documents. 100 % maison, zéro dépendance tierce — c'est ce qui rend l'édition fidèle et le traitement souverain possibles.",
+      "description": "La plupart des outils PDF assemblent des briques tierces. GigaPDF a fait le choix inverse : un moteur PDF intégral, conçu et écrit en interne, qui lit, écrit, édite, rend, signe et convertit vos documents. 100 % maison, zéro bibliothèque PDF, Office ou image tierce — c'est ce qui rend l'édition fidèle et le traitement souverain possibles.",
       "ctaTry": "Essayer l'éditeur",
       "ctaTools": "Voir les outils PDF"
     },
@@ -75,13 +75,13 @@
     "sections": {
       "core": {
         "label": "Fondations",
-        "title": "Un moteur 100 % maison, zéro dépendance tierce",
-        "description": "Au cœur de GigaPDF, un moteur PDF entièrement écrit en interne et compilé en WebAssembly pour tourner à pleine vitesse côté serveur. Il manipule le format PDF à son niveau le plus bas, sans jamais déléguer à une bibliothèque tierce.",
+        "title": "Un moteur 100 % maison, zéro bibliothèque PDF tierce",
+        "description": "Au cœur de GigaPDF, un moteur PDF entièrement écrit en interne et compilé en WebAssembly pour tourner à pleine vitesse côté serveur. Il manipule le format PDF à son niveau le plus bas, sans jamais déléguer à une bibliothèque PDF tierce.",
         "points": {
           "lowLevel": "Lecture et écriture bas niveau du format PDF : tables de références croisées (xref classiques et flux xref), objets compressés (ObjStm), reconstruction des fichiers endommagés.",
           "flate": "Compression et décompression Flate entièrement maison : les flux du document sont décodés et ré-encodés sans dépendance externe.",
           "wasm": "Compilé en WebAssembly : la performance du natif, la portabilité du web, et un code que l'on maîtrise intégralement.",
-          "souverain": "Zéro dépendance tierce sur le chemin critique : ce que le moteur fait, il le fait lui-même — gage de sécurité, d'auditabilité et de pérennité."
+          "souverain": "Zéro bibliothèque PDF, Office ou image tierce : le format est manipulé par le moteur lui-même. La cryptographie (crates auditées RustCrypto) et le moteur JavaScript (Boa) s'appuient, eux, sur des briques éprouvées plutôt que sur du code maison risqué — un choix de sécurité assumé."
         }
       },
       "edit": {
@@ -144,7 +144,7 @@
         "title": "Chiffrement, signature et archivage",
         "description": "Protéger un document, prouver son intégrité, le conserver dans le temps : le moteur gère le chiffrement, la signature numérique et la conformité d'archivage de bout en bout.",
         "points": {
-          "encryption": "Chiffrement des documents en RC4 et AES (128 et 256 bits) : protection par mot de passe et contrôle des permissions.",
+          "encryption": "Chiffrement des documents en RC4 et AES (128 et 256 bits), via les crates cryptographiques auditées RustCrypto : protection par mot de passe et contrôle des permissions.",
           "signature": "Signature numérique PKCS#7 avec certificat : une preuve d'intégrité vérifiable, à la manière des grands lecteurs PDF.",
           "tamper": "Toute altération d'un document signé est détectable — la confiance est démontrable.",
           "archive": "Conformité d'archivage longue durée (PDF/A) pour conserver vos documents dans le temps."
@@ -153,11 +153,11 @@
       "html": {
         "label": "HTML → PDF",
         "title": "Du HTML/CSS au PDF, nativement",
-        "description": "Générer un PDF à partir d'une page web ou d'un gabarit HTML est un besoin courant. GigaPDF intègre son propre moteur de mise en page HTML/CSS — et même un moteur JavaScript maison pour les pages dynamiques.",
+        "description": "Générer un PDF à partir d'une page web ou d'un gabarit HTML est un besoin courant. GigaPDF intègre son propre moteur de mise en page HTML/CSS — et le moteur JavaScript Boa pour les pages dynamiques.",
         "points": {
           "css": "Moteur de rendu HTML/CSS maison : cascade des styles, mise en page en blocs et en ligne, tableaux, flexbox et pagination.",
           "fonts": "Polices web embarquées dans le PDF généré, pour un rendu fidèle au pixel près.",
-          "js": "Moteur JavaScript natif intégré : les gabarits HTML qui exécutent du script sont rendus correctement.",
+          "js": "Moteur JavaScript Boa intégré (ES2021+) : les gabarits HTML qui exécutent du script sont rendus correctement, sans navigateur.",
           "noThirdParty": "Le tout sans navigateur ni moteur de rendu tiers : la chaîne complète est maison."
         }
       },
@@ -250,7 +250,7 @@
     "stack": {
       "label": "Stack",
       "title": "Une stack moderne et auditable",
-      "description": "GigaPDF est un monorepo pnpm + Turbo. Front Next.js 16 / React 19, moteur PDF maison en TypeScript/WebAssembly (100 % maison, zéro dépendance tierce), API FastAPI / Python, le tout sur Node.js 24 et PostgreSQL 17.",
+      "description": "GigaPDF est un monorepo pnpm + Turbo. Front Next.js 16 / React 19, moteur PDF maison en TypeScript/WebAssembly (zéro bibliothèque PDF/Office/image tierce ; crypto RustCrypto, JS Boa), API FastAPI / Python, le tout sur Node.js 24 et PostgreSQL 17.",
       "items": {
         "frontend": "Next.js 16 · React 19 · Tailwind v4",
         "engine": "Moteur PDF maison · TypeScript · WebAssembly",
@@ -1970,8 +1970,8 @@
         "editing": "Édition in-place du texte, des images et des formes (vraie redaction, pas de masque)",
         "forms": "Concepteur de formulaires AcroForm : champs texte, dates, cases, listes — création, remplissage, aplatissement",
         "signature": "Signatures électroniques PKCS#7 / CAdES avec votre propre certificat P12/PFX",
-        "ocr": "OCR (Tesseract fra+eng) : couche de texte cherchable sur les PDF scannés",
-        "office": "Conversions Office : import/export de 9 formats (DOCX/XLSX/PPTX, OpenDocument, OLE2 legacy) via LibreOffice",
+        "ocr": "OCR multi-langues intégré : couche de texte cherchable sur les PDF scannés",
+        "office": "Conversions Office natives : import/export de 9 formats (DOCX/XLSX/PPTX, OpenDocument, OLE2 legacy)",
         "ged": "GED : dossiers, corbeille, recherche plein-texte, tags, déduplication",
         "realtime": "Collaboration multi-utilisateur en temps réel via WebSocket",
         "api": "API REST complète, clés API scopées et widget embed pour intégrer l'éditeur"
@@ -1993,7 +1993,7 @@
         },
         "docker": {
           "title": "Docker (recommandé)",
-          "description": "La méthode la plus simple. L'image web embarque déjà toutes les dépendances système PDF — aucune installation supplémentaire.",
+          "description": "La méthode la plus simple. Le moteur PDF (WebAssembly) est embarqué dans l'application — aucun binaire système tiers ni installation supplémentaire.",
           "prereq": "Prérequis : Docker 24+ et Docker Compose 2.20+.",
           "servicesTitle": "Services démarrés par docker compose :",
           "services": {
@@ -2005,7 +2005,7 @@
             "web": "web — application Next.js + moteur PDF TypeScript (:3000)",
             "admin": "admin — tableau de bord d'administration (:3001)"
           },
-          "bundledNote": "L'image web (Debian) embarque LibreOffice, fontforge, Tesseract OCR (fra+eng) et Chromium Playwright. Aucune installation manuelle de ces binaires n'est requise.",
+          "bundledNote": "Le moteur PDF (WebAssembly) assure les conversions Office et HTML → PDF, l'OCR, l'embarquement des polices, la rasterisation, les signatures et le chiffrement. Aucun binaire système tiers (LibreOffice, Chromium, Tesseract, fontforge, poppler) n'est requis.",
           "migrateNote": "Après le premier démarrage (et après chaque mise à jour), appliquez les migrations de base de données :"
         },
         "native": {
@@ -2018,8 +2018,8 @@
             "postgres": "PostgreSQL 17+",
             "redis": "Redis 7+"
           },
-          "sysdepsTitle": "Dépendances système PDF (Debian/Ubuntu) :",
-          "sysdepsNote": "LibreOffice (conversions Office), fontforge (rendu fidèle des polices), Tesseract OCR + fra + eng, et Chromium pour HTML → PDF.",
+          "sysdepsTitle": "Dépendances système PDF :",
+          "sysdepsNote": "Aucune. Le moteur PDF (WebAssembly) est autonome : conversions Office et HTML → PDF, OCR, embarquement des polices, rasterisation, signatures et chiffrement sont intégrés. Aucun binaire tiers (LibreOffice, Chromium, Tesseract, fontforge, poppler) à installer.",
           "backendTitle": "Backend (FastAPI + Celery)",
           "backendNote": "L'étape pip install -r requirements.txt installe les dépendances backend (l'équivalent d'un « install des dépendances » côté Python — ce projet n'utilise PAS Composer). Puis alembic upgrade head crée le schéma.",
           "frontendTitle": "Frontend (Next.js web + admin + packages)",

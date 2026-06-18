@@ -78,7 +78,7 @@ const changelog: ChangelogEntry[] = [
       { type: "feature", description: "REST API with OpenAPI documentation" },
       { type: "feature", description: "Multi-tenant organizations with shared quotas" },
       { type: "feature", description: "Stripe billing integration" },
-      { type: "feature", description: "OCR text extraction (Tesseract)" },
+      { type: "feature", description: "OCR text extraction" },
       { type: "feature", description: "Export to PNG, JPEG, DOCX, HTML" },
       { type: "feature", description: "S3-compatible storage (Scaleway, AWS, MinIO)" },
       { type: "security", description: "JWT RS256 authentication via BetterAuth" },

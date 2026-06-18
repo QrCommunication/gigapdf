@@ -201,8 +201,7 @@ export default function DocsContent() {
           <p className="text-sm font-medium mb-2">{t("selfhost.native.sysdepsTitle")}</p>
           <p className="text-sm text-muted-foreground mb-3">{t("selfhost.native.sysdepsNote")}</p>
           <div className="font-mono text-sm bg-muted/50 rounded-lg p-4 overflow-x-auto whitespace-pre mb-3 not-prose">
-            <span className="text-terminal-green">$</span> sudo apt install -y libreoffice fontforge \{"\n"}
-            {"    "}tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng
+            <span className="text-terminal-green">$</span> sudo apt install -y libreoffice fontforge
           </div>
           <div className="font-mono text-sm bg-muted/50 rounded-lg p-4 overflow-x-auto whitespace-pre mb-6 not-prose">
             <span className="text-terminal-green">$</span> pnpm exec playwright install --with-deps chromium
