@@ -125,6 +125,15 @@ export interface EditorCanvasHandle {
    * graph est faite par l'appelant (page.tsx).
    */
   setElementLocked: (elementId: string, locked: boolean) => void;
+  /**
+   * Sélectionner un élément par son id (clic sur une ligne du panneau calques).
+   * Trouve l'objet Fabric correspondant, le passe en objet actif et notifie la
+   * sélection. Le `setActiveObject` programmatique de Fabric ne déclenche PAS
+   * `selection:created` — on forwarde donc explicitement à `onSelectionChanged`
+   * pour synchroniser le store + le panneau propriétés (même chemin que la
+   * sélection souris). No-op si l'élément n'est pas rendu sur la page affichée.
+   */
+  selectElement: (elementId: string) => void;
 }
 
 export interface EditorCanvasProps {
@@ -3430,6 +3439,27 @@ export function EditorCanvas({
         } finally {
           endProgrammaticApply();
         }
+      },
+      selectElement: (elementId: string) => {
+        const canvas = fabricRef.current;
+        if (!canvas) return;
+        const target = canvas
+          .getObjects()
+          .find(
+            (o) =>
+              (o as FabricObjectWithData).data?.elementId === elementId &&
+              (o as FabricObjectWithData).data?.isHideMask !== true,
+          );
+        if (!target) return;
+        // Rendre l'objet actif puis forwarder l'id : le setActiveObject
+        // programmatique de Fabric ne fire pas selection:created, donc on
+        // notifie onSelectionChanged nous-mêmes (même chemin que la souris)
+        // pour synchroniser store + panneau propriétés. Un objet verrouillé
+        // (selectable=false / hasControls=false) devient bien actif — sans
+        // poignées — ce qui suffit à le mettre en évidence.
+        canvas.setActiveObject(target);
+        canvas.requestRenderAll();
+        onSelectionChangedRef.current?.([elementId]);
       },
     };
 
