@@ -357,7 +357,8 @@ export default function EditorPage() {
     outlines,
     layers,
     embeddedFiles,
-  } = useDocument({ storedDocumentId });
+    flattenedPdfFile,
+  } = useDocument({ storedDocumentId, flatten: true });
 
   // Client-side thumbnails generated via pdfjs (durable solution — no server roundtrip)
   const thumbnails = usePageThumbnails(currentPdfFile, pages.length, { scale: 0.18 });
@@ -371,9 +372,15 @@ export default function EditorPage() {
     getAuthToken,
   });
 
-  // Fetch the actual PDF binary when document loads
+  // Fetch the actual PDF binary when document loads. Skipped when a flattened
+  // file is present (the flatten-adopt effect below adopts those canonical
+  // bytes instead), so we never overwrite the flattened content with the
+  // un-flattened original. `updateCurrentPdfFile` is intentionally not in the
+  // deps — it's a stable useCallback declared further down (referencing it in
+  // the dep array here would hit its TDZ at render time).
   useEffect(() => {
     if (!documentId || !name) return;
+    if (flattenedPdfFile) return;
     let cancelled = false;
 
     async function loadPdfBinary() {
@@ -397,7 +404,8 @@ export default function EditorPage() {
 
     loadPdfBinary();
     return () => { cancelled = true; };
-  }, [documentId, name]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentId, name, flattenedPdfFile]);
 
   // État pour l'édition du nom
   const [isEditingName, setIsEditingName] = useState(false);
@@ -434,6 +442,17 @@ export default function EditorPage() {
     currentPdfFileRef.current = file;
     setCurrentPdfFile(file);
   }, []);
+
+  // Adopt the flattened PDF (Form XObjects inlined by parse-from-s3) as the
+  // binary source of truth. Runs once when the flattened file arrives from the
+  // load. The parsed `elements` already correspond to these bytes, so this
+  // keeps currentPdfFile consistent with the scene graph (save + raster +
+  // apply-operations all run on the flattened content → in-place text edits).
+  // No-op for form-less docs (flattenedPdfFile stays null → raw download wins).
+  useEffect(() => {
+    if (!flattenedPdfFile) return;
+    updateCurrentPdfFile(flattenedPdfFile);
+  }, [flattenedPdfFile, updateCurrentPdfFile]);
 
   const getPreparedBlob = useCallback(async (): Promise<Blob | null> => {
     const pdfFile = currentPdfFileRef.current;
