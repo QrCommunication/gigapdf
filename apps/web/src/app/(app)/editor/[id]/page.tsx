@@ -20,6 +20,8 @@ import {
   useUIStore,
   useOperationsStore,
   useViewStore,
+  buildTableElements,
+  buildListContent,
 } from "@giga-pdf/editor";
 import {
   ArrowLeft,
@@ -68,6 +70,7 @@ import {
   ContinuousPageView,
 } from "@/components/editor";
 import type { ContinuousPageViewHandle } from "@/components/editor";
+import type { InsertLinkValue } from "@/components/editor/insert-link-dialog";
 import type {
   EditorCanvasHandle,
   TextFormatAction,
@@ -1941,6 +1944,116 @@ export default function EditorPage() {
     if (ok) addPageLocal();
   }, [runPageOperation, pages.length, addPageLocal]);
 
+  // --- Insert menu (Word-like) ------------------------------------------------
+
+  /**
+   * Insert an `rows`×`cols` table at the current page. The model has no grouped
+   * table primitive, so the table is laid out as individual editable text cells
+   * + `line` border shapes within the page content area (page size minus a
+   * margin). Each element flows through the SAME element-add pipeline used by
+   * the canvas tools (`handleElementAdded`): scene-graph mirror + queue + bake.
+   */
+  const handleInsertTable = useCallback(
+    async (rows: number, cols: number) => {
+      const page = currentPage;
+      if (!page) return;
+      const { width, height } = page.dimensions;
+      // 10% margin (clamped) keeps the grid clear of page edges.
+      const marginX = Math.min(width * 0.1, 72);
+      const marginY = Math.min(height * 0.1, 72);
+      const elements = buildTableElements({
+        rows,
+        cols,
+        area: {
+          x: marginX,
+          y: marginY,
+          width: Math.max(width - marginX * 2, 1),
+          height: Math.max(height - marginY * 2, 1),
+        },
+      });
+      // Add cells + borders sequentially through the normal add path. Each call
+      // assigns a fresh elementId, mirrors to the scene graph, queues the op and
+      // schedules a debounced save (batched across the rapid sequence).
+      for (const el of elements) {
+        await handleElementAdded({
+          ...el,
+          elementId: `element-${Date.now()}-${Math.random()}`,
+        } as Element);
+      }
+    },
+    [currentPage, handleElementAdded],
+  );
+
+  /**
+   * Attach a hyperlink (external URL or in-document page) to the single
+   * selected text element. TextElement carries `linkUrl` / `linkPage`; the
+   * change persists via the existing partial-update path (`handleElementUpdate`)
+   * — no new save path.
+   */
+  const handleInsertLink = useCallback(
+    (value: InsertLinkValue) => {
+      const target = selectedTextElements[0];
+      if (!target) return;
+      const updates: Partial<TextElement> =
+        value.kind === "url"
+          ? { linkUrl: value.url, linkPage: null }
+          : { linkUrl: null, linkPage: value.page };
+      handleElementUpdate(target.elementId, updates as Partial<Element>);
+    },
+    [selectedTextElements, handleElementUpdate],
+  );
+
+  /** Remove the hyperlink from the selected text element. */
+  const handleRemoveLink = useCallback(() => {
+    const target = selectedTextElements[0];
+    if (!target) return;
+    handleElementUpdate(target.elementId, {
+      linkUrl: null,
+      linkPage: null,
+    } as Partial<Element>);
+  }, [selectedTextElements, handleElementUpdate]);
+
+  /**
+   * Insert a blank page before / after the current page, reusing the page-op
+   * pipeline (`runPageOperation('add', …)`) — the same one the page sidebar uses.
+   * pdf-engine treats `afterPage` as a 1-indexed insertion point; the current
+   * 0-indexed page index maps to "after the current page", and one less maps to
+   * "before".
+   */
+  const handleInsertBlankPage = useCallback(
+    async (position: "before" | "after") => {
+      const idx = effectivePageIndex;
+      const afterPage = position === "after" ? idx : idx - 1;
+      const ok = await runPageOperation("add", { afterPage });
+      if (!ok) return;
+      addPageLocal();
+      // Inserting before the current page shifts it down by one — follow it so
+      // the user stays on the same content.
+      if (position === "before") {
+        goToPage(idx + 1);
+      }
+    },
+    [effectivePageIndex, runPageOperation, addPageLocal, goToPage],
+  );
+
+  /**
+   * Apply bullet / numbered list formatting to the selected text element by
+   * prefixing each line of its content. Persists via the partial-update path
+   * (content change → in-place replaceText bake).
+   */
+  const handleInsertList = useCallback(
+    (kind: "bullet" | "numbered") => {
+      const target = selectedTextElements[0];
+      if (!target) return;
+      const next = buildListContent(target.content, kind);
+      if (next === target.content) return;
+      handleElementUpdate(target.elementId, {
+        content: next,
+      } as Partial<Element>);
+    },
+    [selectedTextElements, handleElementUpdate],
+  );
+
   const handleDuplicatePage = useCallback(
     async (pageIndex: number) => {
       const ok = await runPageOperation('copy', {
@@ -2653,6 +2766,12 @@ export default function EditorPage() {
         onDelete={handleDelete}
         onDuplicate={handleDuplicate}
         onAddImage={handleAddImage}
+        onInsertTable={handleInsertTable}
+        onInsertLink={handleInsertLink}
+        onRemoveLink={handleRemoveLink}
+        onInsertBlankPage={handleInsertBlankPage}
+        onInsertList={handleInsertList}
+        pageCount={pages.length}
         currentFile={currentPdfFile}
         onToggleFormsPanel={toggleFormsPanel}
         onFlattenPdf={handleFlattenPdf}

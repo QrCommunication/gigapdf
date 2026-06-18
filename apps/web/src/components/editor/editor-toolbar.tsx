@@ -83,6 +83,11 @@ import { PdfADialog } from "./pdfa-dialog";
 import { CompressDialog } from "./compress-dialog";
 import { HeadersFootersDialog } from "./headers-footers-dialog";
 import { FormattingToolbar } from "./formatting-toolbar";
+import { InsertMenu } from "./insert-menu";
+import {
+  InsertLinkDialog,
+  type InsertLinkValue,
+} from "./insert-link-dialog";
 import type { HeaderFooterKind } from "./lib/page-headers-footers";
 import type { HeaderFooterSpec } from "@qrcommunication/gigapdf-lib";
 
@@ -167,6 +172,21 @@ export interface EditorToolbarProps {
   onDuplicate?: () => void;
   /** Callback pour ajouter une image */
   onAddImage?: () => void;
+  /**
+   * Insert menu (Word-like) — inserts a table of editable cells + borders. Each
+   * cell flows through the normal element-add + apply-elements path.
+   */
+  onInsertTable?: (rows: number, cols: number) => void;
+  /** Insert menu — attach a hyperlink (URL or in-document page) to selected text. */
+  onInsertLink?: (value: InsertLinkValue) => void;
+  /** Insert menu — remove the hyperlink from the selected text element. */
+  onRemoveLink?: () => void;
+  /** Insert menu — insert a blank page before / after the current page. */
+  onInsertBlankPage?: (position: "before" | "after") => void;
+  /** Insert menu — apply bullet / numbered list formatting to selected text. */
+  onInsertList?: (kind: "bullet" | "numbered") => void;
+  /** Total page count, for the Insert > Link in-document page target. */
+  pageCount?: number;
   /** Element actuellement selectionne */
   selectedElement?: Element | null;
   /**
@@ -469,6 +489,12 @@ export function EditorToolbar({
   onDelete,
   onDuplicate,
   onAddImage,
+  onInsertTable,
+  onInsertLink,
+  onRemoveLink,
+  onInsertBlankPage,
+  onInsertList,
+  pageCount = 1,
   selectedElement,
   selectedTextElements,
   onElementStyleChange,
@@ -496,6 +522,7 @@ export function EditorToolbar({
   const [showShapeDropdown, setShowShapeDropdown] = useState(false);
   const [showAnnotationDropdown, setShowAnnotationDropdown] = useState(false);
   const [showFieldDropdown, setShowFieldDropdown] = useState(false);
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [showZoomDropdown, setShowZoomDropdown] = useState(false);
   const [showColorDropdown, setShowColorDropdown] = useState(false);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
@@ -788,6 +815,20 @@ export function EditorToolbar({
           </div>
         </Dropdown>
       </div>
+
+      {/* Insert menu (Word-like): image, table, shapes, link, page, list */}
+      <InsertMenu
+        onInsertImage={() => onAddImage?.()}
+        onInsertTable={(rows, cols) => onInsertTable?.(rows, cols)}
+        onInsertShape={(shape) => {
+          onShapeTypeChange?.(shape);
+          onToolChange("shape");
+        }}
+        onInsertLink={() => setShowLinkDialog(true)}
+        onInsertBlankPage={(position) => onInsertBlankPage?.(position)}
+        onInsertList={(kind) => onInsertList?.(kind)}
+        hasTextSelection={(selectedTextElements?.length ?? 0) === 1}
+      />
 
       <Separator />
 
@@ -1280,6 +1321,22 @@ export function EditorToolbar({
         initialHeaderText={headerFooterInitialHeader}
         initialFooterText={headerFooterInitialFooter}
         busy={headerFooterBusy}
+      />
+      <InsertLinkDialog
+        open={showLinkDialog}
+        onClose={() => setShowLinkDialog(false)}
+        hasTextTarget={(selectedTextElements?.length ?? 0) === 1}
+        pageCount={pageCount}
+        initialUrl={selectedTextElements?.[0]?.linkUrl ?? null}
+        initialPage={selectedTextElements?.[0]?.linkPage ?? null}
+        onApply={(value) => {
+          onInsertLink?.(value);
+          setShowLinkDialog(false);
+        }}
+        onRemove={() => {
+          onRemoveLink?.();
+          setShowLinkDialog(false);
+        }}
       />
     </div>
   );

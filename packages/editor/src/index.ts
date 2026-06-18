@@ -53,6 +53,10 @@ export type {
   Transform,
 } from "@giga-pdf/types";
 
+// Insert-menu layout helpers (pure): table grid + list prefixing
+export { buildTableElements, buildListContent } from "./lib/table-layout";
+export type { BuildTableOptions, NewElement } from "./lib/table-layout";
+
 // Embedded fonts: dynamic font loading from PDF via FontFace API + IndexedDB cache
 export { useEmbeddedFonts } from "./hooks/use-embedded-fonts";
 export type {
