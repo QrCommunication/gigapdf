@@ -3,43 +3,31 @@
  * scanned (image-only) pages so the PDF becomes selectable/searchable
  * without altering its visual appearance.
  *
- * Strategy (ocrmypdf-style, all open-source building blocks):
+ * Strategy (ocrmypdf-style, fully offline via the WASM engine):
  *   1. Detect pages WITHOUT extractable text via the engine's structured text
  *      (`extractPlainText`). `force: true` processes every page.
- *   2. Rasterise those pages to PNG via the engine (`renderPages`, dpi/72 scale).
- *   3. Run the system OCR binary in TSV mode: one row per detected
- *      item, level 5 rows = words with pixel bounding boxes + confidence.
- *   4. Convert each word bbox from image pixels (top-left origin, y down)
- *      to PDF user space (bottom-left origin, y up), honouring /Rotate.
+ *   2. Load the bundled per-script OCR models (`loadAllBundledOcrModels`) so the
+ *      CRNN recognizes any shipped script (Latin/Cyrillic/Greek, Arabic/Urdu/
+ *      Hebrew, Devanagari, Bengali, Tamil); the engine's script detector routes
+ *      each line. Without a model it falls back to the mono-glyph Latin CNN.
+ *   3. Run the engine's OCR (`doc.ocr`) which rasterises + recognises in
+ *      WebAssembly and returns word boxes in PIXELS of the page rasterised at
+ *      `dpi/72` (top-left origin, y down).
+ *   4. Convert each word bbox from image pixels to PDF user space (bottom-left
+ *      origin, y up), honouring /Rotate.
  *   5. Add each word via the WASM engine `addTextLayer` (text render mode 3 —
  *      invisible) in a SINGLE content append per page; glyphs stay part of the
- *      content stream so text extraction/search/selection finds them.
- *
- * The standard Helvetica font is WinAnsi-encoded: words containing glyphs
- * outside WinAnsi (CJK, Hebrew, math symbols…) are skipped by the engine —
- * acceptable because the glyphs are invisible anyway and the overwhelming
- * majority of fra+eng OCR output is WinAnsi-safe.
+ *      content stream so text extraction/search/selection finds them. The layer
+ *      carries arbitrary Unicode (a glyphless Type0 font is embedded for
+ *      non-WinAnsi runs), so non-Latin OCR text is searchable too.
  */
 
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { writeFile, readFile, mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import type { GigaPdfEngine, OcrScript } from '@qrcommunication/gigapdf-lib';
 import { getEngine } from '../wasm';
 import { engineLogger } from '../utils/logger';
-import { renderPages } from '../render/engine-render';
 import { extractPlainText } from './structured-text';
-import { isTesseractAvailable, TesseractNotInstalledError } from './ocr';
-
-const execFileAsync = promisify(execFile);
-
-/** Words below this OCR confidence (0-100) are dropped. */
-export const DEFAULT_MIN_WORD_CONFIDENCE = 40;
 
 export interface MakeSearchablePdfOptions {
-  /** OCR language string (e.g. "fra+eng"). Defaults to "fra+eng". */
-  languages?: string;
   /** Render DPI for the OCR rasterisation. Defaults to 144. */
   dpi?: 144 | 200 | 300;
   /**
@@ -47,6 +35,13 @@ export interface MakeSearchablePdfOptions {
    * Defaults to false (only image-only pages are processed).
    */
   force?: boolean;
+  /**
+   * OCR scripts to recognize (each loads a per-script CRNN model once). Omit to
+   * load ALL bundled models — Latin/Cyrillic/Greek, Arabic/Urdu/Hebrew,
+   * Devanagari, Bengali, Tamil, and any added later — so text in any language is
+   * recognized. Restrict it (e.g. `['alpha']`) for speed on known-Latin scans.
+   */
+  languages?: readonly OcrScript[];
 }
 
 export interface MakeSearchablePdfResult {
@@ -57,8 +52,8 @@ export interface MakeSearchablePdfResult {
   wordsAdded: number;
 }
 
-/** One word row (level 5) from OCR TSV output. Pixel coordinates. */
-export interface OcrTsvWord {
+/** One OCR word bounding box, in image pixels (top-left origin, y down). */
+export interface OcrWordBox {
   /** Left edge in image pixels (top-left origin). */
   left: number;
   /** Top edge in image pixels (top-left origin, y down). */
@@ -67,58 +62,6 @@ export interface OcrTsvWord {
   width: number;
   /** Height in image pixels. */
   height: number;
-  /** OCR confidence 0-100. */
-  conf: number;
-  /** Recognised word text (trimmed, non-empty). */
-  text: string;
-}
-
-/**
- * Parse OCR TSV output into word boxes.
- *
- * TSV columns: level page_num block_num par_num line_num word_num
- *              left top width height conf text
- * Level 5 rows are words; every other level (page/block/para/line) carries
- * conf = -1 and no usable text. Pure function — unit-tested with inline
- * fixtures.
- */
-export function parseTsvWords(
-  tsv: string,
-  minConfidence: number = DEFAULT_MIN_WORD_CONFIDENCE,
-): OcrTsvWord[] {
-  const words: OcrTsvWord[] = [];
-
-  for (const rawLine of tsv.split(/\r?\n/)) {
-    const cols = rawLine.split('\t');
-    if (cols.length < 12) continue; // header, blank line, malformed row
-    if (cols[0] !== '5') continue; // level 5 = word
-
-    const left = Number(cols[6]);
-    const top = Number(cols[7]);
-    const width = Number(cols[8]);
-    const height = Number(cols[9]);
-    const conf = Number(cols[10]);
-    // text is the last column; defensive join in case the recognised text
-    // ever contains a tab (theoretically impossible for word level).
-    const text = cols.slice(11).join('\t').trim();
-
-    if (
-      !Number.isFinite(left) ||
-      !Number.isFinite(top) ||
-      !Number.isFinite(width) ||
-      !Number.isFinite(height) ||
-      !Number.isFinite(conf)
-    ) {
-      continue;
-    }
-    if (conf < minConfidence) continue;
-    if (width <= 0 || height <= 0) continue;
-    if (text.length === 0) continue;
-
-    words.push({ left, top, width, height, conf, text });
-  }
-
-  return words;
 }
 
 export interface PdfPlacementContext {
@@ -158,8 +101,8 @@ export interface PdfWordPlacement {
  * for an invisible layer whose only job is search/selection geometry.
  * Pure function — unit-tested with inline fixtures.
  */
-export function tsvWordToPdfPlacement(
-  word: Pick<OcrTsvWord, 'left' | 'top' | 'width' | 'height'>,
+export function ocrWordToPdfPlacement(
+  word: OcrWordBox,
   ctx: PdfPlacementContext,
 ): PdfWordPlacement {
   const displayedWidth =
@@ -209,22 +152,56 @@ function normalizeRotation(angle: number): 0 | 90 | 180 | 270 {
     | 270;
 }
 
+// OCR models load into the engine's GLOBAL registry, and `getEngine()` returns a
+// process singleton — so load each model at most once, not per call.
+let allOcrModelsLoaded = false;
+let allOcrModelsPromise: Promise<number> | null = null;
+const loadedOcrScripts = new Set<OcrScript>();
+
+/**
+ * Ensure the requested OCR models are loaded into the engine (idempotent across
+ * calls). With no `languages`, loads every bundled model so the recognizer
+ * covers any shipped script (the engine's detector routes each line). Failures
+ * are non-fatal: OCR then falls back to the built-in mono-glyph Latin classifier.
+ */
+async function ensureOcrModels(
+  engine: GigaPdfEngine,
+  languages?: readonly OcrScript[],
+): Promise<void> {
+  try {
+    if (!languages || languages.length === 0) {
+      if (allOcrModelsLoaded) return;
+      allOcrModelsPromise ??= engine.loadAllBundledOcrModels();
+      const count = await allOcrModelsPromise;
+      allOcrModelsLoaded = true;
+      engineLogger.info('ocr-searchable: loaded all bundled OCR models', { count });
+      return;
+    }
+    const missing = languages.filter((s) => !loadedOcrScripts.has(s));
+    if (missing.length === 0) return;
+    const loaded = await engine.loadBundledOcrModels(missing);
+    loaded.forEach((s) => loadedOcrScripts.add(s));
+    engineLogger.info('ocr-searchable: loaded OCR models', { requested: languages, loaded });
+  } catch (err) {
+    engineLogger.warn('ocr-searchable: OCR model loading failed — mono-glyph fallback', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 /**
  * Add an invisible (opacity 0) text layer to every image-only page of the
  * PDF, making it searchable and selectable. Pages that already contain
  * extractable text are left untouched unless `force: true`.
  *
  * Returns the original bytes untouched (pagesProcessed = 0) when no page
- * needs OCR — in that case OCR availability is NOT required.
- *
- * @throws TesseractNotInstalledError when pages need OCR but the system
- *         OCR binary is missing.
+ * needs OCR.
  */
 export async function makeSearchablePdf(
   pdfBytes: Uint8Array,
   options: MakeSearchablePdfOptions = {},
 ): Promise<MakeSearchablePdfResult> {
-  const { languages = 'fra+eng', dpi = 144, force = false } = options;
+  const { dpi = 144, force = false } = options;
 
   // 1. Page selection — only pages without extractable text, unless forced.
   const pageTexts = await extractPlainText(pdfBytes);
@@ -236,53 +213,14 @@ export async function makeSearchablePdf(
     return { bytes: pdfBytes, pagesProcessed: 0, wordsAdded: 0 };
   }
 
-  if (!(await isTesseractAvailable())) {
-    throw new TesseractNotInstalledError();
-  }
-
-  // 2. Rasterise the target pages via the engine (single document open).
+  // 2. OCR + invisible text layer via the WASM engine. `doc.ocr` rasterises
+  //    POST-rotation and returns word boxes in image pixels; `addTextLayer`
+  //    writes glyphs in render mode 3 (invisible) — one batched call per page.
   const scale = dpi / 72;
-  const rendered = await renderPages(pdfBytes, {
-    pages: targetPages,
-    scale,
-    format: 'png',
-  });
-
-  // 3. OCR TSV per page, through a throwaway tmp dir.
-  const tmpDir = await mkdtemp(join(tmpdir(), 'gigapdf-ocr-searchable-'));
-  const wordsByPage = new Map<number, OcrTsvWord[]>();
-  const imageDims = new Map<number, { width: number; height: number }>();
-
-  try {
-    for (const page of rendered) {
-      imageDims.set(page.pageNumber, { width: page.width, height: page.height });
-      const imgPath = join(tmpDir, `page-${page.pageNumber}.png`);
-      const outBase = join(tmpDir, `page-${page.pageNumber}`);
-      await writeFile(imgPath, Buffer.from(page.bytes));
-
-      try {
-        await execFileAsync('tesseract', [imgPath, outBase, '-l', languages, 'tsv'], {
-          timeout: 120_000,
-          maxBuffer: 32 * 1024 * 1024,
-        });
-        const tsv = await readFile(`${outBase}.tsv`, 'utf8');
-        wordsByPage.set(page.pageNumber, parseTsvWords(tsv));
-      } catch (err) {
-        engineLogger.warn('ocr-searchable: tesseract failed on page', {
-          pageNumber: page.pageNumber,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        wordsByPage.set(page.pageNumber, []);
-      }
-    }
-  } finally {
-    await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
-  }
-
-  // 4. Invisible text layer via the WASM engine (render mode 3 — glyphs live in
-  //    the content stream for extraction/search but are never painted). One
-  //    batched `addTextLayer` call per page (one font, O(n) not O(n²)).
   const giga = await getEngine();
+  // Load per-script recognizers so non-Latin scripts are recognized, not just
+  // the built-in mono-glyph Latin classifier.
+  await ensureOcrModels(giga, options.languages);
   const doc = giga.open(pdfBytes);
 
   let pagesProcessed = 0;
@@ -290,25 +228,34 @@ export async function makeSearchablePdf(
 
   try {
     for (const pageNumber of targetPages) {
-      const dims = imageDims.get(pageNumber);
-      if (!dims) continue; // page was filtered out by renderPages (out of range)
+      const info = doc.pageInfo(pageNumber);
+      const rotation = normalizeRotation(info.rotation);
+
+      // The engine rasterises the page POST-rotation, so the image axes follow
+      // the displayed page. Reconstruct the rasterised image dimensions.
+      const displayedW = rotation === 90 || rotation === 270 ? info.height : info.width;
+      const displayedH = rotation === 90 || rotation === 270 ? info.width : info.height;
+      const imageWidth = Math.round(displayedW * scale);
+      const imageHeight = Math.round(displayedH * scale);
+
+      const words = doc.ocr(pageNumber, scale);
       pagesProcessed += 1;
 
-      const words = wordsByPage.get(pageNumber) ?? [];
-      if (words.length === 0) continue;
-
-      const info = doc.pageInfo(pageNumber);
       const ctx: PdfPlacementContext = {
-        imageWidth: dims.width,
-        imageHeight: dims.height,
+        imageWidth,
+        imageHeight,
         pageWidth: info.width,
         pageHeight: info.height,
-        rotation: normalizeRotation(info.rotation),
+        rotation,
       };
 
       const runs: { x: number; y: number; size: number; text: string; rotation: number }[] = [];
       for (const word of words) {
-        const placement = tsvWordToPdfPlacement(word, ctx);
+        if (word.text.trim().length === 0) continue;
+        const placement = ocrWordToPdfPlacement(
+          { left: word.x, top: word.y, width: word.w, height: word.h },
+          ctx,
+        );
         if (placement.fontSize < 1) continue;
         runs.push({
           x: placement.x,
@@ -318,8 +265,8 @@ export async function makeSearchablePdf(
           rotation: placement.rotation,
         });
       }
-      // The engine skips words with non-WinAnsi glyphs (standard Helvetica) and
-      // returns the count actually written.
+      // addTextLayer embeds a glyphless Type0 font for non-WinAnsi runs, so any
+      // script is written; it returns the count actually added.
       if (runs.length > 0) {
         wordsAdded += doc.addTextLayer(pageNumber, runs);
       }
@@ -330,7 +277,6 @@ export async function makeSearchablePdf(
     engineLogger.info('ocr-searchable: invisible text layer added', {
       pagesProcessed,
       wordsAdded,
-      languages,
       dpi,
       inputBytes: pdfBytes.byteLength,
       outputBytes: bytes.byteLength,

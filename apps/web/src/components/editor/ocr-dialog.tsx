@@ -35,7 +35,7 @@ const LANGS: { value: Lang; label: string }[] = [
 ];
 
 /**
- * OcrDialog — run Tesseract OCR on the current PDF. Two output modes:
+ * OcrDialog — run OCR on the current PDF. Two output modes:
  *   - "text" (historical): extracted text shown inline, downloadable .txt
  *   - "searchable": the OCR words are written back into the PDF as an
  *     INVISIBLE text layer (opacity 0) so scanned pages become selectable
@@ -177,12 +177,8 @@ export function OcrDialog({
           <div className="px-6 py-6 flex items-start gap-3 text-sm">
             <AlertCircle size={18} className="text-destructive shrink-0 mt-0.5" />
             <p className="text-muted-foreground">
-              Tesseract n'est pas installé sur ce serveur. L'OCR n'est pas
-              disponible. Contactez l'administrateur pour l'activer (paquets
-              <code className="px-1 mx-1 rounded bg-muted">tesseract-ocr</code>
-              <code className="px-1 mx-0.5 rounded bg-muted">tesseract-ocr-fra</code>
-              <code className="px-1 mx-0.5 rounded bg-muted">tesseract-ocr-eng</code>
-              ).
+              Le moteur OCR n'est pas disponible. Réessayez plus tard ou
+              contactez l'administrateur.
             </p>
           </div>
         ) : (

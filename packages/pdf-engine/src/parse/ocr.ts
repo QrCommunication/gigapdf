@@ -1,18 +1,16 @@
 /**
  * OCR via the WASM engine's built-in recognizer (`@qrcommunication/gigapdf-lib`).
  *
- * Native engine path: OCR now runs
- * entirely in WebAssembly (offline-trained CNN), so there is no external binary
- * to install and nothing leaves the process. The public API is unchanged; the
- * `Tesseract*`/`isTesseractAvailable` names are kept for caller compatibility.
+ * Native engine path: OCR runs entirely in WebAssembly (offline-trained CNN) —
+ * no external binary. Nothing leaves the process.
  */
 
 import { getEngine } from '../wasm';
 
-export class TesseractNotInstalledError extends Error {
+export class OcrUnavailableError extends Error {
   constructor() {
     super('OCR engine unavailable');
-    this.name = 'TesseractNotInstalledError';
+    this.name = 'OcrUnavailableError';
   }
 }
 
@@ -41,7 +39,7 @@ export interface OcrResult {
 }
 
 /** The WASM OCR engine is always available (no system dependency). */
-export async function isTesseractAvailable(): Promise<boolean> {
+export async function isOcrAvailable(): Promise<boolean> {
   return true;
 }
 

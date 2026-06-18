@@ -1,5 +1,5 @@
 /**
- * PDF OCR route — runs Tesseract on each rasterised page.
+ * PDF OCR route — runs the built-in WASM OCR engine on each rasterised page.
  *
  * POST /api/pdf/ocr
  *
@@ -15,7 +15,8 @@
  *                               or all pages with force=true).
  *   pages      — JSON array of 1-based page numbers (optional, default all;
  *                output="text" only)
- *   lang       — Tesseract language code (default "fra+eng")
+ *   lang       — OCR language hint (default "fra+eng"; output="text" only,
+ *                kept for compatibility — the engine is script-based)
  *   dpi        — 144 | 200 | 300 (default 144)
  *   format     — "text" | "hocr" (default "text"; output="text" only)
  *   force      — "true" to OCR every page even those that already contain
@@ -32,15 +33,15 @@
  *   X-Ocr-Pages-Processed — number of pages that went through OCR
  *   X-Ocr-Words-Added     — number of invisible words written
  *
- * Returns 503 if tesseract is not installed on the server.
+ * Returns 503 if the OCR engine is unavailable.
  */
 
 import { NextResponse } from 'next/server';
 import {
   ocrPdf,
   makeSearchablePdf,
-  TesseractNotInstalledError,
-  isTesseractAvailable,
+  OcrUnavailableError,
+  isOcrAvailable,
 } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError } from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
@@ -62,7 +63,7 @@ export async function POST(request: Request): Promise<Response> {
     const lang = (formData.get('lang') as string | null) ?? 'fra+eng';
     if (!/^[a-z]+(\+[a-z]+)*$/.test(lang)) {
       return NextResponse.json(
-        { success: false, error: 'lang must match the tesseract format e.g. "fra+eng".' },
+        { success: false, error: 'lang must match the OCR format e.g. "fra+eng".' },
         { status: 400 },
       );
     }
@@ -99,7 +100,6 @@ export async function POST(request: Request): Promise<Response> {
       const force = (formData.get('force') as string | null) === 'true';
       const arrayBuffer = await file.arrayBuffer();
       const result = await makeSearchablePdf(new Uint8Array(arrayBuffer), {
-        languages: lang,
         dpi: dpi as 144 | 200 | 300,
         force,
       });
@@ -144,7 +144,7 @@ export async function POST(request: Request): Promise<Response> {
 
     return NextResponse.json({ success: true, ...result });
   } catch (error: unknown) {
-    if (error instanceof TesseractNotInstalledError) {
+    if (error instanceof OcrUnavailableError) {
       return NextResponse.json(
         { success: false, error: error.message },
         { status: 503 },
@@ -172,6 +172,6 @@ export async function POST(request: Request): Promise<Response> {
 export async function GET(): Promise<Response> {
   const authResult = await requireSession();
   if (!authResult.ok) return authResult.response;
-  const available = await isTesseractAvailable();
+  const available = await isOcrAvailable();
   return NextResponse.json({ available });
 }

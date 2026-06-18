@@ -19,19 +19,14 @@ export type { SearchHit, SearchOptions, SearchResult } from './search';
 
 export { getMetadataRobust } from './metadata-robust';
 
-export { ocrPdf, isTesseractAvailable, TesseractNotInstalledError } from './ocr';
+export { ocrPdf, isOcrAvailable, OcrUnavailableError } from './ocr';
 export type { OcrOptions, OcrPageResult, OcrResult } from './ocr';
 
-export {
-  makeSearchablePdf,
-  parseTsvWords,
-  tsvWordToPdfPlacement,
-  DEFAULT_MIN_WORD_CONFIDENCE,
-} from './ocr-searchable';
+export { makeSearchablePdf, ocrWordToPdfPlacement } from './ocr-searchable';
 export type {
   MakeSearchablePdfOptions,
   MakeSearchablePdfResult,
-  OcrTsvWord,
+  OcrWordBox,
   PdfPlacementContext,
   PdfWordPlacement,
 } from './ocr-searchable';
