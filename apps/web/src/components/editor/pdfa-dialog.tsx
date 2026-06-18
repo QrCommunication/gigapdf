@@ -43,7 +43,7 @@ const VARIANTS: { value: Variant; label: string; desc: string }[] = [
 
 /**
  * PdfADialog — convert the current PDF to a PDF/A archival flavour via
- * MuPDF. Variant choice affects which source features survive the
+ * the engine. Variant choice affects which source features survive the
  * conversion. We default to pdfa-2u (recommended for most legal/archival
  * use cases) and surface the trade-offs inline so the user picks knowingly.
  */

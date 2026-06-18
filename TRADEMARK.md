@@ -1,7 +1,7 @@
 # Trademark Policy — GigaPDF
 
-The GigaPDF source code is open source under the
-[GNU AGPL-3.0-or-later](LICENSE) license.
+The GigaPDF source code is source-available under the
+[PolyForm Noncommercial 1.0.0](LICENSE) license.
 
 The "**GigaPDF**" name and logo are trademarks of **QR Communication SAS**
 (SIREN 940 163 496, 23 rue de Richelieu, 75001 Paris, France).
@@ -49,7 +49,7 @@ Logo files are available in the [`branding/`](branding/) folder
 under [**CC-BY-ND 4.0**](https://creativecommons.org/licenses/by-nd/4.0/)
 (attribution required, no derivative works).
 
-The code itself remains AGPLv3.
+The code itself remains under PolyForm Noncommercial 1.0.0.
 
 ## Why this policy?
 

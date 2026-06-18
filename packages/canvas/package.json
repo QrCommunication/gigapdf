@@ -1,6 +1,6 @@
 {
   "name": "@giga-pdf/canvas",
-  "license": "AGPL-3.0-or-later",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "version": "0.1.0",
   "description": "Fabric.js-based canvas for PDF rendering and editing",
   "main": "./dist/index.js",
@@ -24,8 +24,8 @@
   },
   "dependencies": {
     "@giga-pdf/types": "workspace:*",
-    "fabric": "^7.4.0",
-    "pdfjs-dist": "5.7.284"
+    "@qrcommunication/gigapdf-lib": "^0.42.0",
+    "fabric": "^7.4.0"
   },
   "devDependencies": {
     "@giga-pdf/eslint-config": "workspace:*",

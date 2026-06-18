@@ -3,7 +3,7 @@
  *
  * Implements the canonical 2-pass pipeline:
  *
- *   Phase 0 — open input bytes with pdf-lib only to extract per-page
+ *   Phase 0 — open input bytes with the engine only to extract per-page
  *             metadata (height, width, rotation) needed for the
  *             web → PDF user-space coordinate conversion. No mutation.
  *
@@ -11,9 +11,9 @@
  *             removes original glyphs / images / line-art from the
  *             oldBounds area of every update + delete op. Operates on
  *             the pristine input bytes. Falls back to the input bytes
- *             unchanged if MuPDF errors out (degraded: doublons visible).
+ *             unchanged if the redaction pass errors out (degraded: doublons visible).
  *
- *   Phase 2 — re-open pdf-lib on the redacted bytes, run every add op
+ *   Phase 2 — re-open the engine on the redacted bytes, run every add op
  *             (plus every update op re-cast as add at the NEW element
  *             bounds). Save.
  *
@@ -23,7 +23,7 @@
  * mask-based `updateText` / `updateImage` / `deleteElementArea`.
  */
 
-import { openDocument, saveDocument } from '../engine/document-handle';
+import { openDocument, saveDocument, closeDocument } from '../engine/document-handle';
 import { setFontCacheForHandle } from '../utils/font-cache-port';
 import type { FontCachePort } from '../utils/font-cache-port';
 import { addText } from './text-renderer';
@@ -31,8 +31,8 @@ import { addImage } from './image-renderer';
 import { addShape } from './shape-renderer';
 import { addAnnotation } from './annotation-renderer';
 import { addFormField } from './form-renderer';
-import { applyRedactions } from './mupdf-redact';
-import type { RedactionTarget } from './mupdf-redact';
+import { applyRedactions } from './engine-redact';
+import type { RedactionTarget } from './engine-redact';
 import { webToPdf } from '../utils/coordinates';
 import { engineLogger } from '../utils/logger';
 import type {
@@ -65,9 +65,9 @@ export interface ApplyOperationsResult {
   bytes: Uint8Array;
   /** Number of redaction targets accumulated from update + delete ops. */
   redactionTargetsCount: number;
-  /** Number of redactions MuPDF actually applied (may be smaller if some pages were out of range). */
+  /** Number of redactions the engine actually applied (may be smaller if some pages were out of range). */
   redactionsApplied: number;
-  /** True when Phase 1 MuPDF redaction completed successfully. False when it errored and we fell back. */
+  /** True when Phase 1 redaction completed successfully. False when it errored and we fell back. */
   redactionSucceeded: boolean;
   /** Number of `add` (+ re-cast `update`) ops applied in Phase 2. */
   addsApplied: number;
@@ -101,17 +101,14 @@ export async function applyOperations(
     : Buffer.from(inputBytes);
   const extractImageData = options.extractImageData ?? defaultExtractImageData;
 
-  // ── Phase 0: extract page metadata via pdf-lib (no mutation) ────────────
+  // ── Phase 0: extract page metadata via the engine (no mutation) ─────────
   const metaHandle = await openDocument(inputBuffer);
 
   const toPdfBounds = (
     pageNumber: number,
     webBounds: { x: number; y: number; width: number; height: number },
   ): RedactionTarget['bounds'] => {
-    const page = metaHandle._pdfDoc.getPage(pageNumber - 1);
-    const pageH = page.getHeight();
-    const pageW = page.getWidth();
-    const rotation = page.getRotation().angle as 0 | 90 | 180 | 270;
+    const { width: pageW, height: pageH, rotation } = metaHandle._doc.pageInfo(pageNumber);
     return webToPdf(
       webBounds.x,
       webBounds.y,
@@ -119,7 +116,7 @@ export async function applyOperations(
       webBounds.height,
       pageH,
       pageW,
-      rotation,
+      rotation as 0 | 90 | 180 | 270,
     );
   };
 
@@ -162,7 +159,10 @@ export async function applyOperations(
     }
   }
 
-  // ── Phase 1: MuPDF redaction on the pristine input ──────────────────────
+  // Phase 0 done — release the metadata-only handle (frees its WASM document).
+  closeDocument(metaHandle);
+
+  // ── Phase 1: redaction on the pristine input ────────────────────────────
   let workingBytes: Uint8Array = new Uint8Array(inputBuffer);
   let redactionsApplied = 0;
   let redactionSucceeded = true;
@@ -174,14 +174,14 @@ export async function applyOperations(
       redactionsApplied = result.applied;
     } catch (err) {
       redactionSucceeded = false;
-      engineLogger.warn('applyOperations: MuPDF redaction failed, proceeding without', {
+      engineLogger.warn('applyOperations: redaction failed, proceeding without', {
         error: err instanceof Error ? err.message : String(err),
         targetCount: redactionTargets.length,
       });
     }
   }
 
-  // ── Phase 2: pdf-lib add pass on (potentially redacted) bytes ───────────
+  // ── Phase 2: native add pass on (potentially redacted) bytes ────────────
   const handle = await openDocument(Buffer.from(workingBytes));
   if (options.fontCache) {
     setFontCacheForHandle(handle, options.fontCache);
@@ -233,6 +233,7 @@ export async function applyOperations(
   }
 
   const finalBytes = await saveDocument(handle);
+  closeDocument(handle);
 
   return {
     bytes: new Uint8Array(finalBytes),

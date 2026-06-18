@@ -113,7 +113,7 @@ export function OpenSourceIllustration({ className }: { className?: string }) {
         <circle cx="48" cy="44" r="6" className="fill-background stroke-primary" strokeWidth="2" />
       </g>
 
-      {/* ── Sceau AGPL en haut à droite ──────────────────────────────────── */}
+      {/* ── Sceau open source en haut à droite ───────────────────────────── */}
       <g transform="translate(470 96) rotate(-8)">
         <circle r="48" className="fill-background stroke-primary" strokeWidth="2" />
         <circle r="40" className="stroke-primary/40" strokeWidth="1" fill="none" />
@@ -125,7 +125,7 @@ export function OpenSourceIllustration({ className }: { className?: string }) {
           fontSize="22"
           fontWeight="800"
         >
-          AGPL
+          OPEN
         </text>
         <text
           x="0"
@@ -135,7 +135,7 @@ export function OpenSourceIllustration({ className }: { className?: string }) {
           fontSize="11"
           letterSpacing="2"
         >
-          3.0
+          SOURCE
         </text>
       </g>
 

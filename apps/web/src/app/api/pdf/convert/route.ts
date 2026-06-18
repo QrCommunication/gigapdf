@@ -2,7 +2,7 @@
  * HTML/URL to PDF Conversion route
  *
  * POST /api/pdf/convert
- * Converts HTML content or a URL to a PDF document using Playwright.
+ * Converts HTML content or a URL to a PDF document using the in-house engine.
  *
  * Request body (JSON):
  * {
@@ -24,10 +24,11 @@
  * Returns the generated PDF as application/pdf binary.
  *
  * Security:
- *   - SSRF prevention: DNS pre-flight + Playwright request interception
+ *   - SSRF prevention: DNS pre-flight + per-fetch request guard (page, redirect
+ *     hops, and every external sub-resource the engine asks the host to fetch)
  *   - Private/reserved IP ranges are blocked (RFC 1918, link-local, loopback, …)
  *   - Optional domain allowlist via URL_TO_PDF_DOMAIN_ALLOWLIST env var
- *   - Playwright timeout capped at 15 s to limit resource abuse
+ *   - URL fetch timeout capped at 15 s to limit resource abuse
  */
 
 import { NextResponse } from 'next/server';
@@ -35,14 +36,14 @@ import { htmlToPDF, urlToPDFSafe } from '@giga-pdf/pdf-engine';
 import type { ConvertOptions } from '@giga-pdf/pdf-engine';
 import {
   validateUrlForPdfConversion,
-  shouldBlockPlaywrightRequest,
+  shouldBlockFetchRequest,
   SsrfBlockedError,
 } from '@/lib/security/url-validation';
 import { serverLogger } from '@/lib/server-logger';
 import { requireSession } from '@/lib/auth-helpers';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
 
-// Maximum Playwright timeout for URL-to-PDF conversions.
+// Maximum fetch timeout for URL-to-PDF conversions.
 // A generous per-user timeout is fine for HTML (no external fetch), but for
 // URL mode we cap tightly to limit the attack surface and resource usage.
 const URL_TO_PDF_TIMEOUT_MS = 15_000;
@@ -113,7 +114,7 @@ export async function POST(request: Request): Promise<Response> {
         await validateUrlForPdfConversion(url);
       } catch (err) {
         if (err instanceof SsrfBlockedError) {
-          serverLogger.warn('[SSRF-BLOCKED] Request rejected before Playwright launch', {
+          serverLogger.warn('[SSRF-BLOCKED] Request rejected before fetch', {
             ip: err.blockedIp,
           });
           return NextResponse.json(
@@ -131,9 +132,10 @@ export async function POST(request: Request): Promise<Response> {
         );
       }
 
-      // Step 2 — Playwright conversion with:
+      // Step 2 — engine conversion (the host fetches the page + every external
+      // sub-resource on the engine's behalf) with:
       //   • Hard timeout cap (15 s)
-      //   • Request interception that blocks redirects to private IPs
+      //   • A per-fetch guard that blocks redirects/resources to private IPs
       const safeOptions = {
         ...options,
         // Cap timeout regardless of what the caller requested.
@@ -144,9 +146,9 @@ export async function POST(request: Request): Promise<Response> {
         // Block any request (including redirect targets) that resolve to a
         // private/reserved address — defence-in-depth against SSRF via redirects.
         shouldBlockRequest: (requestUrl: string): boolean => {
-          const blocked = shouldBlockPlaywrightRequest(requestUrl);
+          const blocked = shouldBlockFetchRequest(requestUrl);
           if (blocked) {
-            serverLogger.warn('[SSRF-BLOCKED] Playwright request intercepted', {
+            serverLogger.warn('[SSRF-BLOCKED] Host fetch intercepted', {
               requestUrl,
             });
           }

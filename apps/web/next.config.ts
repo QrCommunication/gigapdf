@@ -70,15 +70,27 @@ const nextConfig: NextConfig = {
     "@prisma/adapter-pg",
     "@prisma/client",
     "nodemailer",
-    // Keep pdfjs-dist external so Node resolves pdf.worker.mjs correctly
-    // (Turbopack bundling breaks import.meta.url → createRequire resolution)
-    "pdfjs-dist",
-    // mupdf ships a wasm blob (mupdf-wasm.wasm) that must be co-located
-    // with mupdf.js at runtime. Bundling it would lose the .wasm sibling.
-    "mupdf",
+    // The Rust→WASM engine ships a `gigapdf.wasm` blob that `loadDefault()`
+    // reads from disk at runtime. Bundling the package would lose the sibling
+    // `.wasm`, so keep it external (and trace the wasm — see below).
+    "@qrcommunication/gigapdf-lib",
   ],
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
+  // The WASM engine's `loadDefault()` (Node-only, reads `gigapdf.wasm` from disk)
+  // statically `import()`s `fs/promises` + `url`. That class is bundled for the
+  // browser too (canvas renderer → editor → embed page), where the browser path
+  // uses `GigaPdfEngine.load(url)` and never reaches `loadDefault()`. Stub the
+  // Node builtins out of the CLIENT bundle only; the server keeps the real
+  // modules (the lib stays `serverExternalPackages`, resolved at runtime).
+  turbopack: {
+    resolveAlias: {
+      "fs/promises": { browser: "./src/lib/node-stub.ts" },
+      "node:fs/promises": { browser: "./src/lib/node-stub.ts" },
+      url: { browser: "./src/lib/node-stub.ts" },
+      "node:url": { browser: "./src/lib/node-stub.ts" },
+    },
+  },
   // next-intl `as-needed` + SSG : sans cela, une requête `/login` (locale par
   // défaut, non préfixée) est réécrite par le proxy vers le prerender `/fr/login`,
   // que le serveur standalone re-normalise en 307 → `/login` (le strip `/fr` de
@@ -88,66 +100,26 @@ const nextConfig: NextConfig = {
   // la normalisation d'URL par le middleware fait servir la cible de réécriture
   // sans re-déclencher le strip. Le proxy continue de voir le chemin public.
   skipMiddlewareUrlNormalize: true,
-  // Force pdfjs-dist worker file to be included in standalone bundle
-  // (needed for server-side PDF parsing in /api/pdf/parse-from-s3)
   outputFileTracingIncludes: {
-    "/api/pdf/parse-from-s3": [
-      "../../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
-      "../../node_modules/pdfjs-dist/legacy/build/pdf.mjs",
+    // The Rust→WASM engine (@qrcommunication/gigapdf-lib) is loaded server-side
+    // by pdf-engine via loadDefault(), which reads `gigapdf.wasm` from disk.
+    // Next's tracing follows imports, not runtime fs reads, so the wasm must be
+    // included explicitly for every API route that touches PDFs or Office.
+    "/api/pdf/**": [
+      "../../node_modules/@qrcommunication/gigapdf-lib/gigapdf.wasm",
     ],
-    "/api/pdf/parse": [
-      "../../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
-      "../../node_modules/pdfjs-dist/legacy/build/pdf.mjs",
+    "/api/office/**": [
+      "../../node_modules/@qrcommunication/gigapdf-lib/gigapdf.wasm",
     ],
-    // Bundled OFL fallback fonts for apply-elements text bake. Without this
-    // include, the .ttf files live in packages/pdf-engine/fonts/ at dev time
-    // but never make it into the standalone bundle, and resolveFont() falls
-    // back to StandardFonts.Helvetica (which has none of the OCRB / Iliad /
-    // Gotham metrics the user sees in the source PDF).
+    // OFL fallback fonts for text bake (apply-elements / watermark): without
+    // them resolveFont() falls back to StandardFonts.Helvetica, losing the
+    // OCRB / Iliad / Gotham metrics the user sees in the source PDF. These
+    // keys are unioned with the wasm globs above for the same routes.
     "/api/pdf/apply-elements": [
       "../../packages/pdf-engine/fonts/*.ttf",
-      // MuPDF wasm runtime — the .wasm and its .js loader must be present
-      // in the standalone bundle for the redaction post-pass to work.
-      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
-      "../../node_modules/mupdf/dist/mupdf-wasm.js",
-      "../../node_modules/mupdf/dist/mupdf.js",
-    ],
-    "/api/office/export": [
-      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
-      "../../node_modules/mupdf/dist/mupdf-wasm.js",
-      "../../node_modules/mupdf/dist/mupdf.js",
-    ],
-    "/api/pdf/flatten": [
-      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
-      "../../node_modules/mupdf/dist/mupdf-wasm.js",
-      "../../node_modules/mupdf/dist/mupdf.js",
-    ],
-    "/api/pdf/search": [
-      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
-      "../../node_modules/mupdf/dist/mupdf-wasm.js",
-      "../../node_modules/mupdf/dist/mupdf.js",
     ],
     "/api/pdf/watermark": [
       "../../packages/pdf-engine/fonts/*.ttf",
-      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
-      "../../node_modules/mupdf/dist/mupdf-wasm.js",
-      "../../node_modules/mupdf/dist/mupdf.js",
-    ],
-    "/api/pdf/ocr": [
-      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
-      "../../node_modules/mupdf/dist/mupdf-wasm.js",
-      "../../node_modules/mupdf/dist/mupdf.js",
-    ],
-    "/api/pdf/pdfa": [
-      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
-      "../../node_modules/mupdf/dist/mupdf-wasm.js",
-      "../../node_modules/mupdf/dist/mupdf.js",
-    ],
-    // Compression route: pdf-lib round-trip + MuPDF optimizeAndSave post-pass.
-    "/api/pdf/compress": [
-      "../../node_modules/mupdf/dist/mupdf-wasm.wasm",
-      "../../node_modules/mupdf/dist/mupdf-wasm.js",
-      "../../node_modules/mupdf/dist/mupdf.js",
     ],
   },
   // Disable static generation for error pages

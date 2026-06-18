@@ -30,6 +30,13 @@ export function Header() {
             >
               {t("nav.features")}
             </Link>
+            {/* « Moteur PDF » : page produit détaillant le moteur maison. */}
+            <Link
+              href="/engine"
+              className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted"
+            >
+              {t("nav.engine")}
+            </Link>
             <Link
               href="/open-source"
               className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted"

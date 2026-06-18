@@ -5,8 +5,8 @@ export { addAnnotation } from './annotation-renderer';
 export { addFormField, updateFormFieldValue } from './form-renderer';
 export { flattenAnnotations, flattenForms } from './flatten';
 export type { FlattenAnnotationsResult } from './flatten';
-export { applyRedactions } from './mupdf-redact';
-export type { RedactionTarget, ApplyRedactionsResult } from './mupdf-redact';
+export { applyRedactions } from './engine-redact';
+export type { RedactionTarget, ApplyRedactionsResult } from './engine-redact';
 export { applyOperations } from './apply-operations';
 export type {
   ElementOperation,
@@ -24,14 +24,14 @@ export type {
   AddNativeAnnotationsResult,
 } from './native-annotations';
 export {
-  renderPages as mupdfRenderPages,
-  renderPage as mupdfRenderPage,
-} from './mupdf-render';
+  renderPages as engineRenderPages,
+  renderPage as engineRenderPage,
+} from './engine-render';
 export type {
-  RenderPageOptions as MupdfRenderPageOptions,
-  RenderedPage as MupdfRenderedPage,
-  BatchRenderOptions as MupdfBatchRenderOptions,
-} from './mupdf-render';
+  RenderPageOptions as EngineRenderPageOptions,
+  RenderedPage as EngineRenderedPage,
+  BatchRenderOptions as EngineBatchRenderOptions,
+} from './engine-render';
 export { addWatermark } from './watermark';
 export type {
   WatermarkOptions,

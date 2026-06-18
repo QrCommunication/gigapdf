@@ -1,4 +1,3 @@
-import { degrees } from 'pdf-lib';
 import type { PDFDocumentHandle } from './document-handle';
 import { markDirty } from './document-handle';
 import { PDFPageOutOfRangeError } from '../errors';
@@ -16,25 +15,24 @@ export function addPage(
   width?: number,
   height?: number,
 ): number {
-  const doc = handle._pdfDoc;
-  const pageCount = doc.getPageCount();
+  const doc = handle._doc;
+  const pageCount = doc.pageCount();
 
   // Clamp to valid insertion range [1, pageCount + 1].
   const clampedPosition = Math.max(1, Math.min(position, pageCount + 1));
 
-  doc.insertPage(clampedPosition - 1, [
-    width ?? DEFAULT_PAGE_WIDTH,
-    height ?? DEFAULT_PAGE_HEIGHT,
-  ]);
+  // The engine inserts a blank page AFTER the 1-based `after` page (0 = front),
+  // so inserting AT `clampedPosition` means after `clampedPosition - 1`.
+  doc.addPage(width ?? DEFAULT_PAGE_WIDTH, height ?? DEFAULT_PAGE_HEIGHT, clampedPosition - 1);
 
   markDirty(doc);
   return clampedPosition;
 }
 
 export function deletePage(handle: PDFDocumentHandle, pageNumber: number): void {
-  const doc = handle._pdfDoc;
-  validatePageNumber(pageNumber, doc.getPageCount());
-  doc.removePage(pageNumber - 1);
+  const doc = handle._doc;
+  validatePageNumber(pageNumber, doc.pageCount());
+  doc.deletePage(pageNumber);
   markDirty(doc);
 }
 
@@ -43,28 +41,15 @@ export async function movePage(
   fromPage: number,
   toPage: number,
 ): Promise<void> {
-  const doc = handle._pdfDoc;
-  const pageCount = doc.getPageCount();
+  const doc = handle._doc;
+  const pageCount = doc.pageCount();
 
   validatePageNumber(fromPage, pageCount);
   validatePageNumber(toPage, pageCount);
 
   if (fromPage === toPage) return;
 
-  // copyPages duplicates page content into a usable PDFPage reference,
-  // allowing us to reorder without losing embedded resources.
-  const [copiedPage] = await doc.copyPages(doc, [fromPage - 1]);
-
-  if (toPage > fromPage) {
-    // Insert the copy after the original's position, then remove the original.
-    doc.insertPage(toPage - 1, copiedPage);
-    doc.removePage(fromPage - 1);
-  } else {
-    // Remove the original first so the target index remains stable.
-    doc.removePage(fromPage - 1);
-    doc.insertPage(toPage - 1, copiedPage);
-  }
-
+  doc.movePage(fromPage, toPage);
   markDirty(doc);
 }
 
@@ -76,25 +61,16 @@ export function rotatePage(
   angle: number,
   mode: RotateMode = 'delta',
 ): void {
-  const doc = handle._pdfDoc;
-  validatePageNumber(pageNumber, doc.getPageCount());
-
-  const page = doc.getPage(pageNumber - 1);
+  const doc = handle._doc;
+  validatePageNumber(pageNumber, doc.pageCount());
 
   // mode 'delta' (default) = add `angle` to the page's current rotation —
-  // matches the intuitive "rotate 90° clockwise" button behaviour. Four
-  // successive 90° clicks cycle back to 0.
-  // mode 'set'   = overwrite the page rotation with `angle`. Used when the
-  // caller already computed the absolute target.
-  const current = page.getRotation().angle;
+  // matches the intuitive "rotate 90° clockwise" button. mode 'set' = absolute.
+  // The engine normalises the result to a 0/90/180/270 multiple.
+  const current = doc.pageInfo(pageNumber).rotation;
   const target = mode === 'delta' ? current + angle : angle;
 
-  // Normalize to [0, 360) then snap to valid PDF rotation multiples of 90.
-  const normalized = ((target % 360) + 360) % 360;
-  const snapped = Math.round(normalized / 90) * 90;
-  const finalAngle = snapped === 360 ? 0 : snapped;
-
-  page.setRotation(degrees(finalAngle));
+  doc.rotatePage(pageNumber, target);
   markDirty(doc);
 }
 
@@ -104,27 +80,42 @@ export async function copyPage(
   targetHandle?: PDFDocumentHandle,
   targetPosition?: number,
 ): Promise<number> {
-  const source = sourceHandle._pdfDoc;
-  const target = targetHandle ?? sourceHandle;
-  const targetDoc = target._pdfDoc;
+  const source = sourceHandle._doc;
+  validatePageNumber(sourcePageNumber, source.pageCount());
 
-  validatePageNumber(sourcePageNumber, source.getPageCount());
+  const sameDoc = !targetHandle || targetHandle === sourceHandle;
 
-  const [copiedPage] = await targetDoc.copyPages(source, [sourcePageNumber - 1]);
-
-  const targetPageCount = targetDoc.getPageCount();
-  const insertAt =
-    targetPosition !== undefined
-      ? Math.max(1, Math.min(targetPosition, targetPageCount + 1))
-      : targetPageCount + 1;
-
-  targetDoc.insertPage(insertAt - 1, copiedPage);
-
-  markDirty(targetDoc);
-  if (targetHandle && targetHandle !== sourceHandle) {
+  if (sameDoc) {
+    // `copyPage` inserts the duplicate right after the source.
+    source.copyPage(sourcePageNumber);
+    const insertedAt = sourcePageNumber + 1;
+    const pageCount = source.pageCount();
+    const target =
+      targetPosition !== undefined
+        ? Math.max(1, Math.min(targetPosition, pageCount))
+        : pageCount;
+    if (target !== insertedAt) {
+      source.movePage(insertedAt, target);
+    }
     markDirty(source);
+    return target;
   }
 
+  // Cross-document copy: extract the single page as a standalone PDF and append
+  // it to the target, then reposition.
+  const target = targetHandle!._doc;
+  const onePage = source.extractPages([sourcePageNumber]);
+  target.appendPages(onePage);
+  const appendedAt = target.pageCount();
+  const pageCount = target.pageCount();
+  const insertAt =
+    targetPosition !== undefined
+      ? Math.max(1, Math.min(targetPosition, pageCount))
+      : pageCount;
+  if (insertAt !== appendedAt) {
+    target.movePage(appendedAt, insertAt);
+  }
+  markDirty(target);
   return insertAt;
 }
 
@@ -133,20 +124,10 @@ export function resizePage(
   pageNumber: number,
   width: number,
   height: number,
-  scaleContent?: boolean,
+  _scaleContent?: boolean,
 ): void {
-  const doc = handle._pdfDoc;
-  validatePageNumber(pageNumber, doc.getPageCount());
-
-  const page = doc.getPage(pageNumber - 1);
-
-  if (scaleContent) {
-    const current = page.getSize();
-    const scaleX = width / current.width;
-    const scaleY = height / current.height;
-    page.scaleContent(scaleX, scaleY);
-  }
-
-  page.setMediaBox(0, 0, width, height);
+  const doc = handle._doc;
+  validatePageNumber(pageNumber, doc.pageCount());
+  doc.resizePage(pageNumber, width, height);
   markDirty(doc);
 }

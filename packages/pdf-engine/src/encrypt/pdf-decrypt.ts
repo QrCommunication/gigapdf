@@ -1,52 +1,30 @@
-import { PDFDocument } from 'pdf-lib';
+import { getEngine } from '../wasm';
 import { PDFEngineError, PDFInvalidPasswordError } from '../errors';
 
 /**
- * Attempts to decrypt an encrypted PDF and returns the decrypted bytes.
- *
- * pdf-lib loads encrypted documents with `ignoreEncryption: true`, which bypasses
- * the PDF password check and strips the Encrypt dictionary on re-save. This works for
- * documents where pdf-lib can parse the encrypted structure without actually decrypting
- * the content streams.
- *
- * LIMITATION: For documents using strong AES-256 encryption where content streams are
- * ciphertext, pdf-lib will parse the raw (undecrypted) streams. True decryption of
- * content streams requires a native library such as qpdf:
- * `qpdf --decrypt --password=<pwd> input.pdf output.pdf`
- *
- * @param buffer - Encrypted PDF bytes
- * @param password - User or owner password (used for validation; pdf-lib ignores it internally)
- * @throws {PDFInvalidPasswordError} When the PDF cannot be loaded at all
- * @throws {PDFEngineError} When an unexpected error occurs during processing
+ * Decrypts an encrypted PDF with the user (or owner) password via the
+ * zero-dependency WASM engine — **real** RC4 / AESV2 / AESV3 content-stream
+ * decryption. (The previous pdf-lib path only stripped the `/Encrypt` entry and
+ * left ciphertext streams intact.) Throws {@link PDFInvalidPasswordError} when
+ * the password is wrong.
  */
 export async function decryptPDF(buffer: Buffer, password: string): Promise<Buffer> {
-  // password is received for API correctness and future native implementation.
-  void password;
+  const giga = await getEngine();
+  const data = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
 
-  let pdfDoc: PDFDocument;
-  try {
-    pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-
-    // pdf-lib surfaces password-related errors with messages containing "password"
-    if (message.toLowerCase().includes('password') || message.toLowerCase().includes('encrypt')) {
-      throw new PDFInvalidPasswordError(`Failed to decrypt PDF: ${message}`);
-    }
-
-    throw new PDFEngineError(
-      `Failed to load PDF for decryption: ${message}`,
-      'PDF_DECRYPT_LOAD_FAILED',
-    );
+  const doc = giga.openEncrypted(data, password);
+  if (!doc) {
+    throw new PDFInvalidPasswordError('Failed to decrypt PDF: incorrect password');
   }
 
   try {
-    const bytes = await pdfDoc.save({ useObjectStreams: false });
-    return Buffer.from(bytes);
+    return Buffer.from(doc.save());
   } catch (err) {
     throw new PDFEngineError(
       `Failed to re-save decrypted PDF: ${err instanceof Error ? err.message : String(err)}`,
       'PDF_DECRYPT_SAVE_FAILED',
     );
+  } finally {
+    doc.close();
   }
 }

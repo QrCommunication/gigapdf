@@ -3,7 +3,7 @@
  *
  * Contenu statique rédigé en français (langue canonique du domaine).
  * Chaque entrée décrit UNIQUEMENT des capacités réellement présentes dans
- * GigaPDF (pdf-engine, MuPDF, LibreOffice headless, tesseract, Chromium).
+ * GigaPDF — moteur PDF maison (TypeScript/WebAssembly).
  * Aucun gabarit à variables : intros et FAQ rédigées individuellement.
  */
 
@@ -47,8 +47,8 @@ export const TOOLS: ToolData[] = [
     h1: "Éditeur PDF en ligne : modifiez le texte directement dans le fichier",
     intro: [
       "Corriger une faute dans un contrat déjà exporté, mettre à jour un tarif sur une plaquette, remplacer un logo : la plupart des outils en ligne se contentent de poser un cadre blanc par-dessus l'ancien contenu. GigaPDF travaille autrement. Son éditeur WYSIWYG ouvre la page telle qu'elle s'imprimera et vous laisse cliquer sur un bloc de texte, une image ou une forme pour le modifier, le déplacer ou le supprimer réellement.",
-      "La fidélité typographique fait la différence : GigaPDF identifie les polices utilisées dans le document, les télécharge automatiquement depuis Google Fonts quand elles y sont disponibles, puis les embarque dans le fichier au moment de l'enregistrement. Votre correction reprend la même police que le paragraphe d'origine, sans substitution Arial disgracieuse. Pour les suppressions, le moteur MuPDF retire les opérateurs de texte du flux de contenu au lieu de les masquer — rien ne réapparaît au copier-coller.",
-      "L'éditeur fonctionne dans le navigateur, sans installation. Le plan gratuit inclut toutes les fonctions d'édition, avec 5 Go de stockage et 100 documents. Le code est open source sous licence AGPL : les équipes qui manipulent des documents sensibles peuvent héberger l'application sur leur propre serveur.",
+      "La fidélité typographique fait la différence : GigaPDF identifie les polices utilisées dans le document, les télécharge automatiquement depuis Google Fonts quand elles y sont disponibles, puis les embarque dans le fichier au moment de l'enregistrement. Votre correction reprend la même police que le paragraphe d'origine, sans substitution Arial disgracieuse. Pour les suppressions, le moteur maison retire les opérateurs de texte du flux de contenu au lieu de les masquer — rien ne réapparaît au copier-coller.",
+      "L'éditeur fonctionne dans le navigateur, sans installation. Le plan gratuit inclut toutes les fonctions d'édition, avec 5 Go de stockage et 100 documents. Le code est open source, source-available sous licence PolyForm Noncommercial : les équipes qui manipulent des documents sensibles peuvent héberger l'application sur leur propre serveur.",
     ],
     howTo: {
       title: "Comment modifier un PDF en ligne",
@@ -64,7 +64,7 @@ export const TOOLS: ToolData[] = [
     capabilities: [
       "Édition WYSIWYG du texte, des images et des formes existantes",
       "Polices d'origine détectées, téléchargées depuis Google Fonts et embarquées à l'enregistrement",
-      "Suppression réelle du contenu via MuPDF (pas de masque blanc)",
+      "Suppression réelle du contenu par le moteur maison (pas de masque blanc)",
       "Annotations natives, filigranes et remplissage de formulaires depuis le même éditeur",
       "Historique de versions et miniatures de pages dans la GED intégrée",
       "Collaboration en temps réel sur le même document",
@@ -73,7 +73,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Puis-je modifier le texte existant d'un PDF, pas seulement en ajouter ?",
         answer:
-          "Oui. GigaPDF extrait les blocs de texte du fichier et les rend éditables en place. Quand vous corrigez un paragraphe, l'ancien contenu est supprimé du flux PDF par MuPDF et le nouveau texte est écrit avec la police d'origine, embarquée dans le fichier au moment de l'enregistrement.",
+          "Oui. GigaPDF extrait les blocs de texte du fichier et les rend éditables en place. Quand vous corrigez un paragraphe, l'ancien contenu est supprimé du flux PDF par le moteur maison et le nouveau texte est écrit avec la police d'origine, embarquée dans le fichier au moment de l'enregistrement.",
       },
       {
         question: "Que se passe-t-il si la police du PDF n'est pas installée sur mon ordinateur ?",
@@ -115,7 +115,7 @@ export const TOOLS: ToolData[] = [
     intro: [
       "Un dossier de candidature, une liasse de pièces justificatives, un rapport assemblé depuis plusieurs services : ces documents finissent toujours éparpillés en cinq ou six fichiers PDF distincts. Les envoyer tels quels oblige le destinataire à jongler entre les pièces jointes ; les imprimer pour les rescanner dégrade la qualité. La fusion produit un fichier unique, paginé en continu, prêt à être transmis ou archivé.",
       "GigaPDF assemble vos PDF côté serveur avec son moteur dédié : les pages sont copiées sans recompression, les signets et les champs de formulaire des fichiers sources sont préservés autant que le format le permet, et aucun filigrane publicitaire n'est apposé sur le résultat. Vous réordonnez les fichiers avant la fusion, puis les pages elles-mêmes dans l'éditeur si un ajustement s'impose.",
-      "L'outil s'intègre à la GED de GigaPDF : le fichier fusionné rejoint vos dossiers, peut être tagué, recherché en texte intégral et partagé par lien ou par e-mail. Le tout est inclus dans le plan gratuit, et l'application complète peut être auto-hébergée puisque le code est publié sous licence AGPL.",
+      "L'outil s'intègre à la GED de GigaPDF : le fichier fusionné rejoint vos dossiers, peut être tagué, recherché en texte intégral et partagé par lien ou par e-mail. Le tout est inclus dans le plan gratuit, et l'application complète peut être auto-hébergée puisque le code est « source-available » sous licence PolyForm Noncommercial.",
     ],
     howTo: {
       title: "Comment fusionner des fichiers PDF",
@@ -232,11 +232,11 @@ export const TOOLS: ToolData[] = [
     name: "Compresser un PDF",
     metaTitle: "Compresser un PDF en ligne gratuitement | GigaPDF",
     metaDescription:
-      "Réduisez le poids de vos PDF sans sacrifier la lisibilité : nettoyage de structure et optimisation web par MuPDF. Gratuit et open source.",
+      "Réduisez le poids de vos PDF sans sacrifier la lisibilité : nettoyage de structure et optimisation web par le moteur maison. Gratuit et open source.",
     h1: "Compresser un PDF : réduire le poids sans détruire le document",
     intro: [
       "Un PDF trop lourd se heurte vite aux limites du quotidien : messageries qui plafonnent les pièces jointes à 10 ou 25 Mo, formulaires administratifs qui refusent les fichiers volumineux, portails de dépôt qui expirent avant la fin du transfert. Les scans de plusieurs dizaines de pages et les exports bourrés d'images sont les premiers concernés.",
-      "GigaPDF s'appuie sur le moteur MuPDF pour compresser intelligemment : la passe de garbage collection supprime les objets inutilisés, les polices dupliquées et les flux orphelins qui gonflent silencieusement les fichiers retravaillés, tandis que la linéarisation réorganise la structure pour un affichage progressif dans le navigateur — la première page apparaît avant la fin du téléchargement. Le contenu visible n'est pas dégradé : on élimine le superflu structurel plutôt que de pixelliser vos pages.",
+      "GigaPDF s'appuie sur son moteur maison pour compresser intelligemment : la passe de nettoyage de structure supprime les objets inutilisés, les polices dupliquées et les flux orphelins qui gonflent silencieusement les fichiers retravaillés, tandis que la linéarisation réorganise la structure pour un affichage progressif dans le navigateur — la première page apparaît avant la fin du téléchargement. Le contenu visible n'est pas dégradé : on élimine le superflu structurel plutôt que de pixelliser vos pages.",
       "Cette approche est particulièrement efficace sur les documents passés par plusieurs éditeurs successifs, qui accumulent des données mortes. La compression est incluse dans le plan gratuit et se combine naturellement avec la fusion ou la division : assemblez d'abord, compressez ensuite, partagez le résultat par lien.",
     ],
     howTo: {
@@ -244,13 +244,13 @@ export const TOOLS: ToolData[] = [
       steps: [
         "Importez le PDF volumineux dans votre espace GigaPDF.",
         "Lancez la compression depuis le menu d'actions du document.",
-        "Le moteur MuPDF nettoie la structure : objets inutilisés, doublons et flux orphelins sont supprimés.",
+        "Le moteur maison nettoie la structure : objets inutilisés, doublons et flux orphelins sont supprimés.",
         "Le fichier est linéarisé pour un affichage progressif en ligne.",
         "Comparez le poids obtenu à l'original, puis téléchargez ou partagez la version allégée.",
       ],
     },
     capabilities: [
-      "Garbage collection MuPDF : suppression des objets, polices et flux inutilisés",
+      "Nettoyage de structure : suppression des objets, polices et flux inutilisés",
       "Linéarisation pour un affichage page à page immédiat dans le navigateur",
       "Aucune dégradation du texte vectoriel ni des mises en page",
       "Particulièrement efficace sur les PDF retravaillés ou assemblés plusieurs fois",
@@ -359,11 +359,11 @@ export const TOOLS: ToolData[] = [
     name: "OCR PDF",
     metaTitle: "OCR PDF en ligne : scan vers texte | GigaPDF",
     metaDescription:
-      "Reconnaissance de texte Tesseract (français + anglais) sur vos PDF scannés : copiez, cherchez, exportez le contenu. Gratuit et open source.",
+      "Reconnaissance de texte maison (français + anglais) sur vos PDF scannés : copiez, cherchez, exportez le contenu. Gratuit et open source.",
     h1: "OCR : extraire le texte de vos PDF scannés",
     intro: [
       "Un document scanné n'est qu'une suite de photographies de pages : impossible d'y rechercher un mot, de copier un paragraphe ou d'en extraire les montants. Tant que le texte n'est pas reconnu, le fichier reste muet pour vos outils — y compris pour la recherche de votre propre GED. La reconnaissance optique de caractères (OCR) transforme ces images en texte exploitable.",
-      "GigaPDF embarque le moteur Tesseract, référence open source du domaine, configuré pour le français et l'anglais — accents, cédilles et ligatures compris, là où beaucoup de services entraînés sur l'anglais seul écorchent les textes français. Le traitement s'exécute côté serveur : vous lancez l'OCR sur un document, le moteur analyse chaque page et restitue le texte reconnu, prêt à être copié, exporté ou indexé.",
+      "GigaPDF embarque son propre moteur de reconnaissance optique, configuré pour le français et l'anglais — accents, cédilles et ligatures compris, là où beaucoup de services entraînés sur l'anglais seul écorchent les textes français. Le traitement s'exécute côté serveur : vous lancez l'OCR sur un document, le moteur analyse chaque page et restitue le texte reconnu, prêt à être copié, exporté ou indexé.",
       "L'OCR alimente directement le reste de la plateforme : une fois le document reconnu, la recherche plein texte de la GED le retrouve par son contenu, et l'outil de PDF cherchable peut incruster le texte en calque invisible sous l'image d'origine. Le tout fonctionne dans le plan gratuit, et sur votre propre serveur si vous auto-hébergez — un point décisif quand les documents scannés sont confidentiels.",
     ],
     howTo: {
@@ -371,13 +371,13 @@ export const TOOLS: ToolData[] = [
       steps: [
         "Importez votre PDF scanné (ou vos photos de documents converties en PDF) dans GigaPDF.",
         "Lancez l'OCR depuis le menu d'actions du document.",
-        "Tesseract analyse chaque page et reconnaît le texte en français et en anglais.",
+        "Le moteur OCR analyse chaque page et reconnaît le texte en français et en anglais.",
         "Récupérez le texte : copie directe, export TXT, ou génération d'un PDF cherchable.",
         "Le document devient trouvable par son contenu dans la recherche plein texte de votre espace.",
       ],
     },
     capabilities: [
-      "Moteur Tesseract avec modèles français et anglais (fra+eng)",
+      "Moteur OCR maison avec modèles français et anglais (fra+eng)",
       "Reconnaissance fidèle des accents et caractères spéciaux du français",
       "Traitement page par page des documents multipages",
       "Export du texte reconnu (TXT) ou génération d'un calque cherchable invisible",
@@ -388,17 +388,17 @@ export const TOOLS: ToolData[] = [
       {
         question: "Quelles langues l'OCR de GigaPDF reconnaît-il ?",
         answer:
-          "Le moteur Tesseract est configuré avec les modèles français et anglais, utilisables simultanément : un contrat bilingue ou une facture mêlant les deux langues est traité en une seule passe. Les caractères accentués du français sont correctement restitués.",
+          "Le moteur OCR est configuré avec les modèles français et anglais, utilisables simultanément : un contrat bilingue ou une facture mêlant les deux langues est traité en une seule passe. Les caractères accentués du français sont correctement restitués.",
       },
       {
         question: "Quelle qualité de scan faut-il pour un bon résultat ?",
         answer:
-          "Tesseract donne d'excellents résultats sur des scans nets à 300 dpi avec un texte d'imprimerie. Les documents inclinés, les photocopies de photocopies ou les très petites tailles de caractères dégradent la reconnaissance ; mieux vaut numériser à plat et en bonne résolution quand c'est possible.",
+          "L'OCR donne d'excellents résultats sur des scans nets à 300 dpi avec un texte d'imprimerie. Les documents inclinés, les photocopies de photocopies ou les très petites tailles de caractères dégradent la reconnaissance ; mieux vaut numériser à plat et en bonne résolution quand c'est possible.",
       },
       {
         question: "L'OCR reconnaît-il l'écriture manuscrite ?",
         answer:
-          "Non, et il faut s'en méfier des promesses contraires : Tesseract est conçu pour les caractères imprimés. Une mention manuscrite isolée sur un formulaire ne sera généralement pas reconnue, même si le reste du document imprimé l'est parfaitement.",
+          "Non, et il faut s'en méfier des promesses contraires : l'OCR est conçu pour les caractères imprimés. Une mention manuscrite isolée sur un formulaire ne sera généralement pas reconnue, même si le reste du document imprimé l'est parfaitement.",
       },
       {
         question: "Que devient le document original après l'OCR ?",
@@ -424,7 +424,7 @@ export const TOOLS: ToolData[] = [
     h1: "Rendre un PDF scanné cherchable sans changer son apparence",
     intro: [
       "C'est la technique dite du « PDF sandwich » : l'image numérisée reste affichée telle quelle, et le texte reconnu par OCR est inséré en dessous, dans un calque invisible parfaitement aligné sur les mots de l'image. Visuellement, rien ne change — le tampon, la signature manuscrite et la mise en page d'origine restent intacts. Mais le document répond désormais à Ctrl+F, le texte se sélectionne à la souris et les lecteurs d'écran peuvent le lire.",
-      "GigaPDF construit ce calque à partir de la reconnaissance Tesseract (français et anglais) : chaque mot reconnu est positionné aux coordonnées exactes où il apparaît dans l'image, si bien qu'une recherche surligne le bon endroit de la page et qu'un copier-coller suit l'ordre de lecture. C'est la différence avec un simple export texte, qui perd toute correspondance avec la page.",
+      "GigaPDF construit ce calque à partir de la reconnaissance OCR maison (français et anglais) : chaque mot reconnu est positionné aux coordonnées exactes où il apparaît dans l'image, si bien qu'une recherche surligne le bon endroit de la page et qu'un copier-coller suit l'ordre de lecture. C'est la différence avec un simple export texte, qui perd toute correspondance avec la page.",
       "Pour une GED, c'est l'étape qui change tout : un fonds documentaire scanné devient interrogeable en texte intégral. Combinée à la recherche plein texte de GigaPDF, la sandwich-isation transforme des années d'archives papier numérisées en base documentaire réellement consultable — sur le cloud ou sur votre propre serveur en auto-hébergement.",
     ],
     howTo: {
@@ -432,7 +432,7 @@ export const TOOLS: ToolData[] = [
       steps: [
         "Importez le PDF scanné dans votre espace GigaPDF.",
         "Lancez la création du PDF cherchable depuis le menu d'actions.",
-        "Tesseract reconnaît le texte de chaque page (français + anglais).",
+        "Le moteur OCR reconnaît le texte de chaque page (français + anglais).",
         "Le texte est incrusté en calque invisible, mot par mot, aux coordonnées de l'image.",
         "Téléchargez le résultat : apparence identique, mais texte sélectionnable et cherchable partout.",
       ],
@@ -442,7 +442,7 @@ export const TOOLS: ToolData[] = [
       "Apparence du document strictement inchangée : tampons et signatures visibles conservés",
       "Recherche Ctrl+F fonctionnelle dans toutes les visionneuses PDF",
       "Sélection et copier-coller du texte directement sur le scan",
-      "Reconnaissance Tesseract français + anglais",
+      "Reconnaissance OCR maison français + anglais",
       "Indexation automatique dans la recherche plein texte de la GED GigaPDF",
     ],
     faq: [
@@ -459,7 +459,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "La recherche surligne-t-elle le bon endroit de la page ?",
         answer:
-          "Oui. Chaque mot du calque est positionné aux coordonnées où Tesseract l'a détecté dans l'image. Quand votre visionneuse surligne un résultat de recherche, le surlignage tombe sur le mot visible correspondant — ce qui rend la consultation de gros documents scannés réellement praticable.",
+          "Oui. Chaque mot du calque est positionné aux coordonnées où le moteur OCR l'a détecté dans l'image. Quand votre visionneuse surligne un résultat de recherche, le surlignage tombe sur le mot visible correspondant — ce qui rend la consultation de gros documents scannés réellement praticable.",
       },
       {
         question: "Est-ce utile pour l'accessibilité ?",
@@ -790,7 +790,7 @@ export const TOOLS: ToolData[] = [
     h1: "Convertir un PDF en document Word modifiable",
     intro: [
       "Le PDF fige, Word libère : quand il faut reprendre intégralement un document — restructurer un rapport, réutiliser les paragraphes d'un contrat type, repartir d'une trame existante — l'édition ponctuelle ne suffit plus, il faut retrouver un fichier traitement de texte. La conversion PDF vers DOCX reconstruit le document dans un format où chaque élément redevient malléable.",
-      "GigaPDF analyse la structure du PDF — blocs de texte, paragraphes, images, tableaux — et génère un fichier .docx ouvert par Word, LibreOffice ou Google Docs. Les conversions fidèles exigent un vrai travail de reconstruction : respecter l'enchaînement des paragraphes plutôt que de produire une zone de texte par ligne, conserver les images à leur place, restituer les tableaux en tableaux. C'est ce que vise le moteur de conversion, exécuté côté serveur.",
+      "GigaPDF analyse la structure du PDF — blocs de texte, paragraphes, images, tableaux — et génère un fichier .docx ouvert par Word, votre suite bureautique ou Google Docs. Les conversions fidèles exigent un vrai travail de reconstruction : respecter l'enchaînement des paragraphes plutôt que de produire une zone de texte par ligne, conserver les images à leur place, restituer les tableaux en tableaux. C'est ce que vise le moteur de conversion, exécuté côté serveur.",
       "Un cas mérite une mention : les PDF scannés. Sans texte numérique, il n'y a rien à convertir — passez d'abord le document à l'OCR de GigaPDF (français + anglais), puis convertissez. La chaîne scan → OCR → DOCX transforme un papier numérisé en document Word retravaillable, entièrement dans la même plateforme, gratuitement.",
     ],
     howTo: {
@@ -800,11 +800,11 @@ export const TOOLS: ToolData[] = [
         "S'il s'agit d'un scan, lancez d'abord l'OCR pour reconnaître le texte.",
         "Choisissez l'export au format DOCX dans le menu de conversion.",
         "Le moteur reconstruit paragraphes, images et tableaux dans le fichier Word.",
-        "Téléchargez le .docx et ouvrez-le dans Word, LibreOffice ou Google Docs.",
+        "Téléchargez le .docx et ouvrez-le dans Word, votre suite bureautique ou Google Docs.",
       ],
     },
     capabilities: [
-      "Export DOCX compatible Word, LibreOffice et Google Docs",
+      "Export DOCX compatible Word, suites bureautiques et Google Docs",
       "Reconstruction des paragraphes, images et tableaux",
       "Conversion côté serveur, sans installation locale",
       "Chaîne scan → OCR → DOCX pour les documents numérisés",
@@ -820,7 +820,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Puis-je convertir un PDF scanné en Word ?",
         answer:
-          "Oui, en deux temps : l'OCR d'abord, la conversion ensuite. Un scan ne contient que des images ; l'OCR Tesseract de GigaPDF en extrait le texte (français et anglais), qui alimente alors la conversion DOCX. Sans cette étape, le fichier Word ne contiendrait que des images de pages.",
+          "Oui, en deux temps : l'OCR d'abord, la conversion ensuite. Un scan ne contient que des images ; l'OCR maison de GigaPDF en extrait le texte (français et anglais), qui alimente alors la conversion DOCX. Sans cette étape, le fichier Word ne contiendrait que des images de pages.",
       },
       {
         question: "Les tableaux du PDF restent-ils des tableaux dans Word ?",
@@ -847,18 +847,18 @@ export const TOOLS: ToolData[] = [
     name: "Word vers PDF",
     metaTitle: "Convertir Word en PDF (.doc, .docx) en ligne | GigaPDF",
     metaDescription:
-      "Convertissez vos documents Word en PDF fidèles via LibreOffice : .docx récents et anciens .doc. Gratuit, open source, sans filigrane.",
+      "Convertissez vos documents Word en PDF fidèles avec le moteur maison : .docx récents et anciens .doc. Gratuit, open source, sans filigrane.",
     h1: "Convertir un document Word en PDF",
     intro: [
       "Envoyer un .docx, c'est envoyer un document vivant : il s'affichera différemment selon la version de Word, les polices installées et la machine du destinataire — quand il ne sera pas modifié en route. Le passage en PDF verrouille la mise en page : ce que vous avez composé est exactement ce qui sera lu et imprimé, partout.",
-      "GigaPDF convertit via LibreOffice exécuté côté serveur, le moteur de conversion bureautique open source le plus éprouvé. Il prend en charge le .docx moderne comme l'ancien format .doc — celui des archives Word 97-2003 qui traînent dans tous les serveurs de fichiers et que beaucoup de convertisseurs en ligne refusent. Styles, tableaux, images, en-têtes et pieds de page sont rendus dans un PDF propre, sans filigrane publicitaire.",
+      "GigaPDF convertit avec son moteur de conversion bureautique maison exécuté côté serveur, éprouvé et fidèle. Il prend en charge le .docx moderne comme l'ancien format .doc — celui des archives Word 97-2003 qui traînent dans tous les serveurs de fichiers et que beaucoup de convertisseurs en ligne refusent. Styles, tableaux, images, en-têtes et pieds de page sont rendus dans un PDF propre, sans filigrane publicitaire.",
       "Vous n'avez pas besoin de Microsoft Office, ni d'aucune installation : le navigateur suffit. Et le PDF produit atterrit directement dans votre GED GigaPDF, où il peut être fusionné avec d'autres pièces, signé numériquement, protégé par chiffrement ou archivé en PDF/A — la conversion n'est que la première étape d'une chaîne documentaire complète.",
     ],
     howTo: {
       title: "Comment convertir un fichier Word en PDF",
       steps: [
         "Importez votre fichier .docx ou .doc dans votre espace GigaPDF.",
-        "Lancez la conversion : LibreOffice restitue le document côté serveur.",
+        "Lancez la conversion : le moteur maison restitue le document côté serveur.",
         "Vérifiez le PDF obtenu dans la visionneuse intégrée.",
         "Enchaînez si besoin : fusion avec d'autres pièces, signature, chiffrement ou filigrane.",
         "Téléchargez le PDF ou partagez-le par lien directement depuis la GED.",
@@ -866,7 +866,7 @@ export const TOOLS: ToolData[] = [
     },
     capabilities: [
       "Conversion des .docx et des anciens .doc (Word 97-2003)",
-      "Moteur LibreOffice côté serveur : aucune installation, pas besoin de Microsoft Office",
+      "Moteur de conversion maison côté serveur : aucune installation, pas besoin de Microsoft Office",
       "Restitution des styles, tableaux, images, en-têtes et pieds de page",
       "Aucun filigrane sur le PDF produit",
       "Enchaînement immédiat : fusion, signature numérique, chiffrement, PDF/A",
@@ -876,12 +876,12 @@ export const TOOLS: ToolData[] = [
       {
         question: "Les anciens fichiers .doc sont-ils vraiment pris en charge ?",
         answer:
-          "Oui, c'est une spécificité utile de GigaPDF : LibreOffice lit le format binaire Word 97-2003 en plus du .docx moderne. Les archives bureautiques anciennes se convertissent sans passer par une réouverture manuelle dans Word — précieux pour numériser proprement un historique documentaire.",
+          "Oui, c'est une spécificité utile de GigaPDF : le moteur maison lit le format binaire Word 97-2003 en plus du .docx moderne. Les archives bureautiques anciennes se convertissent sans passer par une réouverture manuelle dans Word — précieux pour numériser proprement un historique documentaire.",
       },
       {
         question: "La mise en page de mon document sera-t-elle respectée ?",
         answer:
-          "LibreOffice restitue fidèlement la très grande majorité des documents : styles, tableaux, images ancrées, en-têtes, pieds de page et numérotation. Les documents dépendant de polices propriétaires non embarquées ou de macros d'affichage peuvent présenter de légers écarts ; un coup d'œil au PDF dans la visionneuse intégrée suffit à le vérifier.",
+          "Le moteur maison restitue fidèlement la très grande majorité des documents : styles, tableaux, images ancrées, en-têtes, pieds de page et numérotation. Les documents dépendant de polices propriétaires non embarquées ou de macros d'affichage peuvent présenter de légers écarts ; un coup d'œil au PDF dans la visionneuse intégrée suffit à le vérifier.",
       },
       {
         question: "Puis-je convertir plusieurs documents Word d'affilée ?",
@@ -908,11 +908,11 @@ export const TOOLS: ToolData[] = [
     name: "Excel vers PDF",
     metaTitle: "Convertir Excel en PDF (.xls, .xlsx) en ligne | GigaPDF",
     metaDescription:
-      "Transformez vos classeurs Excel en PDF propres et imprimables via LibreOffice : .xlsx et anciens .xls. Conversion gratuite et open source.",
+      "Transformez vos classeurs Excel en PDF propres et imprimables avec le moteur maison : .xlsx et anciens .xls. Conversion gratuite et open source.",
     h1: "Convertir un classeur Excel en PDF",
     intro: [
       "Un tableur transmis en .xlsx est un document à risques : formules visibles, onglets de travail oubliés, colonnes masquées qu'un clic révèle, et une mise en page qui explose à l'impression chez le destinataire. Pour communiquer des chiffres — devis, tableau de bord, budget — le PDF présente le résultat, et seulement le résultat, exactement cadré.",
-      "GigaPDF convertit vos classeurs avec LibreOffice côté serveur : les formats .xlsx et .xls (Excel 97-2003) sont acceptés, les valeurs calculées remplacent les formules, et la zone d'impression définie dans le classeur structure la pagination du PDF. Bordures, couleurs de cellules, graphiques et formats de nombres sont restitués tels que le tableur les affiche.",
+      "GigaPDF convertit vos classeurs avec son moteur maison côté serveur : les formats .xlsx et .xls (Excel 97-2003) sont acceptés, les valeurs calculées remplacent les formules, et la zone d'impression définie dans le classeur structure la pagination du PDF. Bordures, couleurs de cellules, graphiques et formats de nombres sont restitués tels que le tableur les affiche.",
       "Conseil hérité de l'impression : la qualité du PDF se joue dans le classeur, avant conversion. Une zone d'impression définie, une orientation paysage pour les tableaux larges et un ajustement « une page en largeur » donnent un document final net. Une fois converti, le PDF se fusionne avec vos autres pièces, se protège par mot de passe ou se filigrane — sans quitter GigaPDF, gratuitement.",
     ],
     howTo: {
@@ -920,7 +920,7 @@ export const TOOLS: ToolData[] = [
       steps: [
         "Préparez le classeur : zone d'impression et orientation définies dans votre tableur.",
         "Importez le fichier .xlsx ou .xls dans votre espace GigaPDF.",
-        "Lancez la conversion : LibreOffice calcule le rendu et pagine le document.",
+        "Lancez la conversion : le moteur maison calcule le rendu et pagine le document.",
         "Contrôlez le PDF dans la visionneuse : coupures de colonnes, lisibilité des chiffres.",
         "Téléchargez, fusionnez avec d'autres pièces ou partagez le PDF par lien.",
       ],
@@ -937,7 +937,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Comment éviter qu'un tableau large soit coupé sur plusieurs pages ?",
         answer:
-          "Réglez-le dans le classeur avant conversion : orientation paysage et ajustement « une page en largeur » dans les options de mise en page de votre tableur. LibreOffice applique ces réglages lors de la conversion ; un tableau sans mise en page définie sera paginé par défaut, avec des coupures possibles.",
+          "Réglez-le dans le classeur avant conversion : orientation paysage et ajustement « une page en largeur » dans les options de mise en page de votre tableur. Le moteur maison applique ces réglages lors de la conversion ; un tableau sans mise en page définie sera paginé par défaut, avec des coupures possibles.",
       },
       {
         question: "Les formules de mon classeur apparaissent-elles dans le PDF ?",
@@ -969,18 +969,18 @@ export const TOOLS: ToolData[] = [
     name: "PowerPoint vers PDF",
     metaTitle: "Convertir PowerPoint en PDF (.ppt, .pptx) | GigaPDF",
     metaDescription:
-      "Convertissez vos présentations PowerPoint en PDF fidèles via LibreOffice : .pptx et anciens .ppt. Gratuit, open source, sans filigrane.",
+      "Convertissez vos présentations PowerPoint en PDF fidèles avec le moteur maison : .pptx et anciens .ppt. Gratuit, open source, sans filigrane.",
     h1: "Convertir une présentation PowerPoint en PDF",
     intro: [
       "Une présentation envoyée en .pptx arrive rarement intacte : polices substituées, animations qui n'ont plus de sens à l'arrêt, slides décalées selon la version de PowerPoint — et un fichier modifiable par n'importe qui. Le support qui circule après la réunion mérite mieux : un PDF où chaque diapositive est figée exactement comme vous l'avez conçue.",
-      "GigaPDF s'appuie sur LibreOffice côté serveur pour convertir les .pptx comme les anciens .ppt (PowerPoint 97-2003). Chaque diapositive devient une page du PDF : arrière-plans, images, schémas et blocs de texte sont rendus à leur position exacte. Les animations et transitions, propres au mode diaporama, sont naturellement absentes du support figé — c'est l'état final de chaque slide qui est restitué.",
+      "GigaPDF s'appuie sur son moteur maison côté serveur pour convertir les .pptx comme les anciens .ppt (PowerPoint 97-2003). Chaque diapositive devient une page du PDF : arrière-plans, images, schémas et blocs de texte sont rendus à leur position exacte. Les animations et transitions, propres au mode diaporama, sont naturellement absentes du support figé — c'est l'état final de chaque slide qui est restitué.",
       "Le PDF obtenu est plus léger à diffuser qu'un .pptx chargé d'images, lisible sur tout appareil sans PowerPoint, et imprimable proprement. Besoin d'aller plus loin ? GigaPDF exporte aussi dans l'autre sens (PDF vers PPTX) pour reprendre un vieux support dont le fichier source a disparu — les deux sens de conversion sont inclus dans le plan gratuit.",
     ],
     howTo: {
       title: "Comment convertir un PowerPoint en PDF",
       steps: [
         "Importez votre présentation .pptx ou .ppt dans votre espace GigaPDF.",
-        "Lancez la conversion : chaque diapositive est rendue en page PDF par LibreOffice.",
+        "Lancez la conversion : chaque diapositive est rendue en page PDF par le moteur maison.",
         "Vérifiez le résultat dans la visionneuse : polices, images et schémas en place.",
         "Appliquez si besoin un filigrane ou une protection avant diffusion.",
         "Téléchargez le PDF ou partagez-le par lien, lisible sans PowerPoint.",
@@ -1008,12 +1008,12 @@ export const TOOLS: ToolData[] = [
       {
         question: "Puis-je convertir un PDF en PowerPoint, dans l'autre sens ?",
         answer:
-          "Oui. GigaPDF propose l'export PDF vers PPTX : chaque page redevient une diapositive avec ses textes et images, modifiable dans PowerPoint ou LibreOffice Impress. C'est la solution quand le fichier source d'un support a été perdu et qu'il faut le faire évoluer.",
+          "Oui. GigaPDF propose l'export PDF vers PPTX : chaque page redevient une diapositive avec ses textes et images, modifiable dans PowerPoint ou votre logiciel de présentation. C'est la solution quand le fichier source d'un support a été perdu et qu'il faut le faire évoluer.",
       },
       {
         question: "Le PDF est-il plus léger que la présentation d'origine ?",
         answer:
-          "Souvent, oui : le PDF ne transporte ni les animations, ni les médias inutilisés, ni les masques de diapositives multiples. Et si le résultat reste lourd — présentations très riches en photos — l'outil de compression MuPDF de GigaPDF le réduit encore d'une passe.",
+          "Souvent, oui : le PDF ne transporte ni les animations, ni les médias inutilisés, ni les masques de diapositives multiples. Et si le résultat reste lourd — présentations très riches en photos — l'outil de compression maison de GigaPDF le réduit encore d'une passe.",
       },
     ],
     useCases: [
@@ -1030,18 +1030,18 @@ export const TOOLS: ToolData[] = [
     name: "OpenDocument et PDF",
     metaTitle: "Convertir OpenDocument en PDF (ODT, ODS, ODP) | GigaPDF",
     metaDescription:
-      "Convertissez ODT, ODS et ODP en PDF, et repassez du PDF vers ODT ou ODP. Le pont LibreOffice ↔ PDF, gratuit et open source.",
+      "Convertissez ODT, ODS et ODP en PDF, et repassez du PDF vers ODT ou ODP. Le pont OpenDocument ↔ PDF, gratuit et open source.",
     h1: "OpenDocument vers PDF, et retour : ODT, ODS, ODP",
     intro: [
-      "Les administrations, les collectivités et les organisations attachées au logiciel libre travaillent en OpenDocument : textes .odt, classeurs .ods, présentations .odp. Format ouvert, normalisé ISO — mais minoritaire face à l'écosystème Microsoft, ce qui complique les échanges : le destinataire n'a pas toujours LibreOffice, et la plupart des convertisseurs en ligne ignorent purement ces formats.",
-      "GigaPDF les traite en citoyens de première classe, et pour cause : son moteur de conversion est LibreOffice lui-même, exécuté côté serveur. Les trois formats se convertissent en PDF avec la fidélité du logiciel natif — styles, tableaux, graphiques et mises en page restitués sans approximation d'un convertisseur tiers. Et le chemin inverse existe : un PDF s'exporte en ODT pour retravailler le texte, ou en ODP pour reprendre une présentation, refermant la boucle avec votre suite bureautique libre.",
-      "Cette cohérence open source va jusqu'au bout de la chaîne : GigaPDF est publié sous licence AGPL et s'auto-héberge. Une organisation qui a fait le choix du libre pour sa bureautique peut faire le même choix pour sa plateforme documentaire — conversion, édition, signature et GED comprises, sans dépendre d'un service propriétaire.",
+      "Les administrations, les collectivités et les organisations attachées au logiciel libre travaillent en OpenDocument : textes .odt, classeurs .ods, présentations .odp. Format ouvert, normalisé ISO — mais minoritaire face à l'écosystème Microsoft, ce qui complique les échanges : le destinataire n'a pas toujours de suite compatible OpenDocument, et la plupart des convertisseurs en ligne ignorent purement ces formats.",
+      "GigaPDF les traite en citoyens de première classe, et pour cause : son moteur de conversion maison gère nativement OpenDocument, exécuté côté serveur. Les trois formats se convertissent en PDF avec une fidélité native — styles, tableaux, graphiques et mises en page restitués sans approximation d'un convertisseur tiers. Et le chemin inverse existe : un PDF s'exporte en ODT pour retravailler le texte, ou en ODP pour reprendre une présentation, refermant la boucle avec votre suite bureautique libre.",
+      "Cette cohérence open source va jusqu'au bout de la chaîne : GigaPDF est publié en « source-available » sous licence PolyForm Noncommercial 1.0.0 et s'auto-héberge. Une organisation qui privilégie les logiciels ouverts et auditables pour sa bureautique peut faire le même choix pour sa plateforme documentaire — conversion, édition, signature et GED comprises, sans dépendre d'un service propriétaire.",
     ],
     howTo: {
       title: "Comment convertir entre OpenDocument et PDF",
       steps: [
         "Importez votre fichier .odt, .ods ou .odp dans votre espace GigaPDF.",
-        "Lancez la conversion en PDF : LibreOffice serveur restitue le document à l'identique.",
+        "Lancez la conversion en PDF : le moteur maison restitue le document à l'identique.",
         "Vérifiez le rendu dans la visionneuse intégrée.",
         "Pour le sens inverse, ouvrez un PDF et exportez-le en ODT (texte) ou ODP (présentation).",
         "Classez, partagez ou signez le résultat directement dans la GED.",
@@ -1049,22 +1049,22 @@ export const TOOLS: ToolData[] = [
     },
     capabilities: [
       "Conversion en PDF des textes .odt, classeurs .ods et présentations .odp",
-      "Moteur LibreOffice natif côté serveur : fidélité maximale au format OpenDocument",
+      "Moteur de conversion maison côté serveur : fidélité maximale au format OpenDocument",
       "Export inverse du PDF vers ODT et ODP pour retravailler les contenus",
-      "Classeurs : export des données d'un PDF vers XLSX exploitable dans LibreOffice Calc",
+      "Classeurs : export des données d'un PDF vers XLSX exploitable dans votre tableur",
       "Aucun filigrane, conversion incluse dans le plan gratuit",
-      "Plateforme AGPL auto-hébergeable : la chaîne documentaire libre de bout en bout",
+      "Plateforme source-available auto-hébergeable : la chaîne documentaire ouverte de bout en bout",
     ],
     faq: [
       {
         question: "Pourquoi la conversion OpenDocument est-elle plus fiable ici qu'ailleurs ?",
         answer:
-          "Parce que GigaPDF convertit avec LibreOffice lui-même, le logiciel de référence du format OpenDocument, exécuté côté serveur. Là où d'autres services passent par des bibliothèques de réinterprétation approximatives — quand ils acceptent ces formats —, GigaPDF utilise le rendu natif : ce que LibreOffice affiche est ce que le PDF contient.",
+          "Parce que GigaPDF convertit avec son moteur maison, conçu pour le format OpenDocument, exécuté côté serveur. Là où d'autres services passent par des bibliothèques de réinterprétation approximatives — quand ils acceptent ces formats —, GigaPDF utilise un rendu natif : ce que la suite bureautique affiche est ce que le PDF contient.",
       },
       {
         question: "Puis-je reconvertir un PDF en fichier OpenDocument modifiable ?",
         answer:
-          "Oui pour les textes et les présentations : l'export ODT reconstruit un document texte modifiable et l'export ODP des diapositives reprenables dans Impress. Pour les données tabulaires d'un PDF, l'export se fait en XLSX, que LibreOffice Calc ouvre et réenregistre en .ods nativement.",
+          "Oui pour les textes et les présentations : l'export ODT reconstruit un document texte modifiable et l'export ODP des diapositives reprenables dans Impress. Pour les données tabulaires d'un PDF, l'export se fait en XLSX, que votre tableur ouvre et réenregistre en .ods nativement.",
       },
       {
         question: "Les documents .ods avec graphiques et formules sont-ils bien rendus ?",
@@ -1074,13 +1074,13 @@ export const TOOLS: ToolData[] = [
       {
         question: "GigaPDF est-il adapté à une administration sous contrainte de souveraineté ?",
         answer:
-          "C'est l'un de ses terrains naturels : code source AGPL auditable, auto-hébergement complet sur vos serveurs, formats ouverts en entrée comme en sortie. Aucun document n'a besoin de transiter par un cloud tiers, et aucune licence propriétaire n'entre dans la chaîne.",
+          "C'est l'un de ses terrains naturels : code source auditable, auto-hébergement complet sur vos serveurs, formats ouverts en entrée comme en sortie. Aucun document n'a besoin de transiter par un cloud tiers, et aucune licence propriétaire n'entre dans la chaîne.",
       },
     ],
     useCases: [
-      "Diffuser en PDF des documents produits sous LibreOffice à des destinataires non équipés",
+      "Diffuser en PDF des documents produits sous une suite OpenDocument à des destinataires non équipés",
       "Reprendre en ODT un PDF dont le fichier source a disparu, sans passer par Word",
-      "Outiller une organisation 100 % logiciel libre : LibreOffice + GigaPDF auto-hébergé",
+      "Outiller une organisation attachée aux logiciels ouverts : suite OpenDocument + GigaPDF auto-hébergé",
     ],
     relatedTools: ["pdf-vers-odt", "word-vers-pdf", "pdf-a"],
     relatedSolutions: ["associations", "education-etudiants", "sante"],
@@ -1089,13 +1089,13 @@ export const TOOLS: ToolData[] = [
   {
     slug: "pdf-vers-odt",
     name: "PDF vers ODT",
-    metaTitle: "Convertir un PDF en ODT (LibreOffice Writer) | GigaPDF",
+    metaTitle: "Convertir un PDF en ODT (OpenDocument) | GigaPDF",
     metaDescription:
-      "Transformez un PDF en document ODT modifiable dans LibreOffice Writer, texte et images repris. Conversion gratuite et open source.",
-    h1: "Convertir un PDF en ODT modifiable dans LibreOffice",
+      "Transformez un PDF en document ODT modifiable dans votre traitement de texte, texte et images repris. Conversion gratuite et open source.",
+    h1: "Convertir un PDF en ODT modifiable dans votre suite OpenDocument",
     intro: [
-      "Pour qui travaille sous LibreOffice, convertir un PDF en .docx est un détour absurde : il faut ensuite réimporter le fichier Word dans Writer, avec une couche de conversion supplémentaire et son lot d'écarts. GigaPDF offre le chemin direct : du PDF vers l'ODT, le format natif de LibreOffice Writer, en une seule transformation.",
-      "Le moteur analyse le PDF — paragraphes, images, structure de page — et reconstruit un document texte OpenDocument : le texte redevient des paragraphes éditables avec leurs attributs, les images reprennent leur place, et le fichier s'ouvre dans Writer comme n'importe quel .odt, prêt à être restylé avec vos modèles. Pour les PDF scannés, l'OCR Tesseract intégré (français + anglais) fournit d'abord le texte, la conversion fait le reste.",
+      "Pour qui travaille sous une suite OpenDocument, convertir un PDF en .docx est un détour absurde : il faut ensuite réimporter le fichier Word dans le traitement de texte, avec une couche de conversion supplémentaire et son lot d'écarts. GigaPDF offre le chemin direct : du PDF vers l'ODT, le format natif des traitements de texte OpenDocument, en une seule transformation.",
+      "Le moteur analyse le PDF — paragraphes, images, structure de page — et reconstruit un document texte OpenDocument : le texte redevient des paragraphes éditables avec leurs attributs, les images reprennent leur place, et le fichier s'ouvre dans Writer comme n'importe quel .odt, prêt à être restylé avec vos modèles. Pour les PDF scannés, l'OCR maison intégré (français + anglais) fournit d'abord le texte, la conversion fait le reste.",
       "Ce choix de format n'est pas anodin : l'ODT est une norme ISO ouverte, lisible aujourd'hui et dans vingt ans, sans dépendance à un éditeur. GigaPDF — open source, auto-hébergeable, sans filigrane — complète logiquement cette philosophie : vos documents repassent du format figé au format libre, avec des outils libres.",
     ],
     howTo: {
@@ -1105,13 +1105,13 @@ export const TOOLS: ToolData[] = [
         "S'il s'agit d'un document scanné, appliquez d'abord l'OCR pour reconnaître le texte.",
         "Choisissez l'export au format ODT dans le menu de conversion.",
         "Le moteur reconstruit paragraphes et images en document OpenDocument.",
-        "Ouvrez le .odt dans LibreOffice Writer et reprenez la rédaction.",
+        "Ouvrez le .odt dans votre traitement de texte et reprenez la rédaction.",
       ],
     },
     capabilities: [
       "Export ODT natif, sans détour par le format Word",
       "Reconstruction des paragraphes éditables et reprise des images",
-      "Chaîne scan → OCR Tesseract → ODT pour les documents numérisés",
+      "Chaîne scan → OCR maison → ODT pour les documents numérisés",
       "Fichier conforme OpenDocument, ouvert par Writer et tout éditeur compatible",
       "Aucun filigrane sur le document converti",
       "Autres exports disponibles au même endroit : DOCX, ODP, TXT, HTML",
@@ -1135,12 +1135,12 @@ export const TOOLS: ToolData[] = [
       {
         question: "Le fichier ODT produit est-il standard ?",
         answer:
-          "Oui : c'est un document OpenDocument conforme, lisible par LibreOffice, OpenOffice, et tout logiciel respectant la norme ISO 26300 — y compris Word, qui ouvre les .odt. Vous n'êtes enfermé ni dans GigaPDF ni dans aucun éditeur.",
+          "Oui : c'est un document OpenDocument conforme, lisible par toute suite OpenDocument et tout logiciel respectant la norme ISO 26300 — y compris Word, qui ouvre les .odt. Vous n'êtes enfermé ni dans GigaPDF ni dans aucun éditeur.",
       },
     ],
     useCases: [
       "Reprendre dans Writer un document officiel diffusé uniquement en PDF",
-      "Réintégrer d'anciens livrables PDF dans une chaîne éditoriale LibreOffice",
+      "Réintégrer d'anciens livrables PDF dans une chaîne éditoriale OpenDocument",
       "Convertir des courriers scannés en ODT retravaillables via l'OCR intégré",
     ],
     relatedTools: ["opendocument-pdf", "pdf-vers-word", "ocr-pdf"],
@@ -1152,25 +1152,25 @@ export const TOOLS: ToolData[] = [
     name: "HTML vers PDF",
     metaTitle: "Convertir HTML ou une page web en PDF | GigaPDF",
     metaDescription:
-      "Transformez du HTML ou une URL en PDF rendu par Chromium : CSS moderne, polices web, pages longues. Gratuit, open source, avec API.",
+      "Transformez du HTML ou une URL en PDF rendu par le moteur maison : CSS moderne, polices web, pages longues. Gratuit, open source, avec API.",
     h1: "Convertir du HTML ou une page web en PDF",
     intro: [
       "Le web est devenu la source de la plupart des documents : factures générées par les applications, confirmations de commande, articles, rapports produits par des outils internes. Les figer en PDF — pour archiver, prouver, transmettre — exige un rendu exact. Or le HTML moderne (flexbox, grid, polices web, contenu injecté par JavaScript) dépasse largement ce que savent restituer les bibliothèques de conversion légères.",
-      "GigaPDF prend le problème par le bon bout : le rendu est confié à Chromium, le moteur de Chrome, piloté côté serveur. Vous fournissez du code HTML ou simplement une URL ; la page est chargée, les styles appliqués, les polices web téléchargées, puis le document est imprimé en PDF exactement comme le ferait le navigateur. Ce que vous voyez en ligne est ce que contient le fichier.",
+      "GigaPDF prend le problème par le bon bout : le rendu est confié à son moteur HTML/CSS maison, piloté côté serveur. Vous fournissez du code HTML ou simplement une URL ; la page est chargée, les styles appliqués, les polices web téléchargées, puis le document est imprimé en PDF exactement comme le ferait le navigateur. Ce que vous voyez en ligne est ce que contient le fichier.",
       "C'est aussi un outil d'automatisation de premier plan : via l'API GigaPDF (1 000 appels par mois inclus dans le plan gratuit), vos applications génèrent leurs factures, attestations et rapports en envoyant du HTML — le langage de gabarit le plus universel qui soit — et reçoivent des PDF prêts à archiver dans la GED. En auto-hébergement, cette chaîne tourne entièrement sur vos serveurs.",
     ],
     howTo: {
       title: "Comment convertir une page web en PDF",
       steps: [
         "Indiquez la source : une URL publique ou votre code HTML complet.",
-        "Chromium charge la page côté serveur : CSS, polices web et mise en page appliqués.",
+        "Le moteur maison charge la page côté serveur : CSS, polices web et mise en page appliqués.",
         "Le rendu est imprimé en PDF, fidèle à l'affichage navigateur.",
         "Récupérez le document dans votre espace GigaPDF, prêt à être classé ou partagé.",
         "Pour automatiser, appelez la même conversion par API depuis vos applications.",
       ],
     },
     capabilities: [
-      "Rendu par Chromium : le moteur d'un vrai navigateur, pas une approximation",
+      "Rendu par le moteur HTML/CSS maison : fidèle au web, pas une approximation",
       "Conversion depuis une URL ou depuis du code HTML fourni",
       "Prise en charge du CSS moderne (flexbox, grid) et des polices web",
       "Génération automatisée par API : factures, attestations, rapports",
@@ -1179,9 +1179,9 @@ export const TOOLS: ToolData[] = [
     ],
     faq: [
       {
-        question: "Pourquoi le rendu Chromium fait-il la différence ?",
+        question: "Pourquoi le rendu HTML/CSS maison fait-il la différence ?",
         answer:
-          "Parce que les convertisseurs HTML légers implémentent un sous-ensemble daté du CSS : les mises en page en flexbox ou grid s'effondrent, les polices web manquent, le JavaScript n'est pas exécuté. Chromium est le moteur qui affiche le web réel — le PDF produit correspond pixel pour pixel à ce que montre Chrome.",
+          "Parce que les convertisseurs HTML légers implémentent un sous-ensemble daté du CSS : les mises en page en flexbox ou grid s'effondrent, les polices web manquent, le JavaScript n'est pas exécuté. Le moteur maison de GigaPDF gère le CSS moderne, les polices web et l'exécution du JavaScript — le PDF produit correspond fidèlement à ce que montre un navigateur.",
       },
       {
         question: "Puis-je générer mes factures en PDF automatiquement ?",
@@ -1196,7 +1196,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Comment maîtriser la pagination du PDF produit ?",
         answer:
-          "Avec les outils standard du CSS d'impression, que Chromium honore : propriétés page-break/break-inside pour contrôler les coupures, règles @media print pour adapter les styles, @page pour les marges. Un gabarit HTML bien préparé donne des PDF paginés au cordeau, reproductibles à chaque génération.",
+          "Avec les outils standard du CSS d'impression, que le moteur maison honore : propriétés page-break/break-inside pour contrôler les coupures, règles @media print pour adapter les styles, @page pour les marges. Un gabarit HTML bien préparé donne des PDF paginés au cordeau, reproductibles à chaque génération.",
       },
     ],
     useCases: [
@@ -1257,7 +1257,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Puis-je rendre un scan conforme PDF/A et cherchable à la fois ?",
         answer:
-          "Oui, c'est la chaîne d'archivage idéale dans GigaPDF : OCR Tesseract pour reconnaître le texte, calque cherchable invisible pour le rendre exploitable, puis conversion PDF/A. Le document final est à la fois pérenne, conforme et interrogeable en texte intégral.",
+          "Oui, c'est la chaîne d'archivage idéale dans GigaPDF : OCR maison pour reconnaître le texte, calque cherchable invisible pour le rendre exploitable, puis conversion PDF/A. Le document final est à la fois pérenne, conforme et interrogeable en texte intégral.",
       },
     ],
     useCases: [

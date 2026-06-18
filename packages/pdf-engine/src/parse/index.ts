@@ -1,7 +1,7 @@
 export { parseDocument, parsePage, parseMetadata, parseBookmarks } from './parser';
 export type { ParseOptions, ParsePageOptions } from './parser';
 
-// MuPDF-powered extractors (structured text, search, robust metadata, OCR)
+// Engine-powered extractors (structured text, search, robust metadata, OCR)
 export {
   extractStructuredText,
   extractPlainText,

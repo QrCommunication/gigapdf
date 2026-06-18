@@ -149,6 +149,9 @@ storybook-static/
 *.tsbuildinfo
 .eslintcache
 
+# Session handoff / scratch notes (local only)
+.remember/
+
 # Mobile
 apps/mobile/ios/
 apps/mobile/android/
@@ -161,3 +164,8 @@ deploy/backup-vps-config/
 # Debug screenshots from Playwright sessions (not for commit)
 /*.png
 /.playwright-mcp/
+
+# Generated WASM artifact — copied from @qrcommunication/gigapdf-lib by the
+# apps/web postinstall (regenerated on every install/deploy; the 4.6 MB binary
+# is never tracked).
+apps/web/public/gigapdf.wasm

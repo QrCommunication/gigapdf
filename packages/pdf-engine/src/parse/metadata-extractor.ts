@@ -1,5 +1,3 @@
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-import type { PDFDocumentProxy } from 'pdfjs-dist/types/src/display/api';
 import { randomUUID } from 'node:crypto';
 import type {
   DocumentMetadata,
@@ -8,8 +6,17 @@ import type {
   NamedDestination,
 } from '@giga-pdf/types';
 import type { LayerObject } from '@giga-pdf/types';
+import { getEngine } from '../wasm';
 
-if (!pdfjsLib.GlobalWorkerOptions.workerSrc) { pdfjsLib.GlobalWorkerOptions.workerSrc = ''; }
+/**
+ * Document-level extractors (metadata, layers, embedded files, named
+ * destinations) backed entirely by the native engine — no pdfjs. Each opens the
+ * document from raw bytes via the WASM engine and reads structure directly.
+ */
+
+function toBytes(pdfBytes: Buffer | ArrayBuffer | Uint8Array): Uint8Array {
+  return pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+}
 
 function parsePdfDate(dateStr: string | null | undefined): string | null {
   if (!dateStr) return null;
@@ -19,10 +26,13 @@ function parsePdfDate(dateStr: string | null | undefined): string | null {
   return new Date(`${year}-${month}-${day}T${hour}:${min}:${sec}Z`).toISOString();
 }
 
-export async function extractMetadata(doc: PDFDocumentProxy): Promise<DocumentMetadata> {
-  const metadata = await doc.getMetadata();
-  const info = (metadata.info ?? {}) as Record<string, unknown>;
+export async function extractMetadata(
+  pdfBytes: Buffer | ArrayBuffer | Uint8Array,
+): Promise<DocumentMetadata> {
+  const giga = await getEngine();
+  const bytes = toBytes(pdfBytes);
 
+  // The engine never throws across the boundary; defaults below cover failures.
   const permissions: DocumentPermissions = {
     print: true,
     modify: true,
@@ -34,106 +44,125 @@ export async function extractMetadata(doc: PDFDocumentProxy): Promise<DocumentMe
     printHighQuality: true,
   };
 
-  const keywordsRaw = typeof info['Keywords'] === 'string' ? info['Keywords'] : '';
-  const keywords = keywordsRaw
-    ? keywordsRaw.split(/[,;]/).map((k: string) => k.trim()).filter(Boolean)
-    : [];
+  let isEncrypted = false;
+  try {
+    isEncrypted = giga.encryptionInfo(bytes).encrypted;
+  } catch {
+    isEncrypted = false;
+  }
 
-  return {
-    title: typeof info['Title'] === 'string' ? info['Title'] : null,
-    author: typeof info['Author'] === 'string' ? info['Author'] : null,
-    subject: typeof info['Subject'] === 'string' ? info['Subject'] : null,
-    keywords,
-    creator: typeof info['Creator'] === 'string' ? info['Creator'] : null,
-    producer: typeof info['Producer'] === 'string' ? info['Producer'] : null,
-    creationDate: parsePdfDate(typeof info['CreationDate'] === 'string' ? info['CreationDate'] : null),
-    modificationDate: parsePdfDate(typeof info['ModDate'] === 'string' ? info['ModDate'] : null),
-    pageCount: doc.numPages,
-    pdfVersion: typeof info['PDFFormatVersion'] === 'string' ? info['PDFFormatVersion'] : '1.7',
-    isEncrypted: typeof info['IsEncrypted'] === 'boolean' ? info['IsEncrypted'] : false,
-    permissions,
-  };
+  const doc = giga.open(bytes);
+  try {
+    const read = (key: string): string | null => {
+      const v = doc.getMetadata(key);
+      return v && v.length > 0 ? v : null;
+    };
+    const keywordsRaw = read('Keywords') ?? '';
+    const keywords = keywordsRaw
+      ? keywordsRaw.split(/[,;]/).map((k) => k.trim()).filter(Boolean)
+      : [];
+
+    return {
+      title: read('Title'),
+      author: read('Author'),
+      subject: read('Subject'),
+      keywords,
+      creator: read('Creator'),
+      producer: read('Producer'),
+      creationDate: parsePdfDate(read('CreationDate')),
+      modificationDate: parsePdfDate(read('ModDate')),
+      pageCount: doc.pageCount(),
+      pdfVersion: '1.7',
+      isEncrypted,
+      permissions,
+    };
+  } finally {
+    doc.close();
+  }
 }
 
-export async function extractLayers(doc: PDFDocumentProxy): Promise<LayerObject[]> {
+export async function extractLayers(
+  pdfBytes: Buffer | ArrayBuffer | Uint8Array,
+): Promise<LayerObject[]> {
   try {
-    const optionalContentConfig = await doc.getOptionalContentConfig();
-    if (!optionalContentConfig) return [];
-
-    // pdfjs 5.x: OptionalContentConfig is iterable, yields [id, group] pairs
-    const groups = Array.from(optionalContentConfig as Iterable<[unknown, { name?: string }]>);
-    if (groups.length === 0) return [];
-
-    return groups.map(([, group], index) => ({
-      layerId: randomUUID(),
-      name: group.name ?? `Layer ${index + 1}`,
-      visible: true,
-      locked: false,
-      opacity: 1,
-      print: true,
-      order: index,
-    }));
+    const giga = await getEngine();
+    const doc = giga.open(toBytes(pdfBytes));
+    try {
+      return doc.layers().map((layer, index) => ({
+        layerId: randomUUID(),
+        name: layer.name || `Layer ${index + 1}`,
+        visible: layer.visible,
+        locked: layer.locked,
+        opacity: 1,
+        print: true,
+        order: index,
+      }));
+    } finally {
+      doc.close();
+    }
   } catch {
     return [];
   }
 }
 
-export async function extractEmbeddedFiles(doc: PDFDocumentProxy): Promise<EmbeddedFileObject[]> {
+/**
+ * Extract every embedded file from the document's `/Names /EmbeddedFiles` name
+ * tree via the native engine (`attachments()`), which decodes the file streams
+ * (filters applied). Each entry carries the real bytes as a base64 `data:` URI
+ * and an accurate size.
+ */
+export async function extractEmbeddedFiles(
+  pdfBytes: Buffer | ArrayBuffer | Uint8Array,
+): Promise<EmbeddedFileObject[]> {
   try {
-    const attachments = await doc.getAttachments();
-    if (!attachments) return [];
-
-    return Object.entries(attachments).map(([name, attachment]) => {
-      const att = attachment as {
-        filename?: string;
-        content?: Uint8Array;
-        description?: string;
-        creationDate?: string;
-        modDate?: string;
-        mimeType?: string;
-      };
-      return {
-        fileId: randomUUID(),
-        name: att.filename ?? name,
-        mimeType: att.mimeType ?? 'application/octet-stream',
-        sizeBytes: att.content?.byteLength ?? 0,
-        description: att.description ?? null,
-        creationDate: att.creationDate ?? null,
-        modificationDate: att.modDate ?? null,
-        dataUrl: '',
-      };
-    });
+    const giga = await getEngine();
+    const doc = giga.open(toBytes(pdfBytes));
+    try {
+      return doc.attachments().map((att) => {
+        const mimeType = att.mime ?? 'application/octet-stream';
+        const dataUrl =
+          att.data.length > 0
+            ? `data:${mimeType};base64,${Buffer.from(att.data).toString('base64')}`
+            : '';
+        return {
+          fileId: randomUUID(),
+          name: att.filename || att.name,
+          mimeType,
+          sizeBytes: att.data.length,
+          description: att.description,
+          creationDate: parsePdfDate(att.creationDate),
+          modificationDate: parsePdfDate(att.modDate),
+          dataUrl,
+        };
+      });
+    } finally {
+      doc.close();
+    }
   } catch {
     return [];
   }
 }
 
 export async function extractNamedDestinations(
-  doc: PDFDocumentProxy,
+  pdfBytes: Buffer | ArrayBuffer | Uint8Array,
 ): Promise<Record<string, NamedDestination>> {
   try {
-    const destinations = await doc.getDestinations();
-    if (!destinations) return {};
-
-    const result: Record<string, NamedDestination> = {};
-
-    for (const [name, dest] of Object.entries(destinations)) {
-      if (!Array.isArray(dest) || dest.length === 0) continue;
-      try {
-        const pageRef = dest[0] as { num: number; gen: number };
-        const pageIndex = await doc.getPageIndex(pageRef);
-        result[name] = {
-          name,
-          pageNumber: pageIndex + 1,
+    const giga = await getEngine();
+    const doc = giga.open(toBytes(pdfBytes));
+    try {
+      const result: Record<string, NamedDestination> = {};
+      for (const dest of doc.namedDests()) {
+        result[dest.name] = {
+          name: dest.name,
+          pageNumber: dest.page,
           position: null,
           zoom: null,
         };
-      } catch {
-        // skip unresolvable destination
       }
+      return result;
+    } finally {
+      doc.close();
     }
-
-    return result;
   } catch {
     return {};
   }

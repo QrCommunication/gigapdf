@@ -7,7 +7,8 @@
  * 2. Group blocks into visual rows using a Y-band accumulation algorithm.
  * 3. Build a global column anchor list for the page by scanning all rows.
  * 4. Map every block to its closest column anchor and fill a 2-D matrix.
- * 5. Write the matrix to ExcelJS, one Worksheet per page (configurable).
+ * 5. Write the matrices to `.xlsx` via the native engine (`gridsToXlsx`), one
+ *    sheet per page (configurable) — no third-party spreadsheet library.
  *
  * Limitations
  * -----------
@@ -24,8 +25,7 @@
  *   may not align well with surrounding horizontal text.
  */
 
-import { PDFDocument } from 'pdf-lib';
-import ExcelJS from 'exceljs';
+import { getEngine } from '../wasm';
 import { extractTextBlocks } from '../parse/text-extractor';
 import type { TextBlock } from '../parse/text-extractor';
 
@@ -33,17 +33,15 @@ import type { TextBlock } from '../parse/text-extractor';
 // PDF utility — page count
 // ---------------------------------------------------------------------------
 
-/**
- * Return the total page count of a PDF.
- *
- * We use pdf-lib (already a dependency) instead of pdfjs so that we can call
- * this helper independently without creating a second pdfjs instance in the
- * same process, which would cause DataCloneError from pdfjs's LoopbackPort
- * when both instances share the fake worker.
- */
+/** Return the total page count of a PDF via the zero-dependency WASM engine. */
 async function getPageCount(buffer: Uint8Array): Promise<number> {
-  const doc = await PDFDocument.load(buffer, { ignoreEncryption: true });
-  return doc.getPageCount();
+  const giga = await getEngine();
+  const doc = giga.open(buffer);
+  try {
+    return doc.pageCount();
+  } finally {
+    doc.close();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -117,72 +115,43 @@ export async function convertPdfToXlsx(
       ? options.pages.filter((p) => p >= 1 && p <= totalPages)
       : allPageNumbers;
 
-  const workbook = new ExcelJS.Workbook();
+  const giga = await getEngine();
 
   if (separateSheets) {
-    // One worksheet per requested page.
+    // One sheet ("Page N") per requested page; empty pages carry a note.
+    const grids: string[][][] = [];
+    const names: string[] = [];
     for (const pageNum of requestedPages) {
       const pageBlocks = allBlocks.filter((b) => b.pageNumber === pageNum);
-      const sheetName = `Page ${pageNum}`;
-      const ws = workbook.addWorksheet(sheetName);
-      writePageToWorksheet(ws, pageBlocks, pageNum, yTolerance, xTolerance);
+      const matrix =
+        pageBlocks.length === 0
+          ? [[`No text extracted from page ${pageNum}`]]
+          : buildMatrix(pageBlocks, yTolerance, xTolerance);
+      grids.push(matrix);
+      names.push(`Page ${pageNum}`);
     }
-  } else {
-    // All pages concatenated into a single worksheet.
-    const ws = workbook.addWorksheet('Sheet1');
-
-    for (const pageNum of requestedPages) {
-      const pageBlocks = allBlocks.filter((b) => b.pageNumber === pageNum);
-
-      if (pageBlocks.length === 0) {
-        // Blank page separator row.
-        ws.addRow([`— Page ${pageNum}: No text extracted —`]);
-      } else {
-        const matrix = buildMatrix(pageBlocks, yTolerance, xTolerance);
-        for (const row of matrix) {
-          ws.addRow(row);
-        }
-      }
-
-      // Add a blank separator row between pages (not after the last).
-      if (pageNum !== requestedPages[requestedPages.length - 1]) {
-        ws.addRow([]);
-      }
-    }
-
-    autoSizeColumns(ws);
+    return giga.gridsToXlsx(grids, names);
   }
 
-  const buffer2 = await workbook.xlsx.writeBuffer();
-  return new Uint8Array(buffer2 as ArrayBuffer);
+  // All pages concatenated into a single sheet "Sheet1". A blank separator row
+  // ([]) between pages survives in the output because the engine's writer keeps
+  // the row-index gap (an all-empty row emits no <row>, leaving Excel a blank).
+  const rows: string[][] = [];
+  for (const pageNum of requestedPages) {
+    const pageBlocks = allBlocks.filter((b) => b.pageNumber === pageNum);
+    if (pageBlocks.length === 0) {
+      rows.push([`— Page ${pageNum}: No text extracted —`]);
+    } else {
+      for (const row of buildMatrix(pageBlocks, yTolerance, xTolerance)) rows.push(row);
+    }
+    if (pageNum !== requestedPages[requestedPages.length - 1]) rows.push([]);
+  }
+  return giga.gridsToXlsx([rows], ['Sheet1']);
 }
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Write one PDF page's content into an ExcelJS Worksheet.
- */
-function writePageToWorksheet(
-  ws: ExcelJS.Worksheet,
-  blocks: TextBlock[],
-  pageNum: number,
-  yTolerance: number,
-  xTolerance: number,
-): void {
-  if (blocks.length === 0) {
-    ws.addRow([`No text extracted from page ${pageNum}`]);
-    return;
-  }
-
-  const matrix = buildMatrix(blocks, yTolerance, xTolerance);
-  for (const row of matrix) {
-    ws.addRow(row);
-  }
-
-  autoSizeColumns(ws);
-}
 
 /**
  * Build a 2-D string matrix (rows × columns) from an array of TextBlocks
@@ -390,24 +359,4 @@ function nearestAnchorIndex(anchors: number[], x: number, _xTolerance: number): 
   }
 
   return bestIdx;
-}
-
-/**
- * Set column widths to an estimate based on the longest content in each column.
- * Minimum width: 10 characters.  Maximum: 60 (to avoid excessively wide columns).
- */
-function autoSizeColumns(ws: ExcelJS.Worksheet): void {
-  const colWidths: number[] = [];
-
-  ws.eachRow((row) => {
-    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-      const len = String(cell.value ?? '').length;
-      const idx = colNumber - 1;
-      colWidths[idx] = Math.max(colWidths[idx] ?? 10, len);
-    });
-  });
-
-  ws.columns.forEach((col, idx) => {
-    col.width = Math.min(Math.max(colWidths[idx] ?? 10, 10), 60);
-  });
 }

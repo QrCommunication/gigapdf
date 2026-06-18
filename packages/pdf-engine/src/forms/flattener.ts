@@ -1,19 +1,29 @@
-import { PDFDocument } from 'pdf-lib';
+/**
+ * Form flattening via the zero-dependency WASM engine. `doc.flattenForm()`
+ * bakes every field widget across all pages into the page content and drops
+ * `/AcroForm`, so the result is no longer fillable. No pdf-lib.
+ */
+
+import { getEngine } from '../wasm';
 import { PDFParseError } from '../errors';
 
 export async function flattenForm(buffer: Buffer): Promise<Buffer> {
-  let pdfDoc: PDFDocument;
+  const giga = await getEngine();
+  const data = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+
+  let doc;
   try {
-    pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
+    doc = giga.open(data);
   } catch (err) {
     throw new PDFParseError(
       `Failed to parse PDF: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 
-  const form = pdfDoc.getForm();
-  form.flatten();
-
-  const bytes = await pdfDoc.save({ useObjectStreams: true });
-  return Buffer.from(bytes);
+  try {
+    doc.flattenForm();
+    return Buffer.from(doc.save());
+  } finally {
+    doc.close();
+  }
 }

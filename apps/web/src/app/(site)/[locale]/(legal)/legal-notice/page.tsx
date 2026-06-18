@@ -69,10 +69,14 @@ export default async function LegalNoticePage({
       <section className="mb-12">
         <h2 className="text-2xl font-bold mb-4">Propriété intellectuelle</h2>
         <p className="text-muted-foreground leading-relaxed">
-          Le code source de GigaPDF est distribué sous licence{" "}
-          <a href="https://www.gnu.org/licenses/agpl-3.0.html" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
-            GNU AGPL-3.0-or-later
-          </a>. Vous pouvez le consulter sur{" "}
+          Le code source de GigaPDF est « source-available » sous licence{" "}
+          <a href="https://polyformproject.org/licenses/noncommercial/1.0.0" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
+            PolyForm Noncommercial 1.0.0
+          </a>{" "}: libre pour tout usage non commercial. Pour un usage commercial, une
+          licence dédiée est disponible — écrivez-nous à{" "}
+          <a href="mailto:contact@qrcommunication.com" className="text-primary hover:underline">
+            contact@qrcommunication.com
+          </a>. Vous pouvez consulter le code sur{" "}
           <a href="https://github.com/QrCommunication/gigapdf" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
             github.com/QrCommunication/gigapdf
           </a>.

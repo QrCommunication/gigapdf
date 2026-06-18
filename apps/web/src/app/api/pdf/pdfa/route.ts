@@ -1,5 +1,5 @@
 /**
- * PDF/A conversion route via MuPDF.
+ * PDF/A conversion route via the engine.
  *
  * POST /api/pdf/pdfa
  *
@@ -10,7 +10,7 @@
  *
  * Returns the PDF/A-compliant PDF as application/pdf.
  *
- * Returns 422 with explanation if MuPDF refuses conversion (e.g. source
+ * Returns 422 with explanation if the engine refuses conversion (e.g. source
  * uses transparency on pdfa-1b, contains JavaScript, or embeds files on
  * pdfa-1b/2b which forbid them — fallback to pdfa-2u or pdfa-3b).
  */

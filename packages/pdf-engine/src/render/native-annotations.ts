@@ -1,19 +1,14 @@
 /**
- * Native PDF annotations via MuPDF — Highlight, Underline, Squiggly,
- * StrikeOut, FreeText, Stamp.
+ * Native PDF annotations via the WASM engine (`@qrcommunication/gigapdf-lib`).
  *
- * The legacy approach (pdf-lib `drawRectangle` + transparency) produces
- * a flattened drawing that PDF readers can't isolate — the user can't
- * click it, can't edit it, can't toggle its visibility, and copy-paste
- * leaks the underlying text untouched. By creating real `/Annot` objects
- * via MuPDF's `PDFPage.createAnnotation`, the resulting PDF has true
- * interactive annotations that Adobe Acrobat / macOS Preview / Foxit
- * recognise and manage natively.
- *
- * Coordinates are in PDF user-space (origin bottom-left). Callers must
- * convert from web space via `webToPdf` before calling.
+ * Native engine path. Real `/Annot` objects (Highlight, Underline,
+ * StrikeOut, FreeText, Stamp) are written into the page so readers manage them
+ * natively. Coordinates are PDF user-space (origin bottom-left); callers convert
+ * from web space via `webToPdf` first. (`Squiggly` maps to Underline; per-annot
+ * opacity / pop-up author are not carried by the engine annotations.)
  */
 
+import { getEngine } from '../wasm';
 import { engineLogger } from '../utils/logger';
 
 export type NativeAnnotationType =
@@ -33,11 +28,11 @@ export interface NativeAnnotationSpec {
   quads?: Array<[number, number, number, number, number, number, number, number]>;
   /** Stroke colour in [0, 1] range (R, G, B). Defaults to yellow highlight. */
   color?: [number, number, number];
-  /** Optional opacity [0, 1]. Defaults to 0.4 for Highlight, 1 for the rest. */
+  /** Optional opacity [0, 1] (not applied by the engine annotations). */
   opacity?: number;
-  /** Author name shown by readers (Acrobat /T entry). */
+  /** Author name (not carried by the engine annotations). */
   author?: string;
-  /** Free-text content / pop-up note body (Acrobat /Contents entry). */
+  /** Free-text content / stamp label (Acrobat /Contents entry). */
   contents?: string;
 }
 
@@ -50,6 +45,29 @@ export interface AddNativeAnnotationsResult {
 const DEFAULT_HIGHLIGHT_COLOR: [number, number, number] = [1, 0.92, 0];
 const DEFAULT_UNDERLINE_COLOR: [number, number, number] = [0, 0.5, 1];
 
+/** [0,1] RGB → packed 0xRRGGBB. */
+function packRgb([r, g, b]: [number, number, number]): number {
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255)));
+  return (c(r) << 16) | (c(g) << 8) | c(b);
+}
+
+/** Axis-aligned bounding rect [x0,y0,x1,y1] of an 8-number quad. */
+function quadBounds(
+  q: [number, number, number, number, number, number, number, number],
+): [number, number, number, number] {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (let k = 0; k < 8; k += 2) {
+    minX = Math.min(minX, q[k]!);
+    maxX = Math.max(maxX, q[k]!);
+    minY = Math.min(minY, q[k + 1]!);
+    maxY = Math.max(maxY, q[k + 1]!);
+  }
+  return [minX, minY, maxX, maxY];
+}
+
 export async function addNativeAnnotations(
   pdfBytes: Uint8Array,
   annotations: NativeAnnotationSpec[],
@@ -58,78 +76,64 @@ export async function addNativeAnnotations(
     return { bytes: pdfBytes, added: 0, pagesAffected: 0 };
   }
 
-  const mupdf = await import('mupdf');
-  const doc = mupdf.Document.openDocument(
-    pdfBytes,
-    'application/pdf',
-  ) as unknown as InstanceType<typeof mupdf.PDFDocument>;
+  const giga = await getEngine();
+  const doc = giga.open(pdfBytes);
+  try {
+    const totalPages = doc.pageCount();
+    const pagesAffected = new Set<number>();
+    let added = 0;
 
-  const pageBuckets = new Map<number, NativeAnnotationSpec[]>();
-  for (const a of annotations) {
-    const list = pageBuckets.get(a.pageNumber);
-    if (list) list.push(a);
-    else pageBuckets.set(a.pageNumber, [a]);
-  }
-
-  let added = 0;
-  let pagesAffected = 0;
-
-  for (const [pageNumber, list] of pageBuckets) {
-    const pageIndex = pageNumber - 1;
-    if (pageIndex < 0 || pageIndex >= doc.countPages()) {
-      engineLogger.warn('native-annotations: page out of range, skipping', {
-        pageNumber,
-        pageCount: doc.countPages(),
-      });
-      continue;
-    }
-
-    const page = doc.loadPage(pageIndex) as unknown as InstanceType<
-      typeof mupdf.PDFPage
-    >;
-
-    for (const spec of list) {
-      const annot = page.createAnnotation(spec.type);
-      annot.setRect(spec.rect);
-
-      const color =
-        spec.color ??
-        (spec.type === 'Highlight'
-          ? DEFAULT_HIGHLIGHT_COLOR
-          : DEFAULT_UNDERLINE_COLOR);
-      annot.setColor(color);
-
-      const opacity =
-        spec.opacity ?? (spec.type === 'Highlight' ? 0.4 : 1);
-      annot.setOpacity(opacity);
-
-      if (spec.quads && spec.quads.length > 0) {
-        annot.setQuadPoints(spec.quads);
+    for (const spec of annotations) {
+      if (spec.pageNumber < 1 || spec.pageNumber > totalPages) {
+        engineLogger.warn('native-annotations: page out of range, skipping', {
+          pageNumber: spec.pageNumber,
+          pageCount: totalPages,
+        });
+        continue;
       }
+      const rgb = packRgb(
+        spec.color ??
+          (spec.type === 'Highlight' ? DEFAULT_HIGHLIGHT_COLOR : DEFAULT_UNDERLINE_COLOR),
+      );
+      const rects =
+        spec.quads && spec.quads.length > 0 ? spec.quads.map(quadBounds) : [spec.rect];
 
-      if (spec.author) annot.setAuthor(spec.author);
-      if (spec.contents) annot.setContents(spec.contents);
-
-      // Persist the visual appearance stream so even readers that don't
-      // re-render annotations (lightweight viewers) still show the correct
-      // highlight colour.
-      annot.update();
-
-      added++;
+      for (const [x0, y0, x1, y1] of rects) {
+        let ok = false;
+        switch (spec.type) {
+          case 'Highlight':
+            ok = doc.addHighlight(spec.pageNumber, x0, y0, x1, y1, rgb);
+            break;
+          case 'Underline':
+          case 'Squiggly':
+            ok = doc.addUnderline(spec.pageNumber, x0, y0, x1, y1, rgb);
+            break;
+          case 'StrikeOut':
+            ok = doc.addStrikeOut(spec.pageNumber, x0, y0, x1, y1, rgb);
+            break;
+          case 'FreeText':
+            ok = doc.addFreeText(spec.pageNumber, x0, y0, x1, y1, spec.contents ?? '', 12, rgb);
+            break;
+          case 'Stamp':
+            ok = doc.addStamp(spec.pageNumber, x0, y0, x1, y1, spec.contents ?? 'STAMP', rgb);
+            break;
+        }
+        if (ok) {
+          added++;
+          pagesAffected.add(spec.pageNumber);
+        }
+      }
     }
 
-    pagesAffected++;
+    const bytes = doc.saveCompressed();
+    engineLogger.info('native-annotations: added native PDF annotations', {
+      requested: annotations.length,
+      added,
+      pagesAffected: pagesAffected.size,
+      outputBytes: bytes.byteLength,
+    });
+    return { bytes, added, pagesAffected: pagesAffected.size };
+  } finally {
+    doc.close();
   }
-
-  const buf = doc.saveToBuffer('garbage=4,compress=yes,sanitize=yes');
-  const bytes = buf.asUint8Array();
-
-  engineLogger.info('native-annotations: added native PDF annotations', {
-    requested: annotations.length,
-    added,
-    pagesAffected,
-    outputBytes: bytes.byteLength,
-  });
-
-  return { bytes, added, pagesAffected };
 }

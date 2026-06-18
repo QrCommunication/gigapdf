@@ -59,6 +59,23 @@ const JPEG_1x1 = new Uint8Array([
   0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00, 0xf8, 0xff, 0xd9,
 ]);
 
+/**
+ * A real 32×32 still AVIF (AV1 intra, ftyp brand `avif`), decoded by the engine's
+ * native AVIF decoder (no sharp). Proves the `format === 'avif'` path through
+ * `addImage`. Same fixture as the engine's `av1test.avif` reconstruction test.
+ */
+const AVIF_32x32 = Uint8Array.from(
+  atob(
+    'AAAAIGZ0eXBhdmlmAAAAAGF2aWZtaWYxbWlhZk1BMUIAAAD5bWV0YQAAAAAAAAAvaGRscgAAAAAA' +
+      'AAAAcGljdAAAAAAAAAAAAAAAAFBpY3R1cmVIYW5kbGVyAAAAAA5waXRtAAAAAAABAAAAHmlsb2MA' +
+      'AAAARAAAAQABAAAAAQAAASEAAAAbAAAAKGlpbmYAAAAAAAEAAAAaaW5mZQIAAAAAAQAAYXYwMUNv' +
+      'bG9yAAAAAGppcHJwAAAAS2lwY28AAAAUaXNwZQAAAAAAAAAgAAAAIAAAABBwaXhpAAAAAAMICAgA' +
+      'AAAMYXYxQ4EADAAAAAATY29scm5jbHgAAgACAAIAAAAAF2lwbWEAAAAAAAAAAQABBAECgwQAAAAj' +
+      'bWRhdAoGGBE/9sAgMhEXgAAASAAAAAEtpUetaA/vPQ==',
+  ),
+  (c) => c.charCodeAt(0),
+);
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -167,6 +184,31 @@ describe('addImage (JPEG detection)', () => {
     await expect(addImage(handle, outOfRange, makeImageElement(), PNG_1x1)).rejects.toThrow(
       PDFPageOutOfRangeError,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// addImage — AVIF (engine-native decode, no sharp)
+// ---------------------------------------------------------------------------
+
+describe('addImage (AVIF)', () => {
+  it('decodes a real AVIF via the engine and embeds it without throwing', async () => {
+    const handle = await openDocument(makeBuffer(SIMPLE_PDF));
+    const element = makeImageElement({
+      source: {
+        type: 'embedded',
+        dataUrl: '',
+        originalFormat: 'png',
+        originalDimensions: { width: 32, height: 32 },
+      },
+    });
+
+    await expect(addImage(handle, 1, element, AVIF_32x32)).resolves.toBeUndefined();
+    expect(handle.isDirty).toBe(true);
+
+    const saved = await saveDocument(handle);
+    expect(saved).toBeInstanceOf(Buffer);
+    expect(saved.length).toBeGreaterThan(100);
   });
 });
 

@@ -28,8 +28,6 @@ export { extractTextBlocks } from './parse/text-extractor';
 export type { TextBlock } from './parse/text-extractor';
 export { extractImages } from './parse/image-extractor';
 export type { ExtractedImage, ExtractImagesOptions } from './parse/image-extractor';
-export { extractFormFields } from './parse/form-extractor';
-export type { FormField, FormFieldType } from './parse/form-extractor';
 
 // Render
 export {
@@ -47,8 +45,8 @@ export {
   convertToPdfA,
   PdfAConversionError,
   addNativeAnnotations,
-  mupdfRenderPage,
-  mupdfRenderPages,
+  engineRenderPage,
+  engineRenderPages,
   addWatermark,
 } from './render';
 export type {
@@ -64,15 +62,15 @@ export type {
   NativeAnnotationType,
   NativeAnnotationSpec,
   AddNativeAnnotationsResult,
-  MupdfRenderPageOptions,
-  MupdfRenderedPage,
-  MupdfBatchRenderOptions,
+  EngineRenderPageOptions,
+  EngineRenderedPage,
+  EngineBatchRenderOptions,
   WatermarkOptions,
   WatermarkPosition,
   WatermarkResult,
 } from './render';
 
-// Parse — MuPDF-powered extractors
+// Parse — native engine extractors
 export {
   extractStructuredText,
   extractPlainText,

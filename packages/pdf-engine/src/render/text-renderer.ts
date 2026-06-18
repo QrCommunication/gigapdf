@@ -1,12 +1,9 @@
-import { degrees, PDFName, decodePDFRawStream } from 'pdf-lib';
-import type { PDFFont } from 'pdf-lib';
 import { createHash } from 'node:crypto';
 import type { PDFDocumentHandle } from '../engine/document-handle';
 import { markDirty } from '../engine/document-handle';
 import type { TextElement } from '@giga-pdf/types';
-import { hexToRgb } from '../utils/color';
+import { hexToPackedRgb } from '../utils/color';
 import { webToPdf } from '../utils/coordinates';
-import { resolveStandardFont, pickFallbackStandardFont } from '../utils/font-map';
 import {
   loadBundledFontBytes,
   pickBundledFamily,
@@ -28,11 +25,12 @@ function isFontEmbedCustomEnabled(): boolean {
   return process.env['FONT_EMBED_CUSTOM_ENABLED'] === 'true';
 }
 
-// ─── Cache polices custom (par documentId) ────────────────────────────────────
-// Évite de re-fetcher les bytes à chaque opération dans la même session.
-// Clé : `${documentId}::${fontId}`
+// ─── Cache des polices embedées (par documentId::clé) ─────────────────────────
+// Évite de ré-embeder les mêmes bytes dans le même document. La valeur est le
+// `fontObj` (numéro d'objet Type0) retourné par `embedFont`, valide pour la
+// durée de vie du `GigaPdfDoc` du handle.
 
-const embeddedFontCache = new Map<string, PDFFont>();
+const embeddedFontCache = new Map<string, number>();
 
 /** Vide le cache pour un document donné (à appeler à la fermeture du handle). */
 export function clearFontCache(documentId: string): void {
@@ -45,204 +43,14 @@ export function clearFontCache(documentId: string): void {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getPage(handle: PDFDocumentHandle, pageNumber: number) {
-  if (pageNumber < 1 || pageNumber > handle.pageCount) {
-    throw new PDFPageOutOfRangeError(pageNumber, handle.pageCount);
-  }
-  return handle._pdfDoc.getPage(pageNumber - 1);
-}
-
-/**
- * Tente d'extraire les bytes d'une police embarquée dans le PDFDocument source.
- *
- * Parcourt les ressources de toutes les pages à la recherche d'une police dont
- * le BaseFont correspond (partiellement, insensible à la casse) au nom demandé.
- * Supporte les polices Type0 (composite, via DescendantFonts → FontDescriptor)
- * et les polices Type1/TrueType (via FontDescriptor direct).
- *
- * @returns Les bytes bruts du programme de police, ou null si introuvable.
- */
-/**
- * Normalise un nom de police pour le matching :
- *   - retire le préfixe subset "ABCDEF+"
- *   - retire les suffixes de variante usuels ("-Regular", "MT", "PS", etc.)
- *   - lowercase + strip non-alphanumeric
- *
- * Exemples :
- *   "HXBDOG+OCRB10PitchBT-Regular" → "ocrb10pitchbt"
- *   "Arial-BoldMT"                  → "arialbold"
- *   "/HelveticaNeue-Bold"           → "helveticaneuebold"
- */
-function normalizeFontName(raw: string): string {
-  return raw
-    .replace(/^\//, '')
-    .replace(/^[A-Z]{6}\+/, '')
-    .replace(/(-?Regular|-?Roman|-?Book|MT|PS)$/i, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
-}
-
-/**
- * Format of the font program embedded in a PDF FontDescriptor.
- *  - truetype : `/FontFile2` — fontkit ingests directly
- *  - cff      : `/FontFile3` (Subtype `/Type1C` or `/CIDFontType0C`) — raw CFF,
- *               needs fontforge to be turned into a TTF fontkit can use
- *  - type1    : legacy `/FontFile` — Adobe Type1 binary, same: needs fontforge
- */
+/** Format of an extracted font program — drives the embed strategy. */
 export type ExtractedFontFormat = 'truetype' | 'cff' | 'type1';
-
-export interface ExtractedFontProgram {
-  bytes: Uint8Array;
-  format: ExtractedFontFormat;
-}
-
-function extractFontBytesFromSource(
-  handle: PDFDocumentHandle,
-  targetFontName: string,
-): ExtractedFontProgram | null {
-  const normalizedTarget = normalizeFontName(targetFontName);
-  if (!normalizedTarget) return null;
-
-  const ctx = handle._pdfDoc.context;
-
-  // Walk EVERY indirect object in the PDF context, not just the page-level
-  // Resources. Many PDFs (Free invoices, Word/LibreOffice exports, generated
-  // reports) put the Font dict on the /Pages root and have the leaf pages
-  // inherit it via the /Parent chain — page.node.Resources() then returns
-  // null and the page-only walk silently finds zero fonts. Scanning every
-  // indirect object catches every Font regardless of how it's referenced.
-  const indirectObjects = ctx.enumerateIndirectObjects();
-  for (const [, obj] of indirectObjects) {
-    if (!obj || typeof (obj as { get?: unknown }).get !== 'function') continue;
-
-    // A Font dict is identified by /Type=/Font (with /Subtype telling us
-    // Type0 / TrueType / Type1). Skip anything else.
-    const objAsDict = obj as unknown as { get(k: unknown): unknown };
-    const typeName = objAsDict.get(PDFName.of('Type'));
-    if (!typeName || String(typeName) !== '/Font') continue;
-
-    const baseFontRef = objAsDict.get(PDFName.of('BaseFont'));
-    const candidateName = baseFontRef ? String(baseFontRef) : '';
-    const normalizedCandidate = normalizeFontName(candidateName);
-    if (!normalizedCandidate) continue;
-
-    // Two-direction substring match (handles subset prefixes, suffix
-    // variants, and pdfjs's loadedName trimming differently from pdf-lib).
-    const matches =
-      normalizedCandidate === normalizedTarget ||
-      normalizedCandidate.includes(normalizedTarget) ||
-      normalizedTarget.includes(normalizedCandidate);
-    if (!matches) continue;
-
-    const bytes = extractFontProgramBytes(
-      handle,
-      obj as unknown as { get(k: unknown): unknown },
-    );
-    if (bytes) return bytes;
-  }
-
-  return null;
-}
-
-/**
- * Extrait les bytes du programme de police depuis un objet police PDF.
- * Supporte Type0 (via DescendantFonts) et Type1/TrueType (FontDescriptor direct).
- */
-function extractFontProgramBytes(
-  handle: PDFDocumentHandle,
-  fontObj: { get(k: unknown): unknown },
-): ExtractedFontProgram | null {
-  const ctx = handle._pdfDoc.context;
-
-  // Type0 (composite) : DescendantFonts → CIDFont → FontDescriptor
-  const descendantRef = fontObj.get(PDFName.of('DescendantFonts'));
-  if (descendantRef) {
-    const descArr = ctx.lookup(descendantRef as Parameters<typeof ctx.lookup>[0]);
-    if (descArr && typeof (descArr as unknown as { get?: unknown }).get === 'function') {
-      const cidFontRef = (descArr as unknown as { get(k: unknown): unknown }).get(0);
-      const cidFont = cidFontRef ? ctx.lookup(cidFontRef as Parameters<typeof ctx.lookup>[0]) : null;
-      if (cidFont && typeof (cidFont as unknown as { get?: unknown }).get === 'function') {
-        const found = resolveDescriptorFontFile(handle, cidFont as unknown as { get(k: unknown): unknown });
-        if (found) return found;
-      }
-    }
-  }
-
-  // Type1 / TrueType : FontDescriptor direct
-  return resolveDescriptorFontFile(handle, fontObj);
-}
-
-/**
- * Résout un FontDescriptor et retourne les bytes DÉCODÉS du flux de police,
- * accompagnés du format détecté à partir du tag PDF (FontFile / FontFile2 /
- * FontFile3). Le format guide ensuite la stratégie d'embed :
- *   - truetype → fontkit accepte directement
- *   - cff / type1 → conversion fontforge requise
- */
-function resolveDescriptorFontFile(
-  handle: PDFDocumentHandle,
-  fontOrDescHolder: { get(k: unknown): unknown },
-): ExtractedFontProgram | null {
-  const ctx = handle._pdfDoc.context;
-
-  const descriptorRef = fontOrDescHolder.get(PDFName.of('FontDescriptor'));
-  if (!descriptorRef) return null;
-
-  const descriptor = ctx.lookup(descriptorRef as Parameters<typeof ctx.lookup>[0]);
-  if (!descriptor || typeof (descriptor as unknown as { get?: unknown }).get !== 'function') return null;
-
-  const desc = descriptor as unknown as { get(k: unknown): unknown };
-
-  // Order matters: FontFile2 (TrueType) is the most embeddable, try first.
-  // FontFile3 (CFF/OpenType-CFF) and FontFile (Type1) both need conversion,
-  // but they expose enough format info for downstream code to decide.
-  const ff2 = desc.get(PDFName.of('FontFile2'));
-  const ff3 = desc.get(PDFName.of('FontFile3'));
-  const ff = desc.get(PDFName.of('FontFile'));
-
-  let fileRef: unknown;
-  let format: ExtractedFontFormat;
-  if (ff2) {
-    fileRef = ff2;
-    format = 'truetype';
-  } else if (ff3) {
-    fileRef = ff3;
-    format = 'cff';
-  } else if (ff) {
-    fileRef = ff;
-    format = 'type1';
-  } else {
-    return null;
-  }
-
-  const stream = ctx.lookup(fileRef as Parameters<typeof ctx.lookup>[0]);
-  if (!stream) return null;
-
-  // Streams in PDFs are typically /FlateDecode-compressed. `getContents()`
-  // returns the encoded bytes (raw zlib for the OCRB Type1C in Free's
-  // invoices). We MUST decode them before handing to fontkit / fontforge,
-  // otherwise the converter sees zlib magic and fails.
-  let bytes: Uint8Array | null = null;
-  try {
-    bytes = decodePDFRawStream(stream as Parameters<typeof decodePDFRawStream>[0]).decode();
-  } catch {
-    // Fall back to raw bytes for unencoded streams (rare).
-    if (typeof (stream as unknown as { getContents?: unknown }).getContents === 'function') {
-      bytes = (stream as unknown as { getContents(): Uint8Array }).getContents();
-    }
-  }
-  if (!bytes || bytes.byteLength === 0) return null;
-
-  return { bytes, format };
-}
 
 /**
  * Convert Type1/CFF source bytes to TTF, going through the FontCachePort
- * (typically the Prisma `font_cache` table) so that the same source font
- * never gets converted twice on the same VPS.
- *
- * Returns null only if no fallback is possible — fontforge missing AND
- * no cached entry. Caller falls through to the bundled OFL family.
+ * (typically the Prisma `font_cache` table) so the same source font never gets
+ * converted twice on the same VPS. Returns null when no fallback is possible
+ * (fontforge missing AND no cached entry); the caller falls through to bundled.
  */
 async function convertWithCache(
   handle: PDFDocumentHandle,
@@ -321,159 +129,116 @@ async function convertWithCache(
 }
 
 /**
- * Résout la police à utiliser pour un TextElement.
+ * Résout la police à embeder pour un TextElement et renvoie son `fontObj`
+ * (numéro d'objet Type0 dans le document courant).
  *
- * Stratégie (par ordre de priorité) :
- *  1. Si FONT_EMBED_CUSTOM_ENABLED && originalFont défini && fontBytes fournis → embed la police custom
- *  2. Si originalFont défini → tenter d'extraire la police du PDF source et la ré-embeder
- *  3. Si fontFamily correspond à une Standard Font → embed la StandardFont
- *  3.5. Si un FontCachePort est branché sur le handle → résolution Google Fonts
- *       par nom (BaseFont) : téléchargement TTF + cache DB + embed subsetté
- *  4. Fallback bundled OFL (Liberation/Courier Prime), puis StandardFont métrique
+ * Stratégie (par priorité) :
+ *  1. FONT_EMBED_CUSTOM_ENABLED && originalFont && fontBytes → embed direct
+ *  2. originalFont → extraire la police du PDF source (engine `extractFont`) :
+ *     - truetype → embed direct
+ *     - cff/type1 → conversion fontforge (cachée par sha256) → embed
+ *  3. FontCachePort branché → résolution Google Fonts (téléchargement + cache)
+ *  4. Fallback bundled OFL (Liberation/Courier Prime) — couvre aussi les
+ *     familles standard (Arial→sans, Times→serif, Courier→mono) via
+ *     pickBundledFamily, avec de vrais TTF (meilleures métriques que Standard-14).
  */
 async function resolveFont(
   handle: PDFDocumentHandle,
   element: TextElement,
   fontBytes?: Uint8Array,
-): Promise<PDFFont> {
+): Promise<number> {
   const { fontFamily, originalFont } = element.style;
+  const doc = handle._doc;
 
-  // Stratégie 1 : police custom avec bytes fournis (FONT_EMBED_CUSTOM_ENABLED requis)
+  // Stratégie 1 : police custom avec bytes fournis (glyf-based TrueType).
   if (isFontEmbedCustomEnabled() && originalFont && fontBytes && fontBytes.byteLength > 0) {
-    const cacheKey = `${handle.id}::custom::${originalFont}`;
-    const cached = embeddedFontCache.get(cacheKey);
-    if (cached) return cached;
-
-    try {
-      // subset: false — nécessaire pour permettre l'ajout de caractères arbitraires
-      const embedded = await handle._pdfDoc.embedFont(fontBytes, { subset: false });
-      embeddedFontCache.set(cacheKey, embedded);
-      return embedded;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      engineLogger.warn('Impossible d\'embed la police custom, fallback vers extraction source', {
-        originalFont,
-        documentId: handle.id,
-        error: message,
-      });
+    const key = `${handle.id}::custom::${originalFont}`;
+    const cached = embeddedFontCache.get(key);
+    if (cached !== undefined) return cached;
+    const obj = doc.embedFont(originalFont, fontBytes);
+    if (obj !== 0) {
+      embeddedFontCache.set(key, obj);
+      return obj;
     }
+    engineLogger.warn("Impossible d'embed la police custom, fallback extraction source", {
+      originalFont,
+      documentId: handle.id,
+    });
   }
 
-  // Stratégie 2 : originalFont défini → tenter l'extraction depuis le PDF source
+  // Stratégie 2 : extraire la police d'origine du PDF source (zéro pdf-lib).
   if (originalFont) {
-    const cacheKey = `${handle.id}::source::${originalFont}`;
-    const cached = embeddedFontCache.get(cacheKey);
-    if (cached) return cached;
+    const key = `${handle.id}::source::${originalFont}`;
+    const cached = embeddedFontCache.get(key);
+    if (cached !== undefined) return cached;
 
-    const extracted = extractFontBytesFromSource(handle, originalFont);
+    const extracted = doc.extractFont(originalFont);
     if (extracted) {
-      // Stratégie 2.a : TrueType — fontkit l'avale tel quel.
+      // 2.a : TrueType — embed direct.
       if (extracted.format === 'truetype') {
-        try {
-          const embedded = await handle._pdfDoc.embedFont(extracted.bytes, { subset: false });
-          embeddedFontCache.set(cacheKey, embedded);
-          return embedded;
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          engineLogger.warn(
-            'Impossible d\'embed le TrueType extrait du source, on tente la conversion fontforge',
-            { originalFont, documentId: handle.id, error: message },
-          );
+        const obj = doc.embedFont(originalFont, extracted.bytes);
+        if (obj !== 0) {
+          embeddedFontCache.set(key, obj);
+          return obj;
         }
       }
-
-      // Stratégie 2.b : Type1 ou CFF — fontkit refuse, on passe par fontforge.
-      // Le résultat est cacheable par hash SHA-256 du programme source : la
-      // même police extraite d'un autre PDF donnera le même TTF, donc le
-      // cache DB économise un spawn de subprocess à chaque bake.
-      const converted = await convertWithCache(
-        handle,
-        extracted.bytes,
-        extracted.format,
-        originalFont,
-      );
-      if (converted) {
-        try {
-          const embedded = await handle._pdfDoc.embedFont(converted, { subset: false });
-          embeddedFontCache.set(cacheKey, embedded);
-          engineLogger.info('Police custom embed via conversion fontforge', {
-            originalFont,
-            sourceFormat: extracted.format,
-            documentId: handle.id,
-          });
-          return embedded;
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          engineLogger.warn(
-            'TTF converti rejeté par fontkit, fallback bundled OFL',
-            { originalFont, documentId: handle.id, error: message },
-          );
+      // 2.b : Type1 / CFF — conversion fontforge puis embed.
+      if (extracted.format === 'cff' || extracted.format === 'type1') {
+        const converted = await convertWithCache(
+          handle,
+          extracted.bytes,
+          extracted.format,
+          originalFont,
+        );
+        if (converted) {
+          const obj = doc.embedFont(originalFont, converted);
+          if (obj !== 0) {
+            embeddedFontCache.set(key, obj);
+            engineLogger.info('Police custom embed via conversion fontforge', {
+              originalFont,
+              sourceFormat: extracted.format,
+              documentId: handle.id,
+            });
+            return obj;
+          }
         }
       }
     } else {
-      // Police déclarée dans originalFont mais non trouvée dans le PDF source
       engineLogger.warn(
-        'Police originalFont non trouvée dans le PDF source, fallback Helvetica',
-        {
-          originalFont,
-          fontFamily,
-          documentId: handle.id,
-          hint: 'La police n\'est pas embarquée dans le PDF source. Fournir fontBytes pour préserver la police.',
-        },
+        'Police originalFont non trouvée dans le PDF source, fallback',
+        { originalFont, fontFamily, documentId: handle.id },
       );
     }
   }
 
-  // Stratégie 3 : StandardFont connue
-  const standardFont = resolveStandardFont(fontFamily);
-  if (standardFont !== null) {
-    return handle._pdfDoc.embedFont(standardFont);
-  }
-
-  // Stratégie 3.5 : Google Fonts — la police n'est ni extractible du source
-  // ni une StandardFont. Si un FontCachePort est branché sur le handle, on
-  // tente de résoudre la famille par son nom (BaseFont en priorité) via
-  // l'API Google Fonts : le TTF téléchargé est persisté dans le cache DB
-  // puis embedé subsetté. Tout échec (famille inconnue, réseau, embed
-  // rejeté par fontkit) tombe vers le bundled OFL — jamais de throw.
+  // Stratégie 3 : Google Fonts (si un FontCachePort est branché sur le handle).
   const googleFontCache = getFontCacheForHandle(handle);
   if (googleFontCache) {
     const requestedName = originalFont ?? fontFamily;
-    const googleKey = `${handle.id}::google::${requestedName}::${element.style.fontWeight}::${element.style.fontStyle}`;
-    const cachedGoogle = embeddedFontCache.get(googleKey);
-    if (cachedGoogle) return cachedGoogle;
+    const key = `${handle.id}::google::${requestedName}::${element.style.fontWeight}::${element.style.fontStyle}`;
+    const cached = embeddedFontCache.get(key);
+    if (cached !== undefined) return cached;
 
     try {
-      // Le poids/style explicites de l'élément priment ; sinon
-      // downloadGoogleFont infère depuis les suffixes du nom
-      // ("Lato-BlackItalic" → 900 italic).
       const query: GoogleFontQuery = { name: requestedName };
       if (element.style.fontWeight === 'bold') query.weight = 700;
       if (element.style.fontStyle === 'italic') query.italic = true;
 
       const result = await downloadGoogleFont(query, { cache: googleFontCache });
       if (result.found) {
-        // fontkit est déjà enregistré sur le handle (registerFontkit dans
-        // openDocument, cf. document-handle.ts) — embedFont(bytes) accepte
-        // le TTF directement, comme pour les stratégies S1/S2.
-        const embedded = await handle._pdfDoc.embedFont(result.bytes, {
-          subset: true,
-        });
-        embeddedFontCache.set(googleKey, embedded);
-        engineLogger.info('Police résolue via Google Fonts', {
-          requestedName,
-          family: result.family,
-          weight: result.weight,
-          style: result.style,
-          documentId: handle.id,
-        });
-        return embedded;
+        const obj = doc.embedFont(result.family, result.bytes);
+        if (obj !== 0) {
+          embeddedFontCache.set(key, obj);
+          engineLogger.info('Police résolue via Google Fonts', {
+            requestedName,
+            family: result.family,
+            weight: result.weight,
+            style: result.style,
+            documentId: handle.id,
+          });
+          return obj;
+        }
       }
-
-      engineLogger.debug(
-        'Police introuvable sur Google Fonts, fallback bundled OFL',
-        { requestedName, documentId: handle.id },
-      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       engineLogger.warn('Résolution Google Fonts échouée, fallback bundled OFL', {
@@ -484,20 +249,7 @@ async function resolveFont(
     }
   }
 
-  // Stratégie 4 : fallback bundled OFL (Liberation / CourierPrime).
-  //
-  // We ship four real TTF families with the engine — sans (Liberation Sans
-  // ≈ Arial), serif (Liberation Serif ≈ Times), mono (Liberation Mono ≈
-  // Courier New) and ocr (Courier Prime, closest free OCR-style font).
-  // pdf-lib + fontkit can embed those reliably (TrueType is fontkit's native
-  // input), so the bake gets a font with the right metric family AND with
-  // full Latin Unicode coverage. This is dramatically closer to OCRB / Calibri
-  // / Gotham than the StandardFonts.Helvetica fallback ever was.
-  //
-  // We try bundled embedding first. If reading the bundled file or the
-  // embedFont call fails for any reason (read-only fs, corrupted file, etc.),
-  // we fall back to the metric-picked StandardFont so the bake never crashes
-  // mid-batch.
+  // Stratégie 4 : bundled OFL (couvre aussi les familles standard).
   const bundledFamily = pickBundledFamily(originalFont ?? fontFamily);
   const bundledStyle = pickBundledStyle(
     element.style.fontWeight,
@@ -506,40 +258,24 @@ async function resolveFont(
   );
   const bundledKey = `${handle.id}::bundled::${bundledFamily}::${bundledStyle}`;
   const cachedBundled = embeddedFontCache.get(bundledKey);
-  if (cachedBundled) return cachedBundled;
-  try {
-    const bytes = loadBundledFontBytes(bundledFamily, bundledStyle);
-    const embedded = await handle._pdfDoc.embedFont(bytes, { subset: true });
-    embeddedFontCache.set(bundledKey, embedded);
-    engineLogger.info('Police custom remplacée par bundled OFL', {
-      fontFamily,
-      originalFont: originalFont ?? undefined,
-      bundledFamily,
-      bundledStyle,
-      documentId: handle.id,
-    });
-    return embedded;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const fallback = pickFallbackStandardFont(
-      originalFont ?? fontFamily,
-      element.style.fontWeight,
-      element.style.fontStyle,
+  if (cachedBundled !== undefined) return cachedBundled;
+
+  const bytes = loadBundledFontBytes(bundledFamily, bundledStyle);
+  const obj = doc.embedFont(`${bundledFamily}-${bundledStyle}`, bytes);
+  if (obj === 0) {
+    throw new Error(
+      `addText: impossible d'embeder la police bundled ${bundledFamily}/${bundledStyle}`,
     );
-    engineLogger.warn(
-      'Bundled OFL non disponible, dernier recours StandardFont',
-      {
-        fontFamily,
-        originalFont: originalFont ?? undefined,
-        fallback,
-        bundledFamily,
-        bundledStyle,
-        error: message,
-        documentId: handle.id,
-      },
-    );
-    return handle._pdfDoc.embedFont(fallback);
   }
+  embeddedFontCache.set(bundledKey, obj);
+  engineLogger.info('Police résolue via bundled OFL', {
+    fontFamily,
+    originalFont: originalFont ?? undefined,
+    bundledFamily,
+    bundledStyle,
+    documentId: handle.id,
+  });
+  return obj;
 }
 
 // ─── API Publique ─────────────────────────────────────────────────────────────
@@ -550,8 +286,10 @@ export async function addText(
   element: TextElement,
   fontBytes?: Uint8Array,
 ): Promise<void> {
-  const page = getPage(handle, pageNumber);
-  const pageH = page.getHeight();
+  if (pageNumber < 1 || pageNumber > handle.pageCount) {
+    throw new PDFPageOutOfRangeError(pageNumber, handle.pageCount);
+  }
+  const { height: pageH } = handle._doc.pageInfo(pageNumber);
   const pdfRect = webToPdf(
     element.bounds.x,
     element.bounds.y,
@@ -560,30 +298,23 @@ export async function addText(
     pageH,
   );
 
-  const font = await resolveFont(handle, element, fontBytes);
-  const color = hexToRgb(element.style.color);
+  const fontObj = await resolveFont(handle, element, fontBytes);
+  const color = hexToPackedRgb(element.style.color);
 
-  // Intentionally NO maxWidth: the bounds.width recorded for parsed text
-  // matches the original glyph run, but as soon as the user types extra
-  // characters the new content is wider. If we constrained drawText to the
-  // original width pdf-lib would WRAP the new content, splitting "LICHA 2"
-  // into "LICHA " on one line and "2" on the next — which is exactly the
-  // missing-text symptom seen on the Free invoice repro test (pdfjs found
-  // the trailing "2" on a separate line and the visible bake looked like
-  // just "LICHA"). For long edits the user can resize the IText overlay
-  // afterwards if needed; for typical inline edits the natural width wins.
-  page.drawText(element.content, {
-    x: pdfRect.x,
-    y: pdfRect.y + pdfRect.height - element.style.fontSize,
-    size: element.style.fontSize,
-    font,
+  // Baseline anchor: the engine draws from the text baseline at (x, y), so we
+  // place the baseline one fontSize below the box top — the same offset the old
+  // pdf-lib path used (drawText y = top - fontSize).
+  handle._doc.addText(
+    pageNumber,
+    pdfRect.x,
+    pdfRect.y + pdfRect.height - element.style.fontSize,
+    element.style.fontSize,
+    element.content,
+    fontObj,
     color,
-    opacity: element.style.opacity,
-    rotate: degrees(element.transform.rotation),
-    lineHeight: element.style.fontSize * element.style.lineHeight,
-  });
+    element.style.opacity,
+    element.transform.rotation,
+  );
 
-  markDirty(handle._pdfDoc);
+  markDirty(handle._doc);
 }
-
-

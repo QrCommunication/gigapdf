@@ -1,77 +1,64 @@
-import { PDFName, PDFArray } from 'pdf-lib';
 import type { PDFDocumentHandle } from '../engine/document-handle';
 import { markDirty } from '../engine/document-handle';
 
+/**
+ * Flatten the interactive form: the engine bakes every field widget across all
+ * pages into the page content and drops `/AcroForm`, so the result is no longer
+ * fillable. The `_pageNumber` argument is accepted for API compatibility but the
+ * operation is whole-document.
+ */
 export function flattenForms(
   handle: PDFDocumentHandle,
   _pageNumber?: number | null,
 ): void {
-  const form = handle._pdfDoc.getForm();
-  form.flatten();
-  markDirty(handle._pdfDoc);
+  handle._doc.flattenForm();
+  markDirty(handle._doc);
 }
 
 export interface FlattenAnnotationsResult {
-  /** Total number of annotation entries removed across all processed pages. */
+  /** Total number of annotation appearances baked across all processed pages. */
   flattened: number;
-  /** Number of pages whose /Annots entry was found and removed. */
+  /** Number of pages whose annotations were processed. */
   pagesProcessed: number;
 }
 
 /**
- * Removes native PDF annotations (/Annots entries) from one or all pages.
+ * Flatten PDF annotations into the page content.
  *
- * This deletes the `/Annots` array from each targeted page dictionary,
- * ensuring that highlights, notes, and other annotation objects are stripped
- * before export. Annotations added by this engine via `addAnnotation()` are
- * already rendered into the page content stream and are therefore unaffected.
- *
- * @remarks
- * Full appearance-stream compositing (rendering each annotation's visual
- * representation into the content stream before removal) is not yet
- * implemented — pdf-lib does not expose that operation directly. The current
- * implementation provides the minimum-viable security guarantee: the annotation
- * objects are deleted and will not appear in readers or be extractable from the
- * exported file.
+ * Unlike the previous pdf-lib implementation (which only deleted the `/Annots`
+ * array), the engine **bakes each annotation's appearance stream into the page
+ * content** before removing it — so highlights, notes, stamps, etc. remain
+ * visible in the exported file while ceasing to be editable annotations.
  *
  * @param handle - Open PDF document handle.
  * @param pageNumber - 1-based page number to target. Omit or pass `null` to
  *   process all pages.
- * @returns Count of removed annotation entries and pages processed.
+ * @returns Count of baked appearances and pages processed.
  */
 export function flattenAnnotations(
   handle: PDFDocumentHandle,
   pageNumber?: number | null,
 ): FlattenAnnotationsResult {
-  const pdfDoc = handle._pdfDoc;
-  const pages = pdfDoc.getPages();
+  const doc = handle._doc;
+  const pageCount = doc.pageCount();
 
   const targets =
-    pageNumber != null ? [pages[pageNumber - 1]] : pages;
+    pageNumber != null
+      ? [pageNumber]
+      : Array.from({ length: pageCount }, (_, i) => i + 1);
 
   let flattened = 0;
   let pagesProcessed = 0;
 
   for (const page of targets) {
-    if (!page) continue;
-
-    const node = page.node;
-    const annotsRef = node.get(PDFName.of('Annots'));
-    if (annotsRef === undefined) continue;
-
-    // Count entries before removal so we can report the total.
-    try {
-      const annotsArray = pdfDoc.context.lookup(annotsRef, PDFArray);
-      flattened += annotsArray.size();
-    } catch {
-      // annotsRef may be a direct empty array or malformed — still delete it.
-      flattened += 1;
+    if (page < 1 || page > pageCount) continue;
+    const baked = doc.flattenAnnotations(page);
+    if (baked >= 0) {
+      flattened += baked;
+      pagesProcessed++;
     }
-
-    node.delete(PDFName.of('Annots'));
-    pagesProcessed++;
   }
 
-  markDirty(pdfDoc);
+  markDirty(doc);
   return { flattened, pagesProcessed };
 }

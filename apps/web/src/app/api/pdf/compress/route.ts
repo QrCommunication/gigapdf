@@ -6,10 +6,10 @@
  * Form fields (multipart/form-data):
  *   file — PDF file (required)
  *
- * Pipeline: pdf-lib round-trip (openDocument → saveDocument, normalises the
- * structure + object streams) then MuPDF post-pass via optimizeAndSave
- * (garbage=4, compress=yes, sanitize=yes, linearize=yes) — the combo that
- * yields -15 to -25% on real-world documents.
+ * Pipeline: engine round-trip (openDocument → saveDocument, normalises the
+ * structure + object streams) then a native recompression post-pass via
+ * optimizeAndSave (dedupe, drop unreferenced objects, re-deflate streams) —
+ * the combo that yields -15 to -25% on real-world documents.
  *
  * Returns the compressed PDF as application/pdf with size headers:
  *   X-Original-Size   — input size in bytes
@@ -44,16 +44,15 @@ export async function POST(request: Request): Promise<Response> {
     const arrayBuffer = await file.arrayBuffer();
     const originalSize = arrayBuffer.byteLength;
 
-    // 1. pdf-lib round-trip: re-serialises with object streams, drops
+    // 1. Engine round-trip: re-serialises with object streams, drops
     //    incremental-update tails and normalises the xref structure.
     const handle = await openDocument(Buffer.from(arrayBuffer));
     const pdfLibBytes = await saveDocument(handle, {
       useObjectStreams: true,
     });
 
-    // 2. MuPDF post-pass: garbage=4 (dedupe + drop unreferenced objects),
-    //    compress=yes (re-deflate streams), sanitize + linearize (fast web
-    //    view). Falls back to the pdf-lib bytes if MuPDF chokes.
+    // 2. Native recompression post-pass: dedupe + drop unreferenced objects,
+    //    re-deflate streams. Falls back to the round-trip bytes if it fails.
     const optimized = await optimizeAndSave(new Uint8Array(pdfLibBytes), {
       linearize: true,
     });
@@ -61,7 +60,7 @@ export async function POST(request: Request): Promise<Response> {
     serverLogger.info('api.pdf.compress', {
       originalSize,
       compressedSize: optimized.bytes.byteLength,
-      mupdfOptimized: optimized.optimized,
+      recompressed: optimized.optimized,
     });
 
     return new Response(Buffer.from(optimized.bytes), {

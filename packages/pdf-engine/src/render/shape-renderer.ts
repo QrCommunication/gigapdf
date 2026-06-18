@@ -1,15 +1,16 @@
 import type { PDFDocumentHandle } from '../engine/document-handle';
 import { markDirty } from '../engine/document-handle';
 import type { ShapeElement } from '@giga-pdf/types';
-import { hexToRgb } from '../utils/color';
+import { hexToPackedRgb } from '../utils/color';
 import { webToPdf } from '../utils/coordinates';
 import { PDFPageOutOfRangeError } from '../errors';
 
-function getPage(handle: PDFDocumentHandle, pageNumber: number) {
+function pageGeometry(handle: PDFDocumentHandle, pageNumber: number) {
   if (pageNumber < 1 || pageNumber > handle.pageCount) {
     throw new PDFPageOutOfRangeError(pageNumber, handle.pageCount);
   }
-  return handle._pdfDoc.getPage(pageNumber - 1);
+  const { width, height, rotation } = handle._doc.pageInfo(pageNumber);
+  return { width, height, rotation: rotation as 0 | 90 | 180 | 270 };
 }
 
 function buildSvgPathFromPoints(points: Array<{ x: number; y: number }>): string {
@@ -25,10 +26,7 @@ export function addShape(
   pageNumber: number,
   element: ShapeElement,
 ): void {
-  const page = getPage(handle, pageNumber);
-  const pageH = page.getHeight();
-  const pageW = page.getWidth();
-  const rotation = page.getRotation().angle as 0 | 90 | 180 | 270;
+  const { width: pageW, height: pageH, rotation } = pageGeometry(handle, pageNumber);
   const pdfRect = webToPdf(
     element.bounds.x,
     element.bounds.y,
@@ -39,26 +37,25 @@ export function addShape(
     rotation,
   );
 
-  const fillColor = element.style.fillColor ? hexToRgb(element.style.fillColor) : undefined;
-  const borderColor = element.style.strokeColor ? hexToRgb(element.style.strokeColor) : undefined;
+  const doc = handle._doc;
+  const fill = element.style.fillColor ? hexToPackedRgb(element.style.fillColor) : null;
+  const stroke = element.style.strokeColor ? hexToPackedRgb(element.style.strokeColor) : null;
   const borderWidth = element.style.strokeWidth;
   const opacity = element.style.fillOpacity;
-  const dashArray = element.style.strokeDashArray.length > 0
-    ? element.style.strokeDashArray
-    : undefined;
 
   switch (element.shapeType) {
     case 'rectangle': {
-      page.drawRectangle({
-        x: pdfRect.x,
-        y: pdfRect.y,
-        width: pdfRect.width,
-        height: pdfRect.height,
-        color: fillColor,
-        borderColor,
+      doc.addRectangle(
+        pageNumber,
+        pdfRect.x,
+        pdfRect.y,
+        pdfRect.width,
+        pdfRect.height,
+        stroke,
+        fill,
         borderWidth,
         opacity,
-      });
+      );
       break;
     }
 
@@ -66,16 +63,17 @@ export function addShape(
     case 'ellipse': {
       const centerX = pdfRect.x + pdfRect.width / 2;
       const centerY = pdfRect.y + pdfRect.height / 2;
-      page.drawEllipse({
-        x: centerX,
-        y: centerY,
-        xScale: pdfRect.width / 2,
-        yScale: pdfRect.height / 2,
-        color: fillColor,
-        borderColor,
+      doc.addEllipse(
+        pageNumber,
+        centerX,
+        centerY,
+        pdfRect.width / 2,
+        pdfRect.height / 2,
+        stroke,
+        fill,
         borderWidth,
         opacity,
-      });
+      );
       break;
     }
 
@@ -86,41 +84,41 @@ export function addShape(
       const end = points[1] ?? { x: pdfRect.x + pdfRect.width, y: pdfRect.y + pdfRect.height };
       const startPdf = webToPdf(start.x, start.y, 0, 0, pageH, pageW, rotation);
       const endPdf = webToPdf(end.x, end.y, 0, 0, pageH, pageW, rotation);
-      page.drawLine({
-        start: { x: startPdf.x, y: startPdf.y },
-        end: { x: endPdf.x, y: endPdf.y },
-        color: borderColor ?? fillColor,
-        thickness: borderWidth,
-        opacity: element.style.strokeOpacity,
-        dashArray,
-      });
+      doc.drawLine(
+        pageNumber,
+        startPdf.x,
+        startPdf.y,
+        endPdf.x,
+        endPdf.y,
+        stroke ?? fill ?? 0,
+        borderWidth,
+        element.style.strokeOpacity,
+      );
       break;
     }
 
     case 'polygon':
     case 'triangle':
     case 'path': {
-      if (element.geometry.pathData) {
-        page.drawSvgPath(element.geometry.pathData, {
-          x: pdfRect.x,
-          y: pdfRect.y + pdfRect.height,
-          color: fillColor,
-          borderColor,
+      // addPath anchors the SVG origin at (ox, oy) with the Y axis flipped —
+      // same convention as pdf-lib's drawSvgPath, so the top-left anchor is the
+      // rect's top edge: (x, y + height).
+      const svgPath = element.geometry.pathData
+        ? element.geometry.pathData
+        : element.geometry.points.length >= 2
+          ? buildSvgPathFromPoints(element.geometry.points)
+          : '';
+      if (svgPath) {
+        doc.addPath(
+          pageNumber,
+          svgPath,
+          pdfRect.x,
+          pdfRect.y + pdfRect.height,
+          stroke,
+          fill,
           borderWidth,
           opacity,
-        });
-      } else if (element.geometry.points.length >= 2) {
-        const svgPath = buildSvgPathFromPoints(element.geometry.points);
-        if (svgPath) {
-          page.drawSvgPath(svgPath, {
-            x: pdfRect.x,
-            y: pdfRect.y + pdfRect.height,
-            color: fillColor,
-            borderColor,
-            borderWidth,
-            opacity,
-          });
-        }
+        );
       }
       break;
     }
@@ -129,5 +127,5 @@ export function addShape(
       break;
   }
 
-  markDirty(handle._pdfDoc);
+  markDirty(doc);
 }

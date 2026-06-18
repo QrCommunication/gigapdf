@@ -1,7 +1,4 @@
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-import type { PDFDocumentProxy } from 'pdfjs-dist/types/src/display/api';
-import { OPS } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import sharp from 'sharp';
+import { getEngine } from '../wasm';
 import { PDFParseError, PDFPageOutOfRangeError } from '../errors';
 import {
   MAX_PREVIEW_DPI,
@@ -9,8 +6,7 @@ import {
   DEFAULT_JPEG_QUALITY,
   POINTS_PER_INCH,
 } from '../constants';
-import { renderPage as mupdfRenderPage } from '../render/mupdf-render';
-import { ensureWorkerSrc } from '../utils/pdfjs-worker';
+import { renderPage as engineRenderPage } from '../render/engine-render';
 
 export type PreviewFormat = 'png' | 'jpeg' | 'webp';
 
@@ -22,39 +18,19 @@ export interface RenderOptions {
   alpha?: boolean;
 }
 
-async function loadDocument(buffer: Buffer): Promise<PDFDocumentProxy> {
-  ensureWorkerSrc();
-  const data = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-  // disableWorker: true is REQUIRED in Node. Without it pdfjs tries to spin up a
-  // fake worker and throws "Setting up fake worker failed" (no workerSrc), which
-  // made every server-side render fail with an opaque 500. The parser
-  // (parse/parser.ts) loads documents the same way.
-  const loadingTask = pdfjsLib.getDocument({
-    data,
-    useSystemFonts: true,
-    disableWorker: true,
-    // disableWorker exists at runtime but isn't in pdfjs 4.10's
-    // DocumentInitParameters type — cast like parse/parser.ts does.
-  } as Parameters<typeof pdfjsLib.getDocument>[0]);
-  return loadingTask.promise;
-}
-
 export async function renderPage(
   buffer: Buffer,
   pageNumber: number,
   options?: RenderOptions,
 ): Promise<Buffer> {
-  // Rasterise via MuPDF (native, in-process). pdfjs + node-canvas cannot draw
-  // bitmap images in Node — page.render() throws "Image or Canvas expected" on
-  // any PDF containing raster images, and needs workerSrc/canvasFactory glue
-  // that still fails on images. MuPDF renders images, fonts, rotation and
-  // transparency natively (see render/mupdf-render.ts, which is documented as
-  // the replacement for pdfjs page.render() in preview/export endpoints).
+  // Rasterise via the WASM engine (native, in-process). The engine renders
+  // images, fonts, rotation and transparency natively (see
+  // render/engine-render.ts) — no pdfjs / node-canvas.
   const scale =
     options?.scale ??
     Math.min(options?.dpi ?? DEFAULT_PREVIEW_DPI, MAX_PREVIEW_DPI) / POINTS_PER_INCH;
   const data = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-  const rendered = await mupdfRenderPage(data, pageNumber, {
+  const rendered = await engineRenderPage(data, pageNumber, {
     scale,
     format: options?.format ?? 'png',
     quality: options?.quality ?? DEFAULT_JPEG_QUALITY,
@@ -62,95 +38,98 @@ export async function renderPage(
   return Buffer.from(rendered.bytes);
 }
 
+/**
+ * Extract a single embedded image (by 0-based index on the page) and return it
+ * re-encoded in the requested format. Backed by the native engine: the image's
+ * embeddable bytes come from `imageElements`, decoded to RGBA only when the
+ * output format differs from the source encoding (otherwise passed through).
+ */
 export async function extractImage(
   buffer: Buffer,
   pageNumber: number,
   imageIndex: number,
   outputFormat?: PreviewFormat | null,
 ): Promise<{ data: Buffer; mimeType: string }> {
-  let doc: PDFDocumentProxy | null = null;
+  const giga = await getEngine();
+  const bytes = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+
+  let doc: ReturnType<typeof giga.open>;
   try {
-    doc = await loadDocument(buffer);
+    doc = giga.open(bytes);
   } catch (err) {
-    // Preserve the underlying pdfjs error message — a bare `catch {}` here
-    // masked the real cause and turned every render into an opaque 500.
     throw new PDFParseError(
       `Failed to load PDF document: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 
-  const pageCount = doc.numPages;
-  if (pageNumber < 1 || pageNumber > pageCount) {
-    await doc.loadingTask.destroy();
-    throw new PDFPageOutOfRangeError(pageNumber, pageCount);
-  }
-
   try {
-    const page = await doc.getPage(pageNumber);
-    const ops = await page.getOperatorList();
-
-    let currentIndex = 0;
-    let imageName: string | null = null;
-
-    for (let i = 0; i < ops.fnArray.length; i++) {
-      const fn = ops.fnArray[i];
-      if (fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject) {
-        if (currentIndex === imageIndex) {
-          imageName = (ops.argsArray[i] as string[])[0] ?? null;
-          break;
-        }
-        currentIndex++;
-      }
+    const pageCount = doc.pageCount();
+    if (pageNumber < 1 || pageNumber > pageCount) {
+      throw new PDFPageOutOfRangeError(pageNumber, pageCount);
     }
 
-    if (!imageName) {
+    const info = doc.imageElements(pageNumber)[imageIndex];
+    if (!info || info.data.length === 0) {
       throw new PDFParseError(
         `Image at index ${imageIndex} not found on page ${pageNumber}`,
       );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const imgData = await (page.objs as any).get(imageName);
-
-    if (!imgData || !imgData.data) {
-      throw new PDFParseError(`Failed to retrieve image data for image at index ${imageIndex}`);
-    }
-
-    const { data, width, height } = imgData as {
-      data: Uint8ClampedArray | Uint8Array;
-      width: number;
-      height: number;
-    };
-
-    const rawBuffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-
     const format = outputFormat ?? 'png';
 
-    if (format === 'jpeg') {
-      const outBuffer = await sharp(rawBuffer, {
-        raw: { width, height, channels: 4 },
-      })
-        .flatten({ background: { r: 255, g: 255, b: 255 } })
-        .jpeg({ quality: DEFAULT_JPEG_QUALITY })
-        .toBuffer();
-      return { data: outBuffer, mimeType: 'image/jpeg' };
-    } else if (format === 'webp') {
-      const outBuffer = await sharp(rawBuffer, {
-        raw: { width, height, channels: 4 },
-      })
-        .flatten({ background: { r: 255, g: 255, b: 255 } })
-        .webp({ quality: DEFAULT_JPEG_QUALITY })
-        .toBuffer();
-      return { data: outBuffer, mimeType: 'image/webp' };
-    } else {
-      const outBuffer = await sharp(rawBuffer, {
-        raw: { width, height, channels: 4 },
-      })
-        .png()
-        .toBuffer();
-      return { data: outBuffer, mimeType: 'image/png' };
+    // Passthrough when the requested format already matches the embedded
+    // encoding — no decode/re-encode round-trip.
+    if (format === 'png' && info.format === 'png') {
+      return { data: Buffer.from(info.data), mimeType: 'image/png' };
     }
+    if (format === 'jpeg' && info.format === 'jpeg') {
+      return { data: Buffer.from(info.data), mimeType: 'image/jpeg' };
+    }
+
+    // Otherwise decode the embedded bytes to RGBA and re-encode.
+    const decoded =
+      info.format === 'jpeg'
+        ? giga.decodeJpeg(info.data)
+        : info.format === 'png'
+          ? giga.decodePng(info.data)
+          : null;
+    if (!decoded) {
+      throw new PDFParseError(
+        `Cannot decode image at index ${imageIndex} (format "${info.format}")`,
+      );
+    }
+    const { rgba, width, height } = decoded;
+
+    if (format === 'jpeg') {
+      // encodeJpeg composites alpha onto white internally (matches flatten).
+      return {
+        data: Buffer.from(giga.encodeJpeg(rgba, width, height, DEFAULT_JPEG_QUALITY)),
+        mimeType: 'image/jpeg',
+      };
+    }
+    if (format === 'webp') {
+      // Lossless VP8L; flatten onto white first to drop transparency.
+      return {
+        data: Buffer.from(giga.encodeWebp(flattenOnWhite(rgba), width, height)),
+        mimeType: 'image/webp',
+      };
+    }
+    return { data: Buffer.from(giga.rgbaToPng(rgba, width, height)), mimeType: 'image/png' };
   } finally {
-    await doc.loadingTask.destroy();
+    doc.close();
   }
+}
+
+/** Composite an RGBA buffer onto an opaque white background (for formats that
+ * shouldn't carry transparency). */
+function flattenOnWhite(rgba: Uint8Array): Uint8Array {
+  const out = new Uint8Array(rgba.length);
+  for (let i = 0; i < rgba.length; i += 4) {
+    const a = (rgba[i + 3] ?? 255) / 255;
+    out[i] = Math.round((rgba[i] ?? 0) * a + 255 * (1 - a));
+    out[i + 1] = Math.round((rgba[i + 1] ?? 0) * a + 255 * (1 - a));
+    out[i + 2] = Math.round((rgba[i + 2] ?? 0) * a + 255 * (1 - a));
+    out[i + 3] = 255;
+  }
+  return out;
 }

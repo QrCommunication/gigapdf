@@ -3,15 +3,15 @@
  *
  * Pure helpers (TSV parsing + bbox→PDF placement) are tested everywhere
  * with inline fixtures. The end-to-end pipeline (rasterised test-free.pdf
- * → tesseract → invisible text layer → extractPlainText round-trip) is
- * gated behind the system `tesseract` binary via it.runIf — skipped
- * cleanly on CI hosts without tesseract installed.
+ * → OCR recognizer → invisible text layer → extractPlainText round-trip) is
+ * gated behind the system OCR binary via it.runIf — skipped
+ * cleanly on CI hosts without the OCR binary installed.
  */
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PDFDocument } from 'pdf-lib';
+import { getEngine } from '../../src/wasm';
 import {
   parseTsvWords,
   tsvWordToPdfPlacement,
@@ -20,7 +20,7 @@ import {
   type PdfPlacementContext,
 } from '../../src/parse/ocr-searchable';
 import { extractPlainText } from '../../src/parse/structured-text';
-import { renderPages } from '../../src/render/mupdf-render';
+import { renderPages } from '../../src/render/engine-render';
 import { loadFixture, SIMPLE_PDF } from '../helpers';
 
 // ── Pre-conditions (resolved synchronously — it.runIf is evaluated at
@@ -182,7 +182,7 @@ describe('tsvWordToPdfPlacement', () => {
   });
 });
 
-// ── makeSearchablePdf — no-op path (no tesseract required) ───────────────────
+// ── makeSearchablePdf — no-op path (no OCR binary required) ──────────────────
 
 describe('makeSearchablePdf — pages with existing text', () => {
   it('returns the original bytes untouched when every page already has text', async () => {
@@ -194,7 +194,7 @@ describe('makeSearchablePdf — pages with existing text', () => {
   });
 });
 
-// ── makeSearchablePdf — live tesseract round-trip ────────────────────────────
+// ── makeSearchablePdf — live OCR round-trip ──────────────────────────────────
 
 describe('makeSearchablePdf — live OCR (tesseract)', () => {
   it.runIf(tesseractAvailable && samplePdfPath !== null)(
@@ -213,13 +213,18 @@ describe('makeSearchablePdf — live OCR (tesseract)', () => {
       const page1 = rendered[0];
       expect(page1).toBeDefined();
 
-      const rasterDoc = await PDFDocument.create();
-      const png = await rasterDoc.embedPng(page1!.bytes);
       const widthPt = page1!.width / 2;
       const heightPt = page1!.height / 2;
-      const rasterPage = rasterDoc.addPage([widthPt, heightPt]);
-      rasterPage.drawImage(png, { x: 0, y: 0, width: widthPt, height: heightPt });
-      const rasterBytes = new Uint8Array(await rasterDoc.save());
+      // Build an image-only PDF natively: a fresh blank page at the target size
+      // holding just the rendered PNG, with the seed text page dropped → zero
+      // extractable text.
+      const giga = await getEngine();
+      const rasterDoc = giga.open(giga.txtToPdf('seed'));
+      rasterDoc.addPage(widthPt, heightPt, 1);
+      rasterDoc.addImage(2, page1!.bytes, 0, 0, widthPt, heightPt, 1);
+      rasterDoc.deletePage(1);
+      const rasterBytes = rasterDoc.save();
+      rasterDoc.close();
 
       // Sanity: no extractable text before OCR.
       const before = await extractPlainText(rasterBytes);
@@ -230,7 +235,7 @@ describe('makeSearchablePdf — live OCR (tesseract)', () => {
       expect(result.wordsAdded).toBeGreaterThan(0);
       expect(result.bytes.byteLength).toBeGreaterThan(0);
 
-      // The invisible layer must now be extractable by MuPDF.
+      // The invisible layer must now be extractable by the engine.
       const after = await extractPlainText(result.bytes);
       const text = (after[0]?.text ?? '').trim();
       expect(text.length).toBeGreaterThan(0);

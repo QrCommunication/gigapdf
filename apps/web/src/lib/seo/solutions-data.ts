@@ -41,14 +41,14 @@ export const SOLUTIONS: SolutionData[] = [
     h1: "L'outil PDF des avocats : caviarder, signer, archiver en confiance",
     intro: [
       "Le scandale est documenté et récurrent : des conclusions et des pièces « caviardées » au rectangle noir dont le texte réapparaît d'un simple copier-coller, parce que l'outil a dessiné un masque par-dessus au lieu de supprimer le contenu. Pour un cabinet, c'est la violation du secret professionnel en un clic. La première exigence d'un outil PDF pour avocat est là : que la suppression soit une suppression.",
-      "GigaPDF applique une redaction réelle, portée par le moteur MuPDF : les opérateurs de texte situés dans la zone caviardée sont physiquement retirés du flux de contenu du fichier. Après traitement, le texte n'existe plus — ni au copier-coller, ni à l'extraction, ni dans les métadonnées de la zone. À cela s'ajoutent les trois autres piliers du document juridique : la signature numérique PKCS#7 avec votre propre certificat P12 (intégrité prouvable, identité vérifiable), l'archivage conforme PDF/A-1b et 2b, et le chiffrement AES-256 pour les pièces qui circulent.",
-      "Reste la question que tout cabinet doit poser à son prestataire : où vont les documents ? GigaPDF y répond par construction — code open source AGPL auditable, et auto-hébergement complet : l'instance tourne sur le serveur du cabinet, les dossiers clients ne transitent par aucun cloud tiers. Le plan gratuit inclut l'intégralité des fonctions, 5 Go et 100 documents.",
+      "GigaPDF applique une redaction réelle, portée par le moteur PDF maison de GigaPDF : les opérateurs de texte situés dans la zone caviardée sont physiquement retirés du flux de contenu du fichier. Après traitement, le texte n'existe plus — ni au copier-coller, ni à l'extraction, ni dans les métadonnées de la zone. À cela s'ajoutent les trois autres piliers du document juridique : la signature numérique PKCS#7 avec votre propre certificat P12 (intégrité prouvable, identité vérifiable), l'archivage conforme PDF/A-1b et 2b, et le chiffrement AES-256 pour les pièces qui circulent.",
+      "Reste la question que tout cabinet doit poser à son prestataire : où vont les documents ? GigaPDF y répond par construction — code open source auditable, et auto-hébergement complet : l'instance tourne sur le serveur du cabinet, les dossiers clients ne transitent par aucun cloud tiers. Le plan gratuit inclut l'intégralité des fonctions, 5 Go et 100 documents.",
     ],
     workflows: [
       {
         title: "Caviarder une pièce avant communication",
         description:
-          "Ouvrez la pièce dans l'éditeur, tracez les zones à occulter sur les passages couverts par le secret, appliquez : MuPDF supprime le texte du fichier lui-même. Vérifiez en tentant un copier-coller sur la zone — il ne rend plus rien — puis communiquez la pièce caviardée, l'original restant intact dans votre espace avec son historique de versions.",
+          "Ouvrez la pièce dans l'éditeur, tracez les zones à occulter sur les passages couverts par le secret, appliquez : le moteur maison supprime le texte du fichier lui-même. Vérifiez en tentant un copier-coller sur la zone — il ne rend plus rien — puis communiquez la pièce caviardée, l'original restant intact dans votre espace avec son historique de versions.",
       },
       {
         title: "Signer des conclusions avec votre certificat",
@@ -67,18 +67,18 @@ export const SOLUTIONS: SolutionData[] = [
       },
     ],
     capabilities: [
-      "Caviardage réel MuPDF : le texte est supprimé du fichier, pas masqué",
+      "Caviardage réel du moteur maison : le texte est supprimé du fichier, pas masqué",
       "Signature numérique PKCS#7 avec certificat P12/PFX du cabinet",
       "Archivage conforme PDF/A-1b et PDF/A-2b (ISO 19005)",
       "Chiffrement AES-256 et permissions d'impression, copie, modification",
       "OCR français + anglais et recherche plein texte sur les pièces scannées",
-      "Auto-hébergement AGPL : les dossiers clients restent sur vos serveurs",
+      "Auto-hébergement source-available : les dossiers clients restent sur vos serveurs",
     ],
     faq: [
       {
         question: "Comment vérifier que le caviardage a réellement supprimé le texte ?",
         answer:
-          "Faites le test qui piège les mauvais outils : sélectionnez la zone caviardée et tentez un copier-coller, ou lancez une recherche sur un mot occulté. Avec la redaction MuPDF de GigaPDF, rien ne ressort — les opérateurs de texte ont été retirés du flux de contenu, le mot n'existe plus dans le fichier.",
+          "Faites le test qui piège les mauvais outils : sélectionnez la zone caviardée et tentez un copier-coller, ou lancez une recherche sur un mot occulté. Avec le caviardage réel du moteur maison de GigaPDF, rien ne ressort — les opérateurs de texte ont été retirés du flux de contenu, le mot n'existe plus dans le fichier.",
       },
       {
         question: "La signature PKCS#7 de GigaPDF a-t-elle une valeur probante ?",
@@ -88,7 +88,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Peut-on installer GigaPDF sur le serveur du cabinet ?",
         answer:
-          "Oui, intégralement : GigaPDF est open source sous licence AGPL et conçu pour l'auto-hébergement. Édition, caviardage, signature, OCR et GED tournent alors sur votre infrastructure — aucune pièce ne quitte le cabinet, ce qui simplifie considérablement l'analyse de conformité au secret professionnel et au RGPD.",
+          "Oui, intégralement : GigaPDF est open source, source-available sous licence PolyForm Noncommercial, et conçu pour l'auto-hébergement. Édition, caviardage, signature, OCR et GED tournent alors sur votre infrastructure — aucune pièce ne quitte le cabinet, ce qui simplifie considérablement l'analyse de conformité au secret professionnel et au RGPD.",
       },
       {
         question: "Comment retrouver une pièce précise dans des centaines de documents ?",
@@ -108,8 +108,8 @@ export const SOLUTIONS: SolutionData[] = [
     h1: "Experts-comptables : domptez le flux de pièces de vos clients",
     intro: [
       "Le quotidien d'un cabinet comptable, ce sont des pièces qui arrivent dans tous les états : factures photographiées au téléphone, relevés scannés de travers, liasses PDF de quarante pages mélangeant exercices et fournisseurs, tickets illisibles. Avant même la saisie, il y a un travail ingrat de tri, de découpe et de remise en ordre — et chaque pièce introuvable au moment du contrôle coûte des heures.",
-      "GigaPDF outille précisément cette couche documentaire. L'OCR Tesseract (français + anglais) rend les factures scannées exploitables : montants, numéros et mentions deviennent du texte cherchable, indexé par la recherche plein texte de la GED. La division découpe les liasses en pièces unitaires, la fusion reconstitue des dossiers par exercice ou par client, et les tags croisent les classements — un même document visible sous « Client X », « 2025 » et « TVA » sans duplication.",
-      "Tout est inclus dans le plan gratuit — 5 Go, 100 documents, 1 000 appels API mensuels pour automatiser les flux récurrents — et le cabinet qui veut garder les données comptables de ses clients hors de tout cloud tiers installe GigaPDF sur son propre serveur : le code est open source sous licence AGPL.",
+      "GigaPDF outille précisément cette couche documentaire. L'OCR maison (français + anglais) rend les factures scannées exploitables : montants, numéros et mentions deviennent du texte cherchable, indexé par la recherche plein texte de la GED. La division découpe les liasses en pièces unitaires, la fusion reconstitue des dossiers par exercice ou par client, et les tags croisent les classements — un même document visible sous « Client X », « 2025 » et « TVA » sans duplication.",
+      "Tout est inclus dans le plan gratuit — 5 Go, 100 documents, 1 000 appels API mensuels pour automatiser les flux récurrents — et le cabinet qui veut garder les données comptables de ses clients hors de tout cloud tiers installe GigaPDF sur son propre serveur : le code est open source, source-available sous licence PolyForm Noncommercial.",
     ],
     workflows: [
       {
@@ -134,7 +134,7 @@ export const SOLUTIONS: SolutionData[] = [
       },
     ],
     capabilities: [
-      "OCR Tesseract des factures et relevés scannés, accents français compris",
+      "OCR maison des factures et relevés scannés, accents français compris",
       "Recherche plein texte sur le contenu des pièces, pas seulement les noms de fichiers",
       "Division des liasses et fusion de dossiers sans recompression",
       "Tags croisés par client, exercice et nature de pièce",
@@ -145,7 +145,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "L'OCR lit-il correctement les factures françaises ?",
         answer:
-          "Oui : le moteur Tesseract de GigaPDF est configuré avec le modèle français (en plus de l'anglais), donc accents, cédilles et mentions légales sont correctement reconnus sur les documents imprimés nets. Les tickets froissés ou photographiés en biais restent le cas difficile de tout OCR — numérisez à plat quand l'enjeu le justifie.",
+          "Oui : le moteur OCR maison de GigaPDF est configuré avec le modèle français (en plus de l'anglais), donc accents, cédilles et mentions légales sont correctement reconnus sur les documents imprimés nets. Les tickets froissés ou photographiés en biais restent le cas difficile de tout OCR — numérisez à plat quand l'enjeu le justifie.",
       },
       {
         question: "Comment organiser les pièces de dizaines de clients sans tout dupliquer ?",
@@ -227,7 +227,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Peut-on éviter que les documents RH partent dans un cloud américain ?",
         answer:
-          "Oui, radicalement : GigaPDF est open source (AGPL) et s'installe sur vos propres serveurs. Conversion, signature, chiffrement et GED fonctionnent alors en circuit fermé sur votre infrastructure — un argument décisif dans les analyses d'impact et les échanges avec votre DPO.",
+          "Oui, radicalement : GigaPDF est open source (source-available) et s'installe sur vos propres serveurs. Conversion, signature, chiffrement et GED fonctionnent alors en circuit fermé sur votre infrastructure — un argument décisif dans les analyses d'impact et les échanges avec votre DPO.",
       },
     ],
     relatedTools: ["signer-pdf", "formulaires-pdf", "proteger-pdf", "word-vers-pdf", "editer-pdf"],
@@ -289,7 +289,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Les dossiers de candidature dépassent la taille acceptée par ma messagerie : que faire ?",
         answer:
-          "Deux outils règlent le problème : la compression MuPDF, qui nettoie les scans volumineux sans en dégrader la lisibilité, et surtout le partage par lien, qui remplace la pièce jointe — le destinataire consulte le dossier en ligne, vous gardez la main sur l'accès.",
+          "Deux outils règlent le problème : la compression du moteur maison, qui nettoie les scans volumineux sans en dégrader la lisibilité, et surtout le partage par lien, qui remplace la pièce jointe — le destinataire consulte le dossier en ligne, vous gardez la main sur l'accès.",
       },
       {
         question: "Comment prouver qu'un document n'a pas été modifié après signature ?",
@@ -309,7 +309,7 @@ export const SOLUTIONS: SolutionData[] = [
     h1: "Santé : des documents chiffrés, une plateforme souveraine",
     intro: [
       "Les données de santé sont les plus protégées du droit européen, et pour cause : un compte rendu, une ordonnance ou un résultat d'analyse qui fuite ne se « réinitialise » pas comme un mot de passe. Pour un cabinet, un centre de santé ou un établissement, chaque outil numérique qui touche un document patient est une question de conformité — et les services PDF grand public, qui font transiter les fichiers par des serveurs dont on ignore tout, sont précisément ce qu'il faut éviter.",
-      "GigaPDF a deux réponses structurelles. La première : le chiffrement AES-256 au niveau du document — un compte rendu chiffré est illisible sans son mot de passe, sur la messagerie comme sur la clé USB égarée, et les permissions PDF restreignent en complément impression et copie. La seconde, plus radicale : l'auto-hébergement. Le code étant open source sous licence AGPL, l'instance complète — édition, OCR, GED, partage — s'installe sur l'infrastructure de la structure de soins, et les documents patients ne quittent jamais son périmètre.",
+      "GigaPDF a deux réponses structurelles. La première : le chiffrement AES-256 au niveau du document — un compte rendu chiffré est illisible sans son mot de passe, sur la messagerie comme sur la clé USB égarée, et les permissions PDF restreignent en complément impression et copie. La seconde, plus radicale : l'auto-hébergement. Le code étant open source, source-available sous licence PolyForm Noncommercial, l'instance complète — édition, OCR, GED, partage — s'installe sur l'infrastructure de la structure de soins, et les documents patients ne quittent jamais son périmètre.",
       "Au quotidien, la plateforme fluidifie le travail documentaire : OCR des courriers et comptes rendus papier pour les rendre cherchables, fusion des pièces d'un dossier patient, formulaires de consentement remplis en ligne et aplatis, archivage PDF/A des documents à conservation longue. Toutes les fonctions sont incluses dans le plan gratuit.",
     ],
     workflows: [
@@ -331,13 +331,13 @@ export const SOLUTIONS: SolutionData[] = [
       {
         title: "Déployer une instance souveraine",
         description:
-          "Installez GigaPDF sur les serveurs de la structure : l'intégralité des traitements — édition, OCR, chiffrement, GED, partage interne — s'exécute dans votre périmètre. Le code AGPL est auditable par votre prestataire ou votre RSSI, et aucun document patient ne transite par un cloud tiers.",
+          "Installez GigaPDF sur les serveurs de la structure : l'intégralité des traitements — édition, OCR, chiffrement, GED, partage interne — s'exécute dans votre périmètre. Le code source est auditable par votre prestataire ou votre RSSI, et aucun document patient ne transite par un cloud tiers.",
       },
     ],
     capabilities: [
       "Chiffrement AES-256 des documents médicaux et permissions granulaires",
       "Auto-hébergement complet : les données patients restent dans votre périmètre",
-      "Code open source AGPL auditable par votre RSSI ou prestataire",
+      "Code open source auditable par votre RSSI ou prestataire",
       "OCR et calque cherchable pour les archives papier numérisées",
       "Formulaires de consentement remplis en ligne puis aplatis",
       "Archivage PDF/A des documents à conservation longue durée",
@@ -346,7 +346,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "GigaPDF est-il adapté aux exigences pesant sur les données de santé ?",
         answer:
-          "L'architecture le permet : en auto-hébergement, les documents ne quittent pas votre infrastructure, ce qui élimine la question du transfert vers des tiers ; le chiffrement AES-256 protège les documents en circulation ; le code AGPL est auditable. La conformité globale (hébergement HDS le cas échéant, politiques d'accès, traçabilité) reste celle de votre infrastructure et de votre organisation — GigaPDF s'y insère sans imposer de cloud externe.",
+          "L'architecture le permet : en auto-hébergement, les documents ne quittent pas votre infrastructure, ce qui élimine la question du transfert vers des tiers ; le chiffrement AES-256 protège les documents en circulation ; le code source est auditable. La conformité globale (hébergement HDS le cas échéant, politiques d'accès, traçabilité) reste celle de votre infrastructure et de votre organisation — GigaPDF s'y insère sans imposer de cloud externe.",
       },
       {
         question: "Pourquoi chiffrer le PDF lui-même plutôt que compter sur la messagerie sécurisée ?",
@@ -356,7 +356,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "L'OCR peut-il traiter des comptes rendus médicaux scannés ?",
         answer:
-          "Oui pour les documents dactylographiés : Tesseract reconnaît le texte imprimé en français et en anglais, et le calque cherchable rend l'archive interrogeable sans altérer son apparence. Les mentions manuscrites — fréquentes sur les anciens dossiers — ne sont en revanche pas reconnues : c'est une limite de l'OCR, pas un défaut de numérisation.",
+          "Oui pour les documents dactylographiés : le moteur OCR reconnaît le texte imprimé en français et en anglais, et le calque cherchable rend l'archive interrogeable sans altérer son apparence. Les mentions manuscrites — fréquentes sur les anciens dossiers — ne sont en revanche pas reconnues : c'est une limite de l'OCR, pas un défaut de numérisation.",
       },
       {
         question: "Que devient un document supprimé par erreur ?",
@@ -377,7 +377,7 @@ export const SOLUTIONS: SolutionData[] = [
     intro: [
       "La vie étudiante tourne autour du PDF : polycopiés à annoter, articles à surligner pour le mémoire, rapports à rendre dans un format imposé, dossiers de candidature à assembler — le tout avec un budget logiciel égal à zéro. Les outils « gratuits » du marché l'ont bien compris, qui plafonnent les opérations à deux par jour ou tamponnent leur publicité sur les devoirs rendus.",
       "GigaPDF prend le contre-pied : toutes les fonctions sont incluses dans le plan gratuit — 5 Go de stockage, 100 documents — sans filigrane ajouté ni compteur d'opérations. Surlignez et annotez vos cours dans le navigateur, sur n'importe quelle machine, y compris celles de la bibliothèque universitaire : il n'y a rien à installer. Convertissez votre mémoire Word en PDF impeccable avant le dépôt, compressez le rapport de stage gorgé de captures d'écran sous la limite de la plateforme de rendu, fusionnez CV, lettre et relevés en un dossier de candidature unique.",
-      "Et parce que GigaPDF est open source (AGPL), c'est aussi un objet d'étude : le code de l'éditeur, du moteur PDF et de la GED est public. Les étudiants en informatique peuvent regarder sous le capot — voire contribuer, ce qui fait toujours bien sur un CV.",
+      "Et parce que GigaPDF est open source (source-available), c'est aussi un objet d'étude : le code de l'éditeur, du moteur PDF et de la GED est public. Les étudiants en informatique peuvent regarder sous le capot — voire contribuer, ce qui fait toujours bien sur un CV.",
     ],
     workflows: [
       {
@@ -388,7 +388,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         title: "Rendre un devoir au bon format",
         description:
-          "Convertissez le devoir rédigé sous Word ou LibreOffice (.docx, .odt) en PDF : la mise en page est figée, identique chez le correcteur. Si la plateforme de rendu limite la taille, la compression MuPDF allège le fichier sans dégrader le texte. Aucun filigrane publicitaire ne s'invite sur votre copie.",
+          "Convertissez le devoir rédigé sous Word ou une suite OpenDocument (.docx, .odt) en PDF : la mise en page est figée, identique chez le correcteur. Si la plateforme de rendu limite la taille, la compression du moteur maison allège le fichier sans dégrader le texte. Aucun filigrane publicitaire ne s'invite sur votre copie.",
       },
       {
         title: "Assembler un dossier de candidature",
@@ -404,8 +404,8 @@ export const SOLUTIONS: SolutionData[] = [
     capabilities: [
       "Toutes les fonctions gratuites : 5 Go, 100 documents, sans filigrane ni compteur",
       "Annotations natives : surlignage, notes, dessins, lisibles partout",
-      "Conversion Word, LibreOffice, Excel et PowerPoint vers PDF",
-      "Compression MuPDF pour passer sous les limites des plateformes de rendu",
+      "Conversion Word, OpenDocument, Excel et PowerPoint vers PDF",
+      "Compression du moteur maison pour passer sous les limites des plateformes de rendu",
       "Fusion et organisation de dossiers de candidature",
       "Collaboration en temps réel sur les travaux de groupe",
     ],
@@ -423,7 +423,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Comment réduire un rapport de stage trop lourd pour la plateforme de dépôt ?",
         answer:
-          "Lancez la compression : le moteur MuPDF purge les données structurelles inutiles et linéarise le fichier. Sur un rapport bourré de captures d'écran et passé par plusieurs exports successifs, le gain est souvent décisif — et le texte reste parfaitement net, contrairement aux compresseurs qui pixellisent tout.",
+          "Lancez la compression : le moteur maison purge les données structurelles inutiles et linéarise le fichier. Sur un rapport bourré de captures d'écran et passé par plusieurs exports successifs, le gain est souvent décisif — et le texte reste parfaitement net, contrairement aux compresseurs qui pixellisent tout.",
       },
       {
         question: "Mes annotations seront-elles visibles dans le lecteur PDF de mon correcteur ?",
@@ -443,14 +443,14 @@ export const SOLUTIONS: SolutionData[] = [
     h1: "Enseignants et formateurs : maîtrisez vos supports de cours",
     intro: [
       "Préparer un cours, c'est faire de l'assemblage documentaire : un chapitre de manuel scanné, trois exercices piochés dans des fichiers différents, une fiche rédigée sous Word, deux pages d'annales — et il faut en faire un support cohérent, paginé, diffusable. Puis viennent les copies à corriger, les sujets à protéger de la circulation prématurée, et les supports à décliner en version élève et version corrigée.",
-      "GigaPDF traite cette chaîne de bout en bout. La fusion assemble les sources hétérogènes en un support unique — les conversions Word, PowerPoint et LibreOffice se faisant au passage —, la vue miniatures réordonne les pages, et la division extrait la version élève (énoncés seuls) de la version complète (avec corrigés). Le filigrane marque les sujets d'examen « CONFIDENTIEL — NE PAS DIFFUSER » ou appose le nom de votre organisme sur les supports qui circulent.",
+      "GigaPDF traite cette chaîne de bout en bout. La fusion assemble les sources hétérogènes en un support unique — les conversions Word, PowerPoint et OpenDocument se faisant au passage —, la vue miniatures réordonne les pages, et la division extrait la version élève (énoncés seuls) de la version complète (avec corrigés). Le filigrane marque les sujets d'examen « CONFIDENTIEL — NE PAS DIFFUSER » ou appose le nom de votre organisme sur les supports qui circulent.",
       "Pour la correction, les annotations natives remplacent le stylo rouge : surlignage, remarques en marge, appréciations — directement sur la copie PDF, lisibles dans n'importe quel lecteur côté élève. Le tout gratuitement, et les formateurs indépendants soumis à des exigences de traçabilité peuvent archiver leurs livrables en PDF/A et les signer numériquement.",
     ],
     workflows: [
       {
         title: "Composer un support de cours multi-sources",
         description:
-          "Convertissez vos fichiers Word, PowerPoint et LibreOffice en PDF, fusionnez-les avec les pages scannées du manuel, réordonnez l'ensemble sur la planche de miniatures et compressez le support final pour l'ENT ou la plateforme de formation. Un seul fichier propre, paginé en continu, à jour dans votre GED avec ses versions.",
+          "Convertissez vos fichiers Word, PowerPoint et OpenDocument en PDF, fusionnez-les avec les pages scannées du manuel, réordonnez l'ensemble sur la planche de miniatures et compressez le support final pour l'ENT ou la plateforme de formation. Un seul fichier propre, paginé en continu, à jour dans votre GED avec ses versions.",
       },
       {
         title: "Corriger des copies numériques",
@@ -469,7 +469,7 @@ export const SOLUTIONS: SolutionData[] = [
       },
     ],
     capabilities: [
-      "Fusion de sources hétérogènes (Word, PowerPoint, LibreOffice, scans) en supports uniques",
+      "Fusion de sources hétérogènes (Word, PowerPoint, OpenDocument, scans) en supports uniques",
       "Annotations natives pour la correction de copies, lisibles dans tout lecteur",
       "Filigrane texte ou logo sur sujets et supports diffusés",
       "Division énoncés / corrigés depuis un document maître",
@@ -480,7 +480,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Comment assembler un support à partir de fichiers de formats différents ?",
         answer:
-          "Importez tout dans GigaPDF : les .docx, .pptx, .odt et .odp sont convertis en PDF par LibreOffice côté serveur, les scans arrivent tels quels. Fusionnez ensuite l'ensemble dans l'ordre voulu — la vue miniatures permet d'affiner page par page. Le support final est un PDF unique, homogène et paginé.",
+          "Importez tout dans GigaPDF : les .docx, .pptx, .odt et .odp sont convertis en PDF par le moteur maison côté serveur, les scans arrivent tels quels. Fusionnez ensuite l'ensemble dans l'ordre voulu — la vue miniatures permet d'affiner page par page. Le support final est un PDF unique, homogène et paginé.",
       },
       {
         question: "Puis-je corriger des copies sans imprimer ?",
@@ -511,13 +511,13 @@ export const SOLUTIONS: SolutionData[] = [
     intro: [
       "Être indépendant, c'est être son propre service administratif : devis à envoyer dans l'heure, factures à figer proprement, livrables à marquer de son identité, contrats à faire signer — avec des outils qu'on paie de sa poche. Chaque abonnement logiciel se soustrait directement du revenu, et les solutions PDF « freemium » qui tamponnent leur propre publicité sur vos documents clients renvoient une image exactement inverse de celle qu'on cherche à construire.",
       "GigaPDF aligne les fonctions dont un indépendant a réellement besoin, gratuitement et sans filigrane imposé. Vos devis et factures composés sous Word ou Excel se convertissent en PDF impeccables — valeurs figées, formules invisibles. Vos livrables partent avec votre logo en filigrane discret et, pour les versions de travail, un marquage BROUILLON qui évite qu'une maquette non validée soit prise pour définitive. Vos contrats de prestation se signent numériquement en PKCS#7 — une vraie signature vérifiable, pas une image collée.",
-      "Pour les profils techniques, l'API (1 000 appels mensuels inclus) automatise la production documentaire : génération de factures PDF depuis vos gabarits HTML rendus par Chromium, conversion à la volée, archivage. Et la GED tient lieu de classement : un dossier par client, des tags par statut, la recherche plein texte qui retrouve n'importe quelle clause.",
+      "Pour les profils techniques, l'API (1 000 appels mensuels inclus) automatise la production documentaire : génération de factures PDF depuis vos gabarits HTML rendus par le moteur maison, conversion à la volée, archivage. Et la GED tient lieu de classement : un dossier par client, des tags par statut, la recherche plein texte qui retrouve n'importe quelle clause.",
     ],
     workflows: [
       {
         title: "Produire devis et factures impeccables",
         description:
-          "Composez le devis sous Word ou le récapitulatif sous Excel, convertissez en PDF — mise en page figée, formules masquées —, puis protégez le fichier contre la modification avant l'envoi. Pour les flux réguliers, générez directement les factures en HTML via l'API : rendu Chromium fidèle à votre gabarit, à chaque fois.",
+          "Composez le devis sous Word ou le récapitulatif sous Excel, convertissez en PDF — mise en page figée, formules masquées —, puis protégez le fichier contre la modification avant l'envoi. Pour les flux réguliers, générez directement les factures en HTML via l'API : rendu maison fidèle à votre gabarit, à chaque fois.",
       },
       {
         title: "Livrer des documents à votre marque",
@@ -539,7 +539,7 @@ export const SOLUTIONS: SolutionData[] = [
       "Conversion Word, Excel et PowerPoint vers PDF sans filigrane imposé",
       "Filigrane à votre marque : logo, opacité et position réglables",
       "Signature numérique PKCS#7 des contrats avec votre certificat",
-      "Génération automatisée de factures via l'API et le rendu HTML Chromium",
+      "Génération automatisée de factures via l'API et le rendu HTML maison",
       "GED par client : dossiers, tags, recherche plein texte, versions",
       "OCR des justificatifs scannés pour la comptabilité",
     ],
@@ -552,7 +552,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Puis-je automatiser ma facturation sans payer un SaaS dédié ?",
         answer:
-          "Si vous savez produire du HTML, oui : construisez votre gabarit de facture (votre CSS, votre identité), envoyez-le à l'API GigaPDF qui le rend en PDF via Chromium, et archivez le résultat dans la GED. Le plan gratuit inclut 1 000 appels API par mois — largement de quoi couvrir la facturation d'une activité indépendante.",
+          "Si vous savez produire du HTML, oui : construisez votre gabarit de facture (votre CSS, votre identité), envoyez-le à l'API GigaPDF qui le rend en PDF avec son moteur maison, et archivez le résultat dans la GED. Le plan gratuit inclut 1 000 appels API par mois — largement de quoi couvrir la facturation d'une activité indépendante.",
       },
       {
         question: "La signature numérique me protège-t-elle en cas de litige client ?",
@@ -578,7 +578,7 @@ export const SOLUTIONS: SolutionData[] = [
     intro: [
       "Une association produit une paperasse de PME avec un budget de tirelire : dossiers de subvention à assembler pièce par pièce, procès-verbaux d'assemblée générale à faire approuver et archiver, convocations à diffuser, adhésions à collecter — le tout porté par des bénévoles qui changent, travaillent depuis leur propre ordinateur et n'ont ni licence Acrobat ni serveur de fichiers.",
       "GigaPDF correspond trait pour trait à cette situation, par philosophie autant que par fonctions : le plan gratuit inclut toutes les capacités — pas une version de démonstration — avec 5 Go et 100 documents, de quoi couvrir la vie documentaire d'une association. La fusion assemble les dossiers de subvention (statuts, budget, RIB, comptes rendus d'activité) en liasses uniques conformes aux attentes des financeurs ; les PV se signent numériquement ; les formulaires d'adhésion se remplissent en ligne ; et le partage par lien diffuse les documents au bureau sans pièce jointe.",
-      "La collaboration en temps réel permet de préparer un dossier à plusieurs bénévoles, chacun depuis chez soi, sur le même document. Et l'alignement va jusqu'à la licence : GigaPDF est un projet open source AGPL — un commun numérique, qu'une association équipée peut même héberger elle-même.",
+      "La collaboration en temps réel permet de préparer un dossier à plusieurs bénévoles, chacun depuis chez soi, sur le même document. Et l'alignement va jusqu'à la licence : GigaPDF est un projet open source, source-available — auditable et auto-hébergeable, qu'une association équipée peut même héberger elle-même.",
     ],
     workflows: [
       {
@@ -608,7 +608,7 @@ export const SOLUTIONS: SolutionData[] = [
       "Signature numérique PKCS#7 des PV et documents officiels",
       "Formulaires d'adhésion remplissables en ligne puis aplatis",
       "Partage par lien et collaboration en temps réel entre bénévoles",
-      "Projet open source AGPL, auto-hébergeable par les associations équipées",
+      "Projet open source, source-available, auto-hébergeable par les associations équipées",
     ],
     faq: [
       {
@@ -644,7 +644,7 @@ export const SOLUTIONS: SolutionData[] = [
     h1: "Architectes et BTP : des plans annotés aux dossiers maîtrisés",
     intro: [
       "Les documents du bâtiment ont un gabarit à part : plans en grand format qui pèsent des dizaines de mégaoctets, dossiers de consultation des entreprises empilant CCTP, plans et annexes par centaines de pages, allers-retours de visa où chaque remarque doit être localisée précisément sur le plan — et des CCTP scannés d'anciens projets dont personne ne retrouve les prescriptions.",
-      "GigaPDF s'attaque à ces quatre douleurs. Les annotations natives portent le cycle de visa : remarques positionnées au millimètre sur le plan, nuages et flèches tracés à main levée, tampons de validation apposés via les annotations — le tout lisible par l'entreprise dans n'importe quelle visionneuse, et traçable par l'historique de versions à chaque indice. La compression MuPDF dégonfle les dossiers retravaillés et les rend transmissibles par les plateformes de marchés ; la rotation et la réorganisation remettent d'aplomb les liasses scannées mélangeant portrait et paysage.",
+      "GigaPDF s'attaque à ces quatre douleurs. Les annotations natives portent le cycle de visa : remarques positionnées au millimètre sur le plan, nuages et flèches tracés à main levée, tampons de validation apposés via les annotations — le tout lisible par l'entreprise dans n'importe quelle visionneuse, et traçable par l'historique de versions à chaque indice. La compression du moteur maison dégonfle les dossiers retravaillés et les rend transmissibles par les plateformes de marchés ; la rotation et la réorganisation remettent d'aplomb les liasses scannées mélangeant portrait et paysage.",
       "Quant aux archives papier, la chaîne OCR + calque cherchable les ressuscite : un CCTP scanné garde son apparence exacte — tampons et visas visibles — mais devient interrogeable en texte intégral. Rechercher une prescription dans dix ans de projets cesse d'être une expédition. L'ensemble est gratuit, et auto-hébergeable pour les agences qui veulent garder leurs projets en interne.",
     ],
     workflows: [
@@ -656,7 +656,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         title: "Assembler un DCE transmissible",
         description:
-          "Fusionnez CCTP, plans et annexes en dossiers ordonnés par lot, réorganisez les pages sur la planche de miniatures, puis compressez : la passe MuPDF élimine les données mortes accumulées par les exports successifs et linéarise le fichier pour la consultation en ligne. Le dossier passe les limites des plateformes de dématérialisation.",
+          "Fusionnez CCTP, plans et annexes en dossiers ordonnés par lot, réorganisez les pages sur la planche de miniatures, puis compressez : la passe de compression maison élimine les données mortes accumulées par les exports successifs et linéarise le fichier pour la consultation en ligne. Le dossier passe les limites des plateformes de dématérialisation.",
       },
       {
         title: "Rendre les archives projet cherchables",
@@ -671,7 +671,7 @@ export const SOLUTIONS: SolutionData[] = [
     ],
     capabilities: [
       "Annotations natives sur plans : remarques positionnées, tracés à main levée, tampons",
-      "Compression MuPDF des dossiers lourds et linéarisation pour la consultation en ligne",
+      "Compression du moteur maison des dossiers lourds et linéarisation pour la consultation en ligne",
       "OCR + calque cherchable : les pièces scannées deviennent interrogeables sans changer d'aspect",
       "Fusion, rotation et réorganisation des liasses DCE mixtes portrait/paysage",
       "Versions et tags par projet, lot et statut de diffusion",
@@ -681,7 +681,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "GigaPDF gère-t-il les plans en grand format ?",
         answer:
-          "Oui : le PDF n'impose pas de format de page, et les plans en A1 ou A0 s'ouvrent, s'annotent et se compressent comme les autres documents. Pour les dossiers volumineux, la compression MuPDF et le partage par lien — qui évite l'e-mail et ses limites — sont les deux outils qui changent le quotidien.",
+          "Oui : le PDF n'impose pas de format de page, et les plans en A1 ou A0 s'ouvrent, s'annotent et se compressent comme les autres documents. Pour les dossiers volumineux, la compression du moteur maison et le partage par lien — qui évite l'e-mail et ses limites — sont les deux outils qui changent le quotidien.",
       },
       {
         question: "Comment apposer un tampon de visa sur un plan ?",

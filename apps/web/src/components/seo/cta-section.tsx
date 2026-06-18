@@ -31,7 +31,7 @@ const COPY: Record<
     openEditor: "Ouvrir l'éditeur",
     ossTitle: "100 % open source, auto-hébergeable",
     ossBody:
-      "Code publié sous licence AGPL : auditez-le, contribuez, ou installez GigaPDF sur vos propres serveurs pour garder vos documents chez vous.",
+      "Code « source-available » sous licence PolyForm Noncommercial : auditez-le, contribuez, ou installez GigaPDF sur vos propres serveurs pour garder vos documents chez vous.",
     github: "Voir sur GitHub",
   },
   en: {
@@ -41,7 +41,7 @@ const COPY: Record<
     openEditor: "Open the editor",
     ossTitle: "100% open source, self-hostable",
     ossBody:
-      "The code is published under the AGPL license: audit it, contribute, or install GigaPDF on your own servers to keep your documents at home.",
+      "The code is source-available under the PolyForm Noncommercial license: audit it, contribute, or install GigaPDF on your own servers to keep your documents at home.",
     github: "View on GitHub",
   },
 };

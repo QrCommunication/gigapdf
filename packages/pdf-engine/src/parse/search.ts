@@ -1,15 +1,12 @@
 /**
- * Full-text search in a PDF via MuPDF.
+ * Full-text search in a PDF via the WASM engine (`@qrcommunication/gigapdf-lib`).
  *
- * MuPDF's `Page.search(needle, maxHits)` returns an array of quads
- * (4-corner bounding boxes in PDF user-space) for every match. Combined
- * with `StructuredText.search()` we get exact glyph quads instead of
- * approximated rectangles, ideal for frontend highlighting.
- *
- * The search is case-insensitive by default (MuPDF behaviour) and
- * supports Unicode normalisation (NFC/NFD identical hits).
+ * The engine returns, per match, the matched text and its bounding box in PDF
+ * user-space. We expose the same `SearchResult` shape used by the callers (one
+ * synthesized quad per match — the engine reports rectangles, not glyph quads).
  */
 
+import { getEngine } from '../wasm';
 import { engineLogger } from '../utils/logger';
 
 export interface SearchHit {
@@ -45,58 +42,42 @@ export async function searchPdf(
     return { needle, totalHits: 0, pagesSearched: 0, hits: [] };
   }
 
-  const mupdf = await import('mupdf');
-  const doc = mupdf.Document.openDocument(pdfBytes, 'application/pdf');
+  const giga = await getEngine();
+  const doc = giga.open(pdfBytes);
+  try {
+    const totalPages = doc.pageCount();
+    const allow = options.pages
+      ? new Set(options.pages.filter((p) => p >= 1 && p <= totalPages))
+      : null;
+    const maxHits = options.maxHitsPerPage ?? 500;
 
-  const totalPages = doc.countPages();
-  const targetPages = options.pages
-    ? options.pages.filter((p) => p >= 1 && p <= totalPages)
-    : Array.from({ length: totalPages }, (_, i) => i + 1);
-
-  const maxHits = options.maxHitsPerPage ?? 500;
-  const hits: SearchHit[] = [];
-
-  for (const pageNumber of targetPages) {
-    const page = doc.loadPage(pageNumber - 1);
-    const stext = page.toStructuredText();
-    const pageHits = stext.search(needle, maxHits);
-
-    for (let i = 0; i < pageHits.length; i++) {
-      const quads = pageHits[i]!;
-      // Aggregate bbox = enclosing rectangle of all quads in this match.
-      let minX = Infinity,
-        minY = Infinity,
-        maxX = -Infinity,
-        maxY = -Infinity;
-      for (const q of quads) {
-        for (let k = 0; k < 8; k += 2) {
-          const x = q[k]!;
-          const y = q[k + 1]!;
-          if (x < minX) minX = x;
-          if (y < minY) minY = y;
-          if (x > maxX) maxX = x;
-          if (y > maxY) maxY = y;
-        }
-      }
+    const perPage = new Map<number, number>();
+    const hits: SearchHit[] = [];
+    for (const m of doc.search(needle, true)) {
+      if (allow && !allow.has(m.page)) continue;
+      const matchIndex = perPage.get(m.page) ?? 0;
+      if (matchIndex >= maxHits) continue;
+      perPage.set(m.page, matchIndex + 1);
+      const x0 = m.x;
+      const y0 = m.y;
+      const x1 = m.x + m.w;
+      const y1 = m.y + m.h;
       hits.push({
-        pageNumber,
-        matchIndex: i,
-        quads,
-        bbox: [minX, minY, maxX, maxY],
+        pageNumber: m.page,
+        matchIndex,
+        quads: [[x0, y0, x1, y0, x1, y1, x0, y1]],
+        bbox: [x0, y0, x1, y1],
       });
     }
+
+    const pagesSearched = allow ? allow.size : totalPages;
+    engineLogger.info('search: full-text search complete', {
+      needle,
+      totalHits: hits.length,
+      pagesSearched,
+    });
+    return { needle, totalHits: hits.length, pagesSearched, hits };
+  } finally {
+    doc.close();
   }
-
-  engineLogger.info('search: full-text search complete', {
-    needle,
-    totalHits: hits.length,
-    pagesSearched: targetPages.length,
-  });
-
-  return {
-    needle,
-    totalHits: hits.length,
-    pagesSearched: targetPages.length,
-    hits,
-  };
 }

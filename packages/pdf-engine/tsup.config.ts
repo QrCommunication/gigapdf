@@ -18,9 +18,6 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   external: [
-    'canvas',       // Native addon, must not be bundled
-    'sharp',        // Native addon, must not be bundled
-    'playwright',   // Binary, must not be bundled
     // node-forge is CJS with top-level `require('crypto')` calls. Inlining
     // it into the ESM build turns those into esbuild `__require()` shims
     // that throw under Node ESM and under Turbopack ("dynamic usage of

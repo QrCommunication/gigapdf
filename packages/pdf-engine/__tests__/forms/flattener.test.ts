@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { loadFixture, WITH_FORMS_PDF, SIMPLE_PDF } from '../helpers';
 import { flattenForm } from '../../src/forms/flattener';
 import { getFormFields } from '../../src/forms/reader';
-import { PDFDocument } from 'pdf-lib';
+import { openDocument, closeDocument } from '../../src/engine/document-handle';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -25,11 +25,13 @@ describe('flattenForm', () => {
     expect(result.length).toBeGreaterThan(0);
   });
 
-  it('produces a valid PDF (loadable by pdf-lib)', async () => {
+  it('produces a valid PDF (loadable by the engine)', async () => {
     const source = makeBuffer(WITH_FORMS_PDF);
     const result = await flattenForm(source);
 
-    await expect(PDFDocument.load(result, { ignoreEncryption: true })).resolves.toBeDefined();
+    const handle = await openDocument(new Uint8Array(result));
+    expect(handle.pageCount).toBeGreaterThan(0);
+    closeDocument(handle);
   });
 
   it('removes all interactive form fields after flattening', async () => {

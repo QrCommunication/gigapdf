@@ -695,7 +695,7 @@ export const pdfService = {
   },
 
   /**
-   * Full-text search in a PDF via MuPDF. Returns a list of hits with
+   * Full-text search in a PDF via the engine. Returns a list of hits with
    * PDF user-space quads ready for frontend highlighting.
    */
   searchPdf: async (
@@ -825,8 +825,7 @@ export const pdfService = {
   },
 
   /**
-   * Run Tesseract OCR on each rasterised page. Requires `tesseract` to be
-   * installed on the server (verified by GET /api/pdf/ocr).
+   * Run OCR on each rasterised page (verified by GET /api/pdf/ocr).
    */
   ocrPdf: async (
     file: File | Blob,
@@ -861,7 +860,7 @@ export const pdfService = {
   },
 
   /**
-   * Check if Tesseract OCR is available on the server. Used by the UI to
+   * Check if OCR is available on the server. Used by the UI to
    * enable/disable the OCR button.
    */
   isOcrAvailable: async (): Promise<boolean> => {
@@ -875,7 +874,7 @@ export const pdfService = {
   },
 
   /**
-   * Compress a PDF (pdf-lib normalisation + MuPDF garbage=4/compress=yes).
+   * Compress a PDF (native normalisation + garbage collection / compression).
    * Returns the compressed binary plus the before/after sizes reported by
    * the route headers (X-Original-Size / X-Compressed-Size).
    */
