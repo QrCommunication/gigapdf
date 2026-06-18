@@ -5,6 +5,35 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-06-18
+
+### Added
+- New **`/engine`** page (fr + en, statically generated) presenting the in-house
+  PDF engine in detail: real content editing, rendering & rasterization, AcroForm
+  forms, annotations, RC4/AES encryption + PKCS#7 digital signatures, Type0/CID
+  fonts with automatic Google Fonts embedding, a native HTML/CSS→PDF renderer with
+  a built-in JavaScript engine, Office conversions (DOCX/XLSX/PPTX/ODT/ODS) and OCR.
+- SDK cookbook: the `@qrcommunication/gigapdf-lib` documentation gains task-oriented
+  recipes (merge, split, encrypt, sign, annotate, HTML→PDF with fonts, searchable
+  OCR, metadata & bookmarks).
+
+### Changed
+- **Core PDF processing now runs on the in-house Rust→WebAssembly engine.** Page
+  rendering, thumbnails, true redaction, compression, structured-text extraction,
+  search, metadata and the PDF↔Office/HTML conversions all go through
+  `@qrcommunication/gigapdf-lib` — no third-party PDF/Office/image runtime library.
+  The browser canvas renderer loads the engine WASM directly (`load(url)`).
+- Product and marketing copy updated to describe the home-made engine; internal
+  render/preview identifiers renamed for clarity (`engineRenderPage`,
+  `EngineRenderPageOptions`).
+
+### Fixed
+- Client bundle build: the engine's Node-only `loadDefault()` (`fs/promises` /
+  `url`) is now stubbed out of the **browser** bundle (the browser path uses
+  `GigaPdfEngine.load(url)` and never reaches it), unblocking `next build` for the
+  embed/editor canvas. The server keeps the real modules (engine stays
+  `serverExternalPackages`).
+
 ## [1.5.0] - 2026-06-14
 
 ### Added

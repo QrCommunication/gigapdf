@@ -1,10 +1,10 @@
 {
   "name": "giga-pdf",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "packageManager": "pnpm@10.28.0",
   "description": "Giga-PDF - WYSIWYG PDF Editing Platform",
-  "license": "AGPL-3.0-or-later",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "author": "QR Communication SAS <contact@qrcommunication.com>",
   "homepage": "https://github.com/QrCommunication/gigapdf#readme",
   "repository": {
@@ -91,7 +91,6 @@
       "axios@>=1.0.0 <1.16.0": ">=1.16.0",
       "uuid": ">=14.0.0",
       "pdfjs-dist": "5.7.284",
-      "sharp": "0.34.5",
       "better-auth@<1.4.9": ">=1.6.9",
       "postcss@<8.5.10": ">=8.5.10",
       "better-auth": ">=1.6.11",
@@ -115,7 +114,6 @@
       "canvas",
       "esbuild",
       "prisma",
-      "sharp",
       "unrs-resolver"
     ]
   },
