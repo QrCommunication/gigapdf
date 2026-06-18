@@ -86,15 +86,11 @@ function PageSlotImpl({
   onReady,
   onDispose,
 }: PageSlotProps) {
-  // Draggable margin guides only on the active page, once its margins are known.
-  // Restricted to un-rotated pages: the engine's margins refer to the page's own
-  // (un-rotated) box, so on a 90/180/270 page the sides wouldn't line up with the
-  // rendered sheet — better no guides than wrong ones.
+  // Draggable margin guides on the active page, once its margins are known.
+  // The guides map the engine's intrinsic (un-rotated) margins to/from screen
+  // space using the page rotation, so they work at any /Rotate.
   const showGuides =
-    isActive &&
-    margins != null &&
-    onMarginsCommit !== undefined &&
-    page.dimensions.rotation === 0;
+    isActive && margins != null && onMarginsCommit !== undefined;
   // Rulers anchor to the active page; convert its rotated box to displayed points.
   const showPageRulers = isActive && showRulers;
   const pts = effectivePagePoints(page);
@@ -144,6 +140,7 @@ function PageSlotImpl({
             height={slot.height}
             zoom={zoom}
             margins={margins}
+            rotation={page.dimensions.rotation}
             onCommit={(m) => onMarginsCommit(index, m)}
           />
         ) : null}

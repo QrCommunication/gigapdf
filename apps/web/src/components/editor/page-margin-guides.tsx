@@ -19,22 +19,28 @@
  * `pointer-events-none`), so they never steal clicks from the page body.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PageMargins } from "./lib/page-margins";
+import {
+  screenMarginsFromPage,
+  pageMarginsFromScreen,
+} from "./lib/margin-rotation";
 
-/** Which side a guide controls. */
+/** Which side a guide controls (on the displayed sheet). */
 type Side = "top" | "right" | "bottom" | "left";
 
 export interface PageMarginGuidesProps {
-  /** Rendered page width in CSS px (pageWidthPts × zoom). */
+  /** Rendered (displayed) page width in CSS px. */
   width: number;
-  /** Rendered page height in CSS px (pageHeightPts × zoom). */
+  /** Rendered (displayed) page height in CSS px. */
   height: number;
   /** Current zoom factor (1 = 100%): points ↔ px. */
   zoom: number;
-  /** Current margins in PDF points. */
+  /** Current margins in PDF points, on the page's intrinsic (un-rotated) box. */
   margins: PageMargins;
-  /** Commit new margins (PDF points) when a guide is dropped. */
+  /** Page `/Rotate` (CW). Margins are mapped to/from screen space accordingly. */
+  rotation?: number;
+  /** Commit new margins (PDF points, intrinsic box) when a guide is dropped. */
   onCommit: (margins: PageMargins) => void;
 }
 
@@ -69,9 +75,19 @@ export function PageMarginGuides({
   height,
   zoom,
   margins,
+  rotation = 0,
   onCommit,
 }: PageMarginGuidesProps) {
-  const [px, setPx] = useState<GuidePx>(() => marginsToPx(margins, zoom, width, height));
+  // Guides work in SCREEN space (the displayed sheet's edges). Map the page's
+  // intrinsic margins into screen space for display; the inverse runs on commit.
+  const screenMargins = useMemo(
+    () => screenMarginsFromPage(margins, rotation),
+    [margins, rotation],
+  );
+
+  const [px, setPx] = useState<GuidePx>(() =>
+    marginsToPx(screenMargins, zoom, width, height),
+  );
   const draggingRef = useRef<Side | null>(null);
   // Latest guide positions mirrored into a ref so the pointerup handler reads
   // the final value without re-binding listeners. Synced in an effect (never
@@ -85,22 +101,25 @@ export function PageMarginGuides({
   // page swap, external margin update).
   useEffect(() => {
     if (draggingRef.current === null) {
-      setPx(marginsToPx(margins, zoom, width, height));
+      setPx(marginsToPx(screenMargins, zoom, width, height));
     }
-  }, [margins, zoom, width, height]);
+  }, [screenMargins, zoom, width, height]);
 
   const safeZoom = zoom > 0 ? zoom : 1;
 
-  // Convert the current px guide positions back to PDF-point margins, clamped to
-  // a sane non-overlapping range.
+  // Convert the current px guide positions back to PDF-point margins (page's
+  // intrinsic box), clamped to a sane non-overlapping range.
   const pxToMargins = useCallback(
-    (g: GuidePx): PageMargins => ({
-      top: clamp(g.top, 0, height) / safeZoom,
-      bottom: clamp(height - g.bottom, 0, height) / safeZoom,
-      left: clamp(g.left, 0, width) / safeZoom,
-      right: clamp(width - g.right, 0, width) / safeZoom,
-    }),
-    [width, height, safeZoom],
+    (g: GuidePx): PageMargins => {
+      const screen: PageMargins = {
+        top: clamp(g.top, 0, height) / safeZoom,
+        bottom: clamp(height - g.bottom, 0, height) / safeZoom,
+        left: clamp(g.left, 0, width) / safeZoom,
+        right: clamp(width - g.right, 0, width) / safeZoom,
+      };
+      return pageMarginsFromScreen(screen, rotation);
+    },
+    [width, height, safeZoom, rotation],
   );
 
   const onPointerDown = useCallback(
