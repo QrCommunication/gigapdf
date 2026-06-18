@@ -1,5 +1,6 @@
-import { PDFDocument } from 'pdf-lib';
+import { randomBytes } from 'node:crypto';
 import type { DocumentPermissions } from '@giga-pdf/types';
+import { getEngine } from '../wasm';
 import { PDFEngineError } from '../errors';
 
 export type EncryptionAlgorithm = 'AES-128' | 'AES-256';
@@ -11,11 +12,13 @@ export interface EncryptOptions {
   permissions?: Partial<DocumentPermissions>;
 }
 
-// Maps DocumentPermissions fields to PDF permission bit flags per PDF spec Table 3.20.
-// Bits are numbered from 1; unused bits (1-2, 7-8, 13+) are set to 0.
-// The base value -3904 (0xFFFFF0C0) pre-sets reserved bits to 1 as required by the spec.
-function computePermissionFlags(perms: Partial<DocumentPermissions>): number {
-  let flags = -3904; // Base: reserved bits set per PDF spec
+/**
+ * Maps {@link DocumentPermissions} to the PDF `/P` permission bitmask
+ * (ISO 32000 Table 22). The base value `-3904` pre-sets the spec-required
+ * reserved bits; each allowed operation flips its bit on.
+ */
+export function computePermissionFlags(perms: Partial<DocumentPermissions>): number {
+  let flags = -3904; // reserved bits set per spec
   if (perms.print !== false) flags |= 0x4; // bit 3
   if (perms.modify !== false) flags |= 0x8; // bit 4
   if (perms.copy !== false) flags |= 0x10; // bit 5
@@ -28,31 +31,22 @@ function computePermissionFlags(perms: Partial<DocumentPermissions>): number {
 }
 
 /**
- * Encrypts a PDF document with the provided passwords and permissions.
- *
- * V1 LIMITATION: pdf-lib does not support encrypting individual PDF objects
- * (streams, strings) which is required by the PDF encryption spec (ISO 32000-1 §7.6).
- * Full AES-128/AES-256 encryption requires wrapping each object with a derived key,
- * computing the encryption dictionary (Encrypt), and updating the cross-reference table.
- * This is beyond what pdf-lib exposes.
- *
- * For production-grade encryption, integrate with a native library such as qpdf (MIT)
- * via child_process: `qpdf --encrypt <userPwd> <ownerPwd> 256 -- input.pdf output.pdf`
- *
- * This function validates inputs, computes permission flags, and returns the re-saved
- * (unencrypted) PDF so the API surface is correct for future drop-in replacement.
+ * Encrypts a PDF with the PDF Standard Security Handler via the zero-dependency
+ * WASM engine — **real** AES-128 / AES-256 with separate user and owner
+ * passwords. (The previous pdf-lib implementation was a stub: it could not
+ * encrypt object streams and re-saved the document in clear text.)
  */
 export async function encryptPDF(buffer: Buffer, options: EncryptOptions): Promise<Buffer> {
   if (!options.userPassword && !options.ownerPassword) {
-    throw new PDFEngineError(
-      'At least one password must be provided',
-      'PDF_ENCRYPT_NO_PASSWORD',
-    );
+    throw new PDFEngineError('At least one password must be provided', 'PDF_ENCRYPT_NO_PASSWORD');
   }
 
-  let pdfDoc: PDFDocument;
+  const giga = await getEngine();
+  const data = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+
+  let doc;
   try {
-    pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
+    doc = giga.open(data);
   } catch (err) {
     throw new PDFEngineError(
       `Failed to load PDF for encryption: ${err instanceof Error ? err.message : String(err)}`,
@@ -60,12 +54,21 @@ export async function encryptPDF(buffer: Buffer, options: EncryptOptions): Promi
     );
   }
 
-  // Compute permission flags for future use when object-level encryption is implemented.
-  const _permFlags = computePermissionFlags(options.permissions ?? {});
-  void _permFlags;
+  try {
+    const algorithm = options.algorithm === 'AES-128' ? 'aes128' : 'aes256';
+    const permissions = computePermissionFlags(options.permissions ?? {});
+    // The open password is the user password; an owner-only request leaves the
+    // user password empty (anyone can open, but the permissions are enforced).
+    const userPassword = options.userPassword ?? '';
+    const fileId = randomBytes(16).toString('hex');
 
-  // Re-save the document. When a proper encryption layer is added (e.g. via qpdf
-  // subprocess), this byte array becomes the input to the encryption step.
-  const bytes = await pdfDoc.save({ useObjectStreams: false });
-  return Buffer.from(bytes);
+    const encrypted = doc.saveEncrypted(userPassword, fileId, {
+      algorithm,
+      ownerPassword: options.ownerPassword,
+      permissions,
+    });
+    return Buffer.from(encrypted);
+  } finally {
+    doc.close();
+  }
 }

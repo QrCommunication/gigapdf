@@ -1,52 +1,40 @@
-import {
-  PDFTextField,
-  PDFCheckBox,
-  PDFRadioGroup,
-  PDFDropdown,
-  PDFOptionList,
-  PDFName,
-  PDFHexString,
-  TextAlignment,
-  type PDFField,
-} from 'pdf-lib';
+/**
+ * Form-field renderer — creates AcroForm fields via the zero-dependency engine.
+ * No pdf-lib.
+ *
+ * Fidelity note: the engine's field creators cover the core props (value,
+ * maxLen, multiline, password, options, selected, font size/colour/border).
+ * A few secondary flags the old pdf-lib path set — `/Q` alignment, comb,
+ * `/TU` tooltip, required/readOnly — are not yet exposed by the engine and are
+ * dropped here; multi-widget radio groups created one widget at a time degrade
+ * to one single-button group per call.
+ */
+
 import type { PDFDocumentHandle } from '../engine/document-handle';
 import { markDirty } from '../engine/document-handle';
+import type { FieldStyle } from '@qrcommunication/gigapdf-lib';
 import type { FormFieldElement } from '@giga-pdf/types';
+import { hexToPackedRgb } from '../utils/color';
 import { webToPdf } from '../utils/coordinates';
 import { PDFPageOutOfRangeError } from '../errors';
 
-function getPage(handle: PDFDocumentHandle, pageNumber: number) {
+function pageHeightOf(handle: PDFDocumentHandle, pageNumber: number): number {
   if (pageNumber < 1 || pageNumber > handle.pageCount) {
     throw new PDFPageOutOfRangeError(pageNumber, handle.pageCount);
   }
-  return handle._pdfDoc.getPage(pageNumber - 1);
+  return handle._doc.pageInfo(pageNumber).height;
 }
 
-/** Map the element textAlign to pdf-lib's TextAlignment (/Q entry). */
-function toTextAlignment(align: 'left' | 'center' | 'right' | undefined): TextAlignment {
-  switch (align) {
-    case 'center':
-      return TextAlignment.Center;
-    case 'right':
-      return TextAlignment.Right;
-    case 'left':
-    default:
-      return TextAlignment.Left;
-  }
-}
-
-/**
- * Apply the flags/metadata shared by every AcroForm field type:
- * required, readOnly, and the /TU tooltip (alternate description, also
- * read by screen readers).
- */
-function applyCommonFieldProps(field: PDFField, element: FormFieldElement): void {
-  if (element.properties.required) field.enableRequired();
-  if (element.properties.readOnly) field.enableReadOnly();
-  const tooltip = element.tooltip;
-  if (tooltip && tooltip.trim().length > 0) {
-    field.acroField.dict.set(PDFName.of('TU'), PDFHexString.fromText(tooltip));
-  }
+function buildStyle(element: FormFieldElement, fontSize: number | null): FieldStyle {
+  const style: FieldStyle = {};
+  if (fontSize !== null) style.fontSize = fontSize;
+  if (element.style?.textColor) style.color = hexToPackedRgb(element.style.textColor);
+  style.border = element.style?.borderColor ? hexToPackedRgb(element.style.borderColor) : null;
+  style.background = element.style?.backgroundColor
+    ? hexToPackedRgb(element.style.backgroundColor)
+    : null;
+  if (typeof element.style?.borderWidth === 'number') style.borderWidth = element.style.borderWidth;
+  return style;
 }
 
 export function addFormField(
@@ -54,135 +42,85 @@ export function addFormField(
   pageNumber: number,
   element: FormFieldElement,
 ): void {
-  const form = handle._pdfDoc.getForm();
-  const page = getPage(handle, pageNumber);
-  const pageH = page.getHeight();
-  const pdfRect = webToPdf(
+  const pageH = pageHeightOf(handle, pageNumber);
+  const doc = handle._doc;
+  const pdf = webToPdf(
     element.bounds.x,
     element.bounds.y,
     element.bounds.width,
     element.bounds.height,
     pageH,
   );
-
-  const fieldDimensions = {
-    x: pdfRect.x,
-    y: pdfRect.y,
-    width: pdfRect.width,
-    height: pdfRect.height,
-  };
+  const rect: [number, number, number, number] = [pdf.x, pdf.y, pdf.x + pdf.width, pdf.y + pdf.height];
 
   const fontSize =
     typeof element.style?.fontSize === 'number' && element.style.fontSize > 0
       ? element.style.fontSize
       : null;
+  const style = buildStyle(element, fontSize);
 
   switch (element.fieldType) {
     case 'text': {
-      const field = form.createTextField(element.fieldName);
-      // Multiline/password/comb/maxLength must be set BEFORE addToPage so the
-      // initial appearance stream is generated with the right flags.
-      if (element.properties.multiline) field.enableMultiline();
-      if (element.properties.password) field.enablePassword();
-      if (
-        typeof element.properties.maxLength === 'number' &&
-        element.properties.maxLength > 0
-      ) {
-        field.setMaxLength(element.properties.maxLength);
-        if (element.properties.comb) field.enableCombing();
-      }
-      field.setAlignment(toTextAlignment(element.style?.textAlign));
-      // value wins over defaultValue; defaultValue pre-fills an empty field.
-      const text =
+      const value =
         typeof element.value === 'string' && element.value !== ''
           ? element.value
           : typeof element.defaultValue === 'string'
             ? element.defaultValue
             : '';
-      if (text !== '') field.setText(text);
-      field.addToPage(page, fieldDimensions);
-      // setFontSize requires the /DA default-appearance entry, which is only
-      // created by addToPage — calling it earlier throws MissingDAEntryError.
-      if (fontSize !== null) field.setFontSize(fontSize);
-      applyCommonFieldProps(field, element);
+      const opts: { maxLen?: number; multiline?: boolean; password?: boolean; style?: FieldStyle } =
+        { style };
+      if (element.properties.multiline) opts.multiline = true;
+      if (element.properties.password) opts.password = true;
+      if (typeof element.properties.maxLength === 'number' && element.properties.maxLength > 0) {
+        opts.maxLen = element.properties.maxLength;
+      }
+      doc.addTextField(pageNumber, element.fieldName, rect, value, opts);
       break;
     }
 
     case 'checkbox': {
-      const field = form.createCheckBox(element.fieldName);
-      field.addToPage(page, fieldDimensions);
-      const checked = element.value === true || (element.value !== false && element.defaultValue === true);
-      if (checked) field.check();
-      applyCommonFieldProps(field, element);
+      const checked =
+        element.value === true || (element.value !== false && element.defaultValue === true);
+      doc.addCheckbox(pageNumber, element.fieldName, rect, checked, { style });
       break;
     }
 
     case 'radio': {
-      // Radio widgets sharing the same fieldName join the SAME group: pdf-lib
-      // getRadioGroup throws if absent, so create-or-reuse keeps N widgets of
-      // one logical group under a single /Ff radio field.
-      let field: PDFRadioGroup;
-      try {
-        field = form.getRadioGroup(element.fieldName);
-      } catch {
-        field = form.createRadioGroup(element.fieldName);
-      }
       const optionValue =
-        typeof element.value === 'string' && element.value !== ''
-          ? element.value
-          : `option_${field.getOptions().length + 1}`;
-      field.addOptionToPage(optionValue, page, fieldDimensions);
-      // defaultValue carries the export value of the pre-selected widget.
-      if (
-        typeof element.defaultValue === 'string' &&
-        element.defaultValue !== '' &&
-        element.defaultValue === optionValue
-      ) {
-        field.select(optionValue);
+        typeof element.value === 'string' && element.value !== '' ? element.value : 'option_1';
+      const opts: { selected?: string; style?: FieldStyle } = { style };
+      if (typeof element.defaultValue === 'string' && element.defaultValue === optionValue) {
+        opts.selected = optionValue;
       }
-      applyCommonFieldProps(field, element);
+      doc.addRadioGroup(pageNumber, element.fieldName, [{ export: optionValue, rect }], opts);
       break;
     }
 
     case 'dropdown': {
-      const field = form.createDropdown(element.fieldName);
-      if (element.options && element.options.length > 0) {
-        field.addOptions(element.options);
-      }
+      const options = element.options ?? [];
       const selected =
         typeof element.value === 'string' && element.value !== ''
           ? element.value
           : typeof element.defaultValue === 'string'
             ? element.defaultValue
             : '';
-      if (selected !== '' && (element.options ?? []).includes(selected)) {
-        field.select(selected);
-      }
-      field.addToPage(page, fieldDimensions);
-      // /DA only exists after addToPage (cf. text field above).
-      if (fontSize !== null) field.setFontSize(fontSize);
-      applyCommonFieldProps(field, element);
+      const opts: { selected?: string; editable?: boolean; style?: FieldStyle } = { style };
+      if (selected !== '' && options.includes(selected)) opts.selected = selected;
+      doc.addComboBox(pageNumber, element.fieldName, rect, options, opts);
       break;
     }
 
     case 'listbox': {
-      const field = form.createOptionList(element.fieldName);
-      if (element.options && element.options.length > 0) {
-        field.addOptions(element.options);
-      }
+      const options = element.options ?? [];
       const selected =
         typeof element.value === 'string' && element.value !== ''
           ? element.value
           : typeof element.defaultValue === 'string'
             ? element.defaultValue
             : '';
-      if (selected !== '' && (element.options ?? []).includes(selected)) {
-        field.select(selected);
-      }
-      field.addToPage(page, fieldDimensions);
-      // /DA only exists after addToPage (cf. text field above).
-      if (fontSize !== null) field.setFontSize(fontSize);
-      applyCommonFieldProps(field, element);
+      const opts: { selected?: string; multi?: boolean; style?: FieldStyle } = { style };
+      if (selected !== '' && options.includes(selected)) opts.selected = selected;
+      doc.addListBox(pageNumber, element.fieldName, rect, options, opts);
       break;
     }
 
@@ -192,7 +130,7 @@ export function addFormField(
       break;
   }
 
-  markDirty(handle._pdfDoc);
+  markDirty(doc);
 }
 
 export function updateFormFieldValue(
@@ -200,32 +138,31 @@ export function updateFormFieldValue(
   fieldName: string,
   value: string | boolean | string[],
 ): boolean {
-  const form = handle._pdfDoc.getForm();
+  const doc = handle._doc;
 
-  try {
-    const field = form.getField(fieldName);
+  // Discover the field's kind from the current snapshot to dispatch correctly.
+  const field = doc.fields().find((f) => f.name === fieldName);
+  if (!field) return false;
 
-    if (field instanceof PDFTextField) {
-      field.setText(String(value));
-    } else if (field instanceof PDFCheckBox) {
-      if (value) {
-        field.check();
-      } else {
-        field.uncheck();
-      }
-    } else if (field instanceof PDFRadioGroup) {
-      field.select(String(value));
-    } else if (field instanceof PDFDropdown) {
-      field.select(String(value));
-    } else if (field instanceof PDFOptionList) {
-      field.select(String(value));
-    } else {
+  let ok = false;
+  switch (field.kind) {
+    case 'text':
+      ok = doc.setTextField(fieldName, String(value));
+      break;
+    case 'checkbox':
+      ok = doc.setCheckbox(fieldName, Boolean(value));
+      break;
+    case 'radio':
+      ok = doc.setRadio(fieldName, String(value));
+      break;
+    case 'combo':
+    case 'list':
+      ok = doc.setChoice(fieldName, Array.isArray(value) ? value.map(String) : [String(value)]);
+      break;
+    default:
       return false;
-    }
-
-    markDirty(handle._pdfDoc);
-    return true;
-  } catch {
-    return false;
   }
+
+  if (ok) markDirty(doc);
+  return ok;
 }

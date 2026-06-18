@@ -31,8 +31,8 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * CompressDialog — run the dedicated compression pipeline (pdf-lib
- * normalisation + MuPDF garbage=4/compress=yes) on the current PDF and
+ * CompressDialog — run the dedicated compression pipeline (native
+ * normalisation + garbage collection / compression) on the current PDF and
  * either swap the live document with the compressed binary or download a
  * compressed copy. Mirrors the WatermarkDialog apply/download pattern.
  */

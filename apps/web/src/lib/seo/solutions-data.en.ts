@@ -21,14 +21,14 @@ export const SOLUTIONS: SolutionData[] = [
     h1: "The PDF tool for lawyers: redact, sign, archive with confidence",
     intro: [
       "The scandal is documented and keeps repeating: briefs and exhibits 'redacted' with black rectangles whose text reappears with a simple copy-paste, because the tool drew a mask over the content instead of removing it. For a firm, that is privileged information breached in one click. The first requirement of a legal PDF tool sits right there: a deletion must actually delete.",
-      "GigaPDF performs real redaction, powered by the MuPDF engine: the text operators inside the redacted zone are physically stripped from the file's content stream. After processing, the text no longer exists — not in copy-paste, not in extraction, not in the zone's metadata. Around it stand the three other pillars of the legal document: PKCS#7 digital signing with your own P12 certificate (provable integrity, verifiable identity), PDF/A-1b and 2b compliant archiving, and AES-256 encryption for the exhibits that travel.",
-      "Then comes the question every firm should put to its vendors: where do the documents go? GigaPDF answers it structurally — auditable AGPL open-source code, and complete self-hosting: the instance runs on the firm's own server, and client matters never pass through a third-party cloud. The free plan includes every feature, 5 GB, and 100 documents.",
+      "GigaPDF performs real redaction, powered by GigaPDF's in-house engine: the text operators inside the redacted zone are physically stripped from the file's content stream. After processing, the text no longer exists — not in copy-paste, not in extraction, not in the zone's metadata. Around it stand the three other pillars of the legal document: PKCS#7 digital signing with your own P12 certificate (provable integrity, verifiable identity), PDF/A-1b and 2b compliant archiving, and AES-256 encryption for the exhibits that travel.",
+      "Then comes the question every firm should put to its vendors: where do the documents go? GigaPDF answers it structurally — auditable open-source code, and complete self-hosting: the instance runs on the firm's own server, and client matters never pass through a third-party cloud. The free plan includes every feature, 5 GB, and 100 documents.",
     ],
     workflows: [
       {
         title: "Redact an exhibit before disclosure",
         description:
-          "Open the exhibit in the editor, draw the zones to black out over the privileged passages, and apply: MuPDF deletes the text from the file itself. Verify by attempting a copy-paste over the zone — it returns nothing — then disclose the redacted exhibit, while the original stays intact in your workspace with its version history.",
+          "Open the exhibit in the editor, draw the zones to black out over the privileged passages, and apply: the in-house engine deletes the text from the file itself. Verify by attempting a copy-paste over the zone — it returns nothing — then disclose the redacted exhibit, while the original stays intact in your workspace with its version history.",
       },
       {
         title: "Sign pleadings with your own certificate",
@@ -47,18 +47,18 @@ export const SOLUTIONS: SolutionData[] = [
       },
     ],
     capabilities: [
-      "Real MuPDF redaction: text removed from the file, not masked",
+      "Real in-house redaction: text removed from the file, not masked",
       "PKCS#7 digital signing with the firm's P12/PFX certificate",
       "Compliant archiving in PDF/A-1b and PDF/A-2b (ISO 19005)",
       "AES-256 encryption plus print, copy, and modification permissions",
       "English and French OCR with full-text search across scanned exhibits",
-      "AGPL self-hosting: client matters stay on your servers",
+      "Source-available self-hosting: client matters stay on your servers",
     ],
     faq: [
       {
         question: "How do I verify that the redaction really removed the text?",
         answer:
-          "Run the test that traps bad tools: select the redacted zone and try a copy-paste, or search for one of the blacked-out words. With GigaPDF's MuPDF redaction, nothing comes out — the text operators were stripped from the content stream, so the word no longer exists in the file.",
+          "Run the test that traps bad tools: select the redacted zone and try a copy-paste, or search for one of the blacked-out words. With GigaPDF's in-house redaction, nothing comes out — the text operators were stripped from the content stream, so the word no longer exists in the file.",
       },
       {
         question: "Does GigaPDF's PKCS#7 signature carry evidentiary weight?",
@@ -68,7 +68,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Can GigaPDF run on the firm's own server?",
         answer:
-          "Yes, fully: GigaPDF is open source under the AGPL and built for self-hosting. Editing, redaction, signing, OCR, and document management then run on your infrastructure — no exhibit leaves the firm, which considerably simplifies the privilege and data-protection analysis.",
+          "Yes, fully: GigaPDF is open source, source-available under PolyForm Noncommercial, and built for self-hosting. Editing, redaction, signing, OCR, and document management then run on your infrastructure — no exhibit leaves the firm, which considerably simplifies the privilege and data-protection analysis.",
       },
       {
         question: "How do I find one exhibit among hundreds of documents?",
@@ -88,8 +88,8 @@ export const SOLUTIONS: SolutionData[] = [
     h1: "Accountants: tame the flood of client paperwork",
     intro: [
       "Daily life at an accounting firm means records arriving in every possible state: invoices photographed on a phone, statements scanned at an angle, forty-page PDF bundles mixing fiscal years and vendors, unreadable receipts. Before any entry gets booked, there's a thankless layer of sorting, splitting, and reordering — and every document that can't be found at audit time costs hours.",
-      "GigaPDF equips precisely that document layer. Tesseract OCR (English and French) makes scanned invoices usable: amounts, reference numbers, and legal mentions become searchable text indexed by the document manager. Splitting cuts bundles into individual records, merging rebuilds files by year or by client, and tags cross-reference the filing — the same document visible under 'Client X', '2025', and 'VAT' without a single duplicate.",
-      "Everything fits in the free plan — 5 GB, 100 documents, 1,000 monthly API calls to automate recurring flows — and a firm that wants its clients' financial data off third-party clouds installs GigaPDF on its own server: the code is open source under the AGPL.",
+      "GigaPDF equips precisely that document layer. In-house OCR (English and French) makes scanned invoices usable: amounts, reference numbers, and legal mentions become searchable text indexed by the document manager. Splitting cuts bundles into individual records, merging rebuilds files by year or by client, and tags cross-reference the filing — the same document visible under 'Client X', '2025', and 'VAT' without a single duplicate.",
+      "Everything fits in the free plan — 5 GB, 100 documents, 1,000 monthly API calls to automate recurring flows — and a firm that wants its clients' financial data off third-party clouds installs GigaPDF on its own server: the code is open source, source-available under PolyForm Noncommercial.",
     ],
     workflows: [
       {
@@ -114,7 +114,7 @@ export const SOLUTIONS: SolutionData[] = [
       },
     ],
     capabilities: [
-      "Tesseract OCR on scanned invoices and statements, accented text included",
+      "In-house OCR on scanned invoices and statements, accented text included",
       "Full-text search across record content, not just file names",
       "Bundle splitting and file merging without recompression",
       "Cross-tags by client, fiscal year, and record type",
@@ -125,7 +125,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Does the OCR read invoices accurately?",
         answer:
-          "Yes: GigaPDF's Tesseract engine runs the English and French models together, so amounts, accented text, and legal mentions on crisp printed documents come through correctly. Crumpled receipts photographed at an angle remain the hard case for any OCR — scan flat when the stakes justify it.",
+          "Yes: GigaPDF's in-house OCR engine runs the English and French models together, so amounts, accented text, and legal mentions on crisp printed documents come through correctly. Crumpled receipts photographed at an angle remain the hard case for any OCR — scan flat when the stakes justify it.",
       },
       {
         question: "How do I organize records for dozens of clients without duplicating everything?",
@@ -207,7 +207,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Can we keep HR documents off foreign clouds entirely?",
         answer:
-          "Yes, radically: GigaPDF is open source (AGPL) and installs on your own servers. Conversion, signing, encryption, and document management then run as a closed circuit on your infrastructure — a decisive argument in impact assessments and conversations with your data-protection officer.",
+          "Yes, radically: GigaPDF is open source (source-available) and installs on your own servers. Conversion, signing, encryption, and document management then run as a closed circuit on your infrastructure — a decisive argument in impact assessments and conversations with your data-protection officer.",
       },
     ],
     relatedTools: ["sign-pdf", "pdf-forms", "protect-pdf", "word-to-pdf", "edit-pdf"],
@@ -269,7 +269,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Application files exceed my mailbox's size limit — what now?",
         answer:
-          "Two tools settle it: MuPDF compression, which cleans bulky scans without hurting readability, and above all link sharing, which replaces the attachment — the recipient views the file online while you keep control of access.",
+          "Two tools settle it: in-house compression, which cleans bulky scans without hurting readability, and above all link sharing, which replaces the attachment — the recipient views the file online while you keep control of access.",
       },
       {
         question: "How do I prove a document wasn't altered after signing?",
@@ -289,7 +289,7 @@ export const SOLUTIONS: SolutionData[] = [
     h1: "Healthcare: encrypted documents on a sovereign platform",
     intro: [
       "Health data is the most protected category in privacy law, for a simple reason: a leaked report, prescription, or lab result cannot be 'reset' like a password. For a practice, a clinic, or a hospital, every digital tool that touches a patient document is a compliance question — and consumer PDF services that route files through servers nobody can vouch for are exactly what to avoid.",
-      "GigaPDF gives two structural answers. First, AES-256 encryption at the document level — an encrypted report is unreadable without its password, in the mailbox and on the misplaced USB stick alike, while PDF permissions additionally restrict printing and copying. Second, the more radical one: self-hosting. The code being open source under the AGPL, the complete instance — editing, OCR, document management, sharing — installs on the care organization's infrastructure, and patient documents never leave its perimeter.",
+      "GigaPDF gives two structural answers. First, AES-256 encryption at the document level — an encrypted report is unreadable without its password, in the mailbox and on the misplaced USB stick alike, while PDF permissions additionally restrict printing and copying. Second, the more radical one: self-hosting. The code being open source, source-available under PolyForm Noncommercial, the complete instance — editing, OCR, document management, sharing — installs on the care organization's infrastructure, and patient documents never leave its perimeter.",
       "Day to day, the platform smooths the document work itself: OCR turns paper letters and reports into searchable records, patient files merge into single bundles, consent forms are completed online and flattened, and long-retention documents move to PDF/A. Every feature ships in the free plan.",
     ],
     workflows: [
@@ -311,13 +311,13 @@ export const SOLUTIONS: SolutionData[] = [
       {
         title: "Deploy a sovereign instance",
         description:
-          "Install GigaPDF on the organization's servers: every processing step — editing, OCR, encryption, document management, internal sharing — executes inside your perimeter. The AGPL code is auditable by your IT security officer or contractor, and no patient document crosses into a third-party cloud.",
+          "Install GigaPDF on the organization's servers: every processing step — editing, OCR, encryption, document management, internal sharing — executes inside your perimeter. The source code is auditable by your IT security officer or contractor, and no patient document crosses into a third-party cloud.",
       },
     ],
     capabilities: [
       "AES-256 encryption of medical documents plus granular permissions",
       "Complete self-hosting: patient data stays inside your perimeter",
-      "AGPL open-source code, auditable by your security officer or contractor",
+      "Open-source code, auditable by your security officer or contractor",
       "OCR and searchable layer for digitized paper archives",
       "Consent forms completed online, then flattened",
       "PDF/A archiving for documents under long retention",
@@ -326,7 +326,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Does GigaPDF fit the requirements that apply to health data?",
         answer:
-          "The architecture makes it possible: self-hosted, documents never leave your infrastructure, which removes the third-party transfer question; AES-256 protects documents in motion; the AGPL code is auditable. Overall compliance — certified hosting where required, access policies, audit trails — remains a property of your infrastructure and organization; GigaPDF slots in without forcing an external cloud.",
+          "The architecture makes it possible: self-hosted, documents never leave your infrastructure, which removes the third-party transfer question; AES-256 protects documents in motion; the source code is auditable. Overall compliance — certified hosting where required, access policies, audit trails — remains a property of your infrastructure and organization; GigaPDF slots in without forcing an external cloud.",
       },
       {
         question: "Why encrypt the PDF itself rather than rely on secure messaging?",
@@ -336,7 +336,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Can OCR handle scanned medical reports?",
         answer:
-          "Yes for typed documents: Tesseract recognizes printed text in English and French, and the searchable layer makes the archive queryable without touching its appearance. Handwritten notes — common in older files — are not recognized: that is a limit of OCR, not a flaw in your scanning.",
+          "Yes for typed documents: the OCR engine recognizes printed text in English and French, and the searchable layer makes the archive queryable without touching its appearance. Handwritten notes — common in older files — are not recognized: that is a limit of OCR, not a flaw in your scanning.",
       },
       {
         question: "What becomes of a document deleted by mistake?",
@@ -357,7 +357,7 @@ export const SOLUTIONS: SolutionData[] = [
     intro: [
       "Student life runs on PDFs: handouts to annotate, papers to highlight for the thesis, reports due in a mandated format, application files to assemble — all on a software budget of exactly zero. The market's 'free' tools know it well, capping you at two operations a day or stamping their ad on the homework you submit.",
       "GigaPDF takes the opposite stance: every feature is included in the free plan — 5 GB of storage, 100 documents — with no watermark added and no operation counter. Highlight and annotate your lectures in the browser, on any machine including the university library's: there is nothing to install. Convert your thesis from Word to a spotless PDF before submission, squeeze the screenshot-loaded internship report under the upload platform's limit, merge CV, cover letter, and transcripts into one application file.",
-      "And because GigaPDF is open source (AGPL), it doubles as study material: the code of the editor, the PDF engine, and the document manager is public. Computer-science students can look under the hood — or contribute, which never hurts a CV.",
+      "And because GigaPDF is open source (source-available), it doubles as study material: the code of the editor, the PDF engine, and the document manager is public. Computer-science students can look under the hood — or contribute, which never hurts a CV.",
     ],
     workflows: [
       {
@@ -368,7 +368,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         title: "Submit an assignment in the required format",
         description:
-          "Convert the paper written in Word or LibreOffice (.docx, .odt) to PDF: the layout freezes, identical on the grader's screen. If the submission platform caps file size, MuPDF compression lightens the file without touching text sharpness. No advertising lands on your work.",
+          "Convert the paper written in Word or an OpenDocument suite (.docx, .odt) to PDF: the layout freezes, identical on the grader's screen. If the submission platform caps file size, in-house compression lightens the file without touching text sharpness. No advertising lands on your work.",
       },
       {
         title: "Assemble an application file",
@@ -384,8 +384,8 @@ export const SOLUTIONS: SolutionData[] = [
     capabilities: [
       "Everything free: 5 GB, 100 documents, no watermark, no counters",
       "Native annotations: highlights, notes, drawings, readable everywhere",
-      "Word, LibreOffice, Excel, and PowerPoint to PDF conversion",
-      "MuPDF compression to fit submission platform limits",
+      "Word, OpenDocument, Excel, and PowerPoint to PDF conversion",
+      "In-house compression to fit submission platform limits",
       "Merging and organizing of application files",
       "Real-time collaboration on group work",
     ],
@@ -403,7 +403,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "How do I shrink an internship report the platform refuses?",
         answer:
-          "Run the compression: the MuPDF engine purges useless structural data and linearizes the file. On a report packed with screenshots and rebuilt through successive exports, the gain is often decisive — and the text stays perfectly sharp, unlike compressors that rasterize everything.",
+          "Run the compression: the in-house engine purges useless structural data and linearizes the file. On a report packed with screenshots and rebuilt through successive exports, the gain is often decisive — and the text stays perfectly sharp, unlike compressors that rasterize everything.",
       },
       {
         question: "Will my annotations show in my grader's PDF reader?",
@@ -423,14 +423,14 @@ export const SOLUTIONS: SolutionData[] = [
     h1: "Teachers and trainers: own your course materials",
     intro: [
       "Preparing a course is document assembly work: a scanned textbook chapter, three exercises pulled from different files, a worksheet written in Word, two pages of past papers — and it all has to become one coherent, paginated, distributable pack. Then come the papers to grade, the exam questions to keep from leaking early, and the materials to maintain in a student version and an answer-key version.",
-      "GigaPDF handles that chain end to end. Merging assembles the mixed sources into a single pack — Word, PowerPoint, and LibreOffice files converting along the way —, the thumbnail view reorders the pages, and splitting extracts the student version (questions only) from the full version (with answers). The watermark marks exam papers 'CONFIDENTIAL — DO NOT DISTRIBUTE' or puts your organization's name on materials that circulate.",
+      "GigaPDF handles that chain end to end. Merging assembles the mixed sources into a single pack — Word, PowerPoint, and OpenDocument files converting along the way —, the thumbnail view reorders the pages, and splitting extracts the student version (questions only) from the full version (with answers). The watermark marks exam papers 'CONFIDENTIAL — DO NOT DISTRIBUTE' or puts your organization's name on materials that circulate.",
       "For grading, native annotations replace the red pen: highlights, margin remarks, final comments — straight onto the PDF paper, readable in whatever viewer the student uses. All of it costs nothing, and independent trainers under traceability obligations can archive their deliverables as PDF/A and sign them digitally.",
     ],
     workflows: [
       {
         title: "Compose a multi-source course pack",
         description:
-          "Convert your Word, PowerPoint, and LibreOffice files to PDF, merge them with the scanned textbook pages, reorder everything on the thumbnail board, and compress the final pack for the LMS or training platform. One clean file, continuously paginated, current in your document manager with its versions.",
+          "Convert your Word, PowerPoint, and OpenDocument files to PDF, merge them with the scanned textbook pages, reorder everything on the thumbnail board, and compress the final pack for the LMS or training platform. One clean file, continuously paginated, current in your document manager with its versions.",
       },
       {
         title: "Grade digital papers",
@@ -449,7 +449,7 @@ export const SOLUTIONS: SolutionData[] = [
       },
     ],
     capabilities: [
-      "Merging of mixed sources (Word, PowerPoint, LibreOffice, scans) into single packs",
+      "Merging of mixed sources (Word, PowerPoint, OpenDocument, scans) into single packs",
       "Native annotations for grading, readable in any reader",
       "Text or logo watermark on distributed papers and materials",
       "Question/answer-key split from a single master document",
@@ -460,7 +460,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "How do I assemble a pack from files in different formats?",
         answer:
-          "Upload everything to GigaPDF: .docx, .pptx, .odt, and .odp convert to PDF through server-side LibreOffice, scans come in as they are. Then merge the lot in the order you want — the thumbnail view refines it page by page. The final pack is one homogeneous, paginated PDF.",
+          "Upload everything to GigaPDF: .docx, .pptx, .odt, and .odp convert to PDF through the server-side in-house engine, scans come in as they are. Then merge the lot in the order you want — the thumbnail view refines it page by page. The final pack is one homogeneous, paginated PDF.",
       },
       {
         question: "Can I grade papers without printing them?",
@@ -491,13 +491,13 @@ export const SOLUTIONS: SolutionData[] = [
     intro: [
       "Working independently means being your own back office: quotes to send within the hour, invoices to lock down properly, deliverables to brand, contracts to get signed — with tools paid out of your own pocket. Every software subscription subtracts straight from income, and the 'freemium' PDF services that stamp their own advertising on your client documents project precisely the image you're trying to avoid.",
       "GigaPDF lines up the features an independent actually needs, at no cost and with no imposed marking. Quotes and invoices composed in Word or Excel convert to spotless PDFs — values frozen, formulas hidden. Deliverables go out with your logo as a discreet watermark, and working versions carry a DRAFT marking that keeps an unvalidated mockup from being treated as final. Service contracts get signed digitally with PKCS#7 — a real, verifiable signature, not a pasted image.",
-      "For technical profiles, the API (1,000 monthly calls included) automates document production: PDF invoices generated from your HTML templates rendered by Chromium, on-the-fly conversion, archiving. And the document manager doubles as your filing system: a folder per client, status tags, full-text search that digs up any clause.",
+      "For technical profiles, the API (1,000 monthly calls included) automates document production: PDF invoices generated from your HTML templates rendered by the in-house engine, on-the-fly conversion, archiving. And the document manager doubles as your filing system: a folder per client, status tags, full-text search that digs up any clause.",
     ],
     workflows: [
       {
         title: "Produce clean quotes and invoices",
         description:
-          "Compose the quote in Word or the summary in Excel, convert to PDF — layout frozen, formulas hidden —, then protect the file against modification before sending. For recurring flows, generate invoices straight from HTML over the API: Chromium renders your template identically, every time.",
+          "Compose the quote in Word or the summary in Excel, convert to PDF — layout frozen, formulas hidden —, then protect the file against modification before sending. For recurring flows, generate invoices straight from HTML over the API: the in-house engine renders your template identically, every time.",
       },
       {
         title: "Deliver documents that carry your brand",
@@ -519,7 +519,7 @@ export const SOLUTIONS: SolutionData[] = [
       "Word, Excel, and PowerPoint to PDF conversion with no imposed marking",
       "Watermark in your brand: logo, opacity, and position adjustable",
       "PKCS#7 digital signing of contracts with your certificate",
-      "Automated invoice generation over the API with Chromium HTML rendering",
+      "Automated invoice generation over the API with in-house HTML rendering",
       "Per-client document base: folders, tags, full-text search, versions",
       "OCR on scanned receipts for the bookkeeping",
     ],
@@ -532,7 +532,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Can I automate my invoicing without paying for a dedicated SaaS?",
         answer:
-          "If you can produce HTML, yes: build your invoice template (your CSS, your identity), post it to the GigaPDF API, which renders it to PDF through Chromium, and archive the result in the document manager. The free plan includes 1,000 API calls a month — ample for an independent practice's invoicing.",
+          "If you can produce HTML, yes: build your invoice template (your CSS, your identity), post it to the GigaPDF API, which renders it to PDF with its in-house engine, and archive the result in the document manager. The free plan includes 1,000 API calls a month — ample for an independent practice's invoicing.",
       },
       {
         question: "Does the digital signature protect me in a client dispute?",
@@ -558,7 +558,7 @@ export const SOLUTIONS: SolutionData[] = [
     intro: [
       "A nonprofit produces the paperwork of a mid-size company on a piggy-bank budget: grant applications assembled piece by piece, board and general-assembly minutes to approve and archive, notices to circulate, memberships to collect — carried by volunteers who rotate, work from their own machines, and own neither an Acrobat license nor a file server.",
       "GigaPDF matches that situation point for point, in philosophy as much as in features: the free plan includes every capability — not a demo edition — with 5 GB and 100 documents, enough for an organization's document life. Merging assembles grant applications (bylaws, budget, bank details, activity reports) into single bundles in the funder's required order; minutes get signed digitally; membership forms are filled online; and link sharing distributes documents to the board without attachments.",
-      "Real-time collaboration lets several volunteers prepare an application on the same document, each from home. And the alignment reaches the license itself: GigaPDF is an AGPL open-source project — a digital commons that a well-equipped organization can even host on its own.",
+      "Real-time collaboration lets several volunteers prepare an application on the same document, each from home. And the alignment reaches the license itself: GigaPDF is a source-available open-source project — auditable and self-hostable, which a well-equipped organization can even host on its own.",
     ],
     workflows: [
       {
@@ -588,7 +588,7 @@ export const SOLUTIONS: SolutionData[] = [
       "PKCS#7 digital signing of minutes and official documents",
       "Membership forms filled online, then flattened",
       "Link sharing and real-time collaboration between volunteers",
-      "AGPL open-source project, self-hostable by equipped organizations",
+      "Source-available open-source project, self-hostable by equipped organizations",
     ],
     faq: [
       {
@@ -624,7 +624,7 @@ export const SOLUTIONS: SolutionData[] = [
     h1: "Architects and construction: from marked-up drawings to managed sets",
     intro: [
       "Construction documents come in their own weight class: large-format drawings running to dozens of megabytes, tender packages stacking specifications, plans, and annexes by the hundreds of pages, review cycles where every remark must sit at a precise spot on the drawing — and scanned spec books from past projects where nobody can find a requirement anymore.",
-      "GigaPDF goes after those four pains. Native annotations carry the review cycle: remarks pinned to the millimeter on the drawing, clouds and arrows traced freehand, approval stamps applied as annotations — all readable by the contractor in any viewer, and traceable revision by revision through version history. MuPDF compression deflates reworked sets so procurement platforms accept them; rotation and reordering straighten scanned bundles mixing portrait and landscape.",
+      "GigaPDF goes after those four pains. Native annotations carry the review cycle: remarks pinned to the millimeter on the drawing, clouds and arrows traced freehand, approval stamps applied as annotations — all readable by the contractor in any viewer, and traceable revision by revision through version history. In-house compression deflates reworked sets so procurement platforms accept them; rotation and reordering straighten scanned bundles mixing portrait and landscape.",
       "As for the paper archives, the OCR-plus-searchable-layer chain brings them back to life: a scanned spec book keeps its exact appearance — stamps and approvals visible — while becoming queryable in full text. Hunting a requirement across ten years of projects stops being an expedition. Everything is free, and self-hostable for practices that keep their projects in-house.",
     ],
     workflows: [
@@ -636,7 +636,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         title: "Assemble a submittable tender package",
         description:
-          "Merge specifications, drawings, and annexes into ordered files by trade, rearrange the pages on the thumbnail board, then compress: the MuPDF pass strips the dead data piled up by successive exports and linearizes the file for online viewing. The package clears the e-procurement platforms' limits.",
+          "Merge specifications, drawings, and annexes into ordered files by trade, rearrange the pages on the thumbnail board, then compress: the in-house compression pass strips the dead data piled up by successive exports and linearizes the file for online viewing. The package clears the e-procurement platforms' limits.",
       },
       {
         title: "Make the project archives searchable",
@@ -651,7 +651,7 @@ export const SOLUTIONS: SolutionData[] = [
     ],
     capabilities: [
       "Native annotations on drawings: pinned remarks, freehand markup, stamps",
-      "MuPDF compression of heavy sets and linearization for online viewing",
+      "In-house compression of heavy sets and linearization for online viewing",
       "OCR plus searchable layer: scanned documents become queryable, looks untouched",
       "Merging, rotation, and reordering of mixed portrait/landscape bundles",
       "Versions and tags per project, trade, and issue status",
@@ -661,7 +661,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Does GigaPDF handle large-format drawings?",
         answer:
-          "Yes: PDF imposes no page size, and A1 or A0 drawings open, annotate, and compress like any other document. For heavy sets, MuPDF compression and link sharing — which sidesteps email and its limits — are the two tools that change the daily routine.",
+          "Yes: PDF imposes no page size, and A1 or A0 drawings open, annotate, and compress like any other document. For heavy sets, in-house compression and link sharing — which sidesteps email and its limits — are the two tools that change the daily routine.",
       },
       {
         question: "How do I apply an approval stamp to a drawing?",

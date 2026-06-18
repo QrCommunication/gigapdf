@@ -1,112 +1,92 @@
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-import type { PDFDocumentProxy } from 'pdfjs-dist/types/src/display/api';
 import { randomUUID } from 'node:crypto';
 import type { BookmarkObject, BookmarkDestination, BookmarkStyle } from '@giga-pdf/types';
+import type { OutlineEntry } from '@qrcommunication/gigapdf-lib';
 import { rgbToHex } from '../utils';
+import { getEngine } from '../wasm';
 
-if (!pdfjsLib.GlobalWorkerOptions.workerSrc) { pdfjsLib.GlobalWorkerOptions.workerSrc = ''; }
+/**
+ * Extract the document outline (bookmarks) via the native engine — no pdfjs.
+ * `outline()` returns a flat, pre-order list with a `level` per entry plus the
+ * resolved destination page, `/XYZ` position/zoom, and `/F`/`/C` style; this
+ * rebuilds the tree (by `level`) and maps each node to a `BookmarkObject`.
+ */
 
-interface OutlineItem {
-  title: string;
-  bold?: boolean;
-  italic?: boolean;
-  color?: Uint8ClampedArray | null;
-  dest?: string | unknown[] | null;
-  url?: string | null;
-  items?: OutlineItem[];
-}
-
-async function resolveDestination(
-  doc: PDFDocumentProxy,
-  dest: string | unknown[] | null | undefined,
-): Promise<BookmarkDestination> {
-  if (!dest) {
-    return { pageNumber: 1, position: null, zoom: null };
-  }
-
-  try {
-    let destArray: unknown[] | null = null;
-
-    if (typeof dest === 'string') {
-      destArray = await doc.getDestination(dest);
-    } else if (Array.isArray(dest)) {
-      destArray = dest;
-    }
-
-    if (!destArray || destArray.length === 0) {
-      return { pageNumber: 1, position: null, zoom: null };
-    }
-
-    const pageRef = destArray[0] as { num: number; gen: number };
-    const pageIndex = await doc.getPageIndex(pageRef);
-    const pageNumber = pageIndex + 1;
-
-    const fitType = destArray[1] as { name?: string } | string | undefined;
-    const fitName = typeof fitType === 'object' && fitType?.name ? fitType.name : String(fitType ?? '');
-
-    let position: { x: number; y: number } | null = null;
-    let zoom: number | 'fit' | 'fit-width' | 'fit-height' | null = null;
-
-    if (fitName === 'XYZ') {
-      const x = destArray[2] as number | null;
-      const y = destArray[3] as number | null;
-      const z = destArray[4] as number | null;
-      if (x !== null && y !== null) position = { x: x ?? 0, y: y ?? 0 };
-      if (z !== null && z !== undefined) zoom = z;
-    } else if (fitName === 'Fit') {
-      zoom = 'fit';
-    } else if (fitName === 'FitH') {
-      zoom = 'fit-width';
-    } else if (fitName === 'FitV') {
-      zoom = 'fit-height';
-    }
-
-    return { pageNumber, position, zoom };
-  } catch {
-    return { pageNumber: 1, position: null, zoom: null };
+function mapZoom(entry: OutlineEntry): BookmarkDestination['zoom'] {
+  switch (entry.destKind) {
+    case 'xyz':
+      return typeof entry.zoom === 'number' && entry.zoom > 0 ? entry.zoom : null;
+    case 'fit':
+    case 'fitb':
+      return 'fit';
+    case 'fith':
+    case 'fitbh':
+      return 'fit-width';
+    case 'fitv':
+    case 'fitbv':
+      return 'fit-height';
+    default:
+      return null;
   }
 }
 
-async function mapOutlineItem(
-  doc: PDFDocumentProxy,
-  item: OutlineItem,
-): Promise<BookmarkObject> {
-  const destination = await resolveDestination(doc, item.dest);
+function mapEntry(entry: OutlineEntry): BookmarkObject {
+  const position =
+    entry.destKind === 'xyz' && typeof entry.x === 'number' && typeof entry.y === 'number'
+      ? { x: entry.x, y: entry.y }
+      : null;
 
-  const color = item.color
-    ? rgbToHex(item.color[0]! / 255, item.color[1]! / 255, item.color[2]! / 255)
-    : '#000000';
-
-  const style: BookmarkStyle = {
-    bold: item.bold ?? false,
-    italic: item.italic ?? false,
-    color,
+  const destination: BookmarkDestination = {
+    pageNumber: entry.page ?? 1,
+    position,
+    zoom: mapZoom(entry),
   };
 
-  const children: BookmarkObject[] = [];
-  if (item.items && item.items.length > 0) {
-    for (const child of item.items) {
-      children.push(await mapOutlineItem(doc, child));
-    }
-  }
+  const style: BookmarkStyle = {
+    bold: entry.bold ?? false,
+    italic: entry.italic ?? false,
+    color: entry.color ? rgbToHex(entry.color[0], entry.color[1], entry.color[2]) : '#000000',
+  };
 
   return {
     bookmarkId: randomUUID(),
-    title: item.title ?? '',
+    title: entry.title ?? '',
     destination,
     style,
-    children,
+    children: [],
   };
 }
 
-export async function extractBookmarks(doc: PDFDocumentProxy): Promise<BookmarkObject[]> {
-  const outline = await doc.getOutline();
-  if (!outline || outline.length === 0) return [];
-
-  const bookmarks: BookmarkObject[] = [];
-  for (const item of outline as OutlineItem[]) {
-    bookmarks.push(await mapOutlineItem(doc, item));
+export async function extractBookmarks(
+  pdfBytes: Buffer | ArrayBuffer | Uint8Array,
+): Promise<BookmarkObject[]> {
+  try {
+    const giga = await getEngine();
+    const bytes = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+    const doc = giga.open(bytes);
+    try {
+      const roots: BookmarkObject[] = [];
+      // parents[level] = the most recent node at that depth; a node at `level`
+      // attaches to parents[level - 1]. Entries arrive pre-order, so the parent
+      // is always already present.
+      const parents: BookmarkObject[] = [];
+      for (const entry of doc.outline()) {
+        const node = mapEntry(entry);
+        const level = entry.level;
+        if (level === 0) {
+          roots.push(node);
+        } else {
+          const parent = parents[level - 1];
+          if (parent) parent.children.push(node);
+          else roots.push(node); // malformed level jump → treat as a root
+        }
+        parents[level] = node;
+        parents.length = level + 1; // forget deeper levels
+      }
+      return roots;
+    } finally {
+      doc.close();
+    }
+  } catch {
+    return [];
   }
-
-  return bookmarks;
 }

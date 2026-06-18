@@ -207,7 +207,7 @@ export const useAddFormField = () => {
 // The legacy single-element hooks (usePdfTextOperation, usePdfImageOperation,
 // usePdfShapeOperation, usePdfAnnotationOperation) were removed: the editor
 // now batches every add/update/delete through useApplyElements which goes
-// through the canonical 2-pass pipeline (MuPDF redact → pdf-lib add). The
+// through the canonical 2-pass pipeline (native redaction pass → native add pass). The
 // underlying /api/pdf/text and /api/pdf/image routes still exist for external
 // integrations and have been migrated to call applyOperations internally too.
 
@@ -293,7 +293,7 @@ export const useApplyElements = () => {
   });
 };
 
-// ─── MuPDF-powered features (search, watermark, OCR, PDF/A) ──────────────────
+// ─── Engine-powered features (search, watermark, OCR, PDF/A) ─────────────────
 
 /** Full-text search in a PDF — returns hits with PDF user-space quads. */
 export const useSearchPdf = () => {
@@ -344,7 +344,7 @@ export const useSignPdf = () => {
   });
 };
 
-/** Run Tesseract OCR on each page of a PDF. */
+/** Run OCR on each page of a PDF. */
 export const useOcrPdf = () => {
   return useMutation({
     mutationFn: ({
@@ -374,7 +374,7 @@ export const useMakeSearchablePdf = () => {
 };
 
 /**
- * Compress a PDF (pdf-lib normalisation + MuPDF garbage collection).
+ * Compress a PDF (native normalisation + garbage collection).
  * Resolves with the compressed Blob and the before/after sizes in bytes.
  */
 export const useCompressPdf = () => {
@@ -383,7 +383,7 @@ export const useCompressPdf = () => {
   });
 };
 
-/** Check if the server can run OCR (tesseract installed). */
+/** Check if the server can run OCR. */
 export const useIsOcrAvailable = () => {
   return useMutation({
     mutationFn: () => pdfService.isOcrAvailable(),

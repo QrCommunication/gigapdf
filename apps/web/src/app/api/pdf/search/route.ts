@@ -1,5 +1,5 @@
 /**
- * PDF Search route — full-text search via MuPDF.
+ * PDF Search route — full-text search via the engine.
  *
  * POST /api/pdf/search
  *

@@ -102,7 +102,7 @@ export class SsrfBlockedError extends Error {
 // ---------------------------------------------------------------------------
 
 /**
- * Validates a URL before passing it to Playwright for PDF conversion.
+ * Validates a URL before the engine fetches it for PDF conversion.
  *
  * Checks performed (in order):
  *  1. URL must be parseable and use http/https protocol only
@@ -223,17 +223,18 @@ function redactUrl(url: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Playwright request interception helper
+// Host-fetch request guard (page + redirect hops + sub-resources)
 // ---------------------------------------------------------------------------
 
 /**
- * Returns true when a Playwright request URL should be blocked.
+ * Returns true when a URL the server is about to fetch should be blocked.
  *
- * Used with page.route() to prevent SSRF via HTTP redirects:
- * the initial URL may resolve to a public IP but a redirect could
- * send Playwright to an internal address.
+ * Injected into the in-house HTML→PDF engine's host-fetch layer (the page, each
+ * redirect hop, and every external sub-resource) to prevent SSRF via redirects:
+ * the initial URL may resolve to a public IP but a redirect could point at an
+ * internal address.
  */
-export function shouldBlockPlaywrightRequest(requestUrl: string): boolean {
+export function shouldBlockFetchRequest(requestUrl: string): boolean {
   try {
     const parsed = new URL(requestUrl);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return true;

@@ -1,6 +1,6 @@
 {
   "name": "@giga-pdf/embed",
-  "license": "AGPL-3.0-or-later",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "version": "1.0.0",
   "description": "Embed GigaPDF editor in any website",
   "main": "./dist/index.cjs",

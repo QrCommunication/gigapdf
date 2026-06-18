@@ -51,7 +51,7 @@ const COPY: Record<
     listAria: "Liste des outils PDF",
     h1: "Outils PDF en ligne : tout faire sur vos documents, gratuitement",
     intro:
-      "GigaPDF réunit en une seule plateforme les vingt opérations qui composent la vie réelle d'un document PDF : éditer le texte avec les polices d'origine, fusionner et diviser des dossiers, signer numériquement avec votre certificat, reconnaître le texte des scans, protéger par chiffrement AES-256, convertir depuis et vers Word, Excel, PowerPoint et OpenDocument. Chaque outil est complet dans le plan gratuit — pas de version bridée, pas de filigrane publicitaire — et le code, open source sous licence AGPL, peut tourner sur vos propres serveurs.",
+      "GigaPDF réunit en une seule plateforme les vingt opérations qui composent la vie réelle d'un document PDF : éditer le texte avec les polices d'origine, fusionner et diviser des dossiers, signer numériquement avec votre certificat, reconnaître le texte des scans, protéger par chiffrement AES-256, convertir depuis et vers Word, Excel, PowerPoint et OpenDocument. Chaque outil est complet dans le plan gratuit — pas de version bridée, pas de filigrane publicitaire — et le code, open source sous licence PolyForm Noncommercial, peut tourner sur vos propres serveurs.",
     solutionsTitle: "Des outils pensés pour votre métier",
     solutionsText:
       "Au-delà des opérations unitaires, GigaPDF s'organise en workflows métiers : caviardage à valeur probante pour les avocats, OCR de pièces comptables pour les cabinets, signature de contrats pour les RH, dossiers de subvention pour les associations. Découvrez comment les outils s'assemblent pour votre activité.",
@@ -68,7 +68,7 @@ const COPY: Record<
     listAria: "List of PDF tools",
     h1: "Online PDF tools: do everything with your documents, for free",
     intro:
-      "GigaPDF brings together, on a single platform, the twenty operations that make up the real life of a PDF document: editing text with the original fonts, merging and splitting files, signing digitally with your certificate, recognizing text in scans, protecting with AES-256 encryption, converting to and from Word, Excel, PowerPoint and OpenDocument. Every tool is complete in the free plan — no crippled version, no advertising watermark — and the code, open source under the AGPL license, can run on your own servers.",
+      "GigaPDF brings together, on a single platform, the twenty operations that make up the real life of a PDF document: editing text with the original fonts, merging and splitting files, signing digitally with your certificate, recognizing text in scans, protecting with AES-256 encryption, converting to and from Word, Excel, PowerPoint and OpenDocument. Every tool is complete in the free plan — no crippled version, no advertising watermark — and the code, open source under the PolyForm Noncommercial license, can run on your own servers.",
     solutionsTitle: "Tools designed around your profession",
     solutionsText:
       "Beyond individual operations, GigaPDF is organized into business workflows: evidence-grade redaction for lawyers, OCR of accounting documents for firms, contract signing for HR teams, grant application files for nonprofits. Discover how the tools fit together for your line of work.",

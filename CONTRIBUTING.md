@@ -45,7 +45,7 @@ git commit -s -m "your message"
 
 This adds a `Signed-off-by: Your Name <your@email>` line, certifying that
 you wrote the patch (or otherwise have the right to submit it under the
-project's AGPL-3.0-or-later license).
+project's PolyForm Noncommercial 1.0.0 license).
 
 ### One-time git config
 
@@ -266,4 +266,4 @@ gigapdf/
 ## License
 
 By contributing, you agree that your contributions will be licensed under
-the [GNU AGPL-3.0-or-later](LICENSE).
+the [PolyForm Noncommercial 1.0.0](LICENSE).

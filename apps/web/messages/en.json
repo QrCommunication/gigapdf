@@ -26,6 +26,7 @@
   },
   "nav": {
     "features": "Features",
+    "engine": "PDF Engine",
     "openSource": "Open Source",
     "pricing": "Pricing",
     "github": "GitHub",
@@ -46,20 +47,168 @@
       "default": "GigaPDF — Edit your PDFs like a Word document. Open source.",
       "template": "%s | GigaPDF"
     },
-    "description": "Open-source PDF editor (AGPL) with real-time collaboration: edit text with the original fonts, sign (PKCS#7), OCR your scans, convert 9 Office formats. Self-hostable, AES-256 encrypted, GDPR compliant.",
+    "description": "Open-source PDF editor with real-time collaboration: edit text with the original fonts, sign (PKCS#7), OCR your scans, convert 9 Office formats. Self-hostable, AES-256 encrypted, GDPR compliant.",
     "keywords": "open source PDF editor, edit PDF online, free PDF editor, edit PDF text, sign PDF PKCS#7, searchable OCR PDF, convert Word to PDF, convert PDF to Word, real-time collaborative PDF, self-hosted PDF, open source DMS, PDF compression, PDF/A, GigaPDF",
     "ogTitle": "GigaPDF — Edit your PDFs like a Word document. Really.",
     "ogDescription": "Open-source PDF editor: editable text with faithful fonts, live collaboration, PKCS#7 signature, OCR, 9 Office formats. Self-hostable.",
     "twitterTitle": "GigaPDF — The open-source PDF editor",
-    "twitterDescription": "Edit your PDFs like a Word document: faithful fonts, live collaboration, signing, OCR. AGPL open source, self-hostable."
+    "twitterDescription": "Edit your PDFs like a Word document: faithful fonts, live collaboration, signing, OCR. Open source, self-hostable."
+  },
+  "engine": {
+    "meta": {
+      "title": "The GigaPDF engine — 100% in-house, zero third-party dependency",
+      "description": "Discover the GigaPDF in-house PDF engine: low-level read/write, real content editing, high-fidelity rendering, forms, digital signing, OCR and Office conversion. Compiled to WebAssembly, zero third-party dependency."
+    },
+    "hero": {
+      "kicker": "The in-house PDF engine",
+      "title": "A complete PDF engine,",
+      "titleAccent": "written from scratch.",
+      "description": "Most PDF tools stitch together third-party building blocks. GigaPDF took the opposite path: a full PDF engine, designed and written in-house, that reads, writes, edits, renders, signs and converts your documents. 100% in-house, zero third-party dependency — that is what makes faithful editing and sovereign processing possible.",
+      "ctaTry": "Try the editor",
+      "ctaTools": "See the PDF tools"
+    },
+    "intro": {
+      "label": "In short",
+      "title": "Why an in-house engine changes everything",
+      "description": "An end-to-end PDF engine isn't a technical detail: it's what lets you edit a PDF like a Word document without breaking its layout, guarantee your files never leave our servers, and evolve every capability without depending on a third party's schedule."
+    },
+    "sections": {
+      "core": {
+        "label": "Foundations",
+        "title": "A 100% in-house engine, zero third-party dependency",
+        "description": "At the heart of GigaPDF sits a PDF engine written entirely in-house and compiled to WebAssembly to run at full speed on the server. It manipulates the PDF format at its lowest level, never delegating to a third-party library.",
+        "points": {
+          "lowLevel": "Low-level PDF reading and writing: cross-reference tables (classic xref and xref streams), compressed objects (ObjStm), and recovery of damaged files.",
+          "flate": "Fully in-house Flate compression and decompression: the document's streams are decoded and re-encoded with no external dependency.",
+          "wasm": "Compiled to WebAssembly: native-grade performance, web portability, and a codebase we fully control.",
+          "souverain": "Zero third-party dependency on the critical path: what the engine does, it does itself — for security, auditability and longevity."
+        }
+      },
+      "edit": {
+        "label": "Editing",
+        "title": "Truly edit the content, not cover it up",
+        "description": "Editing a PDF isn't slapping a white sticker over the text. GigaPDF genuinely rewrites the page's content stream to delete, move or replace text, shapes and images — exactly like a word processor.",
+        "points": {
+          "realEdit": "Real editing of text, shapes and images: adding, moving, resizing and reformatting directly inside the page content.",
+          "trueDelete": "True object deletion: erased content disappears from the file, not hidden under a mask — no ghost data remains.",
+          "redaction": "Evidence-grade redaction: redacted text and images are removed from the document irreversibly.",
+          "fidelity": "Original layout preserved: changes blend into the document without breaking its structure."
+        }
+      },
+      "render": {
+        "label": "Rendering",
+        "title": "High-fidelity rasterization and rendering",
+        "description": "To show a preview, generate a thumbnail or produce an image of a page, the engine draws every stroke, every curve and every glyph itself — a complete vector rasterizer, built in-house.",
+        "points": {
+          "vector": "Faithful vector rendering: paths, curves, fills and gradients are drawn at the resolution you need.",
+          "glyphs": "Rendering of embedded font glyphs (TrueType and CFF): text appears exactly as in the original document.",
+          "previews": "High-definition previews and thumbnails for every page, at any scale.",
+          "images": "Crisp page-image export, with no loss of quality and no artifacts."
+        }
+      },
+      "forms": {
+        "label": "Forms",
+        "title": "Interactive forms, filled and flattened",
+        "description": "The engine understands interactive PDF forms: it reads their fields, pre-fills them and can freeze them permanently to produce a non-editable document.",
+        "points": {
+          "types": "Four field types supported: text fields, checkboxes, radio buttons and dropdown lists / combos.",
+          "fill": "Programmatic filling of fields and reading of existing values.",
+          "flatten": "Flattening: fields become fixed content, for a final, consistent document.",
+          "fidelity": "Field appearance and positioning respected, compliant with the PDF standard."
+        }
+      },
+      "annotations": {
+        "label": "Annotations",
+        "title": "Natively annotate your documents",
+        "description": "Highlight a passage, add a note, apply a stamp: the engine handles native PDF annotations, readable in any compliant viewer.",
+        "points": {
+          "markup": "Highlighting, underlining and text markup anchored in the right place, even on a rotated page.",
+          "notes": "Notes and comments embedded in the document.",
+          "stamps": "Stamps and arrows to validate, flag or draw attention.",
+          "standard": "Standard-compliant annotations: openable and editable in any PDF viewer that follows the spec."
+        }
+      },
+      "fonts": {
+        "label": "Fonts",
+        "title": "Faithful fonts, automatically",
+        "description": "A PDF's fidelity rests on its fonts. The engine identifies, fetches and embeds them itself, so your documents render everywhere exactly as intended — no tofu, no missing characters.",
+        "points": {
+          "identify": "Precise identification of the fonts used in each document.",
+          "download": "Automatic download of missing fonts from the Google Fonts library, on the fly.",
+          "embed": "Font embedding on save: the produced file is self-contained and renders faithfully everywhere.",
+          "cmap": "Full support for composite fonts (Type0 / CID) and character mapping tables (CMap), for text extraction with no lost characters."
+        }
+      },
+      "security": {
+        "label": "Security",
+        "title": "Encryption, signing and archiving",
+        "description": "Protect a document, prove its integrity, keep it over time: the engine handles encryption, digital signing and archival compliance end to end.",
+        "points": {
+          "encryption": "Document encryption in RC4 and AES (128 and 256 bits): password protection and permission control.",
+          "signature": "PKCS#7 digital signing with a certificate: a verifiable proof of integrity, the way major PDF viewers do it.",
+          "tamper": "Any tampering with a signed document is detectable — trust is demonstrable.",
+          "archive": "Long-term archival compliance (PDF/A) to preserve your documents over time."
+        }
+      },
+      "html": {
+        "label": "HTML → PDF",
+        "title": "From HTML/CSS to PDF, natively",
+        "description": "Generating a PDF from a web page or an HTML template is a common need. GigaPDF includes its own HTML/CSS layout engine — and even an in-house JavaScript engine for dynamic pages.",
+        "points": {
+          "css": "In-house HTML/CSS rendering engine: style cascade, block and inline layout, tables, flexbox and pagination.",
+          "fonts": "Web fonts embedded in the generated PDF, for pixel-faithful rendering.",
+          "js": "Built-in native JavaScript engine: HTML templates that run scripts are rendered correctly.",
+          "noThirdParty": "All of it without a third-party browser or rendering engine: the full chain is in-house."
+        }
+      },
+      "convert": {
+        "label": "Conversion",
+        "title": "Convert to truly editable documents",
+        "description": "The in-house conversion engine doesn't just take a picture of the page: it rebuilds genuinely editable documents, with selectable text, tables and repositioned images.",
+        "points": {
+          "office": "Conversion between PDF and office formats: Word (DOCX), Excel (XLSX), PowerPoint (PPTX) and OpenDocument (ODT, ODS).",
+          "editable": "Genuinely editable elements in the output — text, tables, images — not a flat scan.",
+          "web": "Export to HTML and plain text to reuse the content elsewhere.",
+          "fidelity": "Structure and formatting preserved as faithfully as possible from one format to another."
+        }
+      },
+      "ocr": {
+        "label": "OCR",
+        "title": "Make your scans searchable",
+        "description": "A scanned PDF is just an image: you can neither search it nor copy its text. The in-house OCR recognizes the characters and adds an invisible text layer over the image, without changing its appearance.",
+        "points": {
+          "recognize": "Character recognition directly on scanned pages.",
+          "layer": "Invisible text layer overlaid on the image: the document looks identical to the eye, but becomes searchable.",
+          "searchable": "Full-text search and copy-paste on documents that were only images.",
+          "preserve": "The original image is fully preserved — OCR never alters the rendering."
+        }
+      },
+      "privacy": {
+        "label": "Sovereignty",
+        "title": "Free, open source and privacy-respecting",
+        "description": "Because all processing runs on our own engine, your documents are never sent to a third-party service. They are processed on our servers — or on yours, since GigaPDF is self-hostable.",
+        "points": {
+          "free": "Every engine capability is available in the free plan, with no watermark and no crippled version.",
+          "oss": "Source-available code under the PolyForm Noncommercial license: audit it, study it, contribute.",
+          "noThirdParty": "Nothing sent to a third-party service: processing stays end to end under our in-house engine.",
+          "selfHost": "Self-hostable: install GigaPDF on your own servers to keep your documents at home."
+        }
+      }
+    },
+    "cta": {
+      "title": "Put the engine to the test",
+      "description": "Edit, sign and convert your PDFs right now, or explore every tool this engine makes possible.",
+      "ctaTry": "Try for free",
+      "ctaTools": "Discover the tools"
+    }
   },
   "openSource": {
     "meta": {
       "title": "Open source",
-      "description": "GigaPDF is a 100% open-source PDF editor licensed under AGPL-3.0: transparent, auditable code, self-hostable, no lock-in. Contribute on GitHub."
+      "description": "GigaPDF is a 100% open-source PDF editor, source-available under PolyForm Noncommercial 1.0.0: transparent, auditable code, self-hostable, no lock-in. Contribute on GitHub."
     },
     "hero": {
-      "kicker": "Open code · AGPL-3.0",
+      "kicker": "Open code · PolyForm Noncommercial",
       "title": "A PDF editor that is",
       "titleAccent": "truly open source",
       "description": "Every line of GigaPDF is public, auditable and self-hostable. No black box, no lock-in: the cloud version and the one you host run the exact same code base.",
@@ -88,11 +237,11 @@
     },
     "license": {
       "label": "License",
-      "title": "GNU AGPL-3.0-or-later",
-      "description": "The code is licensed under AGPL-3.0. You are free to use, study, modify and redistribute it — provided you publish the source code of any modified version offered as a network service.",
+      "title": "PolyForm Noncommercial 1.0.0",
+      "description": "The code is source-available under the PolyForm Noncommercial 1.0.0 license: free to use, study, modify and redistribute for any noncommercial purpose. For commercial use, a dedicated license is available — contact us.",
       "points": {
-        "use": "Use, study and modify the code freely.",
-        "network": "Any modified version run as a network service must publish its sources.",
+        "use": "Use, study, modify and redistribute the code for any noncommercial purpose.",
+        "network": "Commercial use requires a dedicated license — reach out to discuss it.",
         "trademark": "The \"GigaPDF\" name and logo are trademarks of QR Communication SAS: a modified fork must rebrand entirely."
       },
       "linkLicense": "Read the license",
@@ -101,10 +250,10 @@
     "stack": {
       "label": "Stack",
       "title": "A modern, auditable stack",
-      "description": "GigaPDF is a pnpm + Turbo monorepo. Next.js 16 / React 19 front end, a TypeScript PDF engine (pdf.js, pdf-lib, MuPDF), a FastAPI / Python API, all on Node.js 24 and PostgreSQL 17.",
+      "description": "GigaPDF is a pnpm + Turbo monorepo. Next.js 16 / React 19 front end, an in-house TypeScript/WebAssembly PDF engine (100% in-house, zero third-party dependency), a FastAPI / Python API, all on Node.js 24 and PostgreSQL 17.",
       "items": {
         "frontend": "Next.js 16 · React 19 · Tailwind v4",
-        "engine": "TypeScript PDF engine · pdf.js · pdf-lib · MuPDF",
+        "engine": "In-house PDF engine · TypeScript · WebAssembly",
         "backend": "FastAPI · Python 3.12 · Celery",
         "data": "PostgreSQL 17 · Redis 8 · S3"
       }
@@ -131,7 +280,7 @@
   },
   "landing": {
     "hero": {
-      "kicker": "Open-source PDF editor — AGPL-3.0",
+      "kicker": "Open-source PDF editor — PolyForm Noncommercial",
       "title": "Edit your PDFs like a Word document.",
       "titleAccent": "Really.",
       "description": "Text, images and layouts are edited right inside the PDF, with the original fonts. Live collaboration on the same canvas, full version history — and your files stay yours: GigaPDF is open source and self-hostable.",
@@ -147,7 +296,7 @@
     },
     "trust": {
       "label": "Guarantees",
-      "openSource": "Open source — AGPL-3.0",
+      "openSource": "Open source — PolyForm Noncommercial",
       "selfHost": "Self-hostable",
       "encryption": "AES-256 encryption",
       "gdpr": "GDPR compliant"
@@ -186,7 +335,7 @@
           "signature": "PKCS#7 digital signature with your P12 certificate — processed in memory, never stored",
           "encryption": "AES-256 encryption for documents, at rest and in transit",
           "pdfa": "PDF/A export for long-term legal archiving",
-          "ocr": "Built-in OCR: your scans become searchable and copyable"
+          "ocr": "Built-in, fully in-house OCR: your scans — printed or handwritten — become searchable and copyable (Latin languages, accents included)"
         }
       },
       "formats": {
@@ -230,7 +379,7 @@
       },
       "ocr": {
         "title": "Searchable OCR",
-        "description": "The scan line turns images into text."
+        "description": "The scan line turns images — printed or handwritten — into text."
       },
       "formats": {
         "title": "9 Office formats",
@@ -347,7 +496,7 @@
       "openSource": {
         "title": "Open source",
         "github": "GitHub repository",
-        "license": "AGPL-3.0 license",
+        "license": "PolyForm Noncommercial license",
         "selfHosting": "Self-hosting guide"
       },
       "legal": {
@@ -1526,12 +1675,12 @@
       },
       "openSource": {
         "title": "Open Source",
-        "description": "GigaPDF is a 100% open source project under the MIT license. This means you can inspect the source code, contribute to the project, or even host it yourself on your own infrastructure.",
+        "description": "GigaPDF is a 100% open source project. The code is source-available under the PolyForm Noncommercial 1.0.0 license: you can inspect the source code, contribute to the project, or self-host it for noncommercial use.",
         "features": {
           "transparent": "Transparent and auditable source code",
           "selfHost": "Free self-hosting option",
           "contribute": "Active contributor community",
-          "mitLicense": "Permissive MIT license"
+          "mitLicense": "PolyForm Noncommercial license"
         }
       },
       "company": {
@@ -1751,9 +1900,9 @@
         "responsibility": "You are solely responsible for the content you upload and its compliance with applicable laws."
       },
       "openSource": {
-        "title": "Open Source license",
-        "description": "GigaPDF is open source software distributed under the MIT license.",
-        "license": "You can use, copy, modify, and distribute the source code",
+        "title": "Source-available license",
+        "description": "GigaPDF is source-available software distributed under the PolyForm Noncommercial 1.0.0 license.",
+        "license": "You can use, study, modify and redistribute the source code for noncommercial purposes; commercial use requires a dedicated license",
         "source": "The source code is available on GitHub",
         "contributions": "Contributions are welcome under the same license terms"
       },
@@ -1810,11 +1959,11 @@
       "subtitle": "Everything to use, integrate and self-host GigaPDF — the open-source WYSIWYG PDF editor.",
       "overview": {
         "title": "Overview",
-        "p1": "GigaPDF is an open-source WYSIWYG PDF editor: true in-place editing of text, images and forms, a document management system (DMS), and real-time collaboration. The code is released under the GNU AGPL-3.0 license and is fully self-hostable.",
+        "p1": "GigaPDF is an open-source WYSIWYG PDF editor: true in-place editing of text, images and forms, a document management system (DMS), and real-time collaboration. The code is source-available under the PolyForm Noncommercial 1.0.0 license (free for noncommercial use) and is fully self-hostable.",
         "p2": "The cloud version (giga-pdf.com) and the self-hosted version share the exact same code base. Use it as-is, embed it into your product via the embed widget and REST API, or host it on your own infrastructure.",
         "repo": "Source code (GitHub)",
-        "license": "AGPL-3.0 license",
-        "badge": "Open source · AGPLv3"
+        "license": "PolyForm Noncommercial license",
+        "badge": "Open source · PolyForm NC"
       },
       "features": {
         "title": "Features (v1.3.0)",

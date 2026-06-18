@@ -4,21 +4,21 @@
  * without altering its visual appearance.
  *
  * Strategy (ocrmypdf-style, all open-source building blocks):
- *   1. Detect pages WITHOUT extractable text via MuPDF structured text
+ *   1. Detect pages WITHOUT extractable text via the engine's structured text
  *      (`extractPlainText`). `force: true` processes every page.
- *   2. Rasterise those pages to PNG via MuPDF (`renderPages`, dpi/72 scale).
- *   3. Run the system `tesseract` binary in TSV mode: one row per detected
+ *   2. Rasterise those pages to PNG via the engine (`renderPages`, dpi/72 scale).
+ *   3. Run the system OCR binary in TSV mode: one row per detected
  *      item, level 5 rows = words with pixel bounding boxes + confidence.
  *   4. Convert each word bbox from image pixels (top-left origin, y down)
  *      to PDF user space (bottom-left origin, y up), honouring /Rotate.
- *   5. Draw each word with pdf-lib `drawText({ opacity: 0 })` — glyphs are
- *      painted fully transparent but remain part of the content stream, so
- *      text extraction/search/selection finds them.
+ *   5. Add each word via the WASM engine `addTextLayer` (text render mode 3 —
+ *      invisible) in a SINGLE content append per page; glyphs stay part of the
+ *      content stream so text extraction/search/selection finds them.
  *
  * The standard Helvetica font is WinAnsi-encoded: words containing glyphs
- * outside WinAnsi (CJK, Hebrew, math symbols…) throw at encode time and are
- * skipped per-word — acceptable because the glyphs are invisible anyway and
- * the overwhelming majority of fra+eng OCR output is WinAnsi-safe.
+ * outside WinAnsi (CJK, Hebrew, math symbols…) are skipped by the engine —
+ * acceptable because the glyphs are invisible anyway and the overwhelming
+ * majority of fra+eng OCR output is WinAnsi-safe.
  */
 
 import { execFile } from 'node:child_process';
@@ -26,19 +26,19 @@ import { promisify } from 'node:util';
 import { writeFile, readFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PDFDocument, StandardFonts, degrees } from 'pdf-lib';
+import { getEngine } from '../wasm';
 import { engineLogger } from '../utils/logger';
-import { renderPages } from '../render/mupdf-render';
+import { renderPages } from '../render/engine-render';
 import { extractPlainText } from './structured-text';
 import { isTesseractAvailable, TesseractNotInstalledError } from './ocr';
 
 const execFileAsync = promisify(execFile);
 
-/** Words below this tesseract confidence (0-100) are dropped. */
+/** Words below this OCR confidence (0-100) are dropped. */
 export const DEFAULT_MIN_WORD_CONFIDENCE = 40;
 
 export interface MakeSearchablePdfOptions {
-  /** Tesseract language string (e.g. "fra+eng"). Defaults to "fra+eng". */
+  /** OCR language string (e.g. "fra+eng"). Defaults to "fra+eng". */
   languages?: string;
   /** Render DPI for the OCR rasterisation. Defaults to 144. */
   dpi?: 144 | 200 | 300;
@@ -57,7 +57,7 @@ export interface MakeSearchablePdfResult {
   wordsAdded: number;
 }
 
-/** One word row (level 5) from tesseract TSV output. Pixel coordinates. */
+/** One word row (level 5) from OCR TSV output. Pixel coordinates. */
 export interface OcrTsvWord {
   /** Left edge in image pixels (top-left origin). */
   left: number;
@@ -67,14 +67,14 @@ export interface OcrTsvWord {
   width: number;
   /** Height in image pixels. */
   height: number;
-  /** Tesseract confidence 0-100. */
+  /** OCR confidence 0-100. */
   conf: number;
   /** Recognised word text (trimmed, non-empty). */
   text: string;
 }
 
 /**
- * Parse tesseract TSV output into word boxes.
+ * Parse OCR TSV output into word boxes.
  *
  * TSV columns: level page_num block_num par_num line_num word_num
  *              left top width height conf text
@@ -146,12 +146,12 @@ export interface PdfWordPlacement {
 }
 
 /**
- * Convert a tesseract word bbox (image pixels, top-left origin, y down)
- * into a pdf-lib drawText placement (PDF user space, bottom-left origin,
+ * Convert an OCR word bbox (image pixels, top-left origin, y down)
+ * into a drawText placement (PDF user space, bottom-left origin,
  * y up), accounting for the page /Rotate flag.
  *
  * scale = displayedPageWidthPt / imageWidthPx, where the displayed width is
- * pageHeight for /Rotate 90|270 (MuPDF rasterises POST-rotation, so the
+ * pageHeight for /Rotate 90|270 (the engine rasterises POST-rotation, so the
  * image axes follow the displayed page, not the user-space MediaBox).
  *
  * The baseline is anchored at the BOTTOM of the word bbox — close enough
@@ -199,7 +199,7 @@ export function tsvWordToPdfPlacement(
   }
 }
 
-/** Normalise a pdf-lib rotation angle to 0|90|180|270. */
+/** Normalise a rotation angle to 0|90|180|270. */
 function normalizeRotation(angle: number): 0 | 90 | 180 | 270 {
   const wrapped = ((Math.round(angle / 90) * 90) % 360 + 360) % 360;
   return (wrapped === 90 || wrapped === 180 || wrapped === 270 ? wrapped : 0) as
@@ -215,10 +215,10 @@ function normalizeRotation(angle: number): 0 | 90 | 180 | 270 {
  * extractable text are left untouched unless `force: true`.
  *
  * Returns the original bytes untouched (pagesProcessed = 0) when no page
- * needs OCR — in that case tesseract availability is NOT required.
+ * needs OCR — in that case OCR availability is NOT required.
  *
  * @throws TesseractNotInstalledError when pages need OCR but the system
- *         tesseract binary is missing.
+ *         OCR binary is missing.
  */
 export async function makeSearchablePdf(
   pdfBytes: Uint8Array,
@@ -240,7 +240,7 @@ export async function makeSearchablePdf(
     throw new TesseractNotInstalledError();
   }
 
-  // 2. Rasterise the target pages via MuPDF (single document open).
+  // 2. Rasterise the target pages via the engine (single document open).
   const scale = dpi / 72;
   const rendered = await renderPages(pdfBytes, {
     pages: targetPages,
@@ -248,7 +248,7 @@ export async function makeSearchablePdf(
     format: 'png',
   });
 
-  // 3. Tesseract TSV per page, through a throwaway tmp dir.
+  // 3. OCR TSV per page, through a throwaway tmp dir.
   const tmpDir = await mkdtemp(join(tmpdir(), 'gigapdf-ocr-searchable-'));
   const wordsByPage = new Map<number, OcrTsvWord[]>();
   const imageDims = new Map<number, { width: number; height: number }>();
@@ -279,64 +279,65 @@ export async function makeSearchablePdf(
     await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
   }
 
-  // 4. Invisible text layer via pdf-lib (opacity 0 — glyphs are in the
-  //    content stream for extraction/search but painted fully transparent).
-  const pdfDoc = await PDFDocument.load(pdfBytes, { updateMetadata: false });
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  // 4. Invisible text layer via the WASM engine (render mode 3 — glyphs live in
+  //    the content stream for extraction/search but are never painted). One
+  //    batched `addTextLayer` call per page (one font, O(n) not O(n²)).
+  const giga = await getEngine();
+  const doc = giga.open(pdfBytes);
 
   let pagesProcessed = 0;
   let wordsAdded = 0;
-  let wordsSkipped = 0;
 
-  for (const pageNumber of targetPages) {
-    const dims = imageDims.get(pageNumber);
-    if (!dims) continue; // page was filtered out by renderPages (out of range)
-    pagesProcessed += 1;
+  try {
+    for (const pageNumber of targetPages) {
+      const dims = imageDims.get(pageNumber);
+      if (!dims) continue; // page was filtered out by renderPages (out of range)
+      pagesProcessed += 1;
 
-    const words = wordsByPage.get(pageNumber) ?? [];
-    if (words.length === 0) continue;
+      const words = wordsByPage.get(pageNumber) ?? [];
+      if (words.length === 0) continue;
 
-    const page = pdfDoc.getPage(pageNumber - 1);
-    const ctx: PdfPlacementContext = {
-      imageWidth: dims.width,
-      imageHeight: dims.height,
-      pageWidth: page.getWidth(),
-      pageHeight: page.getHeight(),
-      rotation: normalizeRotation(page.getRotation().angle),
-    };
+      const info = doc.pageInfo(pageNumber);
+      const ctx: PdfPlacementContext = {
+        imageWidth: dims.width,
+        imageHeight: dims.height,
+        pageWidth: info.width,
+        pageHeight: info.height,
+        rotation: normalizeRotation(info.rotation),
+      };
 
-    for (const word of words) {
-      const placement = tsvWordToPdfPlacement(word, ctx);
-      if (placement.fontSize < 1) continue;
-      try {
-        // Helvetica is WinAnsi-only: encodeText throws on out-of-charset
-        // glyphs — skip the word (it is invisible, exact metrics moot).
-        page.drawText(word.text, {
+      const runs: { x: number; y: number; size: number; text: string; rotation: number }[] = [];
+      for (const word of words) {
+        const placement = tsvWordToPdfPlacement(word, ctx);
+        if (placement.fontSize < 1) continue;
+        runs.push({
           x: placement.x,
           y: placement.y,
           size: placement.fontSize,
-          font,
-          opacity: 0,
-          rotate: degrees(placement.rotation),
+          text: word.text,
+          rotation: placement.rotation,
         });
-        wordsAdded += 1;
-      } catch {
-        wordsSkipped += 1;
+      }
+      // The engine skips words with non-WinAnsi glyphs (standard Helvetica) and
+      // returns the count actually written.
+      if (runs.length > 0) {
+        wordsAdded += doc.addTextLayer(pageNumber, runs);
       }
     }
+
+    const bytes = doc.saveCompressed();
+
+    engineLogger.info('ocr-searchable: invisible text layer added', {
+      pagesProcessed,
+      wordsAdded,
+      languages,
+      dpi,
+      inputBytes: pdfBytes.byteLength,
+      outputBytes: bytes.byteLength,
+    });
+
+    return { bytes, pagesProcessed, wordsAdded };
+  } finally {
+    doc.close();
   }
-
-  const bytes = await pdfDoc.save({ useObjectStreams: true });
-
-  engineLogger.info('ocr-searchable: invisible text layer added', {
-    pagesProcessed,
-    wordsAdded,
-    wordsSkipped,
-    languages,
-    dpi,
-    inputBytes: pdfBytes.byteLength,
-    outputBytes: bytes.byteLength,
-  });
-
-  return { bytes, pagesProcessed, wordsAdded };
 }

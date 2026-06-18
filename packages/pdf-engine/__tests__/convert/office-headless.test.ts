@@ -261,11 +261,11 @@ describe('convertPdfToOffice', () => {
   it(
     'Test 3 — PDF vers XLSX rejette avec LibreOfficeConversionError (non supporte)',
     async () => {
-      // LibreOffice ne peut pas convertir un PDF en tableur — la fonction doit
-      // rejeter immediatement avec une erreur explicite, sans spawner soffice.
+      // Un PDF n'est pas un tableur — la fonction doit rejeter immediatement
+      // avec une erreur explicite (xlsx passe par `convertPdfToXlsx`).
       const fakePdfBytes = new Uint8Array(Buffer.from('%PDF-1.4 minimal'));
       await expect(convertPdfToOffice(fakePdfBytes, 'xlsx')).rejects.toThrow(
-        'PDF → XLSX is not supported by LibreOffice headless',
+        'PDF → XLSX is not supported',
       );
     },
   );
@@ -401,7 +401,7 @@ describe('LibreOfficeUnavailableError', () => {
   it('has the correct name property and message', () => {
     const err = new LibreOfficeUnavailableError();
     expect(err.name).toBe('LibreOfficeUnavailableError');
-    expect(err.message).toContain('soffice');
+    expect(err.message).toContain('unavailable');
     expect(err).toBeInstanceOf(Error);
   });
 });

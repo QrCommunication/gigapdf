@@ -1,5 +1,5 @@
-import { PDFDocument, PDFName, PDFNumber } from 'pdf-lib';
 import type { DocumentPermissions } from '@giga-pdf/types';
+import { getEngine } from '../wasm';
 import { PDFEngineError } from '../errors';
 import { encryptPDF } from './pdf-encrypt';
 
@@ -20,22 +20,7 @@ const ALL_PERMISSIONS_ALLOWED: DocumentPermissions = {
   printHighQuality: true,
 };
 
-// All permissions denied — returned as fallback for encrypted documents
-// where the permission flags cannot be read.
-const ALL_PERMISSIONS_DENIED: DocumentPermissions = {
-  print: false,
-  modify: false,
-  copy: false,
-  annotate: false,
-  fillForms: false,
-  extract: false,
-  assemble: false,
-  printHighQuality: false,
-};
-
-/**
- * Parses an integer permission bitmask (PDF spec Table 3.20) into a DocumentPermissions object.
- */
+/** Decodes a `/P` permission bitmask (ISO 32000 Table 22) into flags. */
 function parsePermissionFlags(flags: number): DocumentPermissions {
   return {
     print: (flags & 0x4) !== 0, // bit 3
@@ -50,78 +35,41 @@ function parsePermissionFlags(flags: number): DocumentPermissions {
 }
 
 /**
- * Reads the encryption status and permission flags from a PDF document.
- *
- * Permission flags are stored in the Encrypt dictionary's /P entry (a signed 32-bit integer).
- * pdf-lib exposes the trailer, which contains a reference to the Encrypt dictionary when
- * the document is encrypted.
- *
- * @param buffer - PDF bytes to inspect
- * @param password - Optional password for encrypted documents (unused in v1, see note in pdf-decrypt.ts)
+ * Reads a PDF's encryption status and permission flags via the zero-dependency
+ * WASM engine — `engine.encryptionInfo` parses the `/Encrypt` dictionary's `/P`
+ * **without decrypting** (no password needed), so this works on protected files.
  */
-export async function getPermissions(buffer: Buffer, password?: string): Promise<PermissionsResult> {
-  void password;
-
-  let pdfDoc: PDFDocument;
-  try {
-    pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
-  } catch (err) {
-    throw new PDFEngineError(
-      `Failed to load PDF for permission inspection: ${err instanceof Error ? err.message : String(err)}`,
-      'PDF_PERMISSIONS_LOAD_FAILED',
-    );
+export async function getPermissions(
+  buffer: Buffer,
+  // Permission flags are read from the (cleartext) `/Encrypt` dictionary, so no
+  // password is needed; kept optional for backward-compatible call sites.
+  _password?: string,
+): Promise<PermissionsResult> {
+  // `encryptionInfo` is lenient on non-PDF input (it would report "not
+  // encrypted"); reject anything without a PDF header up front instead.
+  if (!buffer.subarray(0, 1024).includes('%PDF-')) {
+    throw new PDFEngineError('Not a valid PDF document', 'PDF_PERMISSIONS_LOAD_FAILED');
   }
 
-  // Check for an Encrypt dictionary in the trailer.
-  const trailer = pdfDoc.context.trailerInfo;
-  const encryptRef = trailer.Encrypt;
+  const giga = await getEngine();
+  const data = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  const info = giga.encryptionInfo(data);
 
-  if (encryptRef == null) {
-    // No Encrypt entry — document is not encrypted, all operations permitted.
+  if (!info.encrypted) {
     return { isEncrypted: false, permissions: { ...ALL_PERMISSIONS_ALLOWED } };
   }
-
-  // Attempt to resolve the Encrypt dictionary and read the /P (permissions) entry.
-  try {
-    const encryptDict = pdfDoc.context.lookup(encryptRef);
-
-    if (encryptDict != null && 'get' in encryptDict) {
-      const pEntry = (encryptDict as { get: (key: PDFName) => unknown }).get(PDFName.of('P'));
-
-      if (pEntry instanceof PDFNumber) {
-        const flags = pEntry.asNumber();
-        return { isEncrypted: true, permissions: parsePermissionFlags(flags) };
-      }
-    }
-  } catch {
-    // If we can't read the permissions entry, fall through to the denied default.
-  }
-
-  // Encrypted but permissions flags could not be resolved — deny everything conservatively.
-  return { isEncrypted: true, permissions: { ...ALL_PERMISSIONS_DENIED } };
+  return { isEncrypted: true, permissions: parsePermissionFlags(info.permissions) };
 }
 
 /**
- * Returns a new PDF with the specified permissions applied.
- *
- * This delegates to `encryptPDF`, which sets the permission flags in the encryption
- * dictionary. An owner password is required to change permissions per the PDF spec.
- *
- * V1 LIMITATION: Because `encryptPDF` does not yet apply object-level encryption,
- * the returned PDF will have the permission intent recorded but not enforced at the
- * byte level. See `pdf-encrypt.ts` for the full explanation and upgrade path.
- *
- * @param buffer - Source PDF bytes
- * @param permissions - Permission flags to apply
- * @param ownerPassword - Owner password required to modify permissions
+ * Returns a new PDF with the requested permissions applied. Delegates to
+ * {@link encryptPDF}, which records the permission flags in a real encryption
+ * dictionary (an owner password is required to change permissions per the spec).
  */
 export async function setPermissions(
   buffer: Buffer,
   permissions: Partial<DocumentPermissions>,
   ownerPassword: string,
 ): Promise<Buffer> {
-  return encryptPDF(buffer, {
-    ownerPassword,
-    permissions,
-  });
+  return encryptPDF(buffer, { ownerPassword, permissions });
 }

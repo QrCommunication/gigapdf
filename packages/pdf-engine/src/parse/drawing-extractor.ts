@@ -1,142 +1,54 @@
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { OPS } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api';
 import { randomUUID } from 'node:crypto';
 import type { ShapeElement, ShapeType, Point } from '@giga-pdf/types';
+import type { VectorPathInfo } from '@qrcommunication/gigapdf-lib';
 import { rgbToHex } from '../utils';
+import { getEngine } from '../wasm';
 
-if (!pdfjsLib.GlobalWorkerOptions.workerSrc) { pdfjsLib.GlobalWorkerOptions.workerSrc = ''; }
-
-// pdfjs internal DrawOPS encoded inside constructPath's Float32Array stream.
-// Ref: pdfjs-dist legacy build, search for "moveTo: 0" inside the bundle.
-const DRAW_MOVE_TO = 0;
-const DRAW_LINE_TO = 1;
-const DRAW_CURVE_TO = 2;
-const DRAW_QUAD_CURVE_TO = 3;
-const DRAW_CLOSE_PATH = 4;
-
-interface DrawingState {
-  fillColor: string | null;
-  strokeColor: string | null;
-  strokeWidth: number;
-  dashArray: number[];
-  fillAlpha: number;
-  strokeAlpha: number;
-  ctm: number[];
-  matrixStack: Array<{
-    ctm: number[];
-    fillColor: string | null;
-    strokeColor: string | null;
-    strokeWidth: number;
-    fillAlpha: number;
-    strokeAlpha: number;
-    dashArray: number[];
-  }>;
-}
-
-function parsePdfjsColor(args: unknown[]): string | null {
-  if (args.length === 0) return null;
-  const first = args[0];
-  if (typeof first === 'string') {
-    // Already a hex string ("#rrggbb"). Modern pdfjs.
-    if (/^#[0-9a-f]{6}$/i.test(first)) return first.toLowerCase();
-    return null;
-  }
-  if (typeof first === 'number') {
-    // Older pdfjs: byte triple [r, g, b] in 0–255.
-    const r = Math.max(0, Math.min(255, Math.round(first)));
-    const g = Math.max(0, Math.min(255, Math.round((args[1] as number) ?? 0)));
-    const b = Math.max(0, Math.min(255, Math.round((args[2] as number) ?? 0)));
-    return rgbToHex(r, g, b);
-  }
-  return null;
-}
-
-function multiplyMatrices(m1: number[], m2: number[]): number[] {
-  return [
-    m1[0]! * m2[0]! + m1[2]! * m2[1]!,
-    m1[1]! * m2[0]! + m1[3]! * m2[1]!,
-    m1[0]! * m2[2]! + m1[2]! * m2[3]!,
-    m1[1]! * m2[2]! + m1[3]! * m2[3]!,
-    m1[0]! * m2[4]! + m1[2]! * m2[5]! + m1[4]!,
-    m1[1]! * m2[4]! + m1[3]! * m2[5]! + m1[5]!,
-  ];
-}
-
-function transformPoint(x: number, y: number, ctm: number[]): Point {
-  return {
-    x: ctm[0]! * x + ctm[2]! * y + ctm[4]!,
-    y: ctm[1]! * x + ctm[3]! * y + ctm[5]!,
-  };
-}
+// ---------------------------------------------------------------------------
+// Drawing/shape extractor — backed by the native engine's `vectorPaths()`
+// (no pdfjs). The engine walks the page content stream and returns each painted
+// path as geometry (segments in user space, origin bottom-left) + style
+// (fill/stroke RGB 0..1, line width, alpha, dash). We map that to the editor's
+// ShapeElement scene-graph type, flipping to web coordinates (top-left origin).
+// ---------------------------------------------------------------------------
 
 interface PathSegment {
-  /** SVG-like command in PDF user-space coords (post-CTM, pre-Y-flip) */
+  /** SVG-like command in PDF user-space coords (post-CTM, pre-Y-flip). */
   cmd: 'M' | 'L' | 'C' | 'Q' | 'Z';
   points: Point[];
 }
 
-/**
- * Decode the inline opcode stream produced by pdfjs `constructPath`.
- * Format: Float32Array with [op, ...coords, op, ...coords, ...] where:
- *   op=0  moveTo            → 2 coords
- *   op=1  lineTo            → 2 coords
- *   op=2  curveTo (cubic)   → 6 coords (cp1 cp2 end)
- *   op=3  quadraticCurveTo  → 4 coords (cp end)
- *   op=4  closePath         → 0 coords
- */
-function decodePathStream(buffer: Float32Array, ctm: number[]): PathSegment[] {
-  const segments: PathSegment[] = [];
-  let i = 0;
-  while (i < buffer.length) {
-    const op = buffer[i++]! | 0;
-    switch (op) {
-      case DRAW_MOVE_TO: {
-        if (i + 2 > buffer.length) return segments;
-        const p = transformPoint(buffer[i]!, buffer[i + 1]!, ctm);
-        i += 2;
-        segments.push({ cmd: 'M', points: [p] });
-        break;
-      }
-      case DRAW_LINE_TO: {
-        if (i + 2 > buffer.length) return segments;
-        const p = transformPoint(buffer[i]!, buffer[i + 1]!, ctm);
-        i += 2;
-        segments.push({ cmd: 'L', points: [p] });
-        break;
-      }
-      case DRAW_CURVE_TO: {
-        if (i + 6 > buffer.length) return segments;
-        const cp1 = transformPoint(buffer[i]!, buffer[i + 1]!, ctm);
-        const cp2 = transformPoint(buffer[i + 2]!, buffer[i + 3]!, ctm);
-        const end = transformPoint(buffer[i + 4]!, buffer[i + 5]!, ctm);
-        i += 6;
-        segments.push({ cmd: 'C', points: [cp1, cp2, end] });
-        break;
-      }
-      case DRAW_QUAD_CURVE_TO: {
-        if (i + 4 > buffer.length) return segments;
-        const cp = transformPoint(buffer[i]!, buffer[i + 1]!, ctm);
-        const end = transformPoint(buffer[i + 2]!, buffer[i + 3]!, ctm);
-        i += 4;
-        segments.push({ cmd: 'Q', points: [cp, end] });
-        break;
-      }
-      case DRAW_CLOSE_PATH:
-        segments.push({ cmd: 'Z', points: [] });
-        break;
-      default:
-        // Unknown opcode — abort gracefully rather than read junk
-        return segments;
-    }
+/** Convert one engine path segment (user space) to an SVG-like PathSegment. */
+function toSegment(seg: VectorPathInfo['segments'][number]): PathSegment | null {
+  const p = seg.pts;
+  switch (seg.op) {
+    case 'M':
+      return { cmd: 'M', points: [{ x: p[0]!, y: p[1]! }] };
+    case 'L':
+      return { cmd: 'L', points: [{ x: p[0]!, y: p[1]! }] };
+    case 'C':
+      return {
+        cmd: 'C',
+        points: [
+          { x: p[0]!, y: p[1]! },
+          { x: p[2]!, y: p[3]! },
+          { x: p[4]!, y: p[5]! },
+        ],
+      };
+    case 'Z':
+      return { cmd: 'Z', points: [] };
+    default:
+      return null;
   }
-  return segments;
 }
 
 function pathToSvgString(segments: PathSegment[], pageHeight: number): string {
   let d = '';
   for (const seg of segments) {
-    if (seg.cmd === 'Z') { d += 'Z '; continue; }
+    if (seg.cmd === 'Z') {
+      d += 'Z ';
+      continue;
+    }
     if (seg.cmd === 'M') {
       const p = seg.points[0]!;
       d += `M ${p.x.toFixed(3)} ${(pageHeight - p.y).toFixed(3)} `;
@@ -155,8 +67,7 @@ function pathToSvgString(segments: PathSegment[], pageHeight: number): string {
 }
 
 function flattenPoints(segments: PathSegment[], pageHeight: number): Point[] {
-  // Anchor points only (M/L/C end/Q end), suitable for downstream consumers
-  // that don't render Bezier curves natively.
+  // Anchor points only (M/L start, C/Q end), in web coords.
   const pts: Point[] = [];
   for (const seg of segments) {
     if (seg.cmd === 'Z' || seg.points.length === 0) continue;
@@ -164,29 +75,6 @@ function flattenPoints(segments: PathSegment[], pageHeight: number): Point[] {
     pts.push({ x: last.x, y: pageHeight - last.y });
   }
   return pts;
-}
-
-function detectShapeType(segments: PathSegment[], hasCurves: boolean): ShapeType {
-  if (segments.length === 0) return 'path';
-  const moves = segments.filter((s) => s.cmd === 'M').length;
-  const lines = segments.filter((s) => s.cmd === 'L').length;
-  const curves = segments.filter((s) => s.cmd === 'C' || s.cmd === 'Q').length;
-  const closes = segments.filter((s) => s.cmd === 'Z').length;
-
-  // Single straight line
-  if (moves === 1 && lines === 1 && curves === 0 && closes === 0) return 'line';
-
-  // Closed rectangle: 1 move + 3 lines + 1 close, with axis-aligned edges
-  if (moves === 1 && lines === 3 && closes >= 0 && curves === 0) {
-    return isAxisAlignedRect(segments) ? 'rectangle' : 'polygon';
-  }
-  if (moves === 1 && lines === 4 && curves === 0) {
-    return isAxisAlignedRect(segments) ? 'rectangle' : 'polygon';
-  }
-
-  if (hasCurves) return 'path';
-  if (closes > 0 && lines >= 2) return 'polygon';
-  return 'path';
 }
 
 function isAxisAlignedRect(segments: PathSegment[]): boolean {
@@ -204,86 +92,73 @@ function isAxisAlignedRect(segments: PathSegment[]): boolean {
   );
 }
 
-function emitShape(
-  segments: PathSegment[],
-  paintOp: number,
-  pageHeight: number,
-  state: DrawingState,
-  minMax: Float32Array | number[] | undefined,
-): ShapeElement | null {
-  if (segments.length === 0) return null;
+function detectShapeType(segments: PathSegment[], hasCurves: boolean): ShapeType {
+  if (segments.length === 0) return 'path';
+  const moves = segments.filter((s) => s.cmd === 'M').length;
+  const lines = segments.filter((s) => s.cmd === 'L').length;
+  const curves = segments.filter((s) => s.cmd === 'C' || s.cmd === 'Q').length;
+  const closes = segments.filter((s) => s.cmd === 'Z').length;
 
-  // Filter out invisible no-op paints (clip-only and endPath)
-  const isClip = paintOp === OPS.clip || paintOp === OPS.eoClip;
-  const isEndPath = paintOp === OPS.endPath;
-  if (isClip || isEndPath) return null;
+  // Single straight line
+  if (moves === 1 && lines === 1 && curves === 0 && closes === 0) return 'line';
 
-  const isFill =
-    paintOp === OPS.fill ||
-    paintOp === OPS.eoFill ||
-    paintOp === OPS.fillStroke ||
-    paintOp === OPS.eoFillStroke ||
-    paintOp === OPS.closeFillStroke;
-  const isStroke =
-    paintOp === OPS.stroke ||
-    paintOp === OPS.closeStroke ||
-    paintOp === OPS.fillStroke ||
-    paintOp === OPS.eoFillStroke ||
-    paintOp === OPS.closeFillStroke;
-  if (!isFill && !isStroke) return null;
-
-  // Use pdfjs-provided minMax bbox when available — already in user-space.
-  // Layout: [minX, minY, maxX, maxY] in PDF coords (Y up).
-  let bounds: { x: number; y: number; width: number; height: number };
-  if (minMax && minMax.length === 4) {
-    const minX = minMax[0]!;
-    const minY = minMax[1]!;
-    const maxX = minMax[2]!;
-    const maxY = minMax[3]!;
-    // Apply CTM to bbox corners (cheap: 4 transforms)
-    const c0 = transformPoint(minX, minY, state.ctm);
-    const c1 = transformPoint(maxX, minY, state.ctm);
-    const c2 = transformPoint(maxX, maxY, state.ctm);
-    const c3 = transformPoint(minX, maxY, state.ctm);
-    const xs = [c0.x, c1.x, c2.x, c3.x];
-    const ys = [c0.y, c1.y, c2.y, c3.y];
-    const bbX = Math.min(...xs);
-    const bbY = Math.min(...ys);
-    bounds = {
-      x: bbX,
-      y: pageHeight - Math.max(...ys), // flip to Y-down
-      width: Math.max(...xs) - bbX,
-      height: Math.max(...ys) - bbY,
-    };
-  } else {
-    const flat = flattenPoints(segments, pageHeight);
-    if (flat.length < 2) return null;
-    let minX = flat[0]!.x;
-    let maxX = flat[0]!.x;
-    let minY = flat[0]!.y;
-    let maxY = flat[0]!.y;
-    for (const p of flat) {
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
-    }
-    bounds = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  // Closed rectangle: 1 move + 3-4 lines + close, axis-aligned edges
+  if (moves === 1 && lines === 3 && curves === 0) {
+    return isAxisAlignedRect(segments) ? 'rectangle' : 'polygon';
+  }
+  if (moves === 1 && lines === 4 && curves === 0) {
+    return isAxisAlignedRect(segments) ? 'rectangle' : 'polygon';
   }
 
-  // Drop only TRULY zero-area paths. A previous geometric threshold of
-  // 2 px killed every QR code cell (~1.5 px squares), dotted patterns,
-  // hairline borders, and similar fine-grained content the user actually
-  // needs. Trade-off:
-  //   - zero-area paths: ALWAYS drop (rendering no-ops)
-  //   - 1×1 noise from Type3 glyph rendering: filtered separately at the
-  //     extractor entry point (see ignoreType3Cluster heuristic below)
+  if (hasCurves) return 'path';
+  if (closes > 0 && lines >= 2) return 'polygon';
+  return 'path';
+}
+
+/** Web bounds (top-left origin) from an engine path's user-space box. */
+function webBoundsFromPath(
+  path: VectorPathInfo,
+  pageHeight: number,
+  fallbackPoints: Point[],
+): { x: number; y: number; width: number; height: number } {
+  if (path.hasBounds) {
+    return {
+      x: path.x0,
+      y: pageHeight - path.y1,
+      width: path.x1 - path.x0,
+      height: path.y1 - path.y0,
+    };
+  }
+  // Degenerate box: derive from the flattened (web) anchor points.
+  if (fallbackPoints.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+  let minX = fallbackPoints[0]!.x;
+  let maxX = minX;
+  let minY = fallbackPoints[0]!.y;
+  let maxY = minY;
+  for (const p of fallbackPoints) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+/** Map one engine VectorPathInfo to a ShapeElement, or null when degenerate. */
+function toShape(path: VectorPathInfo, pageHeight: number): ShapeElement | null {
+  const segments = path.segments.map(toSegment).filter((s): s is PathSegment => s !== null);
+  if (segments.length === 0) return null;
+
+  const points = flattenPoints(segments, pageHeight);
+  const bounds = webBoundsFromPath(path, pageHeight, points);
   if (bounds.width <= 0 || bounds.height <= 0) return null;
 
   const hasCurves = segments.some((s) => s.cmd === 'C' || s.cmd === 'Q');
   const shapeType = detectShapeType(segments, hasCurves);
-  const points = flattenPoints(segments, pageHeight);
   const pathData = pathToSvgString(segments, pageHeight);
+
+  const fillColor = path.fill ? rgbToHex(path.fill[0], path.fill[1], path.fill[2]) : null;
+  const strokeColor = path.stroke ? rgbToHex(path.stroke[0], path.stroke[1], path.stroke[2]) : null;
 
   return {
     elementId: randomUUID(),
@@ -294,161 +169,54 @@ function emitShape(
     locked: false,
     visible: true,
     shapeType,
-    geometry: {
-      points,
-      pathData,
-      cornerRadius: 0,
-    },
+    geometry: { points, pathData, cornerRadius: 0 },
     style: {
-      fillColor: isFill ? state.fillColor : null,
-      fillOpacity: isFill ? state.fillAlpha : 0,
-      strokeColor: isStroke ? state.strokeColor : null,
-      strokeWidth: isStroke ? state.strokeWidth : 0,
-      strokeOpacity: isStroke ? state.strokeAlpha : 0,
-      strokeDashArray: state.dashArray,
+      fillColor,
+      fillOpacity: fillColor ? path.fillAlpha : 0,
+      strokeColor,
+      strokeWidth: strokeColor ? path.strokeWidth : 0,
+      strokeOpacity: strokeColor ? path.strokeAlpha : 0,
+      strokeDashArray: path.dash,
     },
   };
 }
 
-export async function extractDrawingElements(
-  page: PDFPageProxy,
-  _pageNumber: number,
-  pageHeight: number,
-): Promise<ShapeElement[]> {
-  const ops = await page.getOperatorList();
-  const shapes: ShapeElement[] = [];
-
-  const state: DrawingState = {
-    fillColor: '#000000',
-    strokeColor: '#000000',
-    strokeWidth: 1,
-    dashArray: [],
-    fillAlpha: 1,
-    strokeAlpha: 1,
-    ctm: [1, 0, 0, 1, 0, 0],
-    matrixStack: [],
-  };
-
-  const fnArray = ops.fnArray;
-  const argsArray = ops.argsArray;
-
-  for (let i = 0; i < fnArray.length; i++) {
-    const fn = fnArray[i];
-    const args = argsArray[i] as unknown[];
-
-    switch (fn) {
-      case OPS.save:
-        state.matrixStack.push({
-          ctm: [...state.ctm],
-          fillColor: state.fillColor,
-          strokeColor: state.strokeColor,
-          strokeWidth: state.strokeWidth,
-          fillAlpha: state.fillAlpha,
-          strokeAlpha: state.strokeAlpha,
-          dashArray: [...state.dashArray],
-        });
-        break;
-
-      case OPS.restore: {
-        const popped = state.matrixStack.pop();
-        if (popped) {
-          state.ctm = popped.ctm;
-          state.fillColor = popped.fillColor;
-          state.strokeColor = popped.strokeColor;
-          state.strokeWidth = popped.strokeWidth;
-          state.fillAlpha = popped.fillAlpha;
-          state.strokeAlpha = popped.strokeAlpha;
-          state.dashArray = popped.dashArray;
-        } else {
-          state.ctm = [1, 0, 0, 1, 0, 0];
+/**
+ * Extract vector shapes from a PDF, grouped by 1-based page number. Opens the
+ * document once. Degenerate (zero-area) paths are skipped. Empty map on failure.
+ */
+export async function extractDrawingElementsByPage(
+  pdfBytes: Buffer | ArrayBuffer | Uint8Array,
+): Promise<Map<number, ShapeElement[]>> {
+  const byPage = new Map<number, ShapeElement[]>();
+  try {
+    const giga = await getEngine();
+    const bytes = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+    const doc = giga.open(bytes);
+    try {
+      const pageCount = doc.pageCount();
+      for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
+        const pageHeight = doc.pageInfo(pageNumber).height;
+        const shapes: ShapeElement[] = [];
+        for (const path of doc.vectorPaths(pageNumber)) {
+          const shape = toShape(path, pageHeight);
+          if (shape) shapes.push(shape);
         }
-        break;
+        if (shapes.length > 0) byPage.set(pageNumber, shapes);
       }
-
-      case OPS.transform: {
-        const [a, b, c, d, e, f] = args as number[];
-        state.ctm = multiplyMatrices(state.ctm, [a!, b!, c!, d!, e!, f!]);
-        break;
-      }
-
-      case OPS.constructPath: {
-        // Modern pdfjs batches every path operation through this op.
-        // Args layout: [paintOp: number, [Float32Array data], minMax?: Float32Array]
-        const paintOp = typeof args[0] === 'number' ? (args[0] as number) : 0;
-        const dataArg = args[1];
-        let buffer: Float32Array | null = null;
-        if (Array.isArray(dataArg) && dataArg.length > 0) {
-          const first = dataArg[0];
-          if (first instanceof Float32Array) buffer = first;
-          else if (first instanceof Array) buffer = Float32Array.from(first as number[]);
-        }
-        if (!buffer) break;
-        const minMax = args[2] as Float32Array | number[] | undefined;
-        const segments = decodePathStream(buffer, state.ctm);
-        const shape = emitShape(segments, paintOp, pageHeight, state, minMax);
-        if (shape) shapes.push(shape);
-        break;
-      }
-
-      case OPS.rectangle: {
-        const [x, y, w, h] = args as number[];
-        const segments: PathSegment[] = [
-          { cmd: 'M', points: [transformPoint(x!, y!, state.ctm)] },
-          { cmd: 'L', points: [transformPoint(x! + w!, y!, state.ctm)] },
-          { cmd: 'L', points: [transformPoint(x! + w!, y! + h!, state.ctm)] },
-          { cmd: 'L', points: [transformPoint(x!, y! + h!, state.ctm)] },
-          { cmd: 'Z', points: [] },
-        ];
-        // Rectangle alone doesn't paint until a subsequent fill/stroke op.
-        // Most generators batch this through constructPath. Safe to ignore
-        // here, the next paint op will materialise a path. But for robustness
-        // we capture rectangles as filled shapes by default since most
-        // standalone re ops with a fill follow.
-        const shape = emitShape(segments, OPS.fill, pageHeight, state, undefined);
-        if (shape) shapes.push(shape);
-        break;
-      }
-
-      case OPS.setStrokeRGBColor: {
-        // pdfjs delivers the colour pre-resolved: a "#rrggbb" string in
-        // modern builds (since pdfjs 3.x), an [r,g,b] byte triple in older
-        // builds. Accept both.
-        state.strokeColor = parsePdfjsColor(args);
-        break;
-      }
-
-      case OPS.setFillRGBColor: {
-        state.fillColor = parsePdfjsColor(args);
-        break;
-      }
-
-      case OPS.setLineWidth: {
-        const [w] = args as number[];
-        state.strokeWidth = w ?? 1;
-        break;
-      }
-
-      case OPS.setDash: {
-        const [dashArray] = args as [number[]];
-        state.dashArray = dashArray ?? [];
-        break;
-      }
-
-      case OPS.setGState: {
-        // Extract fill/stroke alpha from graphics state if present.
-        const gStateArgs = args[0] as Array<[string, unknown]> | undefined;
-        if (Array.isArray(gStateArgs)) {
-          for (const entry of gStateArgs) {
-            if (!Array.isArray(entry)) continue;
-            const [key, value] = entry;
-            if (key === 'ca' && typeof value === 'number') state.fillAlpha = value;
-            if (key === 'CA' && typeof value === 'number') state.strokeAlpha = value;
-          }
-        }
-        break;
-      }
+    } finally {
+      doc.close();
     }
+  } catch {
+    // leave the map empty on failure
   }
+  return byPage;
+}
 
-  return shapes;
+/** Vector shapes on a single page (convenience wrapper over the grouped map). */
+export async function extractDrawingElements(
+  pdfBytes: Buffer | ArrayBuffer | Uint8Array,
+  pageNumber: number,
+): Promise<ShapeElement[]> {
+  return (await extractDrawingElementsByPage(pdfBytes)).get(pageNumber) ?? [];
 }

@@ -3,7 +3,7 @@
  *
  * Static content written natively in English (not translated literally).
  * Every entry describes ONLY capabilities that actually exist in GigaPDF
- * (pdf-engine, MuPDF, LibreOffice headless, tesseract, Chromium).
+ * GigaPDF — in-house PDF engine (TypeScript/WebAssembly).
  * No variable templates: intros and FAQs are written individually.
  *
  * Slugs are English-specific; the FR ↔ EN mapping lives in ./slug-map.ts.
@@ -22,8 +22,8 @@ export const TOOLS: ToolData[] = [
     h1: "Online PDF editor: change the text inside the file itself",
     intro: [
       "Fixing a typo in a contract that only exists as a PDF, updating a price on a brochure, swapping out an old logo: most online tools handle this by painting a white box over the old content and hoping nobody notices. GigaPDF works differently. Its WYSIWYG editor opens the page exactly as it will print and lets you click any text block, image, or shape to change it, move it, or genuinely remove it.",
-      "Font fidelity is what makes the result look right. GigaPDF identifies the fonts used in the document, fetches them automatically from Google Fonts when they are available there, and embeds them in the file when you save. Your correction picks up the same typeface as the surrounding paragraph instead of an ugly Arial substitute. Deletions go through the MuPDF engine, which strips the text operators out of the content stream rather than hiding them — nothing resurfaces when someone copies and pastes.",
-      "The editor runs in the browser with nothing to install. The free plan includes every editing feature, along with 5 GB of storage and 100 documents. The code is open source under the AGPL license, so teams handling sensitive files can run the whole application on their own server.",
+      "Font fidelity is what makes the result look right. GigaPDF identifies the fonts used in the document, fetches them automatically from Google Fonts when they are available there, and embeds them in the file when you save. Your correction picks up the same typeface as the surrounding paragraph instead of an ugly Arial substitute. Deletions go through GigaPDF's in-house engine, which strips the text operators out of the content stream rather than hiding them — nothing resurfaces when someone copies and pastes.",
+      "The editor runs in the browser with nothing to install. The free plan includes every editing feature, along with 5 GB of storage and 100 documents. The code is open source, source-available under the PolyForm Noncommercial license, so teams handling sensitive files can run the whole application on their own server.",
     ],
     howTo: {
       title: "How to edit a PDF online",
@@ -39,7 +39,7 @@ export const TOOLS: ToolData[] = [
     capabilities: [
       "WYSIWYG editing of existing text, images, and shapes",
       "Original fonts detected, fetched from Google Fonts, and embedded on save",
-      "True content removal through MuPDF — no white-box masking",
+      "True content removal through the in-house engine — no white-box masking",
       "Native annotations, watermarks, and form filling from the same editor",
       "Version history and page thumbnails in the built-in document manager",
       "Real-time collaboration on the same document",
@@ -48,7 +48,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Can I change the existing text of a PDF, not just add new text on top?",
         answer:
-          "Yes. GigaPDF extracts the text blocks from the file and makes them editable in place. When you correct a paragraph, the old content is removed from the PDF stream by MuPDF and the new text is written with the original font, which gets embedded in the file when you save.",
+          "Yes. GigaPDF extracts the text blocks from the file and makes them editable in place. When you correct a paragraph, the old content is removed from the PDF stream by the in-house engine and the new text is written with the original font, which gets embedded in the file when you save.",
       },
       {
         question: "What happens when the PDF uses a font I don't have installed?",
@@ -90,7 +90,7 @@ export const TOOLS: ToolData[] = [
     intro: [
       "Application files, supporting documents for a loan, a report assembled from three departments: these things always end up scattered across five or six separate PDFs. Sending them as-is forces the recipient to juggle attachments; printing and rescanning them murders the quality. Merging produces one continuously paginated file, ready to send or archive.",
       "GigaPDF assembles your PDFs server-side with its dedicated engine: pages are copied without recompression, bookmarks and form fields from the source files survive as far as the format allows, and no advertising watermark lands on the result. You set the file order before merging, then fine-tune the page order in the editor if something needs adjusting.",
-      "The merged file drops straight into your GigaPDF document manager, where it can be tagged, found through full-text search, and shared by link or email. All of it ships with the free plan, and since the code is published under the AGPL license, the whole application can run on your own server.",
+      "The merged file drops straight into your GigaPDF document manager, where it can be tagged, found through full-text search, and shared by link or email. All of it ships with the free plan, and since the code is source-available under the PolyForm Noncommercial license, the whole application can run on your own server.",
     ],
     howTo: {
       title: "How to merge PDF files",
@@ -207,11 +207,11 @@ export const TOOLS: ToolData[] = [
     name: "Compress PDF",
     metaTitle: "Compress PDF Online Free — Reduce File Size | GigaPDF",
     metaDescription:
-      "Shrink heavy PDFs without wrecking them: MuPDF strips unused objects and linearizes for fast web viewing. Free and open source.",
+      "Shrink heavy PDFs without wrecking them: the in-house engine strips unused objects and linearizes for fast web viewing. Free and open source.",
     h1: "Compress a PDF: cut the weight without gutting the document",
     intro: [
       "An oversized PDF runs into walls all day long: mailboxes that cap attachments at 10 or 25 MB, government portals that reject large uploads, transfer links that time out halfway. Multi-page scans and image-stuffed exports are the usual offenders.",
-      "GigaPDF leans on the MuPDF engine to compress intelligently: a garbage-collection pass removes unused objects, duplicated fonts, and orphaned streams that silently bloat files reworked by several tools, while linearization reorders the structure for progressive display in the browser — the first page shows up before the download finishes. The visible content is never degraded: the structural junk goes, your pages stay sharp.",
+      "GigaPDF leans on its in-house engine to compress intelligently: a structure-cleanup pass removes unused objects, duplicated fonts, and orphaned streams that silently bloat files reworked by several tools, while linearization reorders the structure for progressive display in the browser — the first page shows up before the download finishes. The visible content is never degraded: the structural junk goes, your pages stay sharp.",
       "This approach pays off most on documents that have been through several editors, because they accumulate dead weight. Compression is part of the free plan and chains naturally with merging and splitting: assemble first, compress next, share the result by link.",
     ],
     howTo: {
@@ -219,13 +219,13 @@ export const TOOLS: ToolData[] = [
       steps: [
         "Upload the heavy PDF to your workspace.",
         "Start compression from the document's actions menu.",
-        "The MuPDF engine cleans the structure: unused objects, duplicates, and orphaned streams are dropped.",
+        "The in-house engine cleans the structure: unused objects, duplicates, and orphaned streams are dropped.",
         "The file is linearized for progressive online viewing.",
         "Compare the new size with the original, then download or share the lighter version.",
       ],
     },
     capabilities: [
-      "MuPDF garbage collection: unused objects, fonts, and streams removed",
+      "In-house structure cleanup: unused objects, fonts, and streams removed",
       "Linearization for instant page-by-page display in the browser",
       "No degradation of vector text or page layouts",
       "Most effective on PDFs that were edited or assembled multiple times",
@@ -334,11 +334,11 @@ export const TOOLS: ToolData[] = [
     name: "OCR PDF",
     metaTitle: "OCR PDF Online Free: Scan to Text | GigaPDF",
     metaDescription:
-      "Run Tesseract OCR (English + French) on scanned PDFs: copy, search, and export the recognized text. Free and open source.",
+      "Run in-house OCR (English + French) on scanned PDFs: copy, search, and export the recognized text. Free and open source.",
     h1: "OCR: pull the text out of your scanned PDFs",
     intro: [
       "A scanned document is just a stack of page photographs: you can't search for a word, copy a paragraph, or pull out the figures. Until the text is recognized, the file stays mute for every tool you own — including your own document manager's search. Optical character recognition (OCR) turns those images into text you can actually use.",
-      "GigaPDF ships with Tesseract, the reference open-source OCR engine, configured for English and French — accents, cedillas, and ligatures included, where many services trained on English alone mangle anything else. Processing runs server-side: you launch OCR on a document, the engine reads every page, and the recognized text comes back ready to copy, export, or index.",
+      "GigaPDF ships with its own optical character recognition engine, configured for English and French — accents, cedillas, and ligatures included, where many services trained on English alone mangle anything else. Processing runs server-side: you launch OCR on a document, the engine reads every page, and the recognized text comes back ready to copy, export, or index.",
       "OCR feeds the rest of the platform directly: once a document is recognized, full-text search finds it by its content, and the searchable-PDF tool can lay the text as an invisible layer under the original image. Everything works on the free plan — and on your own server if you self-host, which matters when the scans are confidential.",
     ],
     howTo: {
@@ -346,13 +346,13 @@ export const TOOLS: ToolData[] = [
       steps: [
         "Upload your scanned PDF (or photos of documents saved as PDF) to GigaPDF.",
         "Launch OCR from the document's actions menu.",
-        "Tesseract reads each page and recognizes the text in English and French.",
+        "The OCR engine reads each page and recognizes the text in English and French.",
         "Grab the result: copy it directly, export it as TXT, or generate a searchable PDF.",
         "The document becomes findable by its content in your workspace's full-text search.",
       ],
     },
     capabilities: [
-      "Tesseract engine with English and French models (eng+fra)",
+      "In-house OCR engine with English and French models (eng+fra)",
       "Accurate handling of accented and special characters",
       "Page-by-page processing of multi-page documents",
       "Recognized text exported as TXT or embedded as an invisible searchable layer",
@@ -363,17 +363,17 @@ export const TOOLS: ToolData[] = [
       {
         question: "Which languages does GigaPDF's OCR recognize?",
         answer:
-          "The Tesseract engine runs with the English and French models loaded together: a bilingual contract or an invoice mixing the two languages is handled in a single pass. Accented characters come through correctly.",
+          "The OCR engine runs with the English and French models loaded together: a bilingual contract or an invoice mixing the two languages is handled in a single pass. Accented characters come through correctly.",
       },
       {
         question: "What scan quality do I need for good results?",
         answer:
-          "Tesseract performs best on clean 300 dpi scans of printed text. Skewed pages, photocopies of photocopies, and tiny font sizes drag recognition down — when it matters, scan flat and at a decent resolution.",
+          "The OCR performs best on clean 300 dpi scans of printed text. Skewed pages, photocopies of photocopies, and tiny font sizes drag recognition down — when it matters, scan flat and at a decent resolution.",
       },
       {
         question: "Does OCR read handwriting?",
         answer:
-          "No, and be wary of tools that promise otherwise: Tesseract is built for printed characters. A handwritten note on a form will usually go unrecognized even when the printed body of the document reads perfectly.",
+          "No, and be wary of tools that promise otherwise: the OCR is built for printed characters. A handwritten note on a form will usually go unrecognized even when the printed body of the document reads perfectly.",
       },
       {
         question: "What happens to the original document after OCR?",
@@ -399,7 +399,7 @@ export const TOOLS: ToolData[] = [
     h1: "Make a scanned PDF searchable without changing how it looks",
     intro: [
       "The technique is known as the 'sandwich PDF': the scanned image stays exactly as displayed, and the OCR-recognized text is inserted underneath in an invisible layer aligned word for word with the image. Visually nothing changes — the stamp, the handwritten signature, the original layout all stay put. But the document now answers Ctrl+F, the text selects with the mouse, and screen readers can speak it.",
-      "GigaPDF builds that layer from Tesseract recognition (English and French): every recognized word is placed at the exact coordinates where it appears in the image, so a search highlights the right spot on the page and copy-paste follows the reading order. That is what separates it from a plain text export, which loses all connection to the page.",
+      "GigaPDF builds that layer from in-house OCR recognition (English and French): every recognized word is placed at the exact coordinates where it appears in the image, so a search highlights the right spot on the page and copy-paste follows the reading order. That is what separates it from a plain text export, which loses all connection to the page.",
       "For a document archive, this is the step that changes everything: a scanned collection becomes queryable in full text. Combined with GigaPDF's built-in search, it turns years of digitized paper into a base you can actually interrogate — in the cloud or on your own self-hosted server.",
     ],
     howTo: {
@@ -407,7 +407,7 @@ export const TOOLS: ToolData[] = [
       steps: [
         "Upload the scanned PDF to your workspace.",
         "Start the searchable-PDF conversion from the actions menu.",
-        "Tesseract recognizes the text on every page (English + French).",
+        "The OCR engine recognizes the text on every page (English + French).",
         "The text is embedded as an invisible layer, word by word, at the image's coordinates.",
         "Download the result: identical appearance, but selectable and searchable text everywhere.",
       ],
@@ -417,7 +417,7 @@ export const TOOLS: ToolData[] = [
       "Document appearance strictly unchanged: visible stamps and signatures preserved",
       "Ctrl+F search working in every PDF viewer",
       "Text selection and copy-paste directly on the scan",
-      "Tesseract recognition in English and French",
+      "In-house OCR recognition in English and French",
       "Automatic indexing in GigaPDF's full-text search",
     ],
     faq: [
@@ -434,7 +434,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Does search highlight the right place on the page?",
         answer:
-          "Yes. Each word in the layer is positioned at the coordinates where Tesseract detected it in the image. When your viewer highlights a search hit, the highlight lands on the matching visible word — which makes long scanned documents genuinely navigable.",
+          "Yes. Each word in the layer is positioned at the coordinates where the OCR engine detected it in the image. When your viewer highlights a search hit, the highlight lands on the matching visible word — which makes long scanned documents genuinely navigable.",
       },
       {
         question: "Does this help with accessibility?",
@@ -765,7 +765,7 @@ export const TOOLS: ToolData[] = [
     h1: "Convert a PDF into an editable Word document",
     intro: [
       "PDF freezes, Word frees: when a document needs a full rework — restructuring a report, reusing the clauses of a template contract, starting from an existing outline — spot edits stop being enough and you need a word-processor file again. PDF-to-DOCX conversion rebuilds the document in a format where every element becomes workable.",
-      "GigaPDF analyzes the PDF's structure — text blocks, paragraphs, images, tables — and produces a .docx that opens in Word, LibreOffice, or Google Docs. Faithful conversion takes real reconstruction work: keeping paragraphs flowing instead of spitting out one text box per line, leaving images where they belong, returning tables as tables. That is what the conversion engine aims for, running server-side.",
+      "GigaPDF analyzes the PDF's structure — text blocks, paragraphs, images, tables — and produces a .docx that opens in Word, your office suite, or Google Docs. Faithful conversion takes real reconstruction work: keeping paragraphs flowing instead of spitting out one text box per line, leaving images where they belong, returning tables as tables. That is what the conversion engine aims for, running server-side.",
       "One case deserves a callout: scanned PDFs. With no digital text, there is nothing to convert — run the document through GigaPDF's OCR first (English + French), then convert. The scan → OCR → DOCX chain turns digitized paper into a workable Word file, all inside the same platform, free of charge.",
     ],
     howTo: {
@@ -775,11 +775,11 @@ export const TOOLS: ToolData[] = [
         "If it's a scan, run OCR first to recognize the text.",
         "Pick the DOCX export in the conversion menu.",
         "The engine rebuilds paragraphs, images, and tables into the Word file.",
-        "Download the .docx and open it in Word, LibreOffice, or Google Docs.",
+        "Download the .docx and open it in Word, your office suite, or Google Docs.",
       ],
     },
     capabilities: [
-      "DOCX export compatible with Word, LibreOffice, and Google Docs",
+      "DOCX export compatible with Word, office suites, and Google Docs",
       "Reconstruction of paragraphs, images, and tables",
       "Server-side conversion, no local install",
       "Scan → OCR → DOCX chain for digitized documents",
@@ -795,7 +795,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Can I convert a scanned PDF to Word?",
         answer:
-          "Yes, in two steps: OCR first, conversion second. A scan contains nothing but images; GigaPDF's Tesseract OCR extracts the text (English and French), which then feeds the DOCX conversion. Skip that step and the Word file would hold only page images.",
+          "Yes, in two steps: OCR first, conversion second. A scan contains nothing but images; GigaPDF's in-house OCR extracts the text (English and French), which then feeds the DOCX conversion. Skip that step and the Word file would hold only page images.",
       },
       {
         question: "Do the PDF's tables stay tables in Word?",
@@ -822,18 +822,18 @@ export const TOOLS: ToolData[] = [
     name: "Word to PDF",
     metaTitle: "Convert Word to PDF Online (.doc, .docx) | GigaPDF",
     metaDescription:
-      "Convert Word documents to faithful PDFs with LibreOffice: modern .docx and legacy .doc. Free, open source, no watermark.",
+      "Convert Word documents to faithful PDFs with the in-house engine: modern .docx and legacy .doc. Free, open source, no watermark.",
     h1: "Convert a Word document to PDF",
     intro: [
       "Sending a .docx means sending a living document: it will render differently depending on the recipient's Word version, installed fonts, and machine — when it isn't simply modified along the way. Converting to PDF locks the layout: what you composed is exactly what gets read and printed, everywhere.",
-      "GigaPDF converts with LibreOffice running server-side, the most battle-tested open-source office conversion engine there is. It handles modern .docx as well as the old binary .doc — the Word 97-2003 format that haunts every file server and that many online converters turn away. Styles, tables, images, headers, and footers come out in a clean PDF with no advertising stamped on it.",
+      "GigaPDF converts with its in-house office conversion engine running server-side, battle-tested and faithful. It handles modern .docx as well as the old binary .doc — the Word 97-2003 format that haunts every file server and that many online converters turn away. Styles, tables, images, headers, and footers come out in a clean PDF with no advertising stamped on it.",
       "You need neither Microsoft Office nor any installation: the browser is enough. The resulting PDF lands straight in your GigaPDF document manager, where it can be merged with other files, digitally signed, encrypted, or archived as PDF/A — conversion is just the first link in a complete document chain.",
     ],
     howTo: {
       title: "How to convert a Word file to PDF",
       steps: [
         "Upload your .docx or .doc file to your workspace.",
-        "Run the conversion: LibreOffice renders the document server-side.",
+        "Run the conversion: the in-house engine renders the document server-side.",
         "Check the resulting PDF in the built-in viewer.",
         "Chain the next step if needed: merging, signing, encryption, or watermarking.",
         "Download the PDF or share it by link straight from the document manager.",
@@ -841,7 +841,7 @@ export const TOOLS: ToolData[] = [
     },
     capabilities: [
       "Conversion of .docx and legacy .doc (Word 97-2003)",
-      "LibreOffice engine server-side: no install, no Microsoft Office required",
+      "In-house conversion engine server-side: no install, no Microsoft Office required",
       "Faithful rendering of styles, tables, images, headers, and footers",
       "No watermark on the output PDF",
       "Immediate chaining: merge, digital signature, encryption, PDF/A",
@@ -851,12 +851,12 @@ export const TOOLS: ToolData[] = [
       {
         question: "Are old .doc files really supported?",
         answer:
-          "Yes, and it's a genuinely useful trait of GigaPDF: LibreOffice reads the binary Word 97-2003 format alongside modern .docx. Old office archives convert without a manual round-trip through Word — valuable when cleaning up a document backlog.",
+          "Yes, and it's a genuinely useful trait of GigaPDF: the in-house engine reads the binary Word 97-2003 format alongside modern .docx. Old office archives convert without a manual round-trip through Word — valuable when cleaning up a document backlog.",
       },
       {
         question: "Will my document's layout be respected?",
         answer:
-          "LibreOffice renders the vast majority of documents faithfully: styles, tables, anchored images, headers, footers, and numbering. Documents relying on proprietary fonts that aren't embedded, or on display macros, can drift slightly; a glance at the PDF in the built-in viewer settles it.",
+          "The in-house engine renders the vast majority of documents faithfully: styles, tables, anchored images, headers, footers, and numbering. Documents relying on proprietary fonts that aren't embedded, or on display macros, can drift slightly; a glance at the PDF in the built-in viewer settles it.",
       },
       {
         question: "Can I convert several Word documents in a row?",
@@ -883,11 +883,11 @@ export const TOOLS: ToolData[] = [
     name: "Excel to PDF",
     metaTitle: "Convert Excel to PDF Online (.xls, .xlsx) | GigaPDF",
     metaDescription:
-      "Turn Excel workbooks into clean, printable PDFs with LibreOffice: .xlsx and legacy .xls. Free, open source conversion.",
+      "Turn Excel workbooks into clean, printable PDFs with the in-house engine: .xlsx and legacy .xls. Free, open source conversion.",
     h1: "Convert an Excel workbook to PDF",
     intro: [
       "A spreadsheet sent as .xlsx is a liability: formulas on display, forgotten working tabs, hidden columns one click away from being revealed, and a layout that explodes when the recipient hits print. To communicate numbers — a quote, a dashboard, a budget — a PDF shows the result, only the result, framed exactly as intended.",
-      "GigaPDF converts your workbooks with LibreOffice on the server: both .xlsx and the legacy .xls (Excel 97-2003) are accepted, computed values stand in for the formulas, and the print area defined in the workbook drives the PDF's pagination. Borders, cell colors, charts, and number formats come out the way the spreadsheet displays them.",
+      "GigaPDF converts your workbooks with its in-house engine on the server: both .xlsx and the legacy .xls (Excel 97-2003) are accepted, computed values stand in for the formulas, and the print area defined in the workbook drives the PDF's pagination. Borders, cell colors, charts, and number formats come out the way the spreadsheet displays them.",
       "A tip inherited from print: the PDF's quality is decided inside the workbook, before converting. A defined print area, landscape orientation for wide tables, and a fit-to-one-page-wide setting produce a sharp final document. Once converted, the PDF merges with your other files, takes a password, or gets watermarked — all without leaving GigaPDF, for free.",
     ],
     howTo: {
@@ -895,7 +895,7 @@ export const TOOLS: ToolData[] = [
       steps: [
         "Prepare the workbook: print area and orientation set in your spreadsheet app.",
         "Upload the .xlsx or .xls file to your workspace.",
-        "Run the conversion: LibreOffice computes the rendering and paginates the document.",
+        "Run the conversion: the in-house engine computes the rendering and paginates the document.",
         "Inspect the PDF in the viewer: column breaks, legibility of the figures.",
         "Download, merge with other files, or share the PDF by link.",
       ],
@@ -912,7 +912,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "How do I keep a wide table from being chopped across pages?",
         answer:
-          "Fix it in the workbook before converting: landscape orientation and a fit-to-one-page-wide setting in your spreadsheet's page layout options. LibreOffice applies those settings during conversion; a table with no layout defined gets default pagination, breaks included.",
+          "Fix it in the workbook before converting: landscape orientation and a fit-to-one-page-wide setting in your spreadsheet's page layout options. The in-house engine applies those settings during conversion; a table with no layout defined gets default pagination, breaks included.",
       },
       {
         question: "Do my workbook's formulas appear in the PDF?",
@@ -944,18 +944,18 @@ export const TOOLS: ToolData[] = [
     name: "PowerPoint to PDF",
     metaTitle: "Convert PowerPoint to PDF (.ppt, .pptx) | GigaPDF",
     metaDescription:
-      "Convert PowerPoint decks to faithful PDFs with LibreOffice: .pptx and legacy .ppt. Free, open source, no watermark.",
+      "Convert PowerPoint decks to faithful PDFs with the in-house engine: .pptx and legacy .ppt. Free, open source, no watermark.",
     h1: "Convert a PowerPoint presentation to PDF",
     intro: [
       "A deck sent as .pptx rarely arrives intact: substituted fonts, animations that make no sense at a standstill, slides shifting between PowerPoint versions — and a file anyone can edit. The deck that circulates after the meeting deserves better: a PDF where every slide is fixed exactly as you designed it.",
-      "GigaPDF relies on LibreOffice server-side to convert .pptx as well as the older .ppt (PowerPoint 97-2003). Each slide becomes one PDF page: backgrounds, images, diagrams, and text blocks land at their exact positions. Animations and transitions, which belong to slideshow mode, are naturally absent from the fixed output — each slide is rendered in its final state.",
+      "GigaPDF relies on its in-house engine server-side to convert .pptx as well as the older .ppt (PowerPoint 97-2003). Each slide becomes one PDF page: backgrounds, images, diagrams, and text blocks land at their exact positions. Animations and transitions, which belong to slideshow mode, are naturally absent from the fixed output — each slide is rendered in its final state.",
       "The resulting PDF is lighter to distribute than an image-heavy .pptx, opens on any device without PowerPoint, and prints properly. Need the reverse trip? GigaPDF also exports PDF to PPTX, handy for reviving an old deck whose source file vanished — both directions ship with the free plan.",
     ],
     howTo: {
       title: "How to convert a PowerPoint to PDF",
       steps: [
         "Upload your .pptx or .ppt presentation to your workspace.",
-        "Run the conversion: LibreOffice renders each slide as a PDF page.",
+        "Run the conversion: the in-house engine renders each slide as a PDF page.",
         "Review the output in the viewer: fonts, images, and diagrams in place.",
         "Add a watermark or protection if the deck needs it before going out.",
         "Download the PDF or share it by link, readable without PowerPoint.",
@@ -983,12 +983,12 @@ export const TOOLS: ToolData[] = [
       {
         question: "Can I convert a PDF into PowerPoint, the other way around?",
         answer:
-          "Yes. GigaPDF offers PDF-to-PPTX export: each page becomes a slide again, texts and images included, editable in PowerPoint or LibreOffice Impress. It's the way out when a deck's source file is lost and the content has to evolve.",
+          "Yes. GigaPDF offers PDF-to-PPTX export: each page becomes a slide again, texts and images included, editable in PowerPoint or your presentation app. It's the way out when a deck's source file is lost and the content has to evolve.",
       },
       {
         question: "Is the PDF lighter than the original presentation?",
         answer:
-          "Often, yes: the PDF carries no animations, no unused media, no stacks of slide masters. And if the output is still heavy — photo-rich decks — GigaPDF's MuPDF compression takes another pass at it.",
+          "Often, yes: the PDF carries no animations, no unused media, no stacks of slide masters. And if the output is still heavy — photo-rich decks — GigaPDF's in-house compression takes another pass at it.",
       },
     ],
     useCases: [
@@ -1005,18 +1005,18 @@ export const TOOLS: ToolData[] = [
     name: "OpenDocument & PDF",
     metaTitle: "Convert OpenDocument to PDF (ODT, ODS, ODP) | GigaPDF",
     metaDescription:
-      "Convert ODT, ODS, and ODP to PDF — and go back from PDF to ODT or ODP. The LibreOffice-to-PDF bridge, free and open source.",
+      "Convert ODT, ODS, and ODP to PDF — and go back from PDF to ODT or ODP. The OpenDocument-to-PDF bridge, free and open source.",
     h1: "OpenDocument to PDF and back: ODT, ODS, ODP",
     intro: [
-      "Public administrations and organizations committed to free software work in OpenDocument: .odt texts, .ods spreadsheets, .odp presentations. An open, ISO-standardized format — but a minority one next to the Microsoft ecosystem, which complicates exchanges: recipients don't always have LibreOffice, and most online converters flatly ignore these formats.",
-      "GigaPDF treats them as first-class citizens, for a structural reason: its conversion engine is LibreOffice itself, running server-side. All three formats convert to PDF with the fidelity of the native application — styles, tables, charts, and layouts rendered without the approximations of a third-party converter. The return trip exists too: a PDF exports to ODT to rework the text, or to ODP to pick a presentation back up, closing the loop with your free-software office suite.",
-      "That open-source consistency runs the full length of the chain: GigaPDF is published under the AGPL and self-hosts. An organization that chose free software for its office suite can make the same choice for its document platform — conversion, editing, signing, and document management included, with no proprietary service in the loop.",
+      "Public administrations and organizations committed to free software work in OpenDocument: .odt texts, .ods spreadsheets, .odp presentations. An open, ISO-standardized format — but a minority one next to the Microsoft ecosystem, which complicates exchanges: recipients don't always have an OpenDocument-compatible suite, and most online converters flatly ignore these formats.",
+      "GigaPDF treats them as first-class citizens, for a structural reason: its in-house conversion engine handles OpenDocument natively, running server-side. All three formats convert to PDF with native fidelity — styles, tables, charts, and layouts rendered without the approximations of a third-party converter. The return trip exists too: a PDF exports to ODT to rework the text, or to ODP to pick a presentation back up, closing the loop with your free-software office suite.",
+      "That open-source consistency runs the full length of the chain: GigaPDF is published as source-available under PolyForm Noncommercial and self-hosts. An organization that favors open, auditable software for its office suite can make the same choice for its document platform — conversion, editing, signing, and document management included, with no proprietary service in the loop.",
     ],
     howTo: {
       title: "How to convert between OpenDocument and PDF",
       steps: [
         "Upload your .odt, .ods, or .odp file to your workspace.",
-        "Run the PDF conversion: server-side LibreOffice renders the document as-is.",
+        "Run the PDF conversion: the server-side in-house engine renders the document as-is.",
         "Check the output in the built-in viewer.",
         "For the reverse direction, open a PDF and export it as ODT (text) or ODP (slides).",
         "File, share, or sign the result directly in the document manager.",
@@ -1024,22 +1024,22 @@ export const TOOLS: ToolData[] = [
     },
     capabilities: [
       "PDF conversion of .odt texts, .ods spreadsheets, and .odp presentations",
-      "Native LibreOffice engine server-side: maximum OpenDocument fidelity",
+      "Native in-house engine server-side: maximum OpenDocument fidelity",
       "Reverse export from PDF to ODT and ODP to rework content",
-      "Spreadsheets: PDF data exported to XLSX, usable in LibreOffice Calc",
+      "Spreadsheets: PDF data exported to XLSX, usable in your spreadsheet app",
       "No watermark; conversion included in the free plan",
-      "AGPL platform you can self-host: a free-software document chain end to end",
+      "Source-available platform you can self-host: an open document chain end to end",
     ],
     faq: [
       {
         question: "Why is OpenDocument conversion more reliable here than elsewhere?",
         answer:
-          "Because GigaPDF converts with LibreOffice itself — the reference application for the OpenDocument format — running on the server. Where other services go through approximate reinterpretation libraries (when they accept these formats at all), GigaPDF uses the native rendering: what LibreOffice displays is what the PDF contains.",
+          "Because GigaPDF converts with its in-house engine — built for the OpenDocument format — running on the server. Where other services go through approximate reinterpretation libraries (when they accept these formats at all), GigaPDF uses native rendering: what the office suite displays is what the PDF contains.",
       },
       {
         question: "Can I convert a PDF back into an editable OpenDocument file?",
         answer:
-          "Yes for texts and presentations: the ODT export rebuilds an editable text document and the ODP export produces slides you can pick up in Impress. For tabular data inside a PDF, the export goes to XLSX, which LibreOffice Calc opens and re-saves as .ods natively.",
+          "Yes for texts and presentations: the ODT export rebuilds an editable text document and the ODP export produces slides you can pick up in Impress. For tabular data inside a PDF, the export goes to XLSX, which your spreadsheet app opens and re-saves as .ods natively.",
       },
       {
         question: "Do .ods files with charts and formulas come out right?",
@@ -1049,13 +1049,13 @@ export const TOOLS: ToolData[] = [
       {
         question: "Is GigaPDF a fit for an administration under sovereignty constraints?",
         answer:
-          "It's one of its natural habitats: auditable AGPL source code, full self-hosting on your servers, open formats in and out. No document ever needs to pass through a third-party cloud, and no proprietary license enters the chain.",
+          "It's one of its natural habitats: auditable source code, full self-hosting on your servers, open formats in and out. No document ever needs to pass through a third-party cloud, and no proprietary license enters the chain.",
       },
     ],
     useCases: [
-      "Publish LibreOffice documents as PDFs for recipients without the suite",
+      "Publish OpenDocument files as PDFs for recipients without the suite",
       "Recover as ODT a PDF whose source file is gone, without detouring through Word",
-      "Equip a fully free-software organization: LibreOffice plus self-hosted GigaPDF",
+      "Equip a fully free-software organization: an OpenDocument suite plus self-hosted GigaPDF",
     ],
     relatedTools: ["pdf-to-odt", "word-to-pdf", "pdf-a"],
     relatedSolutions: ["nonprofits", "students", "healthcare"],
@@ -1064,13 +1064,13 @@ export const TOOLS: ToolData[] = [
   {
     slug: "pdf-to-odt",
     name: "PDF to ODT",
-    metaTitle: "Convert PDF to ODT (LibreOffice Writer) | GigaPDF",
+    metaTitle: "Convert PDF to ODT (OpenDocument) | GigaPDF",
     metaDescription:
-      "Turn a PDF into an editable ODT for LibreOffice Writer, text and images carried over. Free, open source conversion.",
-    h1: "Convert a PDF to ODT, editable in LibreOffice Writer",
+      "Turn a PDF into an editable ODT for your word processor, text and images carried over. Free, open source conversion.",
+    h1: "Convert a PDF to ODT, editable in your OpenDocument suite",
     intro: [
-      "If you work in LibreOffice, converting a PDF to .docx is an absurd detour: you then have to import the Word file into Writer, adding another conversion layer and its inevitable drift. GigaPDF gives you the straight path: PDF to ODT, Writer's native format, in one transformation.",
-      "The engine analyzes the PDF — paragraphs, images, page structure — and rebuilds an OpenDocument text file: the text becomes editable paragraphs with their attributes, images return to their place, and the file opens in Writer like any other .odt, ready to be restyled with your templates. For scanned PDFs, the built-in Tesseract OCR (English + French) supplies the text first; the conversion does the rest.",
+      "If you work in an OpenDocument suite, converting a PDF to .docx is an absurd detour: you then have to import the Word file into your word processor, adding another conversion layer and its inevitable drift. GigaPDF gives you the straight path: PDF to ODT, the native format of OpenDocument word processors, in one transformation.",
+      "The engine analyzes the PDF — paragraphs, images, page structure — and rebuilds an OpenDocument text file: the text becomes editable paragraphs with their attributes, images return to their place, and the file opens in Writer like any other .odt, ready to be restyled with your templates. For scanned PDFs, the built-in in-house OCR (English + French) supplies the text first; the conversion does the rest.",
       "The choice of format is not cosmetic: ODT is an open ISO standard (ISO 26300), readable today and in twenty years, with no vendor dependency. GigaPDF — open source, self-hostable, watermark-free — is the logical companion: your documents move from the frozen format back to the free one, with free tools.",
     ],
     howTo: {
@@ -1080,13 +1080,13 @@ export const TOOLS: ToolData[] = [
         "If it's a scanned document, apply OCR first to recognize the text.",
         "Pick the ODT export in the conversion menu.",
         "The engine rebuilds paragraphs and images into an OpenDocument file.",
-        "Open the .odt in LibreOffice Writer and pick up the writing.",
+        "Open the .odt in your word processor and pick up the writing.",
       ],
     },
     capabilities: [
       "Native ODT export, no detour through the Word format",
       "Rebuilt editable paragraphs and carried-over images",
-      "Scan → Tesseract OCR → ODT chain for digitized documents",
+      "Scan → in-house OCR → ODT chain for digitized documents",
       "OpenDocument-conformant file, opened by Writer and any compatible editor",
       "No watermark on the converted document",
       "Other exports in the same spot: DOCX, ODP, TXT, HTML",
@@ -1110,12 +1110,12 @@ export const TOOLS: ToolData[] = [
       {
         question: "Is the resulting ODT file standard?",
         answer:
-          "Yes: it's a conformant OpenDocument file, readable by LibreOffice, OpenOffice, and any software honoring the ISO 26300 standard — including Word, which opens .odt files. You're locked into neither GigaPDF nor any vendor.",
+          "Yes: it's a conformant OpenDocument file, readable by any OpenDocument suite and any software honoring the ISO 26300 standard — including Word, which opens .odt files. You're locked into neither GigaPDF nor any vendor.",
       },
     ],
     useCases: [
       "Pick up in Writer an official document that was only published as a PDF",
-      "Bring old PDF deliverables back into a LibreOffice editorial pipeline",
+      "Bring old PDF deliverables back into an OpenDocument editorial pipeline",
       "Convert scanned letters into reworkable ODT files through the built-in OCR",
     ],
     relatedTools: ["opendocument-pdf", "pdf-to-word", "ocr-pdf"],
@@ -1127,25 +1127,25 @@ export const TOOLS: ToolData[] = [
     name: "HTML to PDF",
     metaTitle: "Convert HTML or a Web Page to PDF | GigaPDF",
     metaDescription:
-      "Convert HTML or a URL to PDF rendered by Chromium: modern CSS, web fonts, long pages. Free, open source, with an API.",
+      "Convert HTML or a URL to PDF rendered by the in-house engine: modern CSS, web fonts, long pages. Free, open source, with an API.",
     h1: "Convert HTML or a web page to PDF",
     intro: [
       "The web has become the source of most documents: invoices generated by applications, order confirmations, articles, reports produced by internal tools. Freezing them as PDFs — to archive, to prove, to send — demands an exact rendering. Modern HTML (flexbox, grid, web fonts, JavaScript-injected content) is far beyond what lightweight conversion libraries can reproduce.",
-      "GigaPDF attacks the problem from the right end: rendering is handled by Chromium, the engine inside Chrome, driven server-side. You supply HTML code or simply a URL; the page is loaded, styles applied, web fonts fetched, and the document is printed to PDF exactly as the browser would do it. What you see online is what the file contains.",
+      "GigaPDF attacks the problem from the right end: rendering is handled by its in-house HTML/CSS engine, driven server-side. You supply HTML code or simply a URL; the page is loaded, styles applied, web fonts fetched, and the document is printed to PDF exactly as the browser would do it. What you see online is what the file contains.",
       "It's also a first-rate automation tool: through the GigaPDF API (1,000 calls a month in the free plan), your applications generate their invoices, certificates, and reports by sending HTML — the most universal templating language there is — and get back PDFs ready to archive in the document manager. Self-hosted, the whole chain runs on your servers.",
     ],
     howTo: {
       title: "How to convert a web page to PDF",
       steps: [
         "Provide the source: a public URL or your complete HTML code.",
-        "Chromium loads the page server-side: CSS, web fonts, and layout applied.",
+        "The in-house engine loads the page server-side: CSS, web fonts, and layout applied.",
         "The rendering is printed to PDF, faithful to the browser display.",
         "Collect the document in your workspace, ready to file or share.",
         "To automate, call the same conversion from your applications over the API.",
       ],
     },
     capabilities: [
-      "Chromium rendering: a real browser engine, not an approximation",
+      "In-house HTML/CSS rendering: faithful to the web, not an approximation",
       "Conversion from a URL or from supplied HTML code",
       "Modern CSS support (flexbox, grid) and web fonts",
       "Automated generation over the API: invoices, certificates, reports",
@@ -1154,9 +1154,9 @@ export const TOOLS: ToolData[] = [
     ],
     faq: [
       {
-        question: "Why does Chromium rendering make the difference?",
+        question: "Why does the in-house HTML/CSS rendering make the difference?",
         answer:
-          "Because lightweight HTML converters implement a dated subset of CSS: flexbox and grid layouts collapse, web fonts go missing, JavaScript never runs. Chromium is the engine that displays the actual web — the PDF matches what Chrome shows, pixel for pixel.",
+          "Because lightweight HTML converters implement a dated subset of CSS: flexbox and grid layouts collapse, web fonts go missing, JavaScript never runs. GigaPDF's in-house engine handles modern CSS, web fonts, and JavaScript execution — the PDF faithfully matches what a browser shows.",
       },
       {
         question: "Can I generate my invoices as PDFs automatically?",
@@ -1171,7 +1171,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "How do I control the pagination of the resulting PDF?",
         answer:
-          "With standard print CSS, which Chromium honors: page-break and break-inside properties to govern the cuts, @media print rules to adapt styles, @page for margins. A well-prepared HTML template yields precisely paginated PDFs, reproducible on every run.",
+          "With standard print CSS, which the in-house engine honors: page-break and break-inside properties to govern the cuts, @media print rules to adapt styles, @page for margins. A well-prepared HTML template yields precisely paginated PDFs, reproducible on every run.",
       },
     ],
     useCases: [
@@ -1232,7 +1232,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Can a scan be made PDF/A compliant and searchable at once?",
         answer:
-          "Yes, that's the ideal archiving chain in GigaPDF: Tesseract OCR to recognize the text, the invisible searchable layer to make it usable, then PDF/A conversion. The final document is durable, compliant, and queryable in full text all at once.",
+          "Yes, that's the ideal archiving chain in GigaPDF: in-house OCR to recognize the text, the invisible searchable layer to make it usable, then PDF/A conversion. The final document is durable, compliant, and queryable in full text all at once.",
       },
     ],
     useCases: [

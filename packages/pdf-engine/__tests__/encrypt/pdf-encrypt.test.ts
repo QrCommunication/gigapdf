@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { loadFixture, SIMPLE_PDF } from '../helpers';
 import { encryptPDF } from '../../src/encrypt/pdf-encrypt';
 import { decryptPDF } from '../../src/encrypt/pdf-decrypt';
-import { PDFDocument } from 'pdf-lib';
+import { openDocument, closeDocument } from '../../src/engine/document-handle';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -59,11 +59,13 @@ describe('encryptPDF', () => {
     }
   });
 
-  it('produces a loadable PDF (accepted by pdf-lib)', async () => {
+  it('produces a structurally valid encrypted PDF (header + /Encrypt)', async () => {
     const buffer = makeBuffer(SIMPLE_PDF);
     const result = await encryptPDF(buffer, { ownerPassword: 'owner' });
 
-    await expect(PDFDocument.load(result, { ignoreEncryption: true })).resolves.toBeDefined();
+    const latin1 = result.toString('latin1');
+    expect(latin1.startsWith('%PDF-')).toBe(true);
+    expect(latin1).toContain('/Encrypt');
   });
 
   it('accepts a permissions object without throwing', async () => {
@@ -120,16 +122,20 @@ describe('decryptPDF', () => {
     const buffer = makeBuffer(SIMPLE_PDF);
     const result = await decryptPDF(buffer, 'anyPassword');
 
-    await expect(PDFDocument.load(result, { ignoreEncryption: true })).resolves.toBeDefined();
+    const handle = await openDocument(new Uint8Array(result));
+    expect(handle.pageCount).toBeGreaterThan(0);
+    closeDocument(handle);
   });
 
   it('returns same page count as the source document', async () => {
     const buffer = makeBuffer(SIMPLE_PDF);
     const result = await decryptPDF(buffer, 'pass');
 
-    const doc = await PDFDocument.load(result, { ignoreEncryption: true });
-    const sourceDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
-    expect(doc.getPageCount()).toBe(sourceDoc.getPageCount());
+    const doc = await openDocument(new Uint8Array(result));
+    const sourceDoc = await openDocument(new Uint8Array(buffer));
+    expect(doc.pageCount).toBe(sourceDoc.pageCount);
+    closeDocument(doc);
+    closeDocument(sourceDoc);
   });
 
   it('throws an error when given invalid PDF bytes', async () => {

@@ -4,8 +4,8 @@ import {
   resolveStandardFont,
   isStandardFont,
   mapPdfFontToStandard,
+  StandardFonts,
 } from '../../src/utils/font-map';
-import { StandardFonts } from 'pdf-lib';
 
 // ─── normalizeFontName ────────────────────────────────────────────────────────
 // normalizeFontName est désormais une fonction de normalisation de chaîne pure :

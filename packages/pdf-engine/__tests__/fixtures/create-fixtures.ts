@@ -1,31 +1,30 @@
 /**
- * Generate test PDF fixtures using pdf-lib.
+ * Generate test PDF fixtures with the native `@qrcommunication/gigapdf-lib`
+ * engine — zero third-party libraries (no pdf-lib, no fontkit, no sharp; raster
+ * test images are encoded by the engine itself).
  * Run: pnpm fixtures:generate
  *
- * Fixtures générées :
- *  - simple-text.pdf              : 1 page, texte Latin simple, Helvetica
- *  - multi-page.pdf               : 5 pages numérotées, Helvetica
- *  - with-forms.pdf               : AcroForm : text, checkbox, radio, dropdown
- *  - with-annotations.pdf         : highlight, link, note (annotations PDF)
- *  - with-images.pdf              : 1 image JPG + 1 image PNG embarquées
- *  - rotated-pages.pdf            : pages à 0°, 90°, 180°, 270°
- *  - encrypted.pdf                : simulé chiffré (pdf-lib ne supporte pas AES-256 natif)
- *  - cjk-text.pdf                 : texte japonais / chinois encodé en UTF-8 dans metadata
- *  - rtl-text.pdf                 : texte arabe / hébreu RTL (caractères Unicode)
- *  - mixed-fonts.pdf              : 3 polices standard : Helvetica, TimesRoman, Courier
- *
- *  Fixtures héritées (conservées pour compatibilité) :
- *  - simple.pdf                   : alias de simple-text.pdf (ancienne fixture)
- *  - landscape.pdf                : 1 page paysage
- *  - embedded-fonts.pdf           : PDF avec polices TTF embarquées si disponibles
- *  - large-100pages.pdf           : 100 pages (test intégrité gros documents)
- *  - encrypted-placeholder.pdf    : ancien nom, conservé pour compatibilité
+ * Fixtures:
+ *  - simple-text.pdf      : 1 page, simple Latin text (standard Helvetica)
+ *  - multi-page.pdf       : 5 numbered pages
+ *  - with-forms.pdf       : AcroForm — text, checkbox, radio, dropdown
+ *  - with-annotations.pdf : highlight, link, sticky note
+ *  - with-images.pdf      : 1 JPEG + 1 PNG embedded (encoded by the engine)
+ *  - rotated-pages.pdf    : pages at 0°, 90°, 180°, 270°
+ *  - encrypted.pdf        : REAL AES-256 encrypted PDF (the engine encrypts natively)
+ *  - cjk-text.pdf         : Japanese/Chinese text in UTF-16 metadata
+ *  - rtl-text.pdf         : Arabic/Hebrew RTL text in UTF-16 metadata
+ *  - mixed-fonts.pdf      : Helvetica / Times / Courier (6 standard fonts)
+ *  - simple.pdf           : legacy alias of simple-text.pdf + shapes
+ *  - landscape.pdf        : 1 landscape page
+ *  - embedded-fonts.pdf   : a system TTF embedded (subset) if available
+ *  - large-100pages.pdf   : 100 pages (integrity test)
  */
-import { PDFDocument, StandardFonts, rgb, degrees, PDFName, PDFString, PDFDict, asPDFName } from 'pdf-lib';
-import fontkit from '@pdf-lib/fontkit';
-import sharp from 'sharp';
+import type { GigaPdfEngine, GigaPdfDoc } from '@qrcommunication/gigapdf-lib';
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { webcrypto } from 'node:crypto';
 import { join } from 'node:path';
+import { getEngine } from '../../src/wasm';
 
 const DIR = join(import.meta.dirname ?? __dirname, '.');
 
@@ -33,456 +32,265 @@ const DIR = join(import.meta.dirname ?? __dirname, '.');
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Encode une chaîne UTF-16 BE avec BOM pour les strings PDFDocEncoding / PDFUnicode.
- * Utilisé pour forcer des textes CJK / RTL dans les métadonnées.
- */
-function toUTF16BEString(text: string): string {
-  // BOM UTF-16 BE : \xFE\xFF
-  let result = '\xFE\xFF';
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i);
-    result += String.fromCharCode((code >> 8) & 0xff, code & 0xff);
+/** A document with a single blank page of `w`×`h` points (no seed text). */
+function blankDoc(giga: GigaPdfEngine, w = 612, h = 792): GigaPdfDoc {
+  const doc = giga.open(giga.txtToPdf(' '));
+  doc.addPage(w, h, 0); // prepend a blank page → page 1 blank, page 2 = seed
+  doc.deletePage(2); // drop the seed page
+  return doc;
+}
+
+/** A solid `w`×`h` RGBA8888 buffer of one colour. */
+function solidRgba(w: number, h: number, r: number, g: number, b: number): Uint8Array {
+  const out = new Uint8Array(w * h * 4);
+  for (let i = 0; i < w * h; i++) {
+    out[i * 4] = r;
+    out[i * 4 + 1] = g;
+    out[i * 4 + 2] = b;
+    out[i * 4 + 3] = 255;
   }
-  return result;
+  return out;
 }
 
-/**
- * Génère une image JPEG 10x10 rouge via sharp (dépendance déjà présente).
- * Taille suffisante pour que pdf-lib l'accepte sans erreur.
- */
-async function redJpegBytes(): Promise<Buffer> {
-  return sharp({
-    create: { width: 10, height: 10, channels: 3, background: { r: 255, g: 0, b: 0 } },
-  })
-    .jpeg({ quality: 80 })
-    .toBuffer();
+/** A 10×10 solid-colour JPEG via the native engine encoder. */
+function redJpegBytes(giga: GigaPdfEngine): Uint8Array {
+  return giga.encodeJpeg(solidRgba(10, 10, 255, 0, 0), 10, 10, 80);
 }
 
-/**
- * Génère une image PNG 10x10 bleue via sharp.
- */
-async function bluePngBytes(): Promise<Buffer> {
-  return sharp({
-    create: { width: 10, height: 10, channels: 3, background: { r: 0, g: 0, b: 255 } },
-  })
-    .png()
-    .toBuffer();
+/** A 10×10 solid-colour PNG via the native engine encoder. */
+function bluePngBytes(giga: GigaPdfEngine): Uint8Array {
+  return giga.rgbaToPng(solidRgba(10, 10, 0, 0, 255), 10, 10);
 }
 
 // ---------------------------------------------------------------------------
-// Nouvelles fixtures (Phase F)
+// Builders
 // ---------------------------------------------------------------------------
 
-/** 1 page, texte Latin simple */
-async function createSimpleTextPdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  doc.setTitle('Simple Text Fixture');
-  doc.setAuthor('GigaPDF Test Suite');
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const page = doc.addPage([612, 792]);
-  page.drawText('Hello GigaPDF — Simple Latin Text', { x: 50, y: 720, size: 24, font, color: rgb(0, 0, 0) });
-  page.drawText('The quick brown fox jumps over the lazy dog.', { x: 50, y: 680, size: 14, font, color: rgb(0.2, 0.2, 0.2) });
-  page.drawText('Pack my box with five dozen liquor jugs.', { x: 50, y: 650, size: 12, font, color: rgb(0.3, 0.3, 0.3) });
-  page.drawText('0123456789 !@#$%^&*()_+-=[]{}|;:,./<>?', { x: 50, y: 620, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
-  page.drawText('Fixture: simple-text.pdf — generated by GigaPDF test suite', { x: 50, y: 50, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
-  return doc.save();
+function createSimpleTextPdf(giga: GigaPdfEngine): Uint8Array {
+  const doc = blankDoc(giga);
+  doc.setMetadata('Title', 'Simple Text Fixture');
+  doc.setMetadata('Author', 'GigaPDF Test Suite');
+  doc.addStandardText(1, 50, 720, 24, 'Hello GigaPDF — Simple Latin Text', 'Helvetica', 0x000000);
+  doc.addStandardText(1, 50, 680, 14, 'The quick brown fox jumps over the lazy dog.', 'Helvetica', 0x333333);
+  doc.addStandardText(1, 50, 650, 12, 'Pack my box with five dozen liquor jugs.', 'Helvetica', 0x4d4d4d);
+  doc.addStandardText(1, 50, 620, 10, '0123456789 !@#$%^&*()_+-=[]{}|;:,./<>?', 'Helvetica', 0x666666);
+  doc.addStandardText(1, 50, 50, 8, 'Fixture: simple-text.pdf', 'Helvetica', 0xb3b3b3);
+  const out = doc.save();
+  doc.close();
+  return out;
 }
 
-/** 5 pages numérotées */
-async function createMultiPagePdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  doc.setTitle('Multi-Page Fixture');
-  const font = await doc.embedFont(StandardFonts.Helvetica);
+function createMultiPagePdf(giga: GigaPdfEngine): Uint8Array {
+  const doc = blankDoc(giga);
+  doc.setMetadata('Title', 'Multi-Page Fixture');
+  for (let i = 2; i <= 5; i++) doc.addPage(612, 792, i - 1);
   for (let i = 1; i <= 5; i++) {
-    const page = doc.addPage([612, 792]);
-    page.drawText(`Page ${i} of 5`, { x: 50, y: 720, size: 24, font, color: rgb(0, 0, 0) });
-    page.drawText(`Main content for page ${i}.`, { x: 50, y: 680, size: 14, font, color: rgb(0.2, 0.2, 0.2) });
-    page.drawText(`Section A — Body paragraph for page ${i}.`, { x: 50, y: 650, size: 11, font, color: rgb(0.3, 0.3, 0.3) });
-    // Footer
-    page.drawText(`${i}`, { x: 300, y: 30, size: 10, font, color: rgb(0.5, 0.5, 0.5) });
+    doc.addStandardText(i, 50, 720, 24, `Page ${i} of 5`, 'Helvetica', 0x000000);
+    doc.addStandardText(i, 50, 680, 14, `Main content for page ${i}.`, 'Helvetica', 0x333333);
+    doc.addStandardText(i, 50, 650, 11, `Section A — Body paragraph for page ${i}.`, 'Helvetica', 0x4d4d4d);
+    doc.addStandardText(i, 300, 30, 10, `${i}`, 'Helvetica', 0x808080);
   }
-  return doc.save();
+  const out = doc.save();
+  doc.close();
+  return out;
 }
 
-/** AcroForm : text, checkbox, radio, dropdown */
-async function createWithFormsPdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  doc.setTitle('Forms Fixture');
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const page = doc.addPage([612, 792]);
-  page.drawText('AcroForm Test Document', { x: 50, y: 720, size: 20, font, color: rgb(0, 0, 0) });
+function createWithFormsPdf(giga: GigaPdfEngine): Uint8Array {
+  const doc = blankDoc(giga);
+  doc.setMetadata('Title', 'Forms Fixture');
+  doc.addStandardText(1, 50, 720, 20, 'AcroForm Test Document', 'Helvetica', 0x000000);
 
-  const form = doc.getForm();
-
-  // Text field
-  page.drawText('Name:', { x: 50, y: 660, size: 12, font });
-  const nameField = form.createTextField('name');
-  nameField.setText('John Doe');
-  nameField.addToPage(page, { x: 120, y: 650, width: 200, height: 25 });
-
-  // Email text field
-  page.drawText('Email:', { x: 50, y: 615, size: 12, font });
-  const emailField = form.createTextField('email');
-  emailField.addToPage(page, { x: 120, y: 605, width: 200, height: 25 });
-
-  // Checkbox
-  page.drawText('Agree:', { x: 50, y: 570, size: 12, font });
-  const checkbox = form.createCheckBox('agree');
-  checkbox.check();
-  checkbox.addToPage(page, { x: 120, y: 563, width: 16, height: 16 });
-
-  // Radio buttons
-  page.drawText('Gender:', { x: 50, y: 530, size: 12, font });
-  const radioMale = form.createRadioGroup('gender');
-  radioMale.addOptionToPage('male', page, { x: 120, y: 525, width: 14, height: 14 });
-  radioMale.addOptionToPage('female', page, { x: 160, y: 525, width: 14, height: 14 });
-  radioMale.select('male');
-  page.drawText('M', { x: 136, y: 530, size: 10, font });
-  page.drawText('F', { x: 176, y: 530, size: 10, font });
-
-  // Dropdown
-  page.drawText('Country:', { x: 50, y: 490, size: 12, font });
-  const dropdown = form.createDropdown('country');
-  dropdown.addOptions(['France', 'USA', 'UK', 'Germany', 'Japan']);
-  dropdown.select('France');
-  dropdown.addToPage(page, { x: 120, y: 480, width: 200, height: 25 });
-
-  return doc.save();
+  doc.addStandardText(1, 50, 660, 12, 'Name:', 'Helvetica');
+  doc.addTextField(1, 'name', [120, 650, 320, 675], 'John Doe');
+  doc.addStandardText(1, 50, 615, 12, 'Email:', 'Helvetica');
+  doc.addTextField(1, 'email', [120, 605, 320, 630], '');
+  doc.addStandardText(1, 50, 570, 12, 'Agree:', 'Helvetica');
+  doc.addCheckbox(1, 'agree', [120, 563, 136, 579], true);
+  doc.addStandardText(1, 50, 530, 12, 'Gender:', 'Helvetica');
+  doc.addRadioGroup(
+    1,
+    'gender',
+    [
+      { export: 'male', rect: [120, 525, 134, 539] },
+      { export: 'female', rect: [160, 525, 174, 539] },
+    ],
+    { selected: 'male' },
+  );
+  doc.addStandardText(1, 50, 490, 12, 'Country:', 'Helvetica');
+  doc.addComboBox(1, 'country', ['France', 'USA', 'UK', 'Germany', 'Japan'], { selected: 'France' });
+  // addComboBox places at a default rect; position the label only.
+  const out = doc.save();
+  doc.close();
+  return out;
 }
 
-/**
- * Annotations : highlight, link, note.
- * pdf-lib n'expose pas d'API haut niveau pour les annotations,
- * on les crée directement via les structures de bas niveau PDFDict.
- */
-async function createWithAnnotationsPdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  doc.setTitle('Annotations Fixture');
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const page = doc.addPage([612, 792]);
+function createWithAnnotationsPdf(giga: GigaPdfEngine): Uint8Array {
+  const doc = blankDoc(giga);
+  doc.setMetadata('Title', 'Annotations Fixture');
+  doc.addStandardText(1, 50, 720, 20, 'Annotations Test Document', 'Helvetica');
+  doc.addStandardText(1, 50, 660, 14, 'This text has a highlight annotation.', 'Helvetica');
+  doc.addStandardText(1, 50, 610, 14, 'Click here to follow a link.', 'Helvetica', 0x0000cc);
+  doc.addStandardText(1, 50, 560, 14, 'This paragraph has a sticky note.', 'Helvetica');
 
-  page.drawText('Annotations Test Document', { x: 50, y: 720, size: 20, font });
-  page.drawText('This text has a highlight annotation below it.', { x: 50, y: 660, size: 14, font });
-  page.drawText('Click here to follow a link.', { x: 50, y: 610, size: 14, font, color: rgb(0, 0, 0.8) });
-  page.drawText('This paragraph has a sticky note attached.', { x: 50, y: 560, size: 14, font });
-
-  const pageDict = page.node;
-
-  // Build annotation array
-  const annots: PDFDict[] = [];
-
-  // 1) Highlight annotation (yellow) over the first text line
-  const highlight = doc.context.obj({
-    Type: asPDFName('Annot'),
-    Subtype: asPDFName('Highlight'),
-    Rect: [50, 655, 400, 675],
-    C: [1, 1, 0],
-    Contents: PDFString.of('Highlighted text'),
-    QuadPoints: [50, 675, 400, 675, 50, 655, 400, 655],
-  });
-  annots.push(highlight as unknown as PDFDict);
-
-  // 2) Link annotation
-  const link = doc.context.obj({
-    Type: asPDFName('Annot'),
-    Subtype: asPDFName('Link'),
-    Rect: [50, 600, 230, 625],
-    A: doc.context.obj({
-      Type: asPDFName('Action'),
-      S: asPDFName('URI'),
-      URI: PDFString.of('https://giga-pdf.com'),
-    }),
-    Border: [0, 0, 1],
-  });
-  annots.push(link as unknown as PDFDict);
-
-  // 3) Text (sticky note) annotation
-  const note = doc.context.obj({
-    Type: asPDFName('Annot'),
-    Subtype: asPDFName('Text'),
-    Rect: [370, 550, 390, 570],
-    Contents: PDFString.of('This is a sticky note comment.'),
-    Open: false,
-    Name: asPDFName('Note'),
-  });
-  annots.push(note as unknown as PDFDict);
-
-  // Register annotation refs and attach to page
-  const annotRefs = annots.map((a) => doc.context.register(a));
-  pageDict.set(PDFName.of('Annots'), doc.context.obj(annotRefs));
-
-  return doc.save();
+  doc.addHighlight(1, 50, 655, 400, 675, 0xffff00);
+  doc.addUriLink(1, 50, 600, 230, 625, 'https://giga-pdf.com');
+  doc.addTextNote(1, [370, 550, 390, 570], 0xffcc00, { contents: 'This is a sticky note comment.' });
+  const out = doc.save();
+  doc.close();
+  return out;
 }
 
-/** 1 image JPG + 1 image PNG embarquées (générées via sharp) */
-async function createWithImagesPdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  doc.setTitle('Images Fixture');
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const page = doc.addPage([612, 792]);
-
-  page.drawText('Images Fixture', { x: 50, y: 720, size: 20, font });
-  page.drawText('JPEG image (10x10 red, embedded via sharp):', { x: 50, y: 680, size: 12, font });
-  page.drawText('PNG image (10x10 blue, embedded via sharp):', { x: 50, y: 540, size: 12, font });
-
-  // Embed JPEG generated by sharp
-  const jpgBuf = await redJpegBytes();
-  const jpgImage = await doc.embedJpg(jpgBuf);
-  page.drawImage(jpgImage, { x: 50, y: 580, width: 120, height: 80 });
-
-  // Embed PNG generated by sharp
-  const pngBuf = await bluePngBytes();
-  const pngImage = await doc.embedPng(pngBuf);
-  page.drawImage(pngImage, { x: 50, y: 430, width: 120, height: 80 });
-
-  page.drawText('Fixture: with-images.pdf', { x: 50, y: 50, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
-  return doc.save();
+async function createWithImagesPdf(giga: GigaPdfEngine): Promise<Uint8Array> {
+  const doc = blankDoc(giga);
+  doc.setMetadata('Title', 'Images Fixture');
+  doc.addStandardText(1, 50, 720, 20, 'Images Fixture', 'Helvetica');
+  doc.addStandardText(1, 50, 680, 12, 'JPEG image (10x10 red):', 'Helvetica');
+  doc.addStandardText(1, 50, 540, 12, 'PNG image (10x10 blue):', 'Helvetica');
+  doc.addImage(1, redJpegBytes(giga), 50, 580, 120, 80);
+  doc.addImage(1, bluePngBytes(giga), 50, 430, 120, 80);
+  doc.addStandardText(1, 50, 50, 8, 'Fixture: with-images.pdf', 'Helvetica', 0xb3b3b3);
+  const out = doc.save();
+  doc.close();
+  return out;
 }
 
-/** Pages à 0°, 90°, 180°, 270° */
-async function createRotatedPagesPdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  doc.setTitle('Rotated Pages Fixture');
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-
-  const rotations: Array<{ label: string; rot: number }> = [
-    { label: '0deg (normal)', rot: 0 },
-    { label: '90deg (portrait to landscape)', rot: 90 },
-    { label: '180deg (upside down)', rot: 180 },
-    { label: '270deg (landscape to portrait)', rot: 270 },
-  ];
-
-  for (const { label, rot } of rotations) {
-    const page = doc.addPage([612, 792]);
-    page.setRotation(degrees(rot));
-    page.drawText(`Rotation: ${label}`, { x: 50, y: 720, size: 20, font, color: rgb(0, 0, 0) });
-    page.drawText(`This page has a ${rot}deg rotation in the PDF dictionary.`, { x: 50, y: 680, size: 12, font });
-    page.drawText(`Fixture: rotated-pages.pdf`, { x: 50, y: 50, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
+function createRotatedPagesPdf(giga: GigaPdfEngine): Uint8Array {
+  const doc = blankDoc(giga);
+  doc.setMetadata('Title', 'Rotated Pages Fixture');
+  for (let i = 2; i <= 4; i++) doc.addPage(612, 792, i - 1);
+  const rotations = [0, 90, 180, 270];
+  for (let i = 0; i < 4; i++) {
+    const page = i + 1;
+    doc.addStandardText(page, 50, 720, 20, `Rotation: ${rotations[i]}deg`, 'Helvetica', 0x000000);
+    doc.addStandardText(page, 50, 680, 12, `This page has a ${rotations[i]}deg /Rotate entry.`, 'Helvetica');
+    if (rotations[i] !== 0) doc.rotatePage(page, rotations[i]!);
   }
-
-  return doc.save();
+  const out = doc.save();
+  doc.close();
+  return out;
 }
 
-/**
- * "Chiffré" — pdf-lib ne supporte pas AES-256 natif.
- * On génère un PDF normal avec des métadonnées qui signalent
- * l'intention de chiffrement. Les tests doivent mocker le déchiffrement
- * ou utiliser une bibliothèque externe (e.g. node-forge) séparément.
- */
-async function createEncryptedPdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  doc.setTitle('Encrypted PDF Fixture (simulated)');
-  doc.setSubject('This fixture simulates an encrypted PDF. pdf-lib cannot produce real AES-256 encrypted PDFs.');
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const page = doc.addPage([612, 792]);
-  page.drawText('Encrypted PDF (Simulated)', { x: 50, y: 720, size: 20, font });
-  page.drawText('Note: pdf-lib does not support AES-256 encryption natively.', { x: 50, y: 680, size: 12, font });
-  page.drawText('This file simulates the fixture for tests that mock decryption.', { x: 50, y: 650, size: 12, font });
-  page.drawText('User password: user123 / Owner password: owner456 (conceptual)', { x: 50, y: 620, size: 10, font, color: rgb(0.5, 0.1, 0.1) });
-  page.drawText('Fixture: encrypted.pdf', { x: 50, y: 50, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
-  return doc.save();
+function createEncryptedPdf(giga: GigaPdfEngine): Uint8Array {
+  const doc = blankDoc(giga);
+  doc.setMetadata('Title', 'Encrypted PDF Fixture');
+  doc.addStandardText(1, 50, 720, 20, 'Encrypted PDF (AES-256)', 'Helvetica');
+  doc.addStandardText(1, 50, 680, 12, 'User password: user123 / Owner password: owner456', 'Helvetica', 0x801919);
+  const keySeed = new Uint8Array(32);
+  webcrypto.getRandomValues(keySeed);
+  const out = doc.saveEncrypted('user123', 'gigapdf-fixture!', {
+    ownerPassword: 'owner456',
+    algorithm: 'aes256',
+    keySeed,
+  });
+  doc.close();
+  return out;
 }
 
-/**
- * Texte CJK (japonais/chinois).
- * pdf-lib avec les polices Standard ne supporte pas le rendu CJK.
- * On encode les caractères CJK dans les métadonnées (Title, Subject, Author)
- * en UTF-16 BE, et on place les codepoints Unicode en commentaire visible
- * dans le corps du PDF. Les tests valident que le parser extrait
- * correctement les métadonnées encodées UTF-16 BE.
- */
-async function createCjkTextPdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-
-  // Métadonnées en UTF-16 BE (format PDFDocEncoding)
-  const japaneseTitle = 'GigaPDF テスト — 日本語テキスト';
-  const chineseSubject = '中文测试文档 — PDF解析器测试';
-  doc.setTitle(toUTF16BEString(japaneseTitle));
-  doc.setSubject(toUTF16BEString(chineseSubject));
-  doc.setAuthor(toUTF16BEString('テスト作者'));
-
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const page = doc.addPage([612, 792]);
-
-  page.drawText('CJK Text Fixture', { x: 50, y: 720, size: 20, font });
-  page.drawText('Metadata contains UTF-16 BE encoded CJK text:', { x: 50, y: 680, size: 12, font });
-  // Unicode codepoints shown as ASCII for standard font rendering
-  page.drawText('Title: GigaPDF [U+30C6][U+30B9][U+30C8] (Japanese)', { x: 50, y: 650, size: 10, font, color: rgb(0.2, 0.2, 0.6) });
-  page.drawText('Subject: [U+4E2D][U+6587][U+6D4B][U+8BD5] (Chinese)', { x: 50, y: 625, size: 10, font, color: rgb(0.2, 0.6, 0.2) });
-  page.drawText('Author: [U+30C6][U+30B9][U+30C8][U+4F5C][U+8005]', { x: 50, y: 600, size: 10, font, color: rgb(0.6, 0.2, 0.2) });
-  page.drawText('Parser must decode UTF-16 BE BOM strings from PDF metadata.', { x: 50, y: 560, size: 10, font });
-  page.drawText('Fixture: cjk-text.pdf', { x: 50, y: 50, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
-
-  return doc.save();
+function createCjkTextPdf(giga: GigaPdfEngine): Uint8Array {
+  const doc = blankDoc(giga);
+  doc.setMetadata('Title', 'GigaPDF テスト — 日本語テキスト');
+  doc.setMetadata('Subject', '中文测试文档 — PDF解析器测试');
+  doc.setMetadata('Author', 'テスト作者');
+  doc.addStandardText(1, 50, 720, 20, 'CJK Text Fixture', 'Helvetica');
+  doc.addStandardText(1, 50, 680, 12, 'Metadata carries UTF-16 encoded CJK text.', 'Helvetica');
+  doc.addStandardText(1, 50, 50, 8, 'Fixture: cjk-text.pdf', 'Helvetica', 0xb3b3b3);
+  const out = doc.save();
+  doc.close();
+  return out;
 }
 
-/**
- * Texte RTL (arabe/hébreu).
- * Même contrainte que CJK : les polices Standard de pdf-lib ne gèrent
- * pas le bidi/RTL. Les caractères arabes et hébreux sont placés dans les
- * métadonnées (UTF-16 BE) et listés en Unicode dans le corps visible.
- */
-async function createRtlTextPdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-
-  const arabicText = 'مرحباً بك في GigaPDF — اختبار النص العربي';
-  const hebrewText = 'שלום GigaPDF — בדיקת טקסט עברי';
-  doc.setTitle(toUTF16BEString(arabicText));
-  doc.setSubject(toUTF16BEString(hebrewText));
-  doc.setAuthor(toUTF16BEString('مختبر النظام'));
-
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const page = doc.addPage([612, 792]);
-
-  page.drawText('RTL Text Fixture (Arabic & Hebrew)', { x: 50, y: 720, size: 20, font });
-  page.drawText('Metadata contains UTF-16 BE encoded RTL text:', { x: 50, y: 680, size: 12, font });
-  page.drawText('Title: Arabic — [U+0645][U+0631][U+062D][U+0628][U+0627]...', { x: 50, y: 650, size: 10, font, color: rgb(0.2, 0.2, 0.6) });
-  page.drawText('Subject: Hebrew — [U+05E9][U+05DC][U+05D5][U+05DD]...', { x: 50, y: 625, size: 10, font, color: rgb(0.2, 0.6, 0.2) });
-  page.drawText('RTL BiDi direction: right-to-left script systems.', { x: 50, y: 590, size: 10, font });
-  page.drawText('Parser must handle RTL Unicode strings in PDF metadata.', { x: 50, y: 565, size: 10, font });
-  page.drawText('Fixture: rtl-text.pdf', { x: 50, y: 50, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
-
-  return doc.save();
+function createRtlTextPdf(giga: GigaPdfEngine): Uint8Array {
+  const doc = blankDoc(giga);
+  doc.setMetadata('Title', 'مرحباً بك في GigaPDF — اختبار النص العربي');
+  doc.setMetadata('Subject', 'שלום GigaPDF — בדיקת טקסט עברי');
+  doc.setMetadata('Author', 'مختبر النظام');
+  doc.addStandardText(1, 50, 720, 20, 'RTL Text Fixture (Arabic & Hebrew)', 'Helvetica');
+  doc.addStandardText(1, 50, 680, 12, 'Metadata carries UTF-16 encoded RTL text.', 'Helvetica');
+  doc.addStandardText(1, 50, 50, 8, 'Fixture: rtl-text.pdf', 'Helvetica', 0xb3b3b3);
+  const out = doc.save();
+  doc.close();
+  return out;
 }
 
-/** 3 polices différentes : Helvetica, TimesRoman, Courier */
-async function createMixedFontsPdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  doc.setTitle('Mixed Fonts Fixture');
-  const helvetica = await doc.embedFont(StandardFonts.Helvetica);
-  const helveticaBold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const timesRoman = await doc.embedFont(StandardFonts.TimesRoman);
-  const timesItalic = await doc.embedFont(StandardFonts.TimesRomanItalic);
-  const courier = await doc.embedFont(StandardFonts.Courier);
-  const courierBold = await doc.embedFont(StandardFonts.CourierBold);
-
-  const page = doc.addPage([612, 792]);
-
-  page.drawText('Mixed Fonts Fixture', { x: 50, y: 720, size: 20, font: helveticaBold, color: rgb(0, 0, 0) });
-
-  page.drawText('Helvetica (regular) — Sans-serif, 14pt', { x: 50, y: 670, size: 14, font: helvetica, color: rgb(0.1, 0.1, 0.1) });
-  page.drawText('Helvetica Bold — Sans-serif bold, 14pt', { x: 50, y: 645, size: 14, font: helveticaBold, color: rgb(0.1, 0.1, 0.1) });
-
-  page.drawText('Times Roman (regular) — Serif, 14pt', { x: 50, y: 610, size: 14, font: timesRoman, color: rgb(0.1, 0.2, 0.5) });
-  page.drawText('Times Roman Italic — Serif italic, 14pt', { x: 50, y: 585, size: 14, font: timesItalic, color: rgb(0.1, 0.2, 0.5) });
-
-  page.drawText('Courier (regular) — Monospace, 14pt', { x: 50, y: 550, size: 14, font: courier, color: rgb(0.1, 0.5, 0.1) });
-  page.drawText('Courier Bold — Monospace bold, 14pt', { x: 50, y: 525, size: 14, font: courierBold, color: rgb(0.1, 0.5, 0.1) });
-
-  // Mixed in one block
-  page.drawText('Mixed in paragraph: ', { x: 50, y: 480, size: 12, font: helvetica });
-  page.drawText('Helvetica + ', { x: 200, y: 480, size: 12, font: helvetica, color: rgb(0.8, 0, 0) });
-  page.drawText('Times + ', { x: 290, y: 480, size: 12, font: timesRoman, color: rgb(0, 0.6, 0) });
-  page.drawText('Courier', { x: 350, y: 480, size: 12, font: courier, color: rgb(0, 0, 0.8) });
-
-  page.drawText('Parser must detect 6 distinct fonts on this page.', { x: 50, y: 430, size: 10, font: helvetica, color: rgb(0.4, 0.4, 0.4) });
-  page.drawText('Fixture: mixed-fonts.pdf', { x: 50, y: 50, size: 8, font: helvetica, color: rgb(0.7, 0.7, 0.7) });
-
-  return doc.save();
+function createMixedFontsPdf(giga: GigaPdfEngine): Uint8Array {
+  const doc = blankDoc(giga);
+  doc.setMetadata('Title', 'Mixed Fonts Fixture');
+  doc.addStandardText(1, 50, 720, 20, 'Mixed Fonts Fixture', 'Helvetica-Bold', 0x000000);
+  doc.addStandardText(1, 50, 670, 14, 'Helvetica (regular) — Sans-serif', 'Helvetica', 0x1a1a1a);
+  doc.addStandardText(1, 50, 645, 14, 'Helvetica Bold — Sans-serif bold', 'Helvetica-Bold', 0x1a1a1a);
+  doc.addStandardText(1, 50, 610, 14, 'Times Roman — Serif', 'Times-Roman', 0x1a3380);
+  doc.addStandardText(1, 50, 585, 14, 'Times Italic — Serif italic', 'Times-Italic', 0x1a3380);
+  doc.addStandardText(1, 50, 550, 14, 'Courier — Monospace', 'Courier', 0x1a801a);
+  doc.addStandardText(1, 50, 525, 14, 'Courier Bold — Monospace bold', 'Courier-Bold', 0x1a801a);
+  doc.addStandardText(1, 50, 430, 10, 'Parser must detect 6 distinct fonts.', 'Helvetica', 0x666666);
+  const out = doc.save();
+  doc.close();
+  return out;
 }
 
-// ---------------------------------------------------------------------------
-// Fixtures héritées (conservées pour rétro-compatibilité)
-// ---------------------------------------------------------------------------
-
-async function createSimplePdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  const helvetica = await doc.embedFont(StandardFonts.Helvetica);
-  // Include a second font (Courier) so the fixture has non-Helvetica text content.
-  // This is required for RT-02 round-trip tests that verify font preservation.
-  const courier = await doc.embedFont(StandardFonts.Courier);
-  const page = doc.addPage([612, 792]);
-  page.drawText('Hello GigaPDF Test', { x: 50, y: 700, size: 24, font: helvetica, color: rgb(0, 0, 0) });
-  page.drawText('Second line of text', { x: 50, y: 660, size: 14, font: helvetica, color: rgb(0.2, 0.2, 0.2) });
-  // Courier line — ensures simple.pdf has a non-Helvetica font in its text runs
-  page.drawText('Monospace reference line', { x: 50, y: 620, size: 12, font: courier, color: rgb(0.3, 0.3, 0.3) });
-  page.drawRectangle({ x: 50, y: 500, width: 200, height: 100, color: rgb(0.9, 0.1, 0.1), opacity: 0.5 });
-  page.drawLine({ start: { x: 50, y: 480 }, end: { x: 300, y: 480 }, color: rgb(0, 0, 1), thickness: 2 });
-  page.drawEllipse({ x: 400, y: 550, xScale: 60, yScale: 40, color: rgb(0, 0.8, 0) });
-  return doc.save();
+function createSimplePdf(giga: GigaPdfEngine): Uint8Array {
+  const doc = blankDoc(giga);
+  doc.addStandardText(1, 50, 700, 24, 'Hello GigaPDF Test', 'Helvetica', 0x000000);
+  doc.addStandardText(1, 50, 660, 14, 'Second line of text', 'Helvetica', 0x333333);
+  doc.addStandardText(1, 50, 620, 12, 'Monospace reference line', 'Courier', 0x4d4d4d);
+  doc.addRectangle(1, 50, 500, 200, 100, null, 0xe61919);
+  doc.drawLine(1, 50, 480, 300, 480, 0x0000ff, 2);
+  doc.addEllipse(1, 400, 550, 60, 40, null, 0x00cc00);
+  const out = doc.save();
+  doc.close();
+  return out;
 }
 
-async function createEncryptedPlaceholderPdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const page = doc.addPage([612, 792]);
-  page.drawText('This would be encrypted', { x: 50, y: 700, size: 20, font });
-  return doc.save();
+function createLandscapePdf(giga: GigaPdfEngine): Uint8Array {
+  const doc = blankDoc(giga, 792, 612);
+  doc.addStandardText(1, 50, 550, 24, 'Landscape Document', 'Helvetica');
+  const out = doc.save();
+  doc.close();
+  return out;
 }
 
-async function createLandscapePdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const page = doc.addPage([792, 612]);
-  page.drawText('Landscape Document', { x: 50, y: 550, size: 24, font });
-  return doc.save();
-}
-
-async function createEmbeddedFontsPdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  doc.registerFontkit(fontkit);
-
+function createEmbeddedFontsPdf(giga: GigaPdfEngine): Uint8Array {
+  const doc = blankDoc(giga);
   const candidatePaths = [
     '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
     '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
-    '/usr/share/fonts/opentype/urw-base35/NimbusSans-Regular.otf',
     '/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf',
-    '/usr/share/fonts/truetype/selawik-zorin-os/selawk.ttf',
-    '/usr/share/fonts/truetype/tiresias/tiresias_pcfont.ttf',
     '/usr/share/fonts/truetype/freefont/FreeSans.ttf',
     '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
-    '/System/Library/Fonts/Helvetica.ttc',
-    '/Library/Fonts/Arial.ttf',
   ];
-
-  let customFont = null;
-  let customFontName = 'DejaVuSans';
-
+  let embedded = false;
   for (const fontPath of candidatePaths) {
     if (existsSync(fontPath)) {
-      try {
-        const fontBytes = readFileSync(fontPath);
-        customFont = await doc.embedFont(fontBytes, { subset: true });
-        const base = fontPath.split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'CustomFont';
-        customFontName = base;
-        console.log(`  Using TTF font: ${fontPath}`);
+      const fontObj = doc.embedFont('Embedded', new Uint8Array(readFileSync(fontPath)));
+      if (fontObj > 0) {
+        doc.addText(1, 50, 700, 18, 'Custom embedded TrueType font', fontObj, 0x000000);
+        doc.addText(1, 50, 670, 12, 'Round-trip test — TTF subset embedded', fontObj, 0x3333cc);
+        embedded = true;
+        // eslint-disable-next-line no-console
+        console.log(`  Embedded TTF: ${fontPath}`);
         break;
-      } catch {
-        continue;
       }
     }
   }
-
-  const helveticaFont = await doc.embedFont(StandardFonts.Helvetica);
-  const page = doc.addPage([612, 792]);
-
-  if (customFont) {
-    page.drawText('Custom embedded font — DejaVu/Liberation/Ubuntu', { font: customFont, x: 50, y: 700, size: 18, color: rgb(0, 0, 0) });
-    page.drawText(`Font: ${customFontName} (TTF subset embarqué)`, { font: customFont, x: 50, y: 670, size: 12, color: rgb(0.2, 0.2, 0.8) });
-    page.drawText('Calibri simulation — police custom round-trip test', { font: customFont, x: 50, y: 640, size: 14, color: rgb(0.1, 0.5, 0.1) });
-  } else {
-    const courierFont = await doc.embedFont(StandardFonts.Courier);
-    page.drawText('Custom font simulation (Courier as embedded fallback)', { font: courierFont, x: 50, y: 700, size: 18, color: rgb(0, 0, 0) });
-    console.log('  Warning: No TTF found on system, using Courier as embedded font fallback');
+  if (!embedded) {
+    doc.addStandardText(1, 50, 700, 18, 'No system TTF found — Courier fallback', 'Courier', 0x000000);
   }
-
-  page.drawText('Helvetica standard — référence non-embedded', { font: helveticaFont, x: 50, y: 600, size: 12, color: rgb(0.5, 0.5, 0.5) });
-  page.drawText('Round-trip test fixture v1.0 — embedded-fonts.pdf', { font: helveticaFont, x: 50, y: 50, size: 8, color: rgb(0.7, 0.7, 0.7) });
-
-  return doc.save();
+  doc.addStandardText(1, 50, 600, 12, 'Helvetica standard — non-embedded reference', 'Helvetica', 0x808080);
+  const out = doc.save();
+  doc.close();
+  return out;
 }
 
-async function createLargeHundredPagesPdf(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  const font = await doc.embedFont(StandardFonts.Helvetica);
+function createLargeHundredPagesPdf(giga: GigaPdfEngine): Uint8Array {
+  const doc = blankDoc(giga);
+  for (let i = 2; i <= 100; i++) doc.addPage(612, 792, i - 1);
   for (let i = 1; i <= 100; i++) {
-    const page = doc.addPage([612, 792]);
-    page.drawText(`Page ${i} — GigaPDF Large Document Test`, { x: 50, y: 700, size: 16, font, color: rgb(0, 0, 0) });
-    page.drawText(`Content block page ${i}. This is the main body text for testing integrity.`, { x: 50, y: 660, size: 12, font, color: rgb(0.2, 0.2, 0.2) });
-    page.drawText(`Section A — paragraph 1 for page ${i}`, { x: 50, y: 630, size: 10, font, color: rgb(0.3, 0.3, 0.3) });
+    doc.addStandardText(i, 50, 700, 16, `Page ${i} — GigaPDF Large Document Test`, 'Helvetica', 0x000000);
+    doc.addStandardText(i, 50, 660, 12, `Content block page ${i}. Integrity test body.`, 'Helvetica', 0x333333);
   }
-  return doc.save();
+  const out = doc.save();
+  doc.close();
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -491,39 +299,34 @@ async function createLargeHundredPagesPdf(): Promise<Uint8Array> {
 
 export async function generateAllFixtures(): Promise<void> {
   mkdirSync(DIR, { recursive: true });
+  const giga = await getEngine();
 
-  const fixtures: Array<{ name: string; gen: () => Promise<Uint8Array> }> = [
-    // Nouvelles fixtures Phase F
+  const sync: Array<{ name: string; gen: (g: GigaPdfEngine) => Uint8Array }> = [
     { name: 'simple-text.pdf', gen: createSimpleTextPdf },
     { name: 'multi-page.pdf', gen: createMultiPagePdf },
     { name: 'with-forms.pdf', gen: createWithFormsPdf },
     { name: 'with-annotations.pdf', gen: createWithAnnotationsPdf },
-    { name: 'with-images.pdf', gen: createWithImagesPdf },
     { name: 'rotated-pages.pdf', gen: createRotatedPagesPdf },
     { name: 'encrypted.pdf', gen: createEncryptedPdf },
     { name: 'cjk-text.pdf', gen: createCjkTextPdf },
     { name: 'rtl-text.pdf', gen: createRtlTextPdf },
     { name: 'mixed-fonts.pdf', gen: createMixedFontsPdf },
-    // Fixtures héritées
     { name: 'simple.pdf', gen: createSimplePdf },
-    { name: 'encrypted-placeholder.pdf', gen: createEncryptedPlaceholderPdf },
     { name: 'landscape.pdf', gen: createLandscapePdf },
     { name: 'embedded-fonts.pdf', gen: createEmbeddedFontsPdf },
     { name: 'large-100pages.pdf', gen: createLargeHundredPagesPdf },
   ];
 
-  for (const { name, gen } of fixtures) {
-    process.stdout.write(`Generating ${name}...`);
-    const bytes = await gen();
-    writeFileSync(join(DIR, name), bytes);
-    console.log(` OK (${bytes.length} bytes)`);
+  for (const { name, gen } of sync) {
+    writeFileSync(join(DIR, name), gen(giga));
+    // eslint-disable-next-line no-console
+    console.log(`✓ ${name}`);
   }
-
-  console.log(`\nAll ${fixtures.length} fixtures generated in ${DIR}`);
+  writeFileSync(join(DIR, 'with-images.pdf'), await createWithImagesPdf(giga));
+  // eslint-disable-next-line no-console
+  console.log('✓ with-images.pdf');
 }
 
-// Entry point when run directly
-generateAllFixtures().catch((err) => {
-  console.error('Fixture generation failed:', err);
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  void generateAllFixtures();
+}

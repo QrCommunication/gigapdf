@@ -46,10 +46,12 @@ describe('openDocument', () => {
     expect(handle.id.length).toBeGreaterThan(0);
   });
 
-  it('handle exposes internal _pdfDoc object', async () => {
+  it('handle exposes the internal engine document', async () => {
     const handle = await openDocument(fixtureBuffer(SIMPLE_PDF));
 
-    expect(handle._pdfDoc).toBeDefined();
+    expect(handle._doc).toBeDefined();
+    expect(typeof handle._doc.pageCount).toBe('function');
+    closeDocument(handle);
   });
 
   it('newly opened document is not dirty', async () => {
@@ -369,14 +371,14 @@ describe('closeDocument', () => {
     expect(() => closeDocument(handle)).not.toThrow();
   });
 
-  it('handle properties are still readable after close (pdf-lib is in-memory)', async () => {
-    // pdf-lib does not invalidate its objects on close; our closeDocument only
-    // cleans up the dirtyMap entry. The underlying _pdfDoc remains usable.
+  it('page count is readable before close; close releases the engine document', async () => {
+    // The engine frees the WASM document on close(), so the handle must not be
+    // read afterwards (unlike the old in-memory pdf-lib object). We read before
+    // closing, then assert close() is safe.
     const handle = await openDocument(fixtureBuffer(SIMPLE_PDF));
-    closeDocument(handle);
-
-    // pageCount delegates to pdfDoc.getPageCount() — should still work.
     expect(handle.pageCount).toBe(1);
+
+    expect(() => closeDocument(handle)).not.toThrow();
   });
 
   it('isDirty reports false after close (WeakMap entry removed)', async () => {

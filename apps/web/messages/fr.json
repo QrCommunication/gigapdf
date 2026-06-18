@@ -26,6 +26,7 @@
   },
   "nav": {
     "features": "Fonctionnalités",
+    "engine": "Moteur PDF",
     "openSource": "Open source",
     "pricing": "Tarifs",
     "github": "GitHub",
@@ -46,20 +47,168 @@
       "default": "GigaPDF — Éditez vos PDF comme un document Word. Open source.",
       "template": "%s | GigaPDF"
     },
-    "description": "Éditeur PDF open source (AGPL) avec collaboration en temps réel : modifiez le texte avec les polices d'origine, signez (PKCS#7), océrisez vos scans, convertissez 9 formats Office. Auto-hébergeable, chiffré AES-256, conforme RGPD.",
+    "description": "Éditeur PDF open source avec collaboration en temps réel : modifiez le texte avec les polices d'origine, signez (PKCS#7), océrisez vos scans, convertissez 9 formats Office. Auto-hébergeable, chiffré AES-256, conforme RGPD.",
     "keywords": "éditeur PDF open source, modifier PDF en ligne, éditeur PDF gratuit, modifier texte PDF, signer PDF PKCS#7, OCR PDF cherchable, convertir Word en PDF, convertir PDF en Word, PDF collaboratif temps réel, PDF auto-hébergé, GED open source, compression PDF, PDF/A, GigaPDF",
     "ogTitle": "GigaPDF — Éditez vos PDF comme un document Word. Vraiment.",
     "ogDescription": "Éditeur PDF open source : texte modifiable avec polices fidèles, collaboration live, signature PKCS#7, OCR, 9 formats Office. Auto-hébergeable.",
     "twitterTitle": "GigaPDF — L'éditeur PDF open source",
-    "twitterDescription": "Modifiez vos PDF comme un document Word : polices fidèles, collaboration live, signature, OCR. Open source AGPL, auto-hébergeable."
+    "twitterDescription": "Modifiez vos PDF comme un document Word : polices fidèles, collaboration live, signature, OCR. Open source, auto-hébergeable."
+  },
+  "engine": {
+    "meta": {
+      "title": "Le moteur PDF GigaPDF — 100 % maison, zéro dépendance tierce",
+      "description": "Découvrez le moteur PDF maison de GigaPDF : lecture/écriture bas niveau, édition réelle du contenu, rendu haute fidélité, formulaires, signature numérique, OCR et conversion Office. Compilé en WebAssembly, zéro dépendance tierce."
+    },
+    "hero": {
+      "kicker": "Le moteur PDF maison",
+      "title": "Un moteur PDF complet,",
+      "titleAccent": "écrit de zéro.",
+      "description": "La plupart des outils PDF assemblent des briques tierces. GigaPDF a fait le choix inverse : un moteur PDF intégral, conçu et écrit en interne, qui lit, écrit, édite, rend, signe et convertit vos documents. 100 % maison, zéro dépendance tierce — c'est ce qui rend l'édition fidèle et le traitement souverain possibles.",
+      "ctaTry": "Essayer l'éditeur",
+      "ctaTools": "Voir les outils PDF"
+    },
+    "intro": {
+      "label": "En bref",
+      "title": "Pourquoi un moteur fait maison change tout",
+      "description": "Un moteur PDF maîtrisé de bout en bout, ce n'est pas un détail technique : c'est ce qui permet d'éditer un PDF comme un document Word sans casser sa mise en page, de garantir que vos fichiers ne quittent jamais nos serveurs, et de faire évoluer chaque fonction sans dépendre du calendrier d'un tiers."
+    },
+    "sections": {
+      "core": {
+        "label": "Fondations",
+        "title": "Un moteur 100 % maison, zéro dépendance tierce",
+        "description": "Au cœur de GigaPDF, un moteur PDF entièrement écrit en interne et compilé en WebAssembly pour tourner à pleine vitesse côté serveur. Il manipule le format PDF à son niveau le plus bas, sans jamais déléguer à une bibliothèque tierce.",
+        "points": {
+          "lowLevel": "Lecture et écriture bas niveau du format PDF : tables de références croisées (xref classiques et flux xref), objets compressés (ObjStm), reconstruction des fichiers endommagés.",
+          "flate": "Compression et décompression Flate entièrement maison : les flux du document sont décodés et ré-encodés sans dépendance externe.",
+          "wasm": "Compilé en WebAssembly : la performance du natif, la portabilité du web, et un code que l'on maîtrise intégralement.",
+          "souverain": "Zéro dépendance tierce sur le chemin critique : ce que le moteur fait, il le fait lui-même — gage de sécurité, d'auditabilité et de pérennité."
+        }
+      },
+      "edit": {
+        "label": "Édition",
+        "title": "Éditer réellement le contenu, pas le recouvrir",
+        "description": "Modifier un PDF, ce n'est pas coller un autocollant blanc par-dessus le texte. GigaPDF réécrit véritablement le flux de contenu de la page pour supprimer, déplacer ou remplacer texte, formes et images — exactement comme un traitement de texte.",
+        "points": {
+          "realEdit": "Édition réelle du texte, des formes et des images : ajout, déplacement, redimensionnement et reformatage directement dans le contenu de la page.",
+          "trueDelete": "Suppression réelle des objets : le contenu effacé disparaît du fichier, pas masqué sous un cache — aucune donnée fantôme ne subsiste.",
+          "redaction": "Caviardage à valeur probante : le texte et les images expurgés sont retirés du document de façon irréversible.",
+          "fidelity": "Mise en page d'origine préservée : les modifications s'intègrent au document sans en casser la structure."
+        }
+      },
+      "render": {
+        "label": "Rendu",
+        "title": "Rasterisation et rendu haute fidélité",
+        "description": "Pour afficher un aperçu, générer une miniature ou produire une image d'une page, le moteur dessine lui-même chaque trait, chaque courbe et chaque glyphe — un rasteriseur vectoriel complet, écrit maison.",
+        "points": {
+          "vector": "Rendu vectoriel fidèle : tracés, courbes, remplissages et dégradés sont dessinés à la résolution voulue.",
+          "glyphs": "Rendu des glyphes des polices embarquées (TrueType et CFF) : le texte s'affiche exactement comme dans le document d'origine.",
+          "previews": "Aperçus et miniatures haute définition pour chaque page, à n'importe quelle échelle.",
+          "images": "Export d'images nettes des pages, sans perte de qualité ni artefact."
+        }
+      },
+      "forms": {
+        "label": "Formulaires",
+        "title": "Formulaires interactifs, remplis et aplatis",
+        "description": "Le moteur comprend les formulaires PDF interactifs : il lit leurs champs, les pré-remplit et peut les figer définitivement pour produire un document non modifiable.",
+        "points": {
+          "types": "Quatre types de champs pris en charge : zones de texte, cases à cocher, boutons radio et listes déroulantes / combos.",
+          "fill": "Remplissage programmatique des champs et lecture des valeurs existantes.",
+          "flatten": "Aplatissement : les champs deviennent du contenu fixe, pour un document définitif et homogène.",
+          "fidelity": "Apparence et positionnement des champs respectés, conformes à la norme PDF."
+        }
+      },
+      "annotations": {
+        "label": "Annotations",
+        "title": "Annoter nativement vos documents",
+        "description": "Surligner un passage, ajouter une note, apposer un tampon : le moteur gère les annotations natives du format PDF, lisibles dans n'importe quel lecteur conforme.",
+        "points": {
+          "markup": "Surlignage, soulignement et marques de texte ancrés au bon endroit, même sur une page pivotée.",
+          "notes": "Notes et commentaires intégrés au document.",
+          "stamps": "Tampons et flèches pour valider, signaler ou attirer l'attention.",
+          "standard": "Annotations conformes à la norme : ouvrables et modifiables dans tout lecteur PDF respectant le standard."
+        }
+      },
+      "fonts": {
+        "label": "Polices",
+        "title": "Des polices fidèles, automatiquement",
+        "description": "La fidélité d'un PDF tient à ses polices. Le moteur les identifie, les récupère et les embarque lui-même, pour que vos documents s'affichent partout exactement comme prévu — sans tofu ni caractères manquants.",
+        "points": {
+          "identify": "Identification précise des polices utilisées dans chaque document.",
+          "download": "Téléchargement automatique des polices manquantes depuis la bibliothèque Google Fonts, à la volée.",
+          "embed": "Embarquement des polices à l'enregistrement : le fichier produit est autonome et s'affiche fidèlement partout.",
+          "cmap": "Support complet des polices composites (Type0 / CID) et des tables de correspondance de caractères (CMap), pour une extraction de texte sans caractères perdus."
+        }
+      },
+      "security": {
+        "label": "Sécurité",
+        "title": "Chiffrement, signature et archivage",
+        "description": "Protéger un document, prouver son intégrité, le conserver dans le temps : le moteur gère le chiffrement, la signature numérique et la conformité d'archivage de bout en bout.",
+        "points": {
+          "encryption": "Chiffrement des documents en RC4 et AES (128 et 256 bits) : protection par mot de passe et contrôle des permissions.",
+          "signature": "Signature numérique PKCS#7 avec certificat : une preuve d'intégrité vérifiable, à la manière des grands lecteurs PDF.",
+          "tamper": "Toute altération d'un document signé est détectable — la confiance est démontrable.",
+          "archive": "Conformité d'archivage longue durée (PDF/A) pour conserver vos documents dans le temps."
+        }
+      },
+      "html": {
+        "label": "HTML → PDF",
+        "title": "Du HTML/CSS au PDF, nativement",
+        "description": "Générer un PDF à partir d'une page web ou d'un gabarit HTML est un besoin courant. GigaPDF intègre son propre moteur de mise en page HTML/CSS — et même un moteur JavaScript maison pour les pages dynamiques.",
+        "points": {
+          "css": "Moteur de rendu HTML/CSS maison : cascade des styles, mise en page en blocs et en ligne, tableaux, flexbox et pagination.",
+          "fonts": "Polices web embarquées dans le PDF généré, pour un rendu fidèle au pixel près.",
+          "js": "Moteur JavaScript natif intégré : les gabarits HTML qui exécutent du script sont rendus correctement.",
+          "noThirdParty": "Le tout sans navigateur ni moteur de rendu tiers : la chaîne complète est maison."
+        }
+      },
+      "convert": {
+        "label": "Conversion",
+        "title": "Convertir vers de vrais documents éditables",
+        "description": "Le moteur de conversion maison ne se contente pas de prendre une photo de la page : il reconstruit de véritables documents éditables, avec du texte sélectionnable, des tableaux et des images repositionnés.",
+        "points": {
+          "office": "Conversion entre PDF et formats bureautiques : Word (DOCX), Excel (XLSX), PowerPoint (PPTX) et OpenDocument (ODT, ODS).",
+          "editable": "De vrais éléments éditables en sortie — du texte, des tableaux, des images — et non un simple scan figé.",
+          "web": "Export vers HTML et texte brut pour réutiliser le contenu ailleurs.",
+          "fidelity": "Structure et mise en forme préservées au mieux d'un format à l'autre."
+        }
+      },
+      "ocr": {
+        "label": "OCR",
+        "title": "Rendre vos scans cherchables",
+        "description": "Un PDF scanné n'est qu'une image : on ne peut ni le rechercher ni copier son texte. L'OCR maison reconnaît les caractères et ajoute une couche de texte invisible, par-dessus l'image, sans rien changer à son apparence.",
+        "points": {
+          "recognize": "Reconnaissance des caractères directement sur les pages scannées.",
+          "layer": "Couche de texte invisible superposée à l'image : le document reste identique à l'œil, mais devient cherchable.",
+          "searchable": "Recherche plein texte et copier-coller possibles sur des documents qui n'étaient que des images.",
+          "preserve": "L'image d'origine est intégralement préservée — l'OCR n'altère jamais le rendu."
+        }
+      },
+      "privacy": {
+        "label": "Souveraineté",
+        "title": "Gratuit, open source et respectueux de votre vie privée",
+        "description": "Parce que tout le traitement repose sur notre propre moteur, vos documents ne sont jamais envoyés à un service tiers. Ils sont traités sur nos serveurs — ou sur les vôtres, puisque GigaPDF est auto-hébergeable.",
+        "points": {
+          "free": "Toutes les fonctions du moteur sont disponibles dans le plan gratuit, sans filigrane ni version bridée.",
+          "oss": "Code source-available sous licence PolyForm Noncommercial : auditez-le, étudiez-le, contribuez.",
+          "noThirdParty": "Aucun envoi à un service tiers : le traitement reste de bout en bout sous notre moteur maison.",
+          "selfHost": "Auto-hébergeable : installez GigaPDF sur vos propres serveurs pour garder vos documents chez vous."
+        }
+      }
+    },
+    "cta": {
+      "title": "Mettez le moteur à l'épreuve",
+      "description": "Éditez, signez et convertissez vos PDF dès maintenant, ou explorez tous les outils que ce moteur rend possibles.",
+      "ctaTry": "Essayer gratuitement",
+      "ctaTools": "Découvrir les outils"
+    }
   },
   "openSource": {
     "meta": {
       "title": "Open source",
-      "description": "GigaPDF est un éditeur PDF 100 % open source sous licence AGPL-3.0 : code transparent et auditable, auto-hébergeable, sans verrouillage. Contribuez sur GitHub."
+      "description": "GigaPDF est un éditeur PDF 100 % open source, source-available sous licence PolyForm Noncommercial 1.0.0 : code transparent et auditable, auto-hébergeable, sans verrouillage. Contribuez sur GitHub."
     },
     "hero": {
-      "kicker": "Code ouvert · AGPL-3.0",
+      "kicker": "Code ouvert · PolyForm Noncommercial",
       "title": "Un éditeur PDF",
       "titleAccent": "vraiment open source",
       "description": "Tout le code de GigaPDF est public, auditable et auto-hébergeable. Pas de boîte noire, pas de verrouillage : la version cloud et la version que vous hébergez partagent exactement la même base de code.",
@@ -88,11 +237,11 @@
     },
     "license": {
       "label": "Licence",
-      "title": "GNU AGPL-3.0-or-later",
-      "description": "Le code est sous AGPL-3.0. Vous êtes libre de l'utiliser, l'étudier, le modifier et le redistribuer — à condition de publier le code source de toute version modifiée fournie comme service en réseau.",
+      "title": "PolyForm Noncommercial 1.0.0",
+      "description": "Le code est « source-available » sous licence PolyForm Noncommercial 1.0.0 : libre d'utilisation, d'étude, de modification et de redistribution pour tout usage non commercial. Pour un usage commercial, une licence dédiée est disponible — contactez-nous.",
       "points": {
-        "use": "Utilisez, étudiez et modifiez le code librement.",
-        "network": "Toute version modifiée exploitée en service réseau doit publier ses sources.",
+        "use": "Utilisez, étudiez, modifiez et redistribuez le code pour tout usage non commercial.",
+        "network": "Pour un usage commercial, une licence dédiée est requise — écrivez-nous pour en discuter.",
         "trademark": "Le nom et le logo « GigaPDF » sont des marques de QR Communication SAS : un fork modifié doit se renommer entièrement."
       },
       "linkLicense": "Lire la licence",
@@ -101,10 +250,10 @@
     "stack": {
       "label": "Stack",
       "title": "Une stack moderne et auditable",
-      "description": "GigaPDF est un monorepo pnpm + Turbo. Front Next.js 16 / React 19, moteur PDF en TypeScript (pdf.js, pdf-lib, MuPDF), API FastAPI / Python, le tout sur Node.js 24 et PostgreSQL 17.",
+      "description": "GigaPDF est un monorepo pnpm + Turbo. Front Next.js 16 / React 19, moteur PDF maison en TypeScript/WebAssembly (100 % maison, zéro dépendance tierce), API FastAPI / Python, le tout sur Node.js 24 et PostgreSQL 17.",
       "items": {
         "frontend": "Next.js 16 · React 19 · Tailwind v4",
-        "engine": "Moteur PDF TypeScript · pdf.js · pdf-lib · MuPDF",
+        "engine": "Moteur PDF maison · TypeScript · WebAssembly",
         "backend": "FastAPI · Python 3.12 · Celery",
         "data": "PostgreSQL 17 · Redis 8 · S3"
       }
@@ -131,7 +280,7 @@
   },
   "landing": {
     "hero": {
-      "kicker": "Éditeur PDF open source — AGPL-3.0",
+      "kicker": "Éditeur PDF open source — PolyForm Noncommercial",
       "title": "Éditez vos PDF comme un document Word.",
       "titleAccent": "Vraiment.",
       "description": "Texte, images et mises en page se corrigent directement dans le PDF, avec les polices d'origine. Collaboration en direct sur le même canvas, historique des versions — et vos fichiers restent chez vous : GigaPDF est open source et auto-hébergeable.",
@@ -147,7 +296,7 @@
     },
     "trust": {
       "label": "Garanties",
-      "openSource": "Open source — AGPL-3.0",
+      "openSource": "Open source — PolyForm Noncommercial",
       "selfHost": "Auto-hébergeable",
       "encryption": "Chiffrement AES-256",
       "gdpr": "Conforme RGPD"
@@ -186,7 +335,7 @@
           "signature": "Signature numérique PKCS#7 avec votre certificat P12 — traité en mémoire, jamais stocké",
           "encryption": "Chiffrement AES-256 des documents, au repos comme en transit",
           "pdfa": "Export PDF/A pour l'archivage légal longue durée",
-          "ocr": "OCR intégré : vos scans deviennent cherchables et copiables"
+          "ocr": "OCR intégré et 100 % maison : vos scans imprimés comme manuscrits deviennent cherchables et copiables (français et langues latines, accents compris)"
         }
       },
       "formats": {
@@ -230,7 +379,7 @@
       },
       "ocr": {
         "title": "OCR cherchable",
-        "description": "La ligne de scan transforme l'image en texte."
+        "description": "La ligne de scan transforme l'image — imprimée ou manuscrite — en texte."
       },
       "formats": {
         "title": "9 formats Office",
@@ -347,7 +496,7 @@
       "openSource": {
         "title": "Open source",
         "github": "Dépôt GitHub",
-        "license": "Licence AGPL-3.0",
+        "license": "Licence PolyForm Noncommercial",
         "selfHosting": "Guide d'auto-hébergement"
       },
       "legal": {
@@ -1526,12 +1675,12 @@
       },
       "openSource": {
         "title": "Open source",
-        "description": "GigaPDF est un projet 100% open source sous licence MIT. Cela signifie que vous pouvez inspecter le code source, contribuer au projet, ou même l'héberger vous-même sur votre propre infrastructure.",
+        "description": "GigaPDF est un projet 100% open source. Le code est « source-available » sous licence PolyForm Noncommercial 1.0.0 : vous pouvez inspecter le code source, contribuer au projet, ou l'héberger vous-même pour un usage non commercial.",
         "features": {
           "transparent": "Code source transparent et auditable",
           "selfHost": "Possibilité d'auto-hébergement gratuit",
           "contribute": "Communauté de contributeurs active",
-          "mitLicense": "Licence MIT permissive"
+          "mitLicense": "Licence PolyForm Noncommercial"
         }
       },
       "company": {
@@ -1751,9 +1900,9 @@
         "responsibility": "Vous êtes seul responsable du contenu que vous téléchargez et de sa conformité aux lois applicables."
       },
       "openSource": {
-        "title": "Licence open source",
-        "description": "GigaPDF est un logiciel open source distribué sous licence MIT.",
-        "license": "Vous pouvez utiliser, copier, modifier et distribuer le code source",
+        "title": "Licence source-available",
+        "description": "GigaPDF est un logiciel « source-available » distribué sous licence PolyForm Noncommercial 1.0.0.",
+        "license": "Vous pouvez utiliser, étudier, modifier et redistribuer le code source pour tout usage non commercial ; l'usage commercial requiert une licence dédiée",
         "source": "Le code source est disponible sur GitHub",
         "contributions": "Les contributions sont les bienvenues sous les mêmes termes de licence"
       },
@@ -1810,11 +1959,11 @@
       "subtitle": "Tout pour utiliser, intégrer et auto-héberger GigaPDF — l'éditeur PDF WYSIWYG open source.",
       "overview": {
         "title": "Vue d'ensemble",
-        "p1": "GigaPDF est un éditeur PDF WYSIWYG open source : édition réelle du texte, des images et des formulaires directement dans le document, gestion électronique des documents (GED) et collaboration en temps réel. Le code est publié sous licence GNU AGPL-3.0 et entièrement auto-hébergeable.",
+        "p1": "GigaPDF est un éditeur PDF WYSIWYG open source : édition réelle du texte, des images et des formulaires directement dans le document, gestion électronique des documents (GED) et collaboration en temps réel. Le code est « source-available » sous licence PolyForm Noncommercial 1.0.0 (usage non commercial libre) et entièrement auto-hébergeable.",
         "p2": "La version cloud (giga-pdf.com) et la version auto-hébergée partagent exactement la même base de code. Vous pouvez l'utiliser tel quel, l'intégrer dans votre produit via le widget embed et l'API REST, ou l'héberger sur votre propre infrastructure.",
         "repo": "Code source (GitHub)",
-        "license": "Licence AGPL-3.0",
-        "badge": "Open source · AGPLv3"
+        "license": "Licence PolyForm Noncommercial",
+        "badge": "Open source · PolyForm NC"
       },
       "features": {
         "title": "Fonctionnalités (v1.3.0)",

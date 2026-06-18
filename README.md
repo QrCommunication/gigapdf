@@ -7,12 +7,13 @@
 <p align="center">
   <strong>The self-hostable WYSIWYG PDF editor — edit text, images and forms
   in your browser, with a complete REST API.<br>
-  Open source under AGPLv3.</strong>
+  Open source, source-available under PolyForm Noncommercial 1.0.0
+  (commercial licensing available).</strong>
 </p>
 
 <p align="center">
   <a href="https://github.com/QrCommunication/gigapdf/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg" alt="License: AGPL-3.0-or-later" />
+    <img src="https://img.shields.io/badge/license-PolyForm--Noncommercial--1.0.0-blue.svg" alt="License: PolyForm-Noncommercial-1.0.0" />
   </a>
   <a href="https://github.com/QrCommunication/gigapdf/blob/main/TRADEMARK.md">
     <img src="https://img.shields.io/badge/trademark-protected-orange.svg" alt="Trademark Protected" />
@@ -87,6 +88,15 @@ system dependency the PDF engine needs — no extra setup:
 - **fontforge** — Type1/CFF → TTF conversion for faithful font rendering
 - **tesseract-ocr** (fra + eng) — OCR
 - **Playwright Chromium** — HTML → PDF and URL → PDF
+
+> 🦀 **In-house engine (migration in progress).** GigaPDF is moving all
+> PDF / Office / OCR / font processing to
+> **[gigapdf-lib](https://github.com/QrCommunication/gigapdf-lib)** — a
+> zero-dependency Rust → WASM engine built entirely in-house (no MuPDF, no
+> LibreOffice, no Tesseract, no pdf-lib). As the migration lands, those system
+> dependencies are removed; **Playwright** (HTML → PDF) is intended to be the
+> last one, and is itself slated for a native Rust HTML/CSS/JS renderer. Until
+> a step ships, the dependency it replaces is still required above.
 
 > ⚠️ **Self-hosters must configure `NEXT_PUBLIC_LEGAL_*` env vars** in
 > `apps/web/.env.local` for LCEN compliance. The web app refuses to start in
@@ -258,10 +268,12 @@ contact@qrcommunication.com).
 
 GigaPDF has **two distinct licensing regimes**:
 
-### Code: GNU AGPL-3.0-or-later
+### Code: PolyForm Noncommercial 1.0.0 (source-available)
 
-The source code is licensed under [AGPL-3.0-or-later](LICENSE). Any modified
-version used to provide a network service must publish its source code.
+The source code is source-available under [PolyForm Noncommercial 1.0.0](LICENSE):
+free to use, study, modify and redistribute for any **noncommercial** purpose.
+**Commercial use requires a separate license** — contact QR Communication at
+<contact@qrcommunication.com> to discuss it.
 
 ### Name & logo: Trademarks of QR Communication SAS
 

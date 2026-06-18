@@ -17,6 +17,7 @@ const COPY: Record<
     homeAria: string;
     navAria: string;
     tools: string;
+    engine: string;
     solutions: string;
     pricing: string;
     login: string;
@@ -27,6 +28,7 @@ const COPY: Record<
     homeAria: "GigaPDF — Accueil",
     navAria: "Navigation principale",
     tools: "Outils PDF",
+    engine: "Moteur PDF",
     solutions: "Solutions",
     pricing: "Tarifs",
     login: "Connexion",
@@ -36,6 +38,7 @@ const COPY: Record<
     homeAria: "GigaPDF — Home",
     navAria: "Main navigation",
     tools: "PDF Tools",
+    engine: "PDF Engine",
     solutions: "Solutions",
     pricing: "Pricing",
     login: "Log in",
@@ -79,6 +82,12 @@ export function SeoHeader({ locale }: SeoHeaderProps) {
             className="hidden rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground md:inline-block"
           >
             {copy.tools}
+          </Link>
+          <Link
+            href="/engine"
+            className="hidden rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground md:inline-block"
+          >
+            {copy.engine}
           </Link>
           <Link
             href="/solutions"

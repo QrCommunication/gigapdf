@@ -27,8 +27,8 @@ const COPY: Record<
 > = {
   fr: {
     tagline:
-      "Plateforme PDF complète, 100 % open source (AGPL) et auto-hébergeable : édition, signature, OCR, conversion et GED.",
-    agpl: "GigaPDF — Logiciel libre sous licence AGPL-3.0. Vos documents vous appartiennent.",
+      "Plateforme PDF complète, 100 % open source et auto-hébergeable : édition, signature, OCR, conversion et GED.",
+    agpl: "GigaPDF — Logiciel source-available sous licence PolyForm Noncommercial 1.0.0. Vos documents vous appartiennent.",
     columns: [
       {
         title: "Produit",
@@ -61,8 +61,8 @@ const COPY: Record<
   },
   en: {
     tagline:
-      "A complete PDF platform, 100% open source (AGPL) and self-hostable: editing, signing, OCR, conversion and document management.",
-    agpl: "GigaPDF — Free software under the AGPL-3.0 license. Your documents belong to you.",
+      "A complete PDF platform, 100% open source and self-hostable: editing, signing, OCR, conversion and document management.",
+    agpl: "GigaPDF — Source-available software under the PolyForm Noncommercial 1.0.0 license. Your documents belong to you.",
     columns: [
       {
         title: "Product",

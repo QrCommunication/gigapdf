@@ -3,7 +3,7 @@ Thanks for contributing to GigaPDF!
 
 Before opening this PR, please confirm:
 - All commits are signed off (git commit -s) — see CONTRIBUTING.md → DCO
-- You agree to license your contribution under AGPL-3.0-or-later
+- You agree to license your contribution under PolyForm Noncommercial 1.0.0
 -->
 
 ## Summary

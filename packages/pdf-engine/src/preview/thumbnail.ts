@@ -1,8 +1,8 @@
-import sharp from 'sharp';
+import { getEngine } from '../wasm';
 import {
-  renderPage as mupdfRenderPage,
-  renderPages as mupdfRenderPages,
-} from '../render/mupdf-render';
+  renderPage as engineRenderPage,
+  renderPages as engineRenderPages,
+} from '../render/engine-render';
 import { DEFAULT_THUMBNAIL_WIDTH, DEFAULT_THUMBNAIL_HEIGHT } from '../constants';
 import type { PreviewFormat } from './renderer';
 
@@ -15,7 +15,7 @@ export interface ThumbnailOptions {
 
 /**
  * Source rasterisation scale before downscaling to the thumbnail box.
- * 2 ≈ 144 DPI — enough detail that the sharp downscale stays crisp for typical
+ * 2 ≈ 144 DPI — enough detail that the downscale stays crisp for typical
  * thumbnail sizes without rendering the full page at high DPI.
  */
 const THUMBNAIL_RENDER_SCALE = 2;
@@ -30,29 +30,35 @@ async function toThumbnail(
   const format = options?.format ?? 'png';
   const quality = options?.quality;
 
-  const pipeline = sharp(Buffer.from(pngBytes)).resize(maxW, maxH, {
-    fit: 'inside',
-    withoutEnlargement: true,
-  });
+  const giga = await getEngine();
+  const img = giga.decodePng(pngBytes);
+  if (!img) return Buffer.from(pngBytes);
 
+  // Fit inside the box, never enlarging (`withoutEnlargement`).
+  const factor = Math.min(maxW / img.width, maxH / img.height, 1);
+  const dw = Math.max(1, Math.round(img.width * factor));
+  const dh = Math.max(1, Math.round(img.height * factor));
+  const [ow, oh, rgba] =
+    factor < 1
+      ? [dw, dh, giga.resizeRgba(img.rgba, img.width, img.height, dw, dh)]
+      : [img.width, img.height, img.rgba];
+
+  // Page rasters are opaque, so JPEG/WebP need no explicit flatten.
   if (format === 'jpeg') {
-    return pipeline
-      .flatten({ background: { r: 255, g: 255, b: 255 } })
-      .jpeg(quality ? { quality } : {})
-      .toBuffer();
+    return Buffer.from(giga.encodeJpeg(rgba, ow, oh, quality ?? 80));
   }
   if (format === 'webp') {
-    return pipeline.webp(quality ? { quality } : {}).toBuffer();
+    return Buffer.from(giga.encodeWebp(rgba, ow, oh));
   }
-  return pipeline.png().toBuffer();
+  return Buffer.from(giga.rgbaToPng(rgba, ow, oh));
 }
 
 /**
  * Render a single page as a thumbnail.
  *
- * Rasterises via MuPDF (native — handles images/fonts/rotation/transparency
- * where pdfjs + node-canvas threw "Image or Canvas expected"), then downscales
- * to the thumbnail box with sharp.
+ * Rasterises via the native engine (images, fonts, rotation and transparency
+ * handled natively), then downscales to the thumbnail box with the engine's
+ * own RGBA resize.
  */
 export async function renderThumbnail(
   buffer: Buffer,
@@ -60,7 +66,7 @@ export async function renderThumbnail(
   options?: ThumbnailOptions,
 ): Promise<Buffer> {
   const data = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-  const rendered = await mupdfRenderPage(data, pageNumber, {
+  const rendered = await engineRenderPage(data, pageNumber, {
     scale: THUMBNAIL_RENDER_SCALE,
     format: 'png',
   });
@@ -68,15 +74,15 @@ export async function renderThumbnail(
 }
 
 /**
- * Render thumbnails for every page. Opens the document once via MuPDF (batch),
- * then downscales each page in parallel with sharp.
+ * Render thumbnails for every page. Opens the document once via the native
+ * engine (batch), then downscales each page in parallel (engine RGBA resize).
  */
 export async function renderAllThumbnails(
   buffer: Buffer,
   options?: ThumbnailOptions,
 ): Promise<Map<number, Buffer>> {
   const data = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-  const rendered = await mupdfRenderPages(data, {
+  const rendered = await engineRenderPages(data, {
     scale: THUMBNAIL_RENDER_SCALE,
     format: 'png',
   });

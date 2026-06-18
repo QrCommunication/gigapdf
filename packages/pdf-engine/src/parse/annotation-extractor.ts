@@ -1,14 +1,21 @@
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api';
 import { randomUUID } from 'node:crypto';
 import type {
   AnnotationElement as EditorAnnotationElement,
   AnnotationType as EditorAnnotationType,
   LinkDestination,
 } from '@giga-pdf/types';
+import type { AnnotationInfo } from '@qrcommunication/gigapdf-lib';
 import { pdfToWeb, rgbToHex } from '../utils';
+import { getEngine } from '../wasm';
 
-if (!pdfjsLib.GlobalWorkerOptions.workerSrc) { pdfjsLib.GlobalWorkerOptions.workerSrc = ''; }
+// ---------------------------------------------------------------------------
+// Annotation extractor — backed by the native engine (no pdfjs).
+//
+// The engine's `annotations(page)` returns the full markup metadata (author,
+// subject, dates, colour, opacity, quad points, ink list, stamp name, link
+// target). Widget annotations (form fields, including signature fields) are
+// surfaced by the form-extractor instead, so they're filtered out here.
+// ---------------------------------------------------------------------------
 
 // ─── Public standalone types (spec) ─────────────────────────────────────────
 
@@ -30,7 +37,7 @@ export type AnnotationType =
   | 'file-attachment'
   | 'sound'
   | 'movie'
-  | 'widget'           // form field — returned only when caller opts in; filtered by default
+  | 'widget'           // form field — filtered out (handled by form-extractor)
   | 'signature'
   | 'redact';
 
@@ -55,7 +62,7 @@ export interface AnnotationElement {
   signature?: { signerName?: string; signedAt?: string; verified?: boolean };
 }
 
-// ─── Internal mapping: pdfjs subtype string → AnnotationType ─────────────────
+// ─── Subtype → type maps ─────────────────────────────────────────────────────
 
 const SUBTYPE_MAP: Record<string, AnnotationType> = {
   Text: 'text-note',
@@ -75,41 +82,37 @@ const SUBTYPE_MAP: Record<string, AnnotationType> = {
   FileAttachment: 'file-attachment',
   Sound: 'sound',
   Movie: 'movie',
-  Widget: 'widget',
   Redact: 'redact',
-  // Signature widget (typically /Subtype Widget + /FT Sig)
-  // handled below via sigFlags
 };
 
-// ─── Internal mapping (legacy): annotationType number → EditorAnnotationType ─
-
-const ANNOTATION_TYPE_MAP: Record<number, EditorAnnotationType> = {
-  1: 'note',
-  2: 'link',
-  3: 'freetext',
-  8: 'highlight',
-  9: 'underline',
-  10: 'squiggly',
-  11: 'strikeout',
-  13: 'stamp',
+// Editor scene-graph annotation types (the subset the editor renders).
+const SUBTYPE_TO_EDITOR: Record<string, EditorAnnotationType> = {
+  Text: 'note',
+  Link: 'link',
+  FreeText: 'freetext',
+  Highlight: 'highlight',
+  Underline: 'underline',
+  Squiggly: 'squiggly',
+  StrikeOut: 'strikeout',
+  Stamp: 'stamp',
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function colorFromUint8(color: Uint8ClampedArray | number[] | null | undefined): string {
-  if (!color || color.length < 3) return '#000000';
-  return rgbToHex(color[0]! / 255, color[1]! / 255, color[2]! / 255);
+/** Engine RGB (`0..=1`, length 0 or 3) → `#rrggbb`, or undefined when absent. */
+function colorHex(color: number[]): string | undefined {
+  if (color.length < 3) return undefined;
+  return rgbToHex(color[0]!, color[1]!, color[2]!);
 }
 
 /**
  * Parse a PDF date string (D:YYYYMMDDHHmmSSOHH'mm') to ISO 8601.
  * Returns undefined if parsing fails.
  */
-function parsePdfDate(raw: unknown): string | undefined {
-  if (!raw || typeof raw !== 'string') return undefined;
+function parsePdfDate(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
   // Strip optional "D:" prefix
   const s = raw.startsWith('D:') ? raw.slice(2) : raw;
-  // Minimum: YYYY (4 chars)
   if (s.length < 4) return undefined;
 
   const year   = s.slice(0, 4);
@@ -119,7 +122,6 @@ function parsePdfDate(raw: unknown): string | undefined {
   const minute = s.slice(10, 12) || '00';
   const second = s.slice(12, 14) || '00';
 
-  // Timezone: optional OHH'mm' where O is +/-/Z
   let tz = 'Z';
   const tzPart = s.slice(14);
   if (tzPart.startsWith('Z')) {
@@ -139,24 +141,11 @@ function parsePdfDate(raw: unknown): string | undefined {
 }
 
 /**
- * Extract the text content from pdfjs annotation object.
- * pdfjs exposes it as `contentsObj.str` (preferred) or `contents`.
- */
-function extractContent(annotation: Record<string, unknown>): string | undefined {
-  const obj = annotation['contentsObj'] as { str?: string } | undefined;
-  const str = obj?.str ?? (typeof annotation['contents'] === 'string' ? annotation['contents'] : undefined);
-  return str !== undefined && str.length > 0 ? str : undefined;
-}
-
-/**
  * Convert PDF QuadPoints (8 values per quad, in PDF coords) to web coords.
  * Returns flat array of x,y pairs in web coordinate space.
  */
-function convertQuadPoints(
-  qp: number[] | undefined,
-  pageHeight: number,
-): number[] | undefined {
-  if (!qp || qp.length < 8) return undefined;
+function convertQuadPoints(qp: number[], pageHeight: number): number[] | undefined {
+  if (qp.length < 8) return undefined;
   const result: number[] = [];
   for (let i = 0; i + 1 < qp.length; i += 2) {
     result.push(qp[i]!);                        // x unchanged
@@ -165,14 +154,9 @@ function convertQuadPoints(
   return result;
 }
 
-/**
- * Convert pdfjs InkList (array of path arrays in PDF coords) to web coords.
- */
-function convertInkPoints(
-  inkList: number[][] | undefined,
-  pageHeight: number,
-): number[][] | undefined {
-  if (!inkList || inkList.length === 0) return undefined;
+/** Convert an /InkList (array of stroke arrays in PDF coords) to web coords. */
+function convertInkPoints(inkList: number[][], pageHeight: number): number[][] | undefined {
+  if (inkList.length === 0) return undefined;
   return inkList.map((path) => {
     const pts: number[] = [];
     for (let i = 0; i + 1 < path.length; i += 2) {
@@ -181,6 +165,18 @@ function convertInkPoints(
     }
     return pts;
   });
+}
+
+/** Web bounds (top-left origin) from an engine annotation's `/Rect` corners. */
+function rectToWebBounds(
+  info: AnnotationInfo,
+  pageHeight: number,
+): { x: number; y: number; width: number; height: number } {
+  const x = Math.min(info.x0, info.x1);
+  const y = Math.min(info.y0, info.y1);
+  const width = Math.abs(info.x1 - info.x0);
+  const height = Math.abs(info.y1 - info.y0);
+  return pdfToWeb(x, y, width, height, pageHeight);
 }
 
 // ─── Public API: extractAnnotations (raw bytes) ───────────────────────────────
@@ -196,261 +192,158 @@ export async function extractAnnotations(
   pdfBytes: ArrayBuffer | Uint8Array,
   pageNumber?: number,
 ): Promise<AnnotationElement[]> {
-  const data = pdfBytes instanceof ArrayBuffer ? new Uint8Array(pdfBytes) : pdfBytes;
-  const loadingTask = pdfjsLib.getDocument({ data });
-  const doc = await loadingTask.promise;
-
+  const results: AnnotationElement[] = [];
+  const giga = await getEngine();
+  const bytes = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+  const doc = giga.open(bytes);
   try {
-    const totalPages = doc.numPages;
-    const pageNumbers: number[] =
+    const pageCount = doc.pageCount();
+    const pages =
       pageNumber !== undefined
-        ? [pageNumber]
-        : Array.from({ length: totalPages }, (_, i) => i + 1);
+        ? [pageNumber].filter((p) => p >= 1 && p <= pageCount)
+        : Array.from({ length: pageCount }, (_, i) => i + 1);
 
-    const results: AnnotationElement[] = [];
-
-    for (const pn of pageNumbers) {
-      if (pn < 1 || pn > totalPages) continue;
-      const page = await doc.getPage(pn);
-      const viewport = page.getViewport({ scale: 1 });
-      const annotations = await page.getAnnotations({ intent: 'display' });
-
-      for (const ann of annotations) {
-        const element = buildAnnotationElement(ann, pn, viewport.height);
-        if (element !== null) {
-          results.push(element);
-        }
+    for (const pn of pages) {
+      const pageHeight = doc.pageInfo(pn).height;
+      for (const info of doc.annotations(pn)) {
+        const element = buildAnnotationElement(info, pn, pageHeight);
+        if (element !== null) results.push(element);
       }
     }
-
-    return results;
   } finally {
-    doc.loadingTask.destroy();
+    doc.close();
   }
+  return results;
 }
 
 /**
- * Build a standalone AnnotationElement from a raw pdfjs annotation object.
- * Returns null for Widget annotations (handled by form-extractor) or unknown subtypes.
+ * Build a standalone AnnotationElement from an engine annotation. Returns null
+ * for Widget annotations (handled by the form-extractor) or unknown subtypes.
  */
 function buildAnnotationElement(
-  // pdfjs does not export a concrete annotation type; use a loose record
-  ann: Record<string, unknown>,
+  info: AnnotationInfo,
   pageNumber: number,
   pageHeight: number,
 ): AnnotationElement | null {
-  const subtype = ann['subtype'] as string | undefined;
-  if (!subtype) return null;
-
-  // Detect signature widgets before filtering out all widgets
-  const isSigWidget =
-    subtype === 'Widget' &&
-    (ann['fieldType'] === 'Sig' || ann['fieldType'] === 'Signature');
-
-  if (subtype === 'Widget' && !isSigWidget) return null;
-
-  const annotationType: AnnotationType | undefined = isSigWidget
-    ? 'signature'
-    : SUBTYPE_MAP[subtype];
-
+  if (info.subtype === 'Widget') return null;
+  const annotationType = SUBTYPE_MAP[info.subtype];
   if (!annotationType) return null;
-
-  // Bounds
-  const rect = ann['rect'] as number[] | undefined;
-  const x1 = rect?.[0] ?? 0;
-  const y1 = rect?.[1] ?? 0;
-  const x2 = rect?.[2] ?? 0;
-  const y2 = rect?.[3] ?? 0;
-  const w = Math.abs(x2 - x1);
-  const h = Math.abs(y2 - y1);
-  const bounds = pdfToWeb(Math.min(x1, x2), Math.min(y1, y2), w, h, pageHeight);
-
-  // Color  (/C array: [r,g,b] normalised 0-1 in pdfjs, or Uint8ClampedArray)
-  const rawColor = ann['color'] as Uint8ClampedArray | number[] | null | undefined;
-  const color = (rawColor && (rawColor.length ?? 0) >= 3)
-    ? colorFromUint8(rawColor)
-    : undefined;
-
-  // Opacity (/CA)
-  const opacity = typeof ann['opacity'] === 'number' ? ann['opacity'] : undefined;
-
-  // Author (/T), Subject (/Subj)
-  const author = typeof ann['titleObj'] === 'object' && ann['titleObj'] !== null
-    ? ((ann['titleObj'] as { str?: string })['str'] ?? undefined)
-    : (typeof ann['title'] === 'string' && ann['title'].length > 0 ? ann['title'] : undefined);
-
-  const subject = typeof ann['subj'] === 'string' && ann['subj'].length > 0
-    ? ann['subj']
-    : undefined;
-
-  // Dates
-  const createdDate = parsePdfDate(ann['creationDate']);
-  const modifiedDate = parsePdfDate(ann['modificationDate']);
-
-  // Content (/Contents)
-  const content = extractContent(ann);
 
   const element: AnnotationElement = {
     elementId: randomUUID(),
     pageNumber,
     type: annotationType,
-    bounds,
+    bounds: rectToWebBounds(info, pageHeight),
   };
 
-  if (author !== undefined)       element.author       = author;
-  if (subject !== undefined)      element.subject      = subject;
-  if (content !== undefined)      element.content      = content;
-  if (createdDate !== undefined)  element.createdDate  = createdDate;
-  if (modifiedDate !== undefined) element.modifiedDate = modifiedDate;
-  if (color !== undefined)        element.color        = color;
-  if (opacity !== undefined)      element.opacity      = opacity;
+  if (info.author) element.author = info.author;
+  if (info.subject) element.subject = info.subject;
+  if (info.contents) element.content = info.contents;
+  const created = parsePdfDate(info.created);
+  if (created) element.createdDate = created;
+  const modified = parsePdfDate(info.modified);
+  if (modified) element.modifiedDate = modified;
+  const color = colorHex(info.color);
+  if (color) element.color = color;
+  if (typeof info.opacity === 'number') element.opacity = info.opacity;
 
   // ── Type-specific enrichment ──────────────────────────────────────────────
 
-  // QuadPoints: highlight, underline, strikeout, squiggly
   if (
     annotationType === 'highlight' ||
     annotationType === 'underline' ||
     annotationType === 'strikeout' ||
     annotationType === 'squiggly'
   ) {
-    const qp = ann['quadPoints'] as number[] | undefined;
-    const webQP = convertQuadPoints(qp, pageHeight);
+    const webQP = convertQuadPoints(info.quadPoints, pageHeight);
     if (webQP !== undefined) element.quadPoints = webQP;
   }
 
-  // Link: /A (Action) → URI or page destination
   if (annotationType === 'link') {
-    const uri = ann['url'] as string | undefined;
-    const dest = ann['dest'];
-    const unsafeUrl = ann['unsafeUrl'] as string | undefined;
-
     const linkTarget: AnnotationElement['linkTarget'] = {};
-
-    if (uri) {
-      linkTarget.uri = uri;
-    } else if (unsafeUrl) {
-      linkTarget.uri = unsafeUrl;
-    }
-
-    // Internal destination: dest can be [pageRef, /XYZ, x, y, zoom] or a named dest string
-    if (!linkTarget.uri && dest !== null && dest !== undefined) {
-      if (Array.isArray(dest) && dest.length > 0) {
-        // dest[0] is a page reference object; pdfjs resolves it to a page index elsewhere
-        // We can only report the page index if it's directly available
-        const destPageIndex = ann['destPageIndex'] as number | undefined;
-        if (destPageIndex !== undefined) {
-          linkTarget.page = destPageIndex + 1; // convert 0-based to 1-based
-        }
-      }
-    }
-
+    if (info.linkUri) linkTarget.uri = info.linkUri;
+    else if (info.linkPage > 0) linkTarget.page = info.linkPage;
     if (linkTarget.uri !== undefined || linkTarget.page !== undefined) {
       element.linkTarget = linkTarget;
     }
   }
 
-  // Ink: /InkList
   if (annotationType === 'ink') {
-    const inkList = ann['inkLists'] as number[][] | undefined;
-    const webInk = convertInkPoints(inkList, pageHeight);
+    const webInk = convertInkPoints(info.inkList, pageHeight);
     if (webInk !== undefined) element.inkPoints = webInk;
   }
 
-  // Stamp: /Name
-  if (annotationType === 'stamp') {
-    const stampName = ann['name'] as string | undefined;
-    if (stampName) element.stampName = stampName;
-  }
-
-  // Signature: extract from /V sig dict if present
-  if (annotationType === 'signature') {
-    const sigDict = ann['signatureInfo'] as Record<string, unknown> | undefined;
-    if (sigDict) {
-      element.signature = {
-        signerName: typeof sigDict['contactInfo'] === 'string'
-          ? sigDict['contactInfo']
-          : (typeof sigDict['name'] === 'string' ? sigDict['name'] : undefined),
-        signedAt: parsePdfDate(sigDict['signDate']),
-        verified: false, // pdfjs does not perform crypto verification
-      };
-    } else {
-      // Mark as signature slot (not yet signed)
-      element.signature = { verified: false };
-    }
+  if (annotationType === 'stamp' && info.name) {
+    element.stampName = info.name;
   }
 
   return element;
 }
 
-// ─── Existing editor-centric extractor (kept for parser.ts) ──────────────────
+// ─── Editor-centric extractor (used by parser.ts) ────────────────────────────
 
 /**
- * Extract annotation elements for a single already-loaded PDF page.
- * Used internally by parsePage() to produce EditorAnnotationElement objects
- * compatible with @giga-pdf/types.
- *
- * @internal
+ * Extract editor annotation elements for an entire PDF, grouped by 1-based page
+ * number. Opens the document once. Widget (form) annotations are skipped — the
+ * form-extractor surfaces them. Returns an empty map on failure.
  */
-export async function extractAnnotationElements(
-  page: PDFPageProxy,
-  _pageNumber: number,
-  pageHeight: number,
-): Promise<EditorAnnotationElement[]> {
-  const annotations = await page.getAnnotations();
-  const elements: EditorAnnotationElement[] = [];
+export async function extractAnnotationElementsByPage(
+  pdfBytes: Buffer | ArrayBuffer | Uint8Array,
+): Promise<Map<number, EditorAnnotationElement[]>> {
+  const byPage = new Map<number, EditorAnnotationElement[]>();
+  try {
+    const giga = await getEngine();
+    const bytes = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+    const doc = giga.open(bytes);
+    try {
+      const pageCount = doc.pageCount();
+      for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
+        const pageHeight = doc.pageInfo(pageNumber).height;
+        const elements: EditorAnnotationElement[] = [];
+        for (const info of doc.annotations(pageNumber)) {
+          if (info.subtype === 'Widget') continue;
+          const annotationType = SUBTYPE_TO_EDITOR[info.subtype];
+          if (!annotationType) continue;
 
-  for (const annotation of annotations) {
-    if (annotation.subtype === 'Widget') continue;
+          let linkDestination: LinkDestination | null = null;
+          if (annotationType === 'link') {
+            if (info.linkUri) {
+              linkDestination = { type: 'external', pageNumber: null, url: info.linkUri, position: null };
+            } else if (info.linkPage > 0) {
+              linkDestination = { type: 'internal', pageNumber: info.linkPage, url: null, position: null };
+            }
+          }
 
-    const annotationType = ANNOTATION_TYPE_MAP[annotation.annotationType as number];
-    if (!annotationType) continue;
-
-    const [x1, y1, x2, y2] = annotation.rect as number[];
-    const width = Math.abs((x2 ?? 0) - (x1 ?? 0));
-    const height = Math.abs((y2 ?? 0) - (y1 ?? 0));
-    const bounds = pdfToWeb(x1 ?? 0, y1 ?? 0, width, height, pageHeight);
-
-    const color = colorFromUint8(annotation.color as Uint8ClampedArray | null | undefined);
-
-    const contentObj = annotation.contentsObj as { str?: string } | undefined;
-    const content: string =
-      contentObj?.str ?? (typeof annotation.contents === 'string' ? annotation.contents : '');
-
-    let linkDestination: LinkDestination | null = null;
-    if (annotationType === 'link') {
-      if (annotation.url) {
-        linkDestination = {
-          type: 'external',
-          pageNumber: null,
-          url: annotation.url as string,
-          position: null,
-        };
-      } else if (annotation.dest) {
-        linkDestination = {
-          type: 'internal',
-          pageNumber: null,
-          url: null,
-          position: null,
-        };
+          elements.push({
+            elementId: randomUUID(),
+            type: 'annotation',
+            bounds: rectToWebBounds(info, pageHeight),
+            transform: { rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
+            layerId: null,
+            locked: false,
+            visible: true,
+            annotationType,
+            content: info.contents,
+            style: { color: colorHex(info.color) ?? '#000000', opacity: info.opacity },
+            linkDestination,
+            popup: null,
+          });
+        }
+        if (elements.length > 0) byPage.set(pageNumber, elements);
       }
+    } finally {
+      doc.close();
     }
-
-    elements.push({
-      elementId: randomUUID(),
-      type: 'annotation',
-      bounds,
-      transform: { rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
-      layerId: null,
-      locked: false,
-      visible: true,
-      annotationType,
-      content,
-      style: { color, opacity: 1 },
-      linkDestination,
-      popup: null,
-    });
+  } catch {
+    // leave the map empty on failure
   }
+  return byPage;
+}
 
-  return elements;
+/** Editor annotation elements on a single page (wrapper over the grouped map). */
+export async function extractAnnotationElements(
+  pdfBytes: Buffer | ArrayBuffer | Uint8Array,
+  pageNumber: number,
+): Promise<EditorAnnotationElement[]> {
+  return (await extractAnnotationElementsByPage(pdfBytes)).get(pageNumber) ?? [];
 }

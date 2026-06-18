@@ -13,7 +13,7 @@
  *
  * Implementation delegates to applyOperations (pdf-engine) so this route
  * benefits from the same 2-pass pipeline as /api/pdf/apply-elements:
- * MuPDF redaction on input → pdf-lib addText on the redacted bytes.
+ * native redaction pass on input → native addText on the redacted bytes.
  * No white-rectangle masking.
  *
  * Returns the modified PDF as application/pdf binary.

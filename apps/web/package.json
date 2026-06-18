@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "license": "AGPL-3.0-or-later",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -17,7 +17,7 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "postinstall": "prisma generate || true && node -e \"const{cpSync,mkdirSync}=require('fs');mkdirSync('public/pdf-worker',{recursive:true});cpSync(require.resolve('pdfjs-dist/build/pdf.worker.min.mjs'),'public/pdf-worker/pdf.worker.min.mjs');\""
+    "postinstall": "prisma generate || true && node -e \"const{cpSync}=require('fs');cpSync(require.resolve('@qrcommunication/gigapdf-lib/gigapdf.wasm'),'public/gigapdf.wasm');\""
   },
   "dependencies": {
     "@better-auth/expo": "^1.6.18",

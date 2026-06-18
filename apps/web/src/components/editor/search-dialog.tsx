@@ -20,7 +20,7 @@ export interface SearchHitDisplay {
 }
 
 /**
- * SearchDialog — full-text search in the current PDF via MuPDF.
+ * SearchDialog — full-text search in the current PDF via the engine.
  *
  * The dialog stays open while the user navigates hits so they can iterate
  * (Prev/Next, clicking a hit, refining the query). Each hit click forwards

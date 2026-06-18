@@ -27,7 +27,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
+import { getEngine } from '../../src/wasm';
 import { openDocument, saveDocument } from '../../src/engine/document-handle';
 import { addText } from '../../src/render/text-renderer';
 import { addImage } from '../../src/render/image-renderer';
@@ -36,7 +36,7 @@ import { webToPdf } from '../../src/utils/coordinates';
 import type { TextElement, ImageElement, ShapeElement } from '@giga-pdf/types';
 
 // ---------------------------------------------------------------------------
-// Minimal PNG 1×1 (white pixel) — accepted by pdf-lib embedPng
+// Minimal PNG 1×1 (white pixel) — accepted by the engine's addImage
 // ---------------------------------------------------------------------------
 
 const PNG_1x1 = new Uint8Array([
@@ -153,21 +153,24 @@ function makeShapeElement(boundsY: number, size = 20): ShapeElement {
 // ---------------------------------------------------------------------------
 
 async function createA4PdfBuffer(): Promise<Buffer> {
-  const doc = await PDFDocument.create();
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const page = doc.addPage([595, 842]); // A4 in PDF points
-  // Add a reference ruler line at y=100 (web coords = pdf y = 842-100-1 = 741)
-  page.drawText('Reference', { x: 50, y: 741, size: 8, font, color: rgb(0.8, 0.8, 0.8) });
-  return Buffer.from(await doc.save());
+  // A4 page (595×842 pt) with a cosmetic reference label — built natively.
+  const giga = await getEngine();
+  const doc = giga.open(giga.txtToPdf('Reference'));
+  doc.resizePage(1, 595, 842);
+  const bytes = doc.save();
+  doc.close();
+  return Buffer.from(bytes);
 }
 
 async function createRotatedPdfBuffer(rotateDeg: 0 | 90 | 180 | 270): Promise<Buffer> {
-  const doc = await PDFDocument.create();
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const page = doc.addPage([595, 842]);
-  page.setRotation(degrees(rotateDeg));
-  page.drawText(`Rotated ${rotateDeg}deg`, { x: 50, y: 720, size: 12, font });
-  return Buffer.from(await doc.save());
+  // A4 page with an explicit /Rotate entry — built natively.
+  const giga = await getEngine();
+  const doc = giga.open(giga.txtToPdf(`Rotated ${rotateDeg}deg`));
+  doc.resizePage(1, 595, 842);
+  if (rotateDeg !== 0) doc.rotatePage(1, rotateDeg);
+  const bytes = doc.save();
+  doc.close();
+  return Buffer.from(bytes);
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +303,7 @@ describe('REPRO bug export — H5: image and text top-of-glyph convention mismat
     async () => {
       const buf = await createA4PdfBuffer();
       const handle = await openDocument(buf);
-      const PAGE_H = handle._pdfDoc.getPage(0).getHeight(); // 842
+      const PAGE_H = handle._doc.pageInfo(1).height; // 842
 
       const BOUNDS_Y = 150;
       const SIZE = 20;
@@ -383,7 +386,12 @@ describe('REPRO bug export — H6: /Rotate page causes wrong element placement',
       const saved = await saveDocument(handle);
       expect(saved).toBeInstanceOf(Buffer);
 
-      const page = handle._pdfDoc.getPage(0);
+      const _pi = handle._doc.pageInfo(1);
+      const page = {
+        getHeight: () => _pi.height,
+        getWidth: () => _pi.width,
+        getRotation: () => ({ angle: _pi.rotation }),
+      };
       const rawHeight = page.getHeight();     // 842 — the MediaBox height
       const rawWidth  = page.getWidth();      // 595 — the MediaBox width
       const rotation  = page.getRotation().angle as 0 | 90 | 180 | 270; // 90
@@ -420,7 +428,12 @@ describe('REPRO bug export — H6: /Rotate page causes wrong element placement',
       const buf = await createRotatedPdfBuffer(180);
       const handle = await openDocument(buf);
 
-      const page = handle._pdfDoc.getPage(0);
+      const _pi = handle._doc.pageInfo(1);
+      const page = {
+        getHeight: () => _pi.height,
+        getWidth: () => _pi.width,
+        getRotation: () => ({ angle: _pi.rotation }),
+      };
       const rawHeight = page.getHeight();     // 842
       const rawWidth  = page.getWidth();      // 595
       const rotation  = page.getRotation().angle as 0 | 90 | 180 | 270; // 180
@@ -460,7 +473,12 @@ describe('REPRO bug export — H6: /Rotate page causes wrong element placement',
       const buf = await createRotatedPdfBuffer(270);
       const handle = await openDocument(buf);
 
-      const page = handle._pdfDoc.getPage(0);
+      const _pi = handle._doc.pageInfo(1);
+      const page = {
+        getHeight: () => _pi.height,
+        getWidth: () => _pi.width,
+        getRotation: () => ({ angle: _pi.rotation }),
+      };
       const rawHeight = page.getHeight();   // 842
       const rawWidth  = page.getWidth();    // 595
       const rotation  = page.getRotation().angle as 0 | 90 | 180 | 270; // 270

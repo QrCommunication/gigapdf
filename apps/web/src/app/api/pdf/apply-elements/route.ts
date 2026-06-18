@@ -20,7 +20,7 @@
  * Supported element types: text, image, shape, annotation, form_field
  *
  * Implementation: delegates to `applyOperations` (pdf-engine) which runs the
- * canonical 2-pass pipeline (MuPDF redaction on input → pdf-lib add on the
+ * canonical 2-pass pipeline (native redaction pass on input → native add on the
  * redacted bytes). No more white-rectangle masking on this path.
  *
  * Returns the modified PDF as application/pdf binary.
