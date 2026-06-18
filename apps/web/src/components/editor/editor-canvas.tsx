@@ -106,12 +106,15 @@ export interface EditorCanvasHandle {
   applyRemoteElementDelete: (elementId: string) => void;
   /**
    * Afficher/masquer un élément (toggle œil du panneau calques).
-   * Le masquage est un OUTIL D'ÉDITION : l'objet Fabric passe visible=false
-   * mais l'élément RESTE dans le scene graph et dans le PDF baké au save —
-   * aucune redaction n'est déclenchée. Limite connue : les éléments PARSÉS
-   * rendus en mode "1:1 fidelity" (overlay transparent au-dessus du raster
-   * PDF) gardent leur raster visible — seul l'overlay interactif est masqué.
-   * La synchronisation du scene graph est faite par l'appelant (page.tsx).
+   * Le masquage est un OUTIL D'AFFICHAGE : l'élément RESTE dans le scene graph
+   * et dans le PDF baké au save — aucune redaction n'est déclenchée. Comme
+   * l'éditeur affiche le PDF en raster (les overlays sont transparents),
+   * masquer = peindre un rectangle OPAQUE de la couleur de fond échantillonnée
+   * par-dessus la bbox de l'élément (data.isHideMask, jamais baké car le save
+   * passe par l'operations-store). L'overlay est aussi rendu non-evented pour
+   * qu'un double-clic n'ouvre pas l'édition d'un élément caché. Réafficher
+   * retire le masque et restaure l'interactivité selon le verrou. La
+   * synchronisation du scene graph est faite par l'appelant (page.tsx).
    */
   setElementVisibility: (elementId: string, visible: boolean) => void;
   /**
@@ -1179,6 +1182,104 @@ export function EditorCanvas({
     [],
   );
 
+  // --- Masquage réel d'un élément "caché" (toggle œil du panneau calques) ---
+  //
+  // L'éditeur affiche le PDF comme un BITMAP raster (fond non-éditable) ; les
+  // éléments du scene graph sont des overlays Fabric TRANSPARENTS au-dessus (le
+  // texte a fill rgba(0,0,0,0), il ne sert que de hit-target d'édition — le
+  // visuel vient du raster). Passer un overlay `visible=false` ne cache donc
+  // RIEN : son contenu reste peint dans le raster. Pour réellement masquer un
+  // élément, on peint un rectangle OPAQUE de la couleur de fond échantillonnée
+  // (même mécanisme que le masquage d'édition : sampleBackgroundUnder) par-
+  // dessus sa bbox. Le masque porte data.isHideMask + elementId pour être
+  // retiré au toggle, et n'est JAMAIS sélectionnable/evented ni baké dans le
+  // PDF (le save passe par l'operations-store, pas par canvas.getObjects()).
+
+  /** Retire le masque de visibilité d'un élément (s'il existe). */
+  const removeHideMask = useCallback(
+    (canvas: FabricCanvas, elementId: string): void => {
+      const mask = canvas
+        .getObjects()
+        .find(
+          (o) =>
+            (o as FabricObjectWithData).data?.isHideMask === true &&
+            (o as FabricObjectWithData).data?.elementId === elementId,
+        );
+      if (mask) canvas.remove(mask);
+    },
+    [],
+  );
+
+  /**
+   * Pose (ou repose) un masque opaque couvrant la bbox de `target`, échantillonné
+   * sur le fond raster réel. Idempotent : retire d'abord un éventuel masque
+   * existant pour le même élément. À appeler dans une fenêtre programmatique
+   * (beginProgrammaticApply) — le Rect ajouté ne doit pas remonter via
+   * object:added ni être confondu avec un élément éditable.
+   */
+  const applyHideMask = useCallback(
+    async (canvas: FabricCanvas, target: FabricObjectWithData): Promise<void> => {
+      const elementId = target.data?.elementId;
+      if (!elementId) return;
+      removeHideMask(canvas, elementId);
+
+      const o = target as unknown as {
+        left?: number;
+        top?: number;
+        width?: number;
+        height?: number;
+        scaleX?: number;
+        scaleY?: number;
+        originY?: string;
+        angle?: number;
+      };
+      const left = o.left ?? 0;
+      const top = o.top ?? 0;
+      const width = (o.width ?? 0) * (o.scaleX ?? 1);
+      const height = (o.height ?? 0) * (o.scaleY ?? 1);
+      // Le texte est rendu avec originY='bottom' (top = baseline). Translate vers
+      // un coin haut-gauche pour que le masque couvre la zone du glyphe.
+      const topLeftY = o.originY === "bottom" ? top - height : top;
+      // Marge de 1px tout autour : l'anti-aliasing des glyphes du raster déborde
+      // légèrement de la bbox — sans marge un liseré fantôme reste visible.
+      const PAD = 1;
+
+      // Couleur de fond : échantillon live autour de l'élément (gère bannières
+      // colorées / cartes / dégradés), sinon blanc si canvas illisible (CORS).
+      const fillColour =
+        sampleBackgroundUnder(target as FabricObject) ?? "#ffffff";
+
+      const { Rect } = await import("fabric");
+      const mask = new Rect({
+        left: left - PAD,
+        top: topLeftY - PAD,
+        width: width + PAD * 2,
+        height: height + PAD * 2,
+        originX: "left",
+        originY: "top",
+        angle: o.angle ?? 0,
+        fill: fillColour,
+        stroke: undefined,
+        strokeWidth: 0,
+        selectable: false,
+        evented: false,
+        hasControls: false,
+        hasBorders: false,
+        excludeFromExport: true,
+      });
+      (mask as FabricObjectWithData).data = { isHideMask: true, elementId };
+      canvas.add(mask);
+      // Placer le masque JUSTE AU-DESSUS du fond PDF (index 1) : il recouvre le
+      // raster mais reste SOUS les autres overlays éditables, donc cacher un
+      // élément ne masque pas accidentellement ceux qui passent par-dessus.
+      const bgIndex = canvas
+        .getObjects()
+        .findIndex((o2) => (o2 as FabricObjectWithData).data?.isPdfBackground);
+      canvas.moveObjectTo(mask, bgIndex >= 0 ? bgIndex + 1 : 0);
+    },
+    [removeHideMask, sampleBackgroundUnder],
+  );
+
   // Handler appele quand un texte entre en mode edition.
   // 1:1 fidelity mode: text overlay is invisible by default (PDF native text
   // shows through). On edit-enter we must:
@@ -1382,6 +1483,10 @@ export function EditorCanvas({
       if (!e.target) return;
       // Ignorer le fond PDF (image non-éditable ajoutée en arrière-plan)
       if ((e.target as FabricObjectWithData).data?.isPdfBackground) return;
+      // Ignorer les masques de visibilité (Rect opaques posés par le toggle œil) :
+      // ce ne sont pas des éléments du scene graph, ils ne doivent jamais être
+      // queués/bakés ni remontés à page.tsx.
+      if ((e.target as FabricObjectWithData).data?.isHideMask) return;
       const element = fabricObjectToElement(e.target as FabricObjectWithData);
       if (element) {
         clientLogger.debug("[EditorCanvas] Object added:", element.elementId, element.type);
@@ -2527,6 +2632,13 @@ export function EditorCanvas({
       }
 
       if (fabricObj) {
+        // Mémoriser l'état de verrou sur l'objet Fabric (DRY, point unique) :
+        // setElementVisibility en a besoin pour ne PAS ré-activer un élément
+        // verrouillé quand on le réaffiche, et le re-render le rétablit ici.
+        (fabricObj as FabricObjectWithData).data = {
+          ...(fabricObj as FabricObjectWithData).data,
+          locked: element.locked === true,
+        };
         canvas.add(fabricObj);
       }
     }
@@ -2537,7 +2649,31 @@ export function EditorCanvas({
     }
 
     canvas.renderAll();
-  }, [getFontFaceName]);
+
+    // Repose les masques de visibilité pour les éléments cachés (navigation de
+    // page / re-render). Fait APRÈS renderAll() pour que sampleBackgroundUnder
+    // lise le raster du fond déjà peint. Les overlays cachés sont aussi rendus
+    // non-evented (cohérent avec setElementVisibility : pas d'édition au
+    // double-clic sur un élément masqué).
+    const hidden = sortedElements.filter((el) => el.visible === false);
+    if (hidden.length > 0) {
+      for (const el of hidden) {
+        const obj = canvas
+          .getObjects()
+          .find(
+            (o) =>
+              (o as FabricObjectWithData).data?.elementId === el.elementId &&
+              (o as FabricObjectWithData).data?.isHideMask !== true,
+          ) as FabricObjectWithData | undefined;
+        if (!obj) continue;
+        await applyHideMask(canvas, obj);
+        (obj as FabricObject & { set: (o: Record<string, unknown>) => void }).set(
+          { evented: false, selectable: false },
+        );
+      }
+      canvas.requestRenderAll();
+    }
+  }, [getFontFaceName, applyHideMask]);
 
   // Charger une page dans le canvas
   const loadPage = useCallback(
@@ -3171,11 +3307,14 @@ export function EditorCanvas({
         const target = canvas
           .getObjects()
           .find(
-            (o) => (o as FabricObjectWithData).data?.elementId === elementId,
+            (o) =>
+              (o as FabricObjectWithData).data?.elementId === elementId &&
+              (o as FabricObjectWithData).data?.isHideMask !== true,
           ) as
           | (FabricObjectWithData & {
               isEditing?: boolean;
               exitEditing?: () => void;
+              locked?: boolean;
             })
           | undefined;
         if (!target) return;
@@ -3189,24 +3328,48 @@ export function EditorCanvas({
         ) {
           target.exitEditing();
         }
+        // L'objet reste-t-il sélectionnable une fois visible ? Dépend de son
+        // verrou (un élément verrouillé ne redevient pas evented en réaffichant).
+        const lockedState =
+          (target as FabricObjectWithData).data?.locked === true;
         beginProgrammaticApply();
-        try {
-          if (!visible) {
-            // Désélectionner avant de masquer, sinon Fabric garde des
-            // contrôles orphelins sur un objet invisible.
-            const isSelected = canvas
-              .getActiveObjects()
-              .some(
-                (o) =>
-                  (o as FabricObjectWithData).data?.elementId === elementId,
-              );
-            if (isSelected) canvas.discardActiveObject();
+        const finishVisibilityChange = async () => {
+          try {
+            if (!visible) {
+              // Désélectionner avant de masquer, sinon Fabric garde des
+              // contrôles orphelins sur un objet invisible.
+              const isSelected = canvas
+                .getActiveObjects()
+                .some(
+                  (o) =>
+                    (o as FabricObjectWithData).data?.elementId === elementId,
+                );
+              if (isSelected) canvas.discardActiveObject();
+              // Poser le masque opaque sur le raster PUIS neutraliser l'overlay :
+              // invisible + non-evented (sinon un double-clic entrerait encore en
+              // édition sur un élément censé être caché).
+              await applyHideMask(canvas, target);
+              target.set({
+                visible: false,
+                evented: false,
+                selectable: false,
+              });
+            } else {
+              // Réafficher : retirer le masque et restaurer l'interactivité
+              // selon l'état de verrou (un élément verrouillé reste non-evented).
+              removeHideMask(canvas, elementId);
+              target.set({
+                visible: true,
+                evented: !lockedState,
+                selectable: !lockedState,
+              });
+            }
+            canvas.requestRenderAll();
+          } finally {
+            endProgrammaticApply();
           }
-          target.set({ visible });
-          canvas.requestRenderAll();
-        } finally {
-          endProgrammaticApply();
-        }
+        };
+        void finishVisibilityChange();
       },
       setElementLocked: (elementId: string, locked: boolean) => {
         const canvas = fabricRef.current;
@@ -3214,11 +3377,14 @@ export function EditorCanvas({
         const target = canvas
           .getObjects()
           .find(
-            (o) => (o as FabricObjectWithData).data?.elementId === elementId,
+            (o) =>
+              (o as FabricObjectWithData).data?.elementId === elementId &&
+              (o as FabricObjectWithData).data?.isHideMask !== true,
           ) as
           | (FabricObjectWithData & {
               isEditing?: boolean;
               exitEditing?: () => void;
+              visible?: boolean;
             })
           | undefined;
         if (!target) return;
@@ -3231,6 +3397,10 @@ export function EditorCanvas({
         ) {
           target.exitEditing();
         }
+        // Un élément actuellement masqué reste non-evented quel que soit son
+        // verrou : le réafficher (toggle œil) ré-évaluera l'interactivité via
+        // data.locked. On ne le rend donc evented ici que s'il est visible.
+        const isHidden = target.visible === false;
         beginProgrammaticApply();
         try {
           if (locked) {
@@ -3244,12 +3414,18 @@ export function EditorCanvas({
           }
           target.set({
             selectable: !locked,
-            evented: !locked,
+            evented: !locked && !isHidden,
             hasControls: !locked,
             hasBorders: !locked,
             lockMovementX: locked,
             lockMovementY: locked,
           });
+          // Persiste l'état de verrou sur l'objet (lu par setElementVisibility
+          // pour décider de l'interactivité au réaffichage).
+          (target as FabricObjectWithData).data = {
+            ...(target as FabricObjectWithData).data,
+            locked,
+          };
           canvas.requestRenderAll();
         } finally {
           endProgrammaticApply();
@@ -3258,7 +3434,7 @@ export function EditorCanvas({
     };
 
     onCanvasReady(handle);
-  }, [historyIndex, historyStack, onCanvasReady, fabricObjectToElement, saveHistory, renderElementsOverlay, beginProgrammaticApply, endProgrammaticApply]);
+  }, [historyIndex, historyStack, onCanvasReady, fabricObjectToElement, saveHistory, renderElementsOverlay, beginProgrammaticApply, endProgrammaticApply, applyHideMask, removeHideMask]);
 
   // Calculer les dimensions du canvas basées sur la page
   const canvasWidth = page?.dimensions?.width || width;
