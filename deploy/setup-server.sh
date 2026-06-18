@@ -49,15 +49,6 @@ apt install -y \
     nginx \
     certbot \
     python3-certbot-nginx \
-    tesseract-ocr \
-    tesseract-ocr-fra \
-    tesseract-ocr-eng \
-    libtesseract-dev \
-    poppler-utils \
-    libpoppler-cpp-dev \
-    imagemagick \
-    ghostscript \
-    libmagickwand-dev \
     ufw \
     htop \
     logrotate
@@ -205,14 +196,6 @@ log_info "Setting up log rotation..."
 # Use copytruncate so running services keep writing to the same fd after rotation
 # (avoids the need to reload/restart services after each rotation)
 cp /opt/gigapdf/deploy/logrotate.conf /etc/logrotate.d/gigapdf
-
-# =============================================================================
-# 12. ImageMagick Policy (allow PDF processing)
-# =============================================================================
-log_info "Configuring ImageMagick policy..."
-if [ -f /etc/ImageMagick-6/policy.xml ]; then
-    sed -i 's/<policy domain="coder" rights="none" pattern="PDF" \/>/<policy domain="coder" rights="read|write" pattern="PDF" \/>/g' /etc/ImageMagick-6/policy.xml
-fi
 
 # =============================================================================
 # Summary

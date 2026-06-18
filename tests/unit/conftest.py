@@ -46,8 +46,6 @@ from unittest.mock import MagicMock
 # the cost of the full backend stack.
 _THIRD_PARTY_STUBS: tuple[str, ...] = (
     "pdfplumber",
-    "pytesseract",
-    "pdf2image",
     "celery",
     "sqlalchemy",
     "asyncpg",
