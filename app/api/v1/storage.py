@@ -15,7 +15,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import cast, func, literal_column, or_, select, true
+from sqlalchemy import cast, delete, func, literal_column, or_, select, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import array as pg_array
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,11 +27,13 @@ from app.middleware.error_handler import (
     InvalidOperationError,
     NotFoundError,
 )
+from app.middleware.rate_limiter import RateLimitDep
 from app.middleware.request_id import get_request_id
-from app.models.database import DocumentVersion, Folder, StoredDocument
+from app.models.database import DocumentVersion, Folder, OcrBlock, StoredDocument
 from app.schemas.responses.common import APIResponse, MetaInfo, PaginationInfo
 from app.services.activity_service import ActivityAction, activity_service
 from app.services.document_service import document_service
+from app.services.embeddings import embedding_service
 from app.services.quota_service import quota_service
 from app.services.s3_service import s3_service
 from app.utils.helpers import generate_uuid, now_utc
@@ -62,6 +64,11 @@ _MAX_DOCUMENT_NAME_LENGTH = 255
 
 _THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024  # 2 MB
 _THUMBNAIL_URL_EXPIRES_SECONDS = 7 * 24 * 3600  # 7 days (SigV4 maximum)
+
+# OCR-blocks ingestion limits (semantic search, #85).
+_MAX_OCR_BLOCKS = 5000  # per ingest request (guards memory + embedding cost)
+_MAX_OCR_BLOCK_TEXT_CHARS = 4000  # per block (e5 truncates long inputs anyway)
+_EMBED_BATCH_SIZE = 128  # texts per fastembed batch
 
 # PostgreSQL text-search configuration: 'simple' (no stemming) because the
 # stored content is multilingual.
@@ -163,6 +170,86 @@ def _serialize_stored_document(doc: StoredDocument) -> dict:
         "thumbnail_url": _thumbnail_url_for(doc.thumbnail_path),
         "deleted_at": doc.deleted_at.isoformat() if doc.deleted_at else None,
     }
+
+
+async def store_ocr_blocks(
+    session: AsyncSession,
+    document_id: str,
+    blocks: list[dict],
+) -> int:
+    """Embed and (re-)index a document's OCR blocks for semantic search (#85).
+
+    Idempotent **replace**: all existing ``ocr_blocks`` rows for
+    ``document_id`` are deleted first, then the new ``blocks`` are inserted —
+    so re-running on a modified document yields a clean, current index (no
+    duplicates, no stale blocks).
+
+    Each block is a dict ``{page, bbox, text}`` where ``bbox`` is
+    ``{x, y, w, h}`` in PDF user-space points (missing/partial bbox → 0).
+    Embeddings are computed in batches via :data:`embedding_service`; if the
+    model is unavailable the blocks are still stored (with ``embedding=NULL``)
+    so the call never fails — they are simply not semantically searchable
+    until a later re-index.
+
+    The caller owns the transaction (this does **not** commit). Returns the
+    number of blocks indexed.
+    """
+    # 1. Clear the previous index for this document (idempotent re-index).
+    await session.execute(
+        delete(OcrBlock).where(OcrBlock.document_id == document_id)
+    )
+
+    # 2. Normalize incoming blocks: keep only those with non-empty text.
+    normalized: list[dict] = []
+    for block in blocks:
+        text = (block.get("text") or "").strip()
+        if not text:
+            continue
+        bbox = block.get("bbox") or {}
+        try:
+            page = int(block.get("page", 0))
+        except (TypeError, ValueError):
+            page = 0
+        normalized.append(
+            {
+                "page": page,
+                "bbox_x": float(bbox.get("x", 0) or 0),
+                "bbox_y": float(bbox.get("y", 0) or 0),
+                "bbox_w": float(bbox.get("w", 0) or 0),
+                "bbox_h": float(bbox.get("h", 0) or 0),
+                "text": text[:_MAX_OCR_BLOCK_TEXT_CHARS],
+            }
+        )
+
+    if not normalized:
+        return 0
+
+    # 3. Embed in batches (passage prefix). Embedding runs on a thread to keep
+    #    the event loop responsive (fastembed is CPU-bound + synchronous).
+    embeddings: list[list[float] | None] = []
+    for start in range(0, len(normalized), _EMBED_BATCH_SIZE):
+        chunk = normalized[start : start + _EMBED_BATCH_SIZE]
+        chunk_vectors = await asyncio.to_thread(
+            embedding_service.embed_passages, [b["text"] for b in chunk]
+        )
+        embeddings.extend(chunk_vectors)
+
+    # 4. Insert the new rows.
+    for block, embedding in zip(normalized, embeddings, strict=True):
+        session.add(
+            OcrBlock(
+                document_id=document_id,
+                page=block["page"],
+                bbox_x=block["bbox_x"],
+                bbox_y=block["bbox_y"],
+                bbox_w=block["bbox_w"],
+                bbox_h=block["bbox_h"],
+                text=block["text"],
+                embedding=embedding,
+            )
+        )
+
+    return len(normalized)
 
 
 class CreateFolderRequest(BaseModel):
@@ -2326,6 +2413,115 @@ async def update_stored_document(
             "name": stored_doc.name,
             "tags": stored_doc.tags or [],
             "updated_at": stored_doc.updated_at.isoformat(),
+        },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
+
+
+class OcrBlockBBox(BaseModel):
+    """Bounding box of an OCR block in PDF user-space points."""
+
+    x: float = Field(default=0.0, description="Left edge (PDF points)")
+    y: float = Field(default=0.0, description="Bottom edge (PDF points, y-up)")
+    w: float = Field(default=0.0, description="Width (PDF points)")
+    h: float = Field(default=0.0, description="Height (PDF points)")
+
+
+class OcrBlockIn(BaseModel):
+    """One OCR text block to index for semantic search."""
+
+    page: int = Field(ge=0, description="0-based or 1-based page index (stored as-is)")
+    text: str = Field(min_length=1, description="OCR text of the block")
+    bbox: OcrBlockBBox | None = Field(default=None, description="Block bounding box")
+
+
+class IndexOcrBlocksRequest(BaseModel):
+    """Request body for (re-)indexing a document's OCR blocks."""
+
+    blocks: list[OcrBlockIn] = Field(
+        description="OCR blocks to index (replaces any existing index for the document)",
+    )
+
+
+@router.post(
+    "/documents/{stored_document_id}/ocr-blocks",
+    response_model=APIResponse[dict],
+    summary="Index document OCR blocks for semantic search",
+    description="""
+Ingest a document's OCR text blocks (page + bounding box + text) and build the
+semantic-search index for that document.
+
+The OCR text itself is produced on the TypeScript engine side
+(`doc.ocr()` / `doc.ocrText()`); this endpoint receives the structured blocks
+and, for each block, computes a 384-d embedding (multilingual model) stored in
+pgvector. Queries are answered by `POST /api/v1/search/semantic`.
+
+This operation is an **idempotent replace**: every call clears the document's
+previous OCR index and rebuilds it from the provided blocks, so re-indexing an
+edited document keeps the index current without duplicates.
+
+Only the document **owner** can index it. If the embedding model is
+temporarily unavailable the blocks are still stored (without embeddings) and
+become searchable after a later re-index — the call does not fail.
+
+## Request Body
+| Field | Type | Description |
+|-------|------|-------------|
+| blocks | array | OCR blocks: `{ page, text, bbox?: { x, y, w, h } }` |
+""",
+)
+async def index_ocr_blocks(
+    stored_document_id: str,
+    request: IndexOcrBlocksRequest,
+    user: AuthenticatedUser,
+    _rl: RateLimitDep,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[dict]:
+    """Embed and index a document's OCR blocks (owner-only, idempotent)."""
+    start_time = time.time()
+
+    if len(request.blocks) > _MAX_OCR_BLOCKS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many OCR blocks: {len(request.blocks)} (max {_MAX_OCR_BLOCKS})",
+        )
+
+    # Ownership check (IDOR): only the owner of a non-trashed document can index it.
+    result = await db.execute(
+        select(StoredDocument).where(
+            StoredDocument.id == stored_document_id,
+            StoredDocument.owner_id == user.user_id,
+            ~StoredDocument.is_deleted,
+        )
+    )
+    stored_doc = result.scalar_one_or_none()
+    if not stored_doc:
+        raise NotFoundError(f"Stored document not found: {stored_document_id}")
+
+    blocks_payload = [block.model_dump() for block in request.blocks]
+    indexed = await store_ocr_blocks(db, stored_document_id, blocks_payload)
+
+    # Keep the doc-level full-text material in sync with the OCR text so the
+    # existing tsvector keyword search and the new semantic search agree.
+    combined_text = " ".join(
+        block.text for block in request.blocks if block.text.strip()
+    )[:_MAX_EXTRACTED_TEXT_CHARS]
+    stored_doc.extracted_text = combined_text or None
+    stored_doc.updated_at = now_utc()
+
+    await db.commit()
+
+    processing_time = int((time.time() - start_time) * 1000)
+    return APIResponse(
+        success=True,
+        data={
+            "stored_document_id": stored_document_id,
+            "blocks_indexed": indexed,
+            "semantic_search_available": embedding_service.is_available,
         },
         meta=MetaInfo(
             request_id=get_request_id(),

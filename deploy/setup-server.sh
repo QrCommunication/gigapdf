@@ -67,6 +67,33 @@ log_info "Installing pnpm..."
 npm install -g pnpm@9
 
 # =============================================================================
+# 3b. Install pgvector (semantic search — #85), idempotent
+# =============================================================================
+# The semantic-search feature stores 384-d embeddings in PostgreSQL via the
+# `vector` extension (pgvector). The extension must be installed on the
+# PostgreSQL SERVER. This block installs the matching package only when a
+# local PostgreSQL server is present; for a managed/remote DB, install
+# pgvector there and run `CREATE EXTENSION vector;` (migration 019 does the
+# CREATE EXTENSION automatically once the package is available).
+log_info "Ensuring pgvector is available for PostgreSQL..."
+if command -v pg_config &> /dev/null; then
+    PG_MAJOR="$(pg_config --version | grep -oE '[0-9]+' | head -1)"
+    PG_MAJOR="${PG_MAJOR:-17}"
+    if dpkg -s "postgresql-${PG_MAJOR}-pgvector" &> /dev/null; then
+        log_info "pgvector already installed for PostgreSQL ${PG_MAJOR}."
+    elif apt install -y "postgresql-${PG_MAJOR}-pgvector"; then
+        log_info "Installed postgresql-${PG_MAJOR}-pgvector."
+    else
+        log_warn "Could not install postgresql-${PG_MAJOR}-pgvector via apt."
+        log_warn "Install pgvector manually, then re-run migrations."
+    fi
+else
+    log_warn "No local PostgreSQL detected (pg_config missing)."
+    log_warn "Semantic search needs pgvector on the DB server: install"
+    log_warn "postgresql-<major>-pgvector there (migration 019 runs CREATE EXTENSION)."
+fi
+
+# =============================================================================
 # 4. Create gigapdf user
 # =============================================================================
 log_info "Creating gigapdf user..."
@@ -80,6 +107,10 @@ fi
 log_info "Creating directory structure..."
 mkdir -p /opt/gigapdf
 mkdir -p /var/lib/gigapdf/documents
+# Semantic-search embedding model cache (fastembed, #85). The 384-d
+# multilingual MiniLM model (~470 MB) is downloaded here once;
+# FASTEMBED_CACHE_DIR in .env must point to this path.
+mkdir -p /var/lib/gigapdf/fastembed-cache
 mkdir -p /var/log/gigapdf
 mkdir -p /var/www/certbot
 mkdir -p /opt/gigapdf-repo.git
