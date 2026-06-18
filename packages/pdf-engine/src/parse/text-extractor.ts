@@ -234,6 +234,13 @@ function runToTextElement(run: TextElementInfo, pageHeight: number): TextElement
       lineHeight: 1.2,
       letterSpacing: 0,
       writingMode: 'horizontal-tb',
+      direction:
+        [...run.text].filter(
+          (ch) => ch.codePointAt(0)! >= 0x0590 && ch.codePointAt(0)! <= 0x08ff,
+        ).length >
+        run.text.length * 0.4
+          ? 'rtl'
+          : 'ltr',
       underline: false,
       strikethrough: false,
       backgroundColor: null,

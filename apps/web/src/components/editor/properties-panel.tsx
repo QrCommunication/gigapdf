@@ -780,6 +780,7 @@ export function PropertiesPanel({
         </label>
         <textarea
           key={element.elementId}
+          dir={element.style?.direction ?? "ltr"}
           defaultValue={element.content ?? ""}
           onBlur={(e) => {
             const next = e.target.value;
@@ -793,6 +794,27 @@ export function PropertiesPanel({
           placeholder={t("text.contentPlaceholder")}
           className="w-full px-2 py-1.5 rounded border bg-background text-sm resize-y"
         />
+      </div>
+
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">
+          {t("text.direction")}
+        </label>
+        <select
+          value={element.style?.direction ?? "ltr"}
+          onChange={(e) =>
+            onElementUpdate?.(element.elementId, {
+              style: {
+                ...element.style,
+                direction: e.target.value as "ltr" | "rtl",
+              },
+            } as Partial<TextElement>)
+          }
+          className="w-full h-8 px-2 rounded border bg-background text-sm"
+        >
+          <option value="ltr">{t("text.ltr")}</option>
+          <option value="rtl">{t("text.rtl")}</option>
+        </select>
       </div>
 
       <div>
