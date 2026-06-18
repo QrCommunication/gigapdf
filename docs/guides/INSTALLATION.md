@@ -42,18 +42,6 @@ Instructions d'installation complètes pour GigaPDF sur toutes les plateformes s
 | **pnpm** | 10.28+ | Node.js package manager (pinned via `packageManager`) |
 | **Git** | 2.30+ | Version control |
 
-### PDF Feature Dependencies / Dépendances des fonctionnalités PDF
-
-Required for the corresponding features to work on a native install
-(all of them are pre-installed in the Docker `web` image):
-
-| Software | Purpose |
-|----------|---------|
-| **LibreOffice** (writer/calc/impress/draw) | DOCX/XLSX/PPTX ↔ PDF conversions |
-| **fontforge** | Type1/CFF → TTF conversion (faithful font rendering at bake) |
-| **Tesseract OCR** (+ `fra` + `eng`) | Text extraction from scanned PDFs |
-| **Playwright Chromium** | HTML → PDF and URL → PDF conversions |
-
 ---
 
 ## Ubuntu/Debian Installation
@@ -129,15 +117,7 @@ npm install -g pnpm@10.28.0
 pnpm --version
 ```
 
-### Step 6: Install PDF Feature Dependencies / Étape 6 : Installer les dépendances des fonctionnalités PDF
-
-```bash
-# Office conversions (DOCX/XLSX/PPTX ↔ PDF) + faithful font rendering + OCR
-sudo apt install -y libreoffice fontforge \
-  tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng
-```
-
-### Step 7: Clone and Setup Project / Étape 7 : Cloner et configurer le projet
+### Step 6: Clone and Setup Project / Étape 6 : Cloner et configurer le projet
 
 ```bash
 # Clone repository
@@ -158,9 +138,6 @@ pnpm install
 
 # Build all packages and apps (turbo orders internal packages first)
 pnpm build
-
-# Chromium for HTML → PDF / URL → PDF conversions
-pnpm exec playwright install --with-deps chromium
 ```
 
 ---
@@ -178,9 +155,6 @@ pnpm exec playwright install --with-deps chromium
 ```bash
 # Install all required software
 brew install python@3.12 postgresql@16 redis node@20 git
-
-# Install optional dependencies
-brew install tesseract tesseract-lang poppler mupdf
 
 # Link Node.js 20
 brew link node@20
@@ -245,9 +219,10 @@ Follow the [Ubuntu/Debian Installation](#ubuntudebian-installation) steps above.
 
 ## Docker Installation
 
-This is the recommended self-hosting path: every PDF system dependency
-(LibreOffice, fontforge, tesseract-ocr fra+eng, Playwright Chromium) is
-already baked into the Debian-based `web` image.
+This is the recommended self-hosting path. All PDF, OCR, Office
+conversion, and HTML rendering run inside the in-house gigapdf-lib
+WASM engine — no third-party system binaries are required. The
+Debian-based `web` image ships everything needed out of the box.
 
 ### Prerequisites / Prérequis
 
@@ -373,17 +348,6 @@ S3_ACCESS_KEY_ID=your-access-key
 S3_SECRET_ACCESS_KEY=your-secret-key
 S3_BUCKET_NAME=gigapdf-documents
 S3_REGION=fr-par
-```
-
-#### OCR Configuration / Configuration OCR
-
-```bash
-# Tesseract paths
-TESSERACT_PATH=/usr/bin/tesseract
-TESSERACT_DATA_PATH=/usr/share/tesseract-ocr/5/tessdata
-
-# Default OCR languages
-OCR_DEFAULT_LANGUAGES=fra+eng
 ```
 
 #### Celery Configuration (Async Tasks) / Configuration Celery
