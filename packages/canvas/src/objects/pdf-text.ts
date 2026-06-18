@@ -48,6 +48,11 @@ export class PDFText extends fabric.Textbox {
       fontStyle: element.style.fontStyle,
       fill: element.style.color,
       opacity: element.style.opacity,
+      // Word-like decorations: Fabric Textbox supports `underline`,
+      // `linethrough` (strikethrough) and `textBackgroundColor` (highlight).
+      underline: element.style.underline ?? false,
+      linethrough: element.style.strikethrough ?? false,
+      textBackgroundColor: element.style.backgroundColor ?? "",
       textAlign: element.style.textAlign,
       direction: element.style.direction ?? "ltr",
       lineHeight: element.style.lineHeight,
@@ -94,6 +99,12 @@ export class PDFText extends fabric.Textbox {
         textAlign: (this.textAlign as any) || "left",
         lineHeight: this.lineHeight || 1.16,
         letterSpacing: this.charSpacing || 0,
+        underline: this.underline ?? false,
+        strikethrough:
+          (this as unknown as { linethrough?: boolean }).linethrough ?? false,
+        backgroundColor:
+          (this as unknown as { textBackgroundColor?: string })
+            .textBackgroundColor || null,
         writingMode: "horizontal-tb",
         direction: ((this.direction as "ltr" | "rtl") || "ltr") as "ltr" | "rtl",
       },
@@ -138,6 +149,17 @@ export class PDFText extends fabric.Textbox {
         lineHeight: element.style.lineHeight,
         charSpacing: element.style.letterSpacing,
       });
+      // Decorations are optional on partial updates — only re-apply the ones
+      // actually provided so a bounds/position-only patch never clears them.
+      if (element.style.underline !== undefined) {
+        this.set("underline", element.style.underline);
+      }
+      if (element.style.strikethrough !== undefined) {
+        this.set("linethrough", element.style.strikethrough);
+      }
+      if (element.style.backgroundColor !== undefined) {
+        this.set("textBackgroundColor", element.style.backgroundColor ?? "");
+      }
     }
     if (element.locked !== undefined) {
       this.set({

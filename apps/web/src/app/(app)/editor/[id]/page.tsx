@@ -8,6 +8,8 @@ import Link from "next/link";
 import type {
   Element,
   FormFieldElement,
+  TextElement,
+  TextStyle,
   UUID,
   PageObject,
 } from "@giga-pdf/types";
@@ -985,6 +987,15 @@ export default function EditorPage() {
     );
   }, [effectivePage, selectedElementIds]);
 
+  // Text-only subset, used by the toolbar's Word-like formatting cluster.
+  const selectedTextElements = useMemo(
+    () =>
+      selectedElements.filter(
+        (el): el is TextElement => el.type === "text",
+      ),
+    [selectedElements],
+  );
+
   // --- Champs de formulaire du document (mode Concevoir) -------------------
   // Liste plate ordonnée page par page : c'est l'ordre dans lequel les
   // champs seront bakés en AcroForm au save/export — soit l'ordre de
@@ -1419,6 +1430,27 @@ export default function EditorPage() {
       saveWithPriority("debounced");
     },
     [canvasHandle, setDirty, saveWithPriority]
+  );
+
+  // Word-like formatting bar → patch a single text style field. The bar emits
+  // PARTIAL TextStyle patches (e.g. { fontWeight: "bold" }), so merge them into
+  // the element's current style before handing off to handleElementUpdate
+  // (which would otherwise shallow-replace the whole style object). Reuses the
+  // existing canvas + bake + persist pipeline — no new save path.
+  const handleTextStyleChange = useCallback(
+    (elementId: string, style: Partial<TextStyle>) => {
+      const ownerPage = pages.find((p) =>
+        p.elements.some((e) => e.elementId === elementId),
+      );
+      const existing = ownerPage?.elements.find(
+        (e) => e.elementId === elementId,
+      ) as TextElement | undefined;
+      if (!existing) return;
+      handleElementUpdate(elementId, {
+        style: { ...existing.style, ...style },
+      } as Partial<Element>);
+    },
+    [pages, handleElementUpdate],
   );
 
   const handleExport = useCallback(async () => {
@@ -2578,6 +2610,9 @@ export default function EditorPage() {
         onRedo={handleRedo}
         hasSelection={selectedElementIds.length > 0}
         onFormatAction={handleFormatAction}
+        selectedElement={selectedElements.length === 1 ? selectedElements[0] : null}
+        selectedTextElements={selectedTextElements}
+        onElementStyleChange={handleTextStyleChange}
         shapeType={shapeType}
         onShapeTypeChange={setShapeType}
         annotationType={annotationType}

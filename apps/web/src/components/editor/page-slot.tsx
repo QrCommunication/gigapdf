@@ -88,9 +88,14 @@ function PageSlotImpl({
 }: PageSlotProps) {
   // Draggable margin guides on the active page, once its margins are known.
   // The guides map the engine's intrinsic (un-rotated) margins to/from screen
-  // space using the page rotation, so they work at any /Rotate.
+  // space using the page rotation, so they work at any /Rotate. Gated on
+  // `showRulers` so the single "Rulers & margins" toolbar toggle shows/hides
+  // both the rulers and the margin guides together (Word's "View → Ruler").
   const showGuides =
-    isActive && margins != null && onMarginsCommit !== undefined;
+    isActive &&
+    showRulers &&
+    margins != null &&
+    onMarginsCommit !== undefined;
   // Rulers anchor to the active page; convert its rotated box to displayed points.
   const showPageRulers = isActive && showRulers;
   const pts = effectivePagePoints(page);
