@@ -317,7 +317,7 @@ async function buildPageObjectSafe(
  *
  * Extraction pipeline (sequential steps, parallel where safe):
  *
- * Step 1 — Open PDF via pdfjs-dist.
+ * Step 1 — Read page geometry via the native engine.
  * Step 2 — Extract document-level data in parallel:
  *           metadata, bookmarks (outlines), layers, embedded files,
  *           named destinations.
@@ -341,9 +341,8 @@ export async function parseDocument(
 
   engineLogger.info('[parser] parseDocument — start', { documentId });
 
-  // pdfjs `getDocument` may transfer (and detach) the input buffer, which would
-  // leave the native-engine extractors below reading a detached ArrayBuffer.
-  // Snapshot a private host copy for them BEFORE pdfjs touches the original.
+  // Take a private host copy so every native-engine extractor below reads from
+  // a stable buffer the caller cannot mutate or detach underneath them.
   const libBytes = new Uint8Array(
     pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes),
   );

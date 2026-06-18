@@ -2,10 +2,12 @@
  * Port for an external font cache (typically backed by the apps/web
  * Prisma database, but the engine package stays free of any DB import).
  *
- * The text renderer asks for a converted TTF by SHA-256 of the SOURCE
- * font program (the Type1 or CFF bytes extracted from the PDF). On a
- * miss the renderer runs fontforge, then writes the TTF back through
- * `set()` so the next bake reuses it without spawning a subprocess.
+ * The text renderer asks for a usable TTF by SHA-256 of the SOURCE
+ * font program (the Type1 or CFF bytes extracted from the PDF, or a
+ * downloaded Google Font). On a miss the renderer produces the bytes
+ * natively (the engine wraps bare-CFF / converts Type1 in-process — no
+ * external binary), then writes them back through `set()` so the next
+ * bake reuses the result without recomputing it.
  *
  * Implementations should be safe to call concurrently and idempotent
  * (concurrent `set()` calls with the same hash overwrite with the same

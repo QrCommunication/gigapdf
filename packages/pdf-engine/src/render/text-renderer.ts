@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type { PDFDocumentHandle } from '../engine/document-handle';
 import { markDirty } from '../engine/document-handle';
 import type { TextElement } from '@giga-pdf/types';
@@ -14,10 +13,6 @@ import { PDFPageOutOfRangeError } from '../errors';
 import { getFontCacheForHandle } from '../utils/font-cache-port';
 import { downloadGoogleFont } from '../utils/google-fonts';
 import type { GoogleFontQuery } from '../utils/google-fonts';
-import {
-  convertFontToTtf,
-  FontForgeUnavailableError,
-} from '../utils/convert-font-to-ttf';
 
 // ─── Feature Flag ──────────────────────────────────────────────────────────────
 
@@ -41,93 +36,6 @@ export function clearFontCache(documentId: string): void {
   }
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Format of an extracted font program — drives the embed strategy. */
-export type ExtractedFontFormat = 'truetype' | 'cff' | 'type1';
-
-/**
- * Convert Type1/CFF source bytes to TTF, going through the FontCachePort
- * (typically the Prisma `font_cache` table) so the same source font never gets
- * converted twice on the same VPS. Returns null when no fallback is possible
- * (fontforge missing AND no cached entry); the caller falls through to bundled.
- */
-async function convertWithCache(
-  handle: PDFDocumentHandle,
-  sourceBytes: Uint8Array,
-  sourceFormat: ExtractedFontFormat,
-  originalFont: string,
-): Promise<Uint8Array | null> {
-  const sha256 = createHash('sha256').update(sourceBytes).digest('hex');
-  const cache = getFontCacheForHandle(handle);
-
-  if (cache) {
-    try {
-      const hit = await cache.get(sha256);
-      if (hit && hit.byteLength > 0) {
-        engineLogger.info('Font cache HIT (DB)', {
-          originalFont,
-          sha256: sha256.slice(0, 12),
-          documentId: handle.id,
-        });
-        return hit;
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      engineLogger.warn('Font cache lookup failed, on continue sans', {
-        originalFont,
-        sha256: sha256.slice(0, 12),
-        documentId: handle.id,
-        error: message,
-      });
-    }
-  }
-
-  let ttf: Uint8Array;
-  try {
-    ttf = await convertFontToTtf(
-      sourceBytes,
-      sourceFormat === 'truetype' ? 'unknown' : sourceFormat,
-    );
-  } catch (err) {
-    if (err instanceof FontForgeUnavailableError) {
-      engineLogger.warn(
-        'fontforge non installé, conversion impossible — fallback bundled OFL',
-        { originalFont, documentId: handle.id },
-      );
-    } else {
-      const message = err instanceof Error ? err.message : String(err);
-      engineLogger.warn('Conversion fontforge échouée — fallback bundled OFL', {
-        originalFont,
-        sourceFormat,
-        documentId: handle.id,
-        error: message,
-      });
-    }
-    return null;
-  }
-
-  if (cache) {
-    try {
-      await cache.set(sha256, ttf, {
-        family: originalFont.replace(/^[A-Z]{6}\+/, '').split(/[-,]/)[0] ?? originalFont,
-        postscriptName: originalFont,
-        source: sourceFormat === 'cff' ? 'converted-cff' : 'converted-type1',
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      engineLogger.warn('Font cache write failed (best-effort)', {
-        originalFont,
-        sha256: sha256.slice(0, 12),
-        documentId: handle.id,
-        error: message,
-      });
-    }
-  }
-
-  return ttf;
-}
-
 /**
  * Résout la police à embeder pour un TextElement et renvoie son `fontObj`
  * (numéro d'objet Type0 dans le document courant).
@@ -136,7 +44,8 @@ async function convertWithCache(
  *  1. FONT_EMBED_CUSTOM_ENABLED && originalFont && fontBytes → embed direct
  *  2. originalFont → extraire la police du PDF source (engine `extractFont`) :
  *     - truetype → embed direct
- *     - cff/type1 → conversion fontforge (cachée par sha256) → embed
+ *     - cff (Type1C) → embed natif (bare-CFF enrobé en OpenType) ; type1/PFB
+ *       brut non supporté nativement → fallback Google/OFL
  *  3. FontCachePort branché → résolution Google Fonts (téléchargement + cache)
  *  4. Fallback bundled OFL (Liberation/Courier Prime) — couvre aussi les
  *     familles standard (Arial→sans, Times→serif, Courier→mono) via
@@ -182,26 +91,25 @@ async function resolveFont(
           return obj;
         }
       }
-      // 2.b : Type1 / CFF — conversion fontforge puis embed.
+      // 2.b : CFF (Type1C) / Type1 — embed natif par le moteur (zéro
+      // fontforge). Le moteur enrobe le bare-CFF en OpenType ; le Type1/PFB
+      // brut n'est pas (encore) supporté nativement → embedFont retourne 0 et
+      // on retombe sur Google Fonts / OFL ci-dessous.
       if (extracted.format === 'cff' || extracted.format === 'type1') {
-        const converted = await convertWithCache(
-          handle,
-          extracted.bytes,
-          extracted.format,
-          originalFont,
-        );
-        if (converted) {
-          const obj = doc.embedFont(originalFont, converted);
-          if (obj !== 0) {
-            embeddedFontCache.set(key, obj);
-            engineLogger.info('Police custom embed via conversion fontforge', {
-              originalFont,
-              sourceFormat: extracted.format,
-              documentId: handle.id,
-            });
-            return obj;
-          }
+        const obj = doc.embedFont(originalFont, extracted.bytes);
+        if (obj !== 0) {
+          embeddedFontCache.set(key, obj);
+          engineLogger.info('Police custom embed native (CFF/Type1C)', {
+            originalFont,
+            sourceFormat: extracted.format,
+            documentId: handle.id,
+          });
+          return obj;
         }
+        engineLogger.warn(
+          'Embed natif impossible (format non supporté nativement), fallback',
+          { originalFont, sourceFormat: extracted.format, documentId: handle.id },
+        );
       }
     } else {
       engineLogger.warn(
