@@ -5,6 +5,7 @@
 import type {
   UUID,
   PageObject,
+  Element,
   Tool,
   ShapeType,
   AnnotationType,
@@ -31,6 +32,9 @@ export interface ViewportDimensions {
   height: number;
 }
 
+/** Measurement unit for rulers and margin handles. */
+export type RulerUnit = "px" | "mm" | "cm" | "in" | "pt";
+
 export interface CanvasState {
   zoom: number;
   minZoom: number;
@@ -50,6 +54,13 @@ export interface CanvasState {
   snapToGrid: boolean;
   gridSize: number;
   showRulers: boolean;
+  /**
+   * Page layout mode for the document canvas. "continuous" stacks every page
+   * vertically (Word-like scroll), "single" shows one page at a time.
+   */
+  viewMode: "single" | "continuous";
+  /** Measurement unit displayed on the rulers / margin handles. */
+  rulerUnit: RulerUnit;
   currentPageIndex: number;
   // Tool options
   shapeType: ShapeType;
@@ -60,6 +71,40 @@ export interface CanvasState {
   strokeColor: string;
   fillColor: string;
   strokeWidth: number;
+}
+
+// Layout Store Types (Word-like page layout: margins, headers, footers)
+
+/** Page margins in PDF points (origin top-left). */
+export interface Margins {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+/**
+ * Header or footer band content for a section. `elements` reuses the editor
+ * `Element` type so a header/footer can hold the same primitives as a page
+ * (text, image, ...). `height` is the reserved band height in PDF points.
+ */
+export interface HeaderFooterContent {
+  enabled: boolean;
+  elements: Element[];
+  height: number;
+  showOnFirstPage: boolean;
+}
+
+/**
+ * A layout section. v1 always holds a single section spanning the whole
+ * document (`pageRange` = { from: 0, to: <lastIndex> }), but the shape already
+ * supports multiple sections with distinct margins / headers / footers.
+ */
+export interface SectionLayout {
+  margins: Margins;
+  header: HeaderFooterContent;
+  footer: HeaderFooterContent;
+  pageRange: { from: number; to: number };
 }
 
 // Selection Store Types

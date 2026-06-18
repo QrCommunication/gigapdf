@@ -12,7 +12,7 @@ import type {
   FieldType,
   FieldCreationKind,
 } from "@giga-pdf/types";
-import type { CanvasState, ViewportDimensions } from "../types";
+import type { CanvasState, RulerUnit, ViewportDimensions } from "../types";
 
 /** Map a creation palette kind to the underlying PDF field type. */
 function fieldKindToFieldType(kind: FieldCreationKind): FieldType {
@@ -50,6 +50,8 @@ export interface CanvasStore extends CanvasState {
   setGridSize: (size: number) => void;
   toggleRulers: () => void;
   setShowRulers: (show: boolean) => void;
+  setViewMode: (mode: CanvasState["viewMode"]) => void;
+  setRulerUnit: (unit: RulerUnit) => void;
   setCurrentPage: (pageIndex: number) => void;
   nextPage: () => void;
   previousPage: () => void;
@@ -77,6 +79,8 @@ const initialState: CanvasState = {
   snapToGrid: false,
   gridSize: 10,
   showRulers: false,
+  viewMode: "continuous",
+  rulerUnit: "mm",
   currentPageIndex: 0,
   // Tool options defaults
   shapeType: "rectangle",
@@ -187,6 +191,16 @@ export const useCanvasStore: UseBoundStore<StoreApi<CanvasStore>> = create<Canva
     setShowRulers: (show) =>
       set((state) => {
         state.showRulers = show;
+      }),
+
+    setViewMode: (mode) =>
+      set((state) => {
+        state.viewMode = mode;
+      }),
+
+    setRulerUnit: (unit) =>
+      set((state) => {
+        state.rulerUnit = unit;
       }),
 
     setCurrentPage: (pageIndex) =>

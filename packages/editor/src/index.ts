@@ -20,6 +20,7 @@ export * from "./middleware";
 export type {
   DocumentState,
   CanvasState,
+  RulerUnit,
   SelectionState,
   HistoryState,
   CollaborationState,
@@ -35,6 +36,9 @@ export type {
   ContextMenuItem,
   SyncConfig,
   PersistenceConfig,
+  Margins,
+  HeaderFooterContent,
+  SectionLayout,
 } from "./types";
 
 // Re-export commonly used types from @giga-pdf/types
