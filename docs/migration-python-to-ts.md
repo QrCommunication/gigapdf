@@ -39,7 +39,7 @@ L'objectif est d'éliminer complètement le path Python pour le traitement PDF e
 | `forms/` | getFormFields, fillForm, flattenForm | Aucun gap |
 | `encrypt/` | encryptPDF (V1 stub sans chiffrement objet réel), decryptPDF, getPermissions, setPermissions | **GAP** : `encryptPDF` re-sauvegarde le PDF sans chiffrer les objets PDF. Chiffrement AES-128/256 réel nécessite intégration qpdf (spawn subprocess) |
 | `preview/` | renderPage, renderThumbnail, renderAllThumbnails, extractImage | Requiert canvas (node-canvas) — dépendance native |
-| `convert/` | htmlToPDF, urlToPDF, urlToPDFSafe | Requiert Playwright — dépendance lourde |
+| `convert/` | htmlToPDF, urlToPDF, urlToPDFSafe | ~~Requiert Playwright~~ — Playwright supprimé (task #52) ; HTML→PDF traité nativement par le moteur HTML/CSS de gigapdf-lib (zéro dépendance tierce) |
 | `utils/` | color, coordinates, font-map, page-range, logger | Complet |
 
 ### Routes Next.js actives (TS)
