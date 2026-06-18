@@ -1206,6 +1206,10 @@
       "imageTooLarge": "L'image est trop volumineuse (10 Mo maximum).",
       "restoreFailed": "Échec de la restauration. Vérifiez que le document a bien une version d'origine accessible."
     },
+    "rulers": {
+      "marginErrorTitle": "Impossible de modifier les marges",
+      "marginErrorDescription": "Les marges de la page n'ont pas pu être modifiées. Veuillez réessayer."
+    },
     "watermark": {
       "modeLabel": "Résultat",
       "applyToDocument": "Appliquer au document",
@@ -1286,6 +1290,8 @@
       "fitPage": "Ajuster à la page",
       "viewModeSingle": "Page unique",
       "viewModeContinuous": "Défilement continu",
+      "rulers": "Règles",
+      "rulerUnit": "Unité des règles",
       "rotate": "Pivoter",
       "addPage": "Ajouter une page",
       "deletePage": "Supprimer la page",

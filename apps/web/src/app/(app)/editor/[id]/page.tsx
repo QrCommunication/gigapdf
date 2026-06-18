@@ -87,6 +87,10 @@ import {
   type SocketEventData,
 } from "@giga-pdf/api";
 import { ContentEditLayer, type ElementModification } from "@/components/editor/content-edit-layer";
+import {
+  applyPageMargins,
+  type PageMargins,
+} from "@/components/editor/lib/page-margins";
 import { clientLogger } from "@/lib/client-logger";
 import { withRetry } from "@/lib/with-retry";
 
@@ -199,6 +203,8 @@ export default function EditorPage() {
     fillColor,
     strokeWidth,
     viewMode,
+    showRulers,
+    rulerUnit,
     setActiveTool,
     setZoom,
     setFitMode,
@@ -209,6 +215,8 @@ export default function EditorPage() {
     setFillColor,
     setStrokeWidth,
     setViewMode,
+    toggleRulers,
+    setRulerUnit,
     setCurrentPage: setCanvasCurrentPage,
   } = useCanvasStore(
     useShallow((s) => ({
@@ -222,6 +230,8 @@ export default function EditorPage() {
       fillColor: s.fillColor,
       strokeWidth: s.strokeWidth,
       viewMode: s.viewMode,
+      showRulers: s.showRulers,
+      rulerUnit: s.rulerUnit,
       setActiveTool: s.setActiveTool,
       setZoom: s.setZoom,
       setFitMode: s.setFitMode,
@@ -232,6 +242,8 @@ export default function EditorPage() {
       setFillColor: s.setFillColor,
       setStrokeWidth: s.setStrokeWidth,
       setViewMode: s.setViewMode,
+      toggleRulers: s.toggleRulers,
+      setRulerUnit: s.setRulerUnit,
       setCurrentPage: s.setCurrentPage,
     }))
   );
@@ -1675,6 +1687,33 @@ export default function EditorPage() {
     [pageOperation, adoptModifiedPdf],
   );
 
+  // Commit new page margins (PDF points) dropped from a ruler/guide drag. The
+  // GigaPDF engine insets the page's CropBox client-side, producing new bytes
+  // that we adopt exactly like a page op (swap binary + save + re-parse so the
+  // editable overlay re-aligns to the new page box).
+  const handleMarginsCommit = useCallback(
+    (pageIndex: number, margins: PageMargins) => {
+      const file = currentPdfFileRef.current;
+      if (!file) return;
+      void (async () => {
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const next = await applyPageMargins(bytes, pageIndex, margins);
+          // `next` is a fresh Uint8Array backed by its own ArrayBuffer.
+          adoptModifiedPdf(new Blob([next], { type: "application/pdf" }));
+        } catch (err) {
+          clientLogger.error("[editor] set page margins failed:", err);
+          toast({
+            title: t("rulers.marginErrorTitle"),
+            description: t("rulers.marginErrorDescription"),
+            variant: "destructive",
+          });
+        }
+      })();
+    },
+    [adoptModifiedPdf, toast, t],
+  );
+
   // Filigrane appliqué au document courant (mode « Appliquer au document »
   // du WatermarkDialog) : adopte le binaire filigrané exactement comme une
   // opération de page (swap binaire + re-parse + save immédiat), puis
@@ -2443,6 +2482,12 @@ export default function EditorPage() {
             goToPage(effectivePageIndex);
           }
         }}
+        // Rulers + draggable margins are a continuous-view feature; the toggle
+        // only appears there.
+        showRulers={showRulers}
+        {...(isContinuous ? { onToggleRulers: toggleRulers } : {})}
+        rulerUnit={rulerUnit}
+        onRulerUnitChange={setRulerUnit}
         fitMode={fitMode}
         onFitPage={handleFitPage}
         onFitWidth={handleFitWidth}
@@ -2509,6 +2554,9 @@ export default function EditorPage() {
               pdfFile={currentPdfFile}
               activePageIndex={effectivePageIndex}
               onActivatePage={activatePage}
+              showRulers={showRulers}
+              rulerUnit={rulerUnit}
+              onMarginsCommit={handleMarginsCommit}
             />
           ) : (
             <>

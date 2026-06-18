@@ -1206,6 +1206,10 @@
       "imageTooLarge": "The image is too large (10 MB maximum).",
       "restoreFailed": "Restore failed. Make sure the document has an accessible original version."
     },
+    "rulers": {
+      "marginErrorTitle": "Could not update margins",
+      "marginErrorDescription": "The page margins could not be changed. Please try again."
+    },
     "watermark": {
       "modeLabel": "Result",
       "applyToDocument": "Apply to document",
@@ -1286,6 +1290,8 @@
       "fitPage": "Fit page",
       "viewModeSingle": "Single page",
       "viewModeContinuous": "Continuous scroll",
+      "rulers": "Rulers",
+      "rulerUnit": "Ruler unit",
       "rotate": "Rotate",
       "addPage": "Add page",
       "deletePage": "Delete page",
