@@ -77,12 +77,10 @@ export {
   searchPdf,
   getMetadataRobust,
   ocrPdf,
-  isTesseractAvailable,
-  TesseractNotInstalledError,
+  isOcrAvailable,
+  OcrUnavailableError,
   makeSearchablePdf,
-  parseTsvWords,
-  tsvWordToPdfPlacement,
-  DEFAULT_MIN_WORD_CONFIDENCE,
+  ocrWordToPdfPlacement,
 } from './parse';
 export type {
   StructuredChar,
@@ -98,7 +96,7 @@ export type {
   OcrResult,
   MakeSearchablePdfOptions,
   MakeSearchablePdfResult,
-  OcrTsvWord,
+  OcrWordBox,
   PdfPlacementContext,
   PdfWordPlacement,
 } from './parse';
