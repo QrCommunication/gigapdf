@@ -226,22 +226,11 @@ sudo bash /opt/gigapdf/scripts/rollback.sh --list
 
 ## Dépendances système de l'hôte (déploiement natif)
 
-Le moteur PDF TypeScript (service `gigapdf-web`) s'appuie sur des binaires
-système. À installer une fois sur l'hôte (déjà inclus dans l'image Docker
-`web` pour les déploiements compose) :
-
-```bash
-sudo apt install -y libreoffice fontforge \
-  tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng
-pnpm exec playwright install --with-deps chromium
-```
-
-| Binaire | Fonctionnalité |
-|---------|----------------|
-| LibreOffice (writer/calc/impress/draw) | Conversions DOCX/XLSX/PPTX ↔ PDF |
-| fontforge | Conversion Type1/CFF → TTF (fidélité des polices au bake) |
-| tesseract-ocr (fra + eng) | OCR (`/api/pdf/ocr`) |
-| Chromium Playwright | HTML → PDF, URL → PDF |
+Le moteur PDF (`gigapdf-lib`) est un moteur Rust → WASM zéro dépendance
+tierce. Toutes les fonctionnalités PDF (OCR, rendu, conversion Office,
+HTML → PDF, gestion des polices) s'exécutent nativement sans aucun binaire
+système supplémentaire. Aucune installation `apt` n'est requise au-delà du
+runtime Node/Python et des services d'infrastructure (PostgreSQL, Redis).
 
 ---
 

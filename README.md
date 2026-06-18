@@ -81,22 +81,10 @@ The compose stack starts six services:
 | `web` | Next.js frontend (`Dockerfile.web`) | 3000 |
 | `admin` | Admin dashboard (`Dockerfile.admin`) | 3001 |
 
-The `web` image is based on **Debian bookworm** and already embeds every
-system dependency the PDF engine needs — no extra setup:
-
-- **LibreOffice** (writer/calc/impress/draw) — Office ↔ PDF conversions
-- **fontforge** — Type1/CFF → TTF conversion for faithful font rendering
-- **tesseract-ocr** (fra + eng) — OCR
-- **Playwright Chromium** — HTML → PDF and URL → PDF
-
-> 🦀 **In-house engine (migration in progress).** GigaPDF is moving all
-> PDF / Office / OCR / font processing to
-> **[gigapdf-lib](https://github.com/QrCommunication/gigapdf-lib)** — a
-> zero-dependency Rust → WASM engine built entirely in-house (no MuPDF, no
-> LibreOffice, no Tesseract, no pdf-lib). As the migration lands, those system
-> dependencies are removed; **Playwright** (HTML → PDF) is intended to be the
-> last one, and is itself slated for a native Rust HTML/CSS/JS renderer. Until
-> a step ships, the dependency it replaces is still required above.
+The `web` image is based on **Debian bookworm**. All PDF, OCR, Office
+conversion, font processing, and HTML rendering run inside the in-house
+**[gigapdf-lib](https://github.com/QrCommunication/gigapdf-lib)** Rust →
+WASM engine — no third-party system binaries required.
 
 > ⚠️ **Self-hosters must configure `NEXT_PUBLIC_LEGAL_*` env vars** in
 > `apps/web/.env.local` for LCEN compliance. The web app refuses to start in
@@ -110,15 +98,7 @@ Prerequisites:
 - **Python 3.12** + venv (backend API, `requirements.txt`)
 - **PostgreSQL 17** and **Redis 8**
 
-Install the system dependencies used by the PDF engine (Ubuntu/Debian):
-
-```bash
-sudo apt-get update
-sudo apt-get install -y libreoffice fontforge \
-  tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng
-```
-
-Then build and install:
+Build and install:
 
 ```bash
 git clone https://github.com/QrCommunication/gigapdf.git
@@ -130,9 +110,6 @@ pip install -r requirements.txt
 
 # Frontend (Next.js web + admin + packages)
 pnpm install && pnpm build
-
-# Chromium for HTML → PDF conversions
-pnpm exec playwright install --with-deps chromium
 ```
 
 Run the services behind a reverse proxy. The repository ships systemd units
@@ -197,10 +174,10 @@ The self-hosted version uses the exact same code base.
 - PDF/A conversion
 - OCR — text extraction from scans (fra+eng default) and "searchable PDF"
   mode that adds an invisible text layer to image-only pages
-- Conversion (HTML → PDF, URL → PDF via Playwright; Word, Excel,
-  PowerPoint and OpenDocument ↔ PDF via LibreOffice — import
+- Conversion (HTML → PDF, URL → PDF; Word, Excel, PowerPoint and
+  OpenDocument ↔ PDF — import
   `.doc`/`.docx`/`.xls`/`.xlsx`/`.ppt`/`.pptx`/`.odt`/`.ods`/`.odp`,
-  export DOCX/XLSX/PPTX/ODT/ODP)
+  export DOCX/XLSX/PPTX/ODT/ODP; all processed natively by gigapdf-lib)
 - Sharing (email invitations, public links) and document detail page with
   version history, one-click restore and activity history
 
@@ -238,7 +215,7 @@ apps/
   admin/      Admin dashboard
   mobile/     Expo / React Native app
 packages/
-  pdf-engine/ TypeScript PDF processing (pdfjs-dist + pdf-lib + Playwright)
+  pdf-engine/ TypeScript PDF processing (pdfjs-dist + gigapdf-lib)
   canvas/     Fabric.js editor canvas
   editor/     React editor components
   embed/      Embeddable widget

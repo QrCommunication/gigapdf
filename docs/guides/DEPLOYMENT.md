@@ -99,12 +99,6 @@ sudo apt install -y postgresql-17 postgresql-contrib-17
 # Install Redis 7
 sudo apt install -y redis-server
 
-# Install PDF feature dependencies:
-#   - LibreOffice: DOCX/XLSX/PPTX ↔ PDF conversions
-#   - fontforge: Type1/CFF → TTF conversion (faithful font rendering)
-#   - Tesseract OCR (fra + eng): text extraction from scanned PDFs
-sudo apt install -y libreoffice fontforge \
-  tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng
 ```
 
 ---
@@ -329,9 +323,6 @@ pnpm build:packages
 # Build frontend applications
 pnpm --filter web build
 pnpm --filter admin build
-
-# Chromium for HTML → PDF / URL → PDF conversions
-pnpm exec playwright install --with-deps chromium
 
 # Configure environment
 cp .env.example .env
