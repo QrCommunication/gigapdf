@@ -197,15 +197,9 @@ export default function DocsContent() {
             ))}
           </ul>
 
-          {/* System deps */}
-          <p className="text-sm font-medium mb-2">{t("selfhost.native.sysdepsTitle")}</p>
-          <p className="text-sm text-muted-foreground mb-3">{t("selfhost.native.sysdepsNote")}</p>
-          <div className="font-mono text-sm bg-muted/50 rounded-lg p-4 overflow-x-auto whitespace-pre mb-3 not-prose">
-            <span className="text-terminal-green">$</span> sudo apt install -y libreoffice fontforge
-          </div>
-          <div className="font-mono text-sm bg-muted/50 rounded-lg p-4 overflow-x-auto whitespace-pre mb-6 not-prose">
-            <span className="text-terminal-green">$</span> pnpm exec playwright install --with-deps chromium
-          </div>
+          {/* No system binaries needed: the WASM engine (gigapdf-lib) is
+              self-contained for Office/HTML/OCR/font work — no LibreOffice,
+              fontforge or Chromium to install. */}
 
           {/* Backend */}
           <h4 className="font-semibold mb-2">{t("selfhost.native.backendTitle")}</h4>

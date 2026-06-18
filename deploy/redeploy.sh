@@ -113,53 +113,11 @@ if ! \$SKIP_INSTALL; then
   pnpm install --frozen-lockfile --prefer-offline
 fi
 
-# ── 2.4-pre Ensure libreoffice is installed (Office <-> PDF conversion) ──
-# Idempotent: apt-get install no-ops if already at latest. Required for the
-# convertOfficeToPdf / convertPdfToOffice functions in pdf-engine. The four
-# packages cover Writer (docx), Calc (xlsx) and Impress (pptx). The headless
-# mode needs no display server.
-section "Ensuring libreoffice is installed"
-if ! command -v soffice >/dev/null 2>&1; then
-  sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
-  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y libreoffice-core libreoffice-writer libreoffice-calc libreoffice-impress 2>&1 | tail -3
-  echo "  libreoffice installed: \$(soffice --version 2>&1 | head -1)"
-else
-  echo "  libreoffice already present: \$(soffice --version 2>&1 | head -1)"
-fi
-
-# ── 2.4a Ensure fontforge is installed (Type1/CFF→TTF font conversion) ──
-# Idempotent: apt-get install no-ops if already at latest. Required so the
-# pdf-engine bake pipeline can fall back to a fontforge subprocess for Type1
-# / CFF embedded fonts that fontkit cannot ingest natively. Without this the
-# bake silently downgrades edited text to a bundled OFL font instead of
-# preserving the source typography.
-section "Ensuring fontforge is installed"
-if ! command -v fontforge >/dev/null 2>&1; then
-  sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
-  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y fontforge 2>&1 | tail -3
-  echo "  fontforge installed: \$(fontforge --version 2>&1 | head -1)"
-else
-  echo "  fontforge already present: \$(fontforge --version 2>&1 | head -1)"
-fi
-
-# ── 2.4b Ensure Playwright Chromium is installed (HTML→PDF conversion) ──
-# Idempotent: playwright install only downloads if the version isn't present.
-# We install under \$VPS_PATH/.cache so the service user can read it without
-# hitting root-owned directories.
-section "Ensuring Playwright Chromium is available"
-export PLAYWRIGHT_BROWSERS_PATH="\$VPS_PATH/.cache/ms-playwright"
-mkdir -p "\$PLAYWRIGHT_BROWSERS_PATH"
-if pnpm exec playwright install chromium 2>&1 | tail -3; then
-  echo "  chromium ready at \$PLAYWRIGHT_BROWSERS_PATH"
-else
-  echo "  [warn] playwright install failed (HTML→PDF convert may 500 until installed manually)"
-fi
-
-# Also persist the env var in /opt/gigapdf/.env so gigapdf-web picks it up.
-if [ -f "\$VPS_PATH/.env" ] && ! sudo grep -q '^PLAYWRIGHT_BROWSERS_PATH=' "\$VPS_PATH/.env"; then
-  echo "PLAYWRIGHT_BROWSERS_PATH=\$PLAYWRIGHT_BROWSERS_PATH" | sudo tee -a "\$VPS_PATH/.env" >/dev/null
-  echo "  added PLAYWRIGHT_BROWSERS_PATH to .env"
-fi
+# ── 2.4-pre (removed) No third-party binaries required ───────────────────
+# The WASM engine (gigapdf-lib) handles Office<->PDF, HTML/URL->PDF, OCR and
+# font embedding/conversion entirely in-process: the app calls officeToPdf /
+# htmlRender / the native font embedder, never a subprocess. The former
+# libreoffice / fontforge / Playwright-Chromium installs are therefore gone.
 
 # ── 2.4c Apply manual SQL migrations ─────────────────────────────────────
 # We don't run \`prisma db push\` here because Prisma's introspection has
