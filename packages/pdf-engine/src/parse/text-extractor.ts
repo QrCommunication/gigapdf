@@ -199,6 +199,11 @@ function runToTextElement(run: TextElementInfo, pageHeight: number): TextElement
   return {
     elementId: randomUUID(),
     type: 'text',
+    // The engine text-run index drives true in-place editing downstream
+    // (`replaceText`/`moveElement`/`removeElement`). A negative sentinel marks
+    // FORM-XObject text the engine cannot edit in place — keep it as-is so the
+    // apply pipeline recognises it as non-editable and falls back to redact+add.
+    index: run.index,
     bounds: {
       x: run.x,
       y: pageHeight - run.y - run.height,
