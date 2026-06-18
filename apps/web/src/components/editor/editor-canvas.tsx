@@ -16,6 +16,9 @@ import type {
 } from "@giga-pdf/types";
 import type { Canvas as FabricCanvas, FabricObject } from "fabric";
 import { clientLogger } from "@/lib/client-logger";
+// Shared PDF-background builder — the same index-0 FabricImage construction the
+// continuous-view PageCanvasHost uses, so the logic lives in one place.
+import { addPdfBackground, backgroundRenderScale } from "./lib/pdf-background";
 
 /** Zoom hard bounds (10% – 800%) shared by wheel, toolbar and fit modes. */
 const MIN_ZOOM = 0.1;
@@ -2725,7 +2728,7 @@ export function EditorCanvas({
             await renderer.loadDocument(arrayBuffer);
             // Rendre à une résolution plus élevée (HiDPI) pour un rendu net,
             // puis réduire l'image via scaleX/scaleY pour garder les dimensions PDF correctes.
-            const renderScale = Math.min(window.devicePixelRatio || 2, 3);
+            const renderScale = backgroundRenderScale(window.devicePixelRatio);
             const dataUrl = await renderer.renderPageToDataURL(pageData.pageNumber, {
               scale: renderScale,
               // Render PDF natively (text + paths). The Fabric overlay above
@@ -2736,25 +2739,9 @@ export function EditorCanvas({
             });
             renderer.dispose();
 
-            const bgImg = await fabricModule.FabricImage.fromURL(dataUrl);
-            bgImg.set({
-              left: 0,
-              top: 0,
-              // Fabric v6 defaults originX/Y to 'center'. Without forcing
-              // 'left'/'top' the image is centred on (0, 0) and only its
-              // bottom-right quadrant lands inside the canvas — producing
-              // the "PDF appears as fragments" visual bug.
-              originX: "left",
-              originY: "top",
-              scaleX: 1 / renderScale,
-              scaleY: 1 / renderScale,
-              selectable: false,
-              evented: false,
-              hasControls: false,
-              hasBorders: false,
-            });
-            (bgImg as FabricObjectWithData).data = { isPdfBackground: true };
-            canvas.add(bgImg); // canvas est vide ici → bgImg est à l'index 0
+            // Build the index-0 PDF-background image via the shared helper
+            // (same construction as the continuous-view PageCanvasHost).
+            await addPdfBackground(canvas, fabricModule, dataUrl, renderScale);
           }
         } catch (e) {
           clientLogger.warn("[EditorCanvas] Could not render PDF background:", e);
