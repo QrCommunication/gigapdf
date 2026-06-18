@@ -105,6 +105,27 @@ describe("useOperationsStore", () => {
     expect(op?.oldBounds).toEqual(BOUNDS);
   });
 
+  it("queueDelete threads the engine run index into the op payload", () => {
+    const store = useOperationsStore.getState();
+    store.queueDelete(2, "run-id" as UUID, BOUNDS, 7);
+
+    const [op] = useOperationsStore.getState().peek();
+    // index flows through so apply-operations can fire in-place removeElement.
+    expect((op?.element as { index?: number }).index).toBe(7);
+  });
+
+  it("queueDelete omits index entirely when not provided", () => {
+    const store = useOperationsStore.getState();
+    store.queueDelete(3, "added-id" as UUID, BOUNDS);
+
+    const [op] = useOperationsStore.getState().peek();
+    // No index key at all (not `undefined`) — added/non-text elements must
+    // stay on the engine's redact+add fallback.
+    expect(Object.prototype.hasOwnProperty.call(op?.element, "index")).toBe(
+      false,
+    );
+  });
+
   it("handles rapid enqueue/drain cycles without losing ops", () => {
     const store = useOperationsStore.getState();
     for (let i = 0; i < 100; i++) {
