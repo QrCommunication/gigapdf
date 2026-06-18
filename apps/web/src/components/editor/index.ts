@@ -32,3 +32,12 @@ export type { MetadataDialogProps } from "./metadata-dialog";
 export { ConvertDialog } from "./convert-dialog";
 export { ContentEditLayer } from "./content-edit-layer";
 export type { ContentEditLayerProps, ElementModification } from "./content-edit-layer";
+
+export { ContinuousPageView } from "./continuous-page-view";
+export type {
+  ContinuousPageViewProps,
+  ContinuousPageViewHandle,
+  ScrollAlign,
+} from "./continuous-page-view";
+export { PageSlot } from "./page-slot";
+export type { PageSlotProps } from "./page-slot";

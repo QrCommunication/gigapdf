@@ -1284,6 +1284,8 @@
       "zoomOut": "Zoom arrière",
       "fitWidth": "Ajuster à la largeur",
       "fitPage": "Ajuster à la page",
+      "viewModeSingle": "Page unique",
+      "viewModeContinuous": "Défilement continu",
       "rotate": "Pivoter",
       "addPage": "Ajouter une page",
       "deletePage": "Supprimer la page",

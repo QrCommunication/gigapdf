@@ -63,6 +63,8 @@ import {
   CalendarDays,
   Maximize,
   MoveHorizontal,
+  Rows3,
+  RectangleVertical,
 } from "lucide-react";
 import { MergeDialog } from "./merge-dialog";
 import { SplitDialog } from "./split-dialog";
@@ -121,6 +123,10 @@ export interface EditorToolbarProps {
   fieldKind?: FieldCreationKind;
   /** Callback pour changer la variante de création du champ */
   onFieldKindChange?: (fieldKind: FieldCreationKind) => void;
+  /** Mode d'affichage des pages : page unique ou défilement continu. */
+  viewMode?: "single" | "continuous";
+  /** Callback pour basculer le mode d'affichage. */
+  onViewModeChange?: (mode: "single" | "continuous") => void;
   /** Mode de zoom adaptatif actif (page / largeur / null = manuel) */
   fitMode?: "page" | "width" | null;
   /** Ajuster la page entière au viewport (Ctrl+0) */
@@ -393,6 +399,8 @@ export function EditorToolbar({
   onAnnotationTypeChange,
   fieldKind = "text",
   onFieldKindChange,
+  viewMode = "continuous",
+  onViewModeChange,
   fitMode = null,
   onFitPage,
   onFitWidth,
@@ -868,9 +876,34 @@ export function EditorToolbar({
         </>
       )}
 
+      {/* View mode — défilement continu (toutes les pages) vs page unique.
+          Anchored to the right cluster (ml-auto) just before the zoom group. */}
+      {onViewModeChange && (
+        <>
+          <div className="ml-auto flex items-center gap-1">
+            <ToolButton
+              icon={<RectangleVertical size={20} />}
+              label={t("viewModeSingle")}
+              isActive={viewMode === "single"}
+              onClick={() => onViewModeChange("single")}
+            />
+            <ToolButton
+              icon={<Rows3 size={20} />}
+              label={t("viewModeContinuous")}
+              isActive={viewMode === "continuous"}
+              onClick={() => onViewModeChange("continuous")}
+            />
+          </div>
+          <Separator />
+        </>
+      )}
+
       {/* Zoom — boutons ± à pas multiplicatif + menu presets/ajustements.
           Le bouton central affiche TOUJOURS la valeur courante (y compris
-          un zoom arbitraire issu de la molette ou d'un mode fit). */}
+          un zoom arbitraire issu de la molette ou d'un mode fit). `ml-auto`
+          ancre le cluster à droite quand le toggle de vue est absent ; quand
+          il est présent, le toggle (ml-auto, en premier) gagne l'espace et le
+          zoom se cale juste après lui. */}
       <div className="flex items-center gap-1 ml-auto">
         <ToolButton
           icon={<ZoomOut size={20} />}
