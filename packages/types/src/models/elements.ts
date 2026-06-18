@@ -50,6 +50,18 @@ export interface TextElement extends ElementBase {
   // Link support for clickable text
   linkUrl: string | null;
   linkPage: number | null;
+  /**
+   * Engine text-run index (from `GigaPdfDoc.textElements().index`) enabling
+   * true in-place editing via `replaceText` / `moveElement` / `removeElement`.
+   *
+   * Present only for runs surfaced by the per-run extractor
+   * (`extractTextElementsByPage`). Absent — or `< 0` (a sentinel the engine
+   * uses for FORM-XObject text it cannot edit in place) — means the run is not
+   * directly editable in place; the apply pipeline falls back to redact + add.
+   * Coalesced text blocks span multiple runs and therefore carry no single
+   * index.
+   */
+  index?: number;
 }
 
 // ============= Image Element =============
@@ -84,6 +96,17 @@ export interface ImageElement extends ElementBase {
   source: ImageSource;
   style: ImageStyle;
   crop: ImageCrop | null;
+  /**
+   * Engine element index (from `GigaPdfDoc.imageElements().index`) for future
+   * in-place `moveElement` / `removeElement` support.
+   *
+   * NOTE: the image extractor does not populate this yet — it derives a
+   * synthetic positional `img_{n}` resource name instead, so this field is
+   * currently always absent and the apply pipeline always uses the redact + add
+   * fallback for images. Reserved so the contract is ready once the extractor
+   * plumbs the real `ImageElementInfo.index`.
+   */
+  index?: number;
 }
 
 // ============= Shape Element =============
@@ -110,6 +133,16 @@ export interface ShapeElement extends ElementBase {
   shapeType: ShapeType;
   geometry: ShapeGeometry;
   style: ShapeStyle;
+  /**
+   * Engine element index (from `GigaPdfDoc.vectorPaths().index`) for future
+   * in-place `moveElement` / `removeElement` support.
+   *
+   * NOTE: the drawing extractor does not populate this yet — it assigns a random
+   * `elementId` instead, so this field is currently always absent and the apply
+   * pipeline always uses the redact + add fallback for shapes. Reserved so the
+   * contract is ready once the extractor plumbs the real `VectorPathInfo.index`.
+   */
+  index?: number;
 }
 
 // ============= Annotation Element =============
