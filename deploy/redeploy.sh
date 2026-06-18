@@ -107,10 +107,17 @@ rm -rf .turbo
 find apps packages -maxdepth 3 -type d -name '.turbo' -exec rm -rf {} + 2>/dev/null || true
 rm -rf apps/web/.next apps/admin/.next
 
-# ── 2.4 Install deps (frozen lockfile) ───────────────────────────────────
+# ── 2.4 Install deps — DEMO: always track the newest gigapdf-lib ─────────
+# This app is a living demonstration of @qrcommunication/gigapdf-lib and
+# co-evolves with it, so its package.json pins the lib to the "latest" dist-tag
+# (majors included). A NON-frozen install is therefore deliberate here: it
+# re-resolves "latest" to the newest published lib on every deploy. The build
+# step below is the gate — a breaking lib change fails the build and aborts the
+# deploy, so prod stays on the previous release rather than shipping broken.
+# (This is the documented exception to the usual --frozen-lockfile rule.)
 if ! \$SKIP_INSTALL; then
-  section "Installing pnpm deps (frozen lockfile)"
-  pnpm install --frozen-lockfile --prefer-offline
+  section "Installing pnpm deps (tracking latest gigapdf-lib)"
+  pnpm install --no-frozen-lockfile
 fi
 
 # ── 2.4-pre (removed) No third-party binaries required ───────────────────
