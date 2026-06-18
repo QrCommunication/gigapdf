@@ -11,6 +11,7 @@ import type {
   Element,
   TextStyle,
 } from "@giga-pdf/types";
+import type { RulerUnit } from "@giga-pdf/editor";
 import { FontPicker } from "@giga-pdf/ui";
 import {
   MousePointer2,
@@ -65,6 +66,7 @@ import {
   MoveHorizontal,
   Rows3,
   RectangleVertical,
+  Ruler,
 } from "lucide-react";
 import { MergeDialog } from "./merge-dialog";
 import { SplitDialog } from "./split-dialog";
@@ -127,6 +129,14 @@ export interface EditorToolbarProps {
   viewMode?: "single" | "continuous";
   /** Callback pour basculer le mode d'affichage. */
   onViewModeChange?: (mode: "single" | "continuous") => void;
+  /** Règles (horizontale + verticale) visibles. */
+  showRulers?: boolean;
+  /** Callback pour afficher/masquer les règles. */
+  onToggleRulers?: () => void;
+  /** Unité d'affichage des règles (px/mm/cm/in/pt). */
+  rulerUnit?: RulerUnit;
+  /** Callback pour changer l'unité des règles. */
+  onRulerUnitChange?: (unit: RulerUnit) => void;
   /** Mode de zoom adaptatif actif (page / largeur / null = manuel) */
   fitMode?: "page" | "width" | null;
   /** Ajuster la page entière au viewport (Ctrl+0) */
@@ -382,6 +392,15 @@ function getFontValueFromFamily(family: string): string {
 // Available font sizes
 const FONT_SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72];
 
+/** Ruler unit cycle order (the unit button steps through these in turn). */
+const RULER_UNIT_CYCLE: readonly RulerUnit[] = ["mm", "cm", "in", "pt", "px"];
+
+/** The unit following `unit` in {@link RULER_UNIT_CYCLE} (wraps around). */
+function nextRulerUnit(unit: RulerUnit): RulerUnit {
+  const i = RULER_UNIT_CYCLE.indexOf(unit);
+  return RULER_UNIT_CYCLE[(i + 1) % RULER_UNIT_CYCLE.length] ?? "mm";
+}
+
 export function EditorToolbar({
   activeTool,
   onToolChange,
@@ -401,6 +420,10 @@ export function EditorToolbar({
   onFieldKindChange,
   viewMode = "continuous",
   onViewModeChange,
+  showRulers = false,
+  onToggleRulers,
+  rulerUnit = "mm",
+  onRulerUnitChange,
   fitMode = null,
   onFitPage,
   onFitWidth,
@@ -893,6 +916,36 @@ export function EditorToolbar({
               isActive={viewMode === "continuous"}
               onClick={() => onViewModeChange("continuous")}
             />
+          </div>
+          <Separator />
+        </>
+      )}
+
+      {/* Rulers — toggle the horizontal/vertical rulers; when on, a button
+          cycles the display unit. Right-aligns on its own only when the view
+          toggle (which already grabbed `ml-auto`) is absent. */}
+      {onToggleRulers && (
+        <>
+          <div
+            className={`flex items-center gap-1 ${onViewModeChange ? "" : "ml-auto"}`}
+          >
+            <ToolButton
+              icon={<Ruler size={20} />}
+              label={t("rulers")}
+              isActive={showRulers}
+              onClick={() => onToggleRulers()}
+            />
+            {showRulers && onRulerUnitChange ? (
+              <ToolButton
+                icon={
+                  <span className="text-xs font-medium uppercase">
+                    {rulerUnit}
+                  </span>
+                }
+                label={t("rulerUnit")}
+                onClick={() => onRulerUnitChange(nextRulerUnit(rulerUnit))}
+              />
+            ) : null}
           </div>
           <Separator />
         </>

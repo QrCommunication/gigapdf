@@ -23,8 +23,13 @@ import React from "react";
 import type { PageObject } from "@giga-pdf/types";
 import { PageChrome } from "./page-chrome";
 import { PageCanvasHost } from "./page-canvas-host";
+import { PageMarginGuides } from "./page-margin-guides";
+import { PageRulers } from "./page-rulers";
+import { effectivePagePoints } from "./lib/page-layout";
+import type { PageMargins } from "./lib/page-margins";
 import type { PageRenderPool } from "./lib/page-render-pool";
 import type { PageSlot as PageSlotGeometry } from "./lib/page-layout";
+import type { RulerUnit } from "./lib/ruler-ticks";
 
 export interface PageSlotProps {
   /** The page to render. */
@@ -41,6 +46,17 @@ export interface PageSlotProps {
   isActive: boolean;
   /** Shared canvas + background-render pool. */
   pool: PageRenderPool;
+  /** Show the rulers (active page only). */
+  showRulers?: boolean;
+  /** Ruler display unit. */
+  rulerUnit?: RulerUnit;
+  /**
+   * This page's margins (PDF points), or `null` if unknown / not loaded yet.
+   * Draggable margin guides render only when present AND the page is active.
+   */
+  margins?: PageMargins | null;
+  /** Commit new margins (PDF points) for THIS page after a guide is dropped. */
+  onMarginsCommit?: (index: number, margins: PageMargins) => void;
   /** Click into the page body → caller sets the active page. */
   onActivate?: (index: number) => void;
   /** Forwarded to the canvas host once the page finishes rendering. */
@@ -62,10 +78,27 @@ function PageSlotImpl({
   isVisible,
   isActive,
   pool,
+  showRulers = false,
+  rulerUnit = "mm",
+  margins,
+  onMarginsCommit,
   onActivate,
   onReady,
   onDispose,
 }: PageSlotProps) {
+  // Draggable margin guides only on the active page, once its margins are known.
+  // Restricted to un-rotated pages: the engine's margins refer to the page's own
+  // (un-rotated) box, so on a 90/180/270 page the sides wouldn't line up with the
+  // rendered sheet — better no guides than wrong ones.
+  const showGuides =
+    isActive &&
+    margins != null &&
+    onMarginsCommit !== undefined &&
+    page.dimensions.rotation === 0;
+  // Rulers anchor to the active page; convert its rotated box to displayed points.
+  const showPageRulers = isActive && showRulers;
+  const pts = effectivePagePoints(page);
+
   return (
     <div
       className="absolute left-0 right-0 flex justify-center"
@@ -97,6 +130,23 @@ function PageSlotImpl({
             pageNumber={page.pageNumber}
           />
         )}
+        {showPageRulers ? (
+          <PageRulers
+            pageWidthPts={pts.w}
+            pageHeightPts={pts.h}
+            zoom={zoom}
+            unit={rulerUnit}
+          />
+        ) : null}
+        {showGuides ? (
+          <PageMarginGuides
+            width={slot.width}
+            height={slot.height}
+            zoom={zoom}
+            margins={margins}
+            onCommit={(m) => onMarginsCommit(index, m)}
+          />
+        ) : null}
       </PageChrome>
     </div>
   );

@@ -44,6 +44,8 @@ import { clientLogger } from "@/lib/client-logger";
 import { PageSlot } from "./page-slot";
 import { PageRenderPool } from "./lib/page-render-pool";
 import { computePageLayout, pageIndexAtScroll } from "./lib/page-layout";
+import { readAllPageMargins, type PageMargins } from "./lib/page-margins";
+import type { RulerUnit } from "./lib/ruler-ticks";
 
 /** Pages of buffer kept mounted on each side of the visible window. */
 const BUFFER_PAGES = 2;
@@ -73,6 +75,15 @@ export interface ContinuousPageViewProps {
   activePageIndex: number;
   /** Click into a page → caller updates the active page (+ selection store). */
   onActivatePage: (index: number) => void;
+  /** Show the horizontal + vertical rulers along the page edges. */
+  showRulers?: boolean;
+  /** Display unit for the rulers (px/mm/cm/in/pt). Defaults to "mm". */
+  rulerUnit?: RulerUnit;
+  /**
+   * Commit new margins (PDF points) for a page after its margin guide is
+   * dropped. When omitted, the draggable margin guides are not rendered.
+   */
+  onMarginsCommit?: (index: number, margins: PageMargins) => void;
 }
 
 /**
@@ -80,7 +91,16 @@ export interface ContinuousPageViewProps {
  * visibility, focus and scroll telemetry; owns the shared {@link PageRenderPool}.
  */
 function ContinuousPageViewImpl(
-  { pages, zoom, pdfFile, activePageIndex, onActivatePage }: ContinuousPageViewProps,
+  {
+    pages,
+    zoom,
+    pdfFile,
+    activePageIndex,
+    onActivatePage,
+    showRulers = false,
+    rulerUnit = "mm",
+    onMarginsCommit,
+  }: ContinuousPageViewProps,
   ref: React.ForwardedRef<ContinuousPageViewHandle>,
 ) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -117,9 +137,14 @@ function ContinuousPageViewImpl(
   // ── Shared render pool, rebuilt when the PDF binary changes ────────────────
   const [pool, setPool] = useState<PageRenderPool | null>(null);
 
+  // Per-page margins (PDF points), read from the binary; drives the draggable
+  // guides. `null` entries (or a missing index) → no guides for that page.
+  const [pageMargins, setPageMargins] = useState<Array<PageMargins | null>>([]);
+
   useEffect(() => {
     if (!pdfFile) {
       setPool(null);
+      setPageMargins([]);
       return;
     }
     let cancelled = false;
@@ -133,6 +158,19 @@ function ContinuousPageViewImpl(
         }
         created = new PageRenderPool({ pdfBytes: bytes });
         setPool(created);
+        // Read margins off the same bytes (cheap: opens one short-lived doc on
+        // the already-loaded engine). Failure is non-fatal — just no guides.
+        try {
+          const margins = await readAllPageMargins(bytes);
+          if (!cancelled) {
+            setPageMargins(margins);
+          }
+        } catch (err) {
+          clientLogger.warn("[ContinuousPageView] margin read failed:", err);
+          if (!cancelled) {
+            setPageMargins([]);
+          }
+        }
       } catch (err) {
         clientLogger.warn("[ContinuousPageView] pool init failed:", err);
       }
@@ -372,6 +410,7 @@ function ContinuousPageViewImpl(
           if (!slot) {
             return null;
           }
+          const isActive = index === activePageIndex;
           return (
             <React.Fragment key={page.pageId}>
               {/* Zero-size IO sentinel positioned at the slot top. */}
@@ -395,10 +434,14 @@ function ContinuousPageViewImpl(
                   // ~SETTLE_MS after the scroll stops.
                   isVisible={
                     visiblePages.has(index) &&
-                    (!isFastScrolling || index === activePageIndex)
+                    (!isFastScrolling || isActive)
                   }
-                  isActive={index === activePageIndex}
+                  isActive={isActive}
                   pool={pool}
+                  showRulers={showRulers}
+                  rulerUnit={rulerUnit}
+                  margins={pageMargins[index] ?? null}
+                  {...(onMarginsCommit ? { onMarginsCommit } : {})}
                   onActivate={onActivatePage}
                 />
               ) : null}

@@ -42,6 +42,16 @@ async function getEngine(): Promise<GigaPdfEngine> {
   return _enginePromise;
 }
 
+/**
+ * Get the shared, lazily-loaded GigaPDF engine (the single wasm instance used
+ * for page rasterisation). Exposed so other editor features — e.g. reading or
+ * writing page margins — can open their own short-lived `GigaPdfDoc` on the
+ * same engine instead of loading a second wasm module.
+ */
+export function loadPdfEngine(): Promise<GigaPdfEngine> {
+  return getEngine();
+}
+
 /** Encode raw PNG bytes as a `data:image/png;base64,…` URL (any size). */
 function pngToDataUrl(png: Uint8Array): Promise<string> {
   const blob = new Blob([png], { type: "image/png" });
