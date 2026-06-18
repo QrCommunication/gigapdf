@@ -50,6 +50,10 @@ export interface UIStore extends UIState {
   setShowFormsPanel: (show: boolean) => void;
   toggleContentEdit: () => void;
   setContentEditActive: (active: boolean) => void;
+  /** Toggle Word-style running headers & footers on/off for the document. */
+  toggleHeadersFooters: () => void;
+  /** Set the Word-style headers & footers enabled flag explicitly. */
+  setHeadersFootersEnabled: (enabled: boolean) => void;
 
   reset: () => void;
 }
@@ -67,6 +71,7 @@ const initialState: UIState = {
   contextMenu: null,
   showFormsPanel: false,
   isContentEditActive: false,
+  headersFootersEnabled: false,
 };
 
 export const useUIStore: UseBoundStore<StoreApi<UIStore>> = create<UIStore>()(
@@ -211,6 +216,16 @@ export const useUIStore: UseBoundStore<StoreApi<UIStore>> = create<UIStore>()(
     setContentEditActive: (active) =>
       set((state) => {
         state.isContentEditActive = active;
+      }),
+
+    toggleHeadersFooters: () =>
+      set((state) => {
+        state.headersFootersEnabled = !state.headersFootersEnabled;
+      }),
+
+    setHeadersFootersEnabled: (enabled) =>
+      set((state) => {
+        state.headersFootersEnabled = enabled;
       }),
 
     reset: () => set(initialState),

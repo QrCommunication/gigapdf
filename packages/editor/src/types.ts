@@ -213,6 +213,12 @@ export interface UIState {
   // Editor-specific UI modes
   showFormsPanel: boolean;
   isContentEditActive: boolean;
+  /**
+   * Word-style running headers & footers turned on for the document. When on,
+   * the editor manages header/footer bands (and the dialog is enabled); when
+   * off, all bands are cleared from the PDF.
+   */
+  headersFootersEnabled: boolean;
 }
 
 export interface Notification {
