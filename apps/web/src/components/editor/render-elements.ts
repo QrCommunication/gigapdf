@@ -41,6 +41,12 @@ export interface ElementObjectData {
   elementId: string;
   elementType: string;
   isPdfBackground?: boolean;
+  // Engine text-run index (TextElement.index) — survives parse → Fabric →
+  // operation payload so apply-operations can fire the TRUE in-place edit
+  // (replaceText/moveElement/removeElement) instead of redact+add. Undefined
+  // for added/form/non-text elements (engine falls back to redact+add), and
+  // a `< 0` sentinel for FORM-XObject text the engine cannot edit in place.
+  index?: number;
   // Champs supplémentaires selon le type d'élément
   originalFont?: string | null;
   fieldName?: string;
@@ -83,6 +89,10 @@ function buildCommonProps(
     data: {
       elementId: element.elementId,
       elementType: element.type,
+      // Carry the engine run index through to the Fabric object. Only text/
+      // image/shape elements have one; for the rest it stays undefined, which
+      // is exactly what apply-operations needs to keep using redact+add.
+      index: (element as { index?: number }).index,
     } satisfies ElementObjectData,
   };
 }

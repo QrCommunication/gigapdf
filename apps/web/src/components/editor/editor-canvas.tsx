@@ -872,6 +872,12 @@ export function EditorCanvas({
           ocrConfidence: null,
           linkUrl: (data?.linkUrl as string) || null,
           linkPage: (data?.linkPage as number) || null,
+          // Carry the ORIGINAL engine run index (stamped onto data by the
+          // renderer for parsed runs) so an edited text run keeps its in-place
+          // identity: apply-operations uses it to fire replaceText/moveElement
+          // instead of redact+add. Never regenerated — newly-added text has no
+          // index in data, so this stays undefined and falls back to add.
+          index: data?.index as number | undefined,
         };
       }
 

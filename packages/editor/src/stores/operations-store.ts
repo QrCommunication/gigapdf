@@ -19,6 +19,14 @@ export type ElementOperationAction = "add" | "update" | "delete";
 export interface ElementOperation {
   action: ElementOperationAction;
   pageNumber: number;
+  /**
+   * For add/update: the full Element (carries `index` for parsed text runs).
+   * For delete: `{ elementId, bounds, index? }` — `index` is the engine
+   * text-run index, threaded through so apply-operations can fire the TRUE
+   * in-place `removeElement` instead of redact+add. Absent / `< 0` (a sentinel
+   * the engine uses for FORM-XObject text) means the delete falls back to
+   * redact + add — handled entirely by the engine, never special-cased here.
+   */
   element: Element | Record<string, unknown>;
   oldBounds?: Bounds;
 }
@@ -34,8 +42,17 @@ export interface OperationsStore {
     element: Element,
     oldBounds: Bounds,
   ) => void;
-  /** Queue a delete op. Bounds tell the renderer what region to clear. */
-  queueDelete: (pageNumber: number, elementId: UUID, bounds: Bounds) => void;
+  /**
+   * Queue a delete op. Bounds tell the renderer what region to clear.
+   * `index` (engine text-run index, when known) enables the in-place
+   * `removeElement` path; omit it for added/non-text elements.
+   */
+  queueDelete: (
+    pageNumber: number,
+    elementId: UUID,
+    bounds: Bounds,
+    index?: number,
+  ) => void;
 
   /** Retrieve and clear all pending operations (consumed during save). */
   drain: () => ElementOperation[];
@@ -73,12 +90,16 @@ export const useOperationsStore: UseBoundStore<StoreApi<OperationsStore>> =
           });
         }),
 
-      queueDelete: (pageNumber, elementId, bounds) =>
+      queueDelete: (pageNumber, elementId, bounds, index) =>
         set((state) => {
           state.operations.push({
             action: "delete",
             pageNumber,
-            element: { elementId, bounds },
+            element: {
+              elementId,
+              bounds,
+              ...(index !== undefined ? { index } : {}),
+            },
             oldBounds: bounds,
           });
         }),

@@ -1112,10 +1112,15 @@ export default function EditorPage() {
       deselectElement(elementId);
       const pageNumber = currentPageIndex + 1;
 
-      // Best-effort bounds lookup before the element is gone.
+      // Best-effort bounds lookup before the element is gone. Thread the
+      // engine run index (present on parsed text runs in the scene graph) so
+      // apply-operations can fire the TRUE in-place removeElement instead of
+      // redact+add. Undefined for added/non-text elements — the engine then
+      // falls back to redact+add on its own.
       const removed = currentPage?.elements.find((e) => e.elementId === elementId);
       if (removed) {
-        queueDelete(pageNumber, elementId as UUID, removed.bounds);
+        const removedIndex = (removed as { index?: number }).index;
+        queueDelete(pageNumber, elementId as UUID, removed.bounds, removedIndex);
       }
 
       // Mirror the removal in the local scene graph so the Properties
