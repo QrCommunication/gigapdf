@@ -1392,6 +1392,8 @@
         "drawing": "Dessin"
       },
       "text": {
+        "content": "Texte",
+        "contentPlaceholder": "Modifier le texte…",
         "fontFamily": "Police",
         "fontSize": "Taille",
         "color": "Couleur",

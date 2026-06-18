@@ -82,12 +82,29 @@ export const useOperationsStore: UseBoundStore<StoreApi<OperationsStore>> =
 
       queueUpdate: (pageNumber, element, oldBounds) =>
         set((state) => {
-          state.operations.push({
-            action: "update",
-            pageNumber,
-            element,
-            oldBounds,
-          });
+          // Coalesce repeated updates to the same element: keep the FIRST
+          // op's oldBounds (the original pre-edit region to redact) and swap
+          // in the latest element state. Without this, editing one element N
+          // times (font then colour, several textarea commits, repeated
+          // drags) queues N update ops, so the redact+add fallback would draw
+          // the text N times. The in-place replaceText path is last-wins
+          // anyway, so coalescing keeps both paths correct.
+          const existing = state.operations.find(
+            (op) =>
+              op.action === "update" &&
+              op.pageNumber === pageNumber &&
+              (op.element as Element).elementId === element.elementId,
+          );
+          if (existing) {
+            existing.element = element;
+          } else {
+            state.operations.push({
+              action: "update",
+              pageNumber,
+              element,
+              oldBounds,
+            });
+          }
         }),
 
       queueDelete: (pageNumber, elementId, bounds, index) =>

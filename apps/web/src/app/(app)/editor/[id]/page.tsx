@@ -1230,6 +1230,14 @@ export default function EditorPage() {
         if (pages.indexOf(ownerPage) === currentPageIndex) {
           canvasHandle?.applyLocalElementUpdate(merged);
         }
+        // Bake the panel edit into the PDF binary via the operations queue.
+        // Panel edits don't go through the Fabric object:modified path
+        // (applyLocalElementUpdate suppresses events), so they must be queued
+        // explicitly. A content-only change (the text textarea) takes the
+        // engine in-place replaceText path (the element carries its run
+        // index); a style change falls back to redact+add over the original
+        // bounds. queueUpdate coalesces repeated edits to the same element.
+        queueUpdate(pages.indexOf(ownerPage) + 1, merged, existing.bounds);
       }
 
       // Émettre via WebSocket pour la collaboration
@@ -1290,6 +1298,7 @@ export default function EditorPage() {
       currentPageIndex,
       updateElementInPage,
       canvasHandle,
+      queueUpdate,
     ]
   );
 
