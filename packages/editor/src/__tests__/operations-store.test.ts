@@ -48,6 +48,33 @@ describe("useOperationsStore", () => {
     expect(ops[2]?.pageNumber).toBe(3);
   });
 
+  it("coalesces repeated updates to the same element (keeps first oldBounds, latest element)", () => {
+    const store = useOperationsStore.getState();
+    const FIRST_BOUNDS: Bounds = { x: 1, y: 2, width: 3, height: 4 };
+    const LATER_BOUNDS: Bounds = { x: 9, y: 9, width: 9, height: 9 };
+    store.queueUpdate(1, makeTextElement("same"), FIRST_BOUNDS);
+    store.queueUpdate(
+      1,
+      { ...makeTextElement("same"), content: "edited" } as Element,
+      LATER_BOUNDS,
+    );
+
+    const ops = useOperationsStore.getState().peek();
+    expect(ops).toHaveLength(1);
+    expect(ops[0]?.action).toBe("update");
+    expect((ops[0]?.element as { content: string }).content).toBe("edited");
+    // First oldBounds preserved — the original region to redact for the fallback.
+    expect(ops[0]?.oldBounds).toEqual(FIRST_BOUNDS);
+  });
+
+  it("does not coalesce updates to different elements or different pages", () => {
+    const store = useOperationsStore.getState();
+    store.queueUpdate(1, makeTextElement("a"), BOUNDS);
+    store.queueUpdate(1, makeTextElement("b"), BOUNDS); // different element
+    store.queueUpdate(2, makeTextElement("a"), BOUNDS); // same element, other page
+    expect(useOperationsStore.getState().peek()).toHaveLength(3);
+  });
+
   it("drain returns all ops and empties the queue", () => {
     const store = useOperationsStore.getState();
     store.queueAdd(1, makeTextElement("a"));

@@ -769,6 +769,32 @@ export function PropertiesPanel({
   // Render pour élément texte
   const renderTextProperties = (element: TextElement) => (
     <div className="space-y-3">
+      {/* Contenu éditable directement — indépendant du clic sur le canvas
+          (utile quand le hit-target ne couvre pas exactement le texte rendu).
+          Commit au blur → onElementUpdate({ content }) → édition in-place
+          (replaceText) via le même chemin que les autres propriétés. La key
+          réinitialise le textarea quand on change d'élément sélectionné. */}
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">
+          {t("text.content")}
+        </label>
+        <textarea
+          key={element.elementId}
+          defaultValue={element.content ?? ""}
+          onBlur={(e) => {
+            const next = e.target.value;
+            if (next !== (element.content ?? "")) {
+              onElementUpdate?.(element.elementId, {
+                content: next,
+              } as Partial<TextElement>);
+            }
+          }}
+          rows={3}
+          placeholder={t("text.contentPlaceholder")}
+          className="w-full px-2 py-1.5 rounded border bg-background text-sm resize-y"
+        />
+      </div>
+
       <div>
         <label className="text-xs text-muted-foreground block mb-1">
           {t("text.fontFamily")}

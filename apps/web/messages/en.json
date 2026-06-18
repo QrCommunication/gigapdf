@@ -1392,6 +1392,8 @@
         "drawing": "Drawing"
       },
       "text": {
+        "content": "Text",
+        "contentPlaceholder": "Edit the text…",
         "fontFamily": "Font",
         "fontSize": "Size",
         "color": "Color",
