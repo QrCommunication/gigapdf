@@ -61,13 +61,6 @@ class Settings(BaseSettings):
     storage_max_size_gb: int = 100
 
     # -------------------------------------------------------------------------
-    # OCR (Tesseract)
-    # -------------------------------------------------------------------------
-    tesseract_path: str = "/usr/bin/tesseract"
-    tesseract_data_path: str = "/usr/share/tesseract-ocr/5/tessdata"
-    ocr_default_languages: str = "fra+eng"
-
-    # -------------------------------------------------------------------------
     # Celery
     # -------------------------------------------------------------------------
     celery_broker_url: str = "redis://localhost:6379/1"
