@@ -1750,6 +1750,16 @@ export default function EditorPage() {
     [canvasHandle, updateElementInPage, emitElementUpdate, setDirty, saveWithPriority],
   );
 
+  // Sélectionner un élément depuis le panneau calques : le canvas le passe en
+  // objet actif et forwarde la sélection au store + panneau propriétés. Pas de
+  // mutation ni de save — purement une sélection (comme un clic sur le canvas).
+  const handleSelectElementFromLayer = useCallback(
+    (elementId: string) => {
+      canvasHandle?.selectElement(elementId);
+    },
+    [canvasHandle],
+  );
+
   // Handler pour le téléchargement de fichiers embarqués
   const handleDownloadFile = useCallback((file: { dataUrl: string; name: string }) => {
     const link = document.createElement("a");
@@ -2412,6 +2422,7 @@ export default function EditorPage() {
           onNavigateToPage={handleNavigateToPage}
           onElementVisibilityChange={handleElementVisibilityChange}
           onElementLockChange={handleElementLockChange}
+          onElementSelect={handleSelectElementFromLayer}
           onDownloadFile={handleDownloadFile}
           currentPageIndex={currentPageIndex}
         />

@@ -35,6 +35,11 @@ interface LayersPanelProps {
   selectedElementIds?: string[];
   onElementVisibilityChange?: (elementId: string, visible: boolean) => void;
   onElementLockChange?: (elementId: string, locked: boolean) => void;
+  /**
+   * Sélectionner un élément en cliquant sa ligne : surligne l'objet sur le
+   * canvas et ouvre ses propriétés (comportement design-tool standard).
+   */
+  onElementSelect?: (elementId: string) => void;
   className?: string;
 }
 
@@ -79,6 +84,7 @@ export function LayersPanel({
   selectedElementIds = [],
   onElementVisibilityChange,
   onElementLockChange,
+  onElementSelect,
   className,
 }: LayersPanelProps) {
   const t = useTranslations("editor.layers");
@@ -144,9 +150,19 @@ export function LayersPanel({
             return (
               <div
                 key={element.elementId}
+                role={onElementSelect ? "button" : undefined}
+                tabIndex={onElementSelect ? 0 : undefined}
+                onClick={() => onElementSelect?.(element.elementId)}
+                onKeyDown={(e) => {
+                  if (onElementSelect && (e.key === "Enter" || e.key === " ")) {
+                    e.preventDefault();
+                    onElementSelect(element.elementId);
+                  }
+                }}
                 className={cn(
                   "flex items-center gap-1 px-1 py-1 rounded-md text-sm",
                   "hover:bg-accent transition-colors",
+                  onElementSelect && "cursor-pointer",
                   selected && "bg-accent",
                   !visible && "opacity-50",
                 )}
@@ -155,9 +171,10 @@ export function LayersPanel({
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6 shrink-0"
-                  onClick={() =>
-                    onElementVisibilityChange?.(element.elementId, !visible)
-                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onElementVisibilityChange?.(element.elementId, !visible);
+                  }}
                   title={visible ? t("hide") : t("show")}
                   aria-label={visible ? t("hide") : t("show")}
                   aria-pressed={!visible}
@@ -173,9 +190,10 @@ export function LayersPanel({
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6 shrink-0"
-                  onClick={() =>
-                    onElementLockChange?.(element.elementId, !locked)
-                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onElementLockChange?.(element.elementId, !locked);
+                  }}
                   title={locked ? t("unlock") : t("lock")}
                   aria-label={locked ? t("unlock") : t("lock")}
                   aria-pressed={locked}

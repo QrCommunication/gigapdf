@@ -21,6 +21,8 @@ interface DocumentInfoSidebarProps {
   onNavigateToPage?: (pageNumber: number, position?: { x: number; y: number } | null) => void;
   onElementVisibilityChange?: (elementId: string, visible: boolean) => void;
   onElementLockChange?: (elementId: string, locked: boolean) => void;
+  /** Sélectionner un élément en cliquant sa ligne dans le panneau calques. */
+  onElementSelect?: (elementId: string) => void;
   onDownloadFile?: (file: EmbeddedFileObject) => void;
   currentPageIndex?: number;
   className?: string;
@@ -39,6 +41,7 @@ export function DocumentInfoSidebar({
   onNavigateToPage,
   onElementVisibilityChange,
   onElementLockChange,
+  onElementSelect,
   onDownloadFile,
   currentPageIndex,
   className,
@@ -105,6 +108,7 @@ export function DocumentInfoSidebar({
             selectedElementIds={selectedElementIds}
             onElementVisibilityChange={onElementVisibilityChange}
             onElementLockChange={onElementLockChange}
+            onElementSelect={onElementSelect}
           />
 
           {/* Fichiers embarqués */}
