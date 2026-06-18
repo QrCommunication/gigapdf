@@ -40,7 +40,13 @@ pgvector>=0.3.0
 # offline to embed OCR text. The model is downloaded once into
 # FASTEMBED_CACHE_DIR, then cached. (fastembed has no multilingual-e5-small;
 # see app/services/embeddings.py for the model-choice rationale.)
-fastembed>=0.4.0
+# Pinned to the 0.8.x line on purpose: 0.8.0 switched this model to *mean*
+# pooling (the config-correct pooling for this checkpoint; older releases used
+# CLS, which produced different vectors). The pin keeps embedding behaviour —
+# and therefore the vectors already stored in ocr_blocks — reproducible across
+# deploys; a future minor could change pooling again and silently invalidate
+# the index. Server provisioning + caveats: docs/semantic-search-setup.md.
+fastembed>=0.8.0,<0.9
 
 # Authentication
 PyJWT[crypto]>=2.13.0
