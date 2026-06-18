@@ -17,6 +17,7 @@ import {
   useSelectionStore,
   useUIStore,
   useOperationsStore,
+  useViewStore,
 } from "@giga-pdf/editor";
 import {
   ArrowLeft,
@@ -62,7 +63,9 @@ import {
   CollaborationOverlay,
   CollaboratorsList,
   DocumentInfoSidebar,
+  ContinuousPageView,
 } from "@/components/editor";
+import type { ContinuousPageViewHandle } from "@/components/editor";
 import type {
   EditorCanvasHandle,
   TextFormatAction,
@@ -195,6 +198,7 @@ export default function EditorPage() {
     strokeColor,
     fillColor,
     strokeWidth,
+    viewMode,
     setActiveTool,
     setZoom,
     setFitMode,
@@ -204,6 +208,8 @@ export default function EditorPage() {
     setStrokeColor,
     setFillColor,
     setStrokeWidth,
+    setViewMode,
+    setCurrentPage: setCanvasCurrentPage,
   } = useCanvasStore(
     useShallow((s) => ({
       activeTool: s.activeTool,
@@ -215,6 +221,7 @@ export default function EditorPage() {
       strokeColor: s.strokeColor,
       fillColor: s.fillColor,
       strokeWidth: s.strokeWidth,
+      viewMode: s.viewMode,
       setActiveTool: s.setActiveTool,
       setZoom: s.setZoom,
       setFitMode: s.setFitMode,
@@ -224,6 +231,8 @@ export default function EditorPage() {
       setStrokeColor: s.setStrokeColor,
       setFillColor: s.setFillColor,
       setStrokeWidth: s.setStrokeWidth,
+      setViewMode: s.setViewMode,
+      setCurrentPage: s.setCurrentPage,
     }))
   );
 
@@ -240,6 +249,19 @@ export default function EditorPage() {
 
   const handleFitPage = useCallback(() => setFitMode("page"), [setFitMode]);
   const handleFitWidth = useCallback(() => setFitMode("width"), [setFitMode]);
+
+  // View store — active page in the continuous (Word-like) scroller. The
+  // continuous view writes activePageIndex on click; the page-scoped panels
+  // read it (see effectivePageIndex below). Single-page mode ignores it.
+  const { activePageIndex, setActivePageIndex } = useViewStore(
+    useShallow((s) => ({
+      activePageIndex: s.activePageIndex,
+      setActivePageIndex: s.setActivePageIndex,
+    }))
+  );
+
+  // Imperative handle to the continuous scroller (scrollToPage on jumps).
+  const continuousViewRef = useRef<ContinuousPageViewHandle>(null);
 
   // Selection store — selected element ids
   const {
@@ -362,6 +384,58 @@ export default function EditorPage() {
 
   // Client-side thumbnails generated via pdfjs (durable solution — no server roundtrip)
   const thumbnails = usePageThumbnails(currentPdfFile, pages.length, { scale: 0.18 });
+
+  // ── Continuous vs single view ─────────────────────────────────────────────
+  // In continuous mode the page-scoped panels (Properties / Content edit /
+  // Forms / Layers) follow the ACTIVE page (the one the user clicked into),
+  // tracked in the view store. In single mode they follow useDocument's
+  // current page. `effectivePageIndex`/`effectivePage` unify the two so the
+  // panels stay agnostic of the layout mode.
+  const isContinuous = viewMode === "continuous";
+  const effectivePageIndex = useMemo(() => {
+    const raw = isContinuous ? activePageIndex : currentPageIndex;
+    if (pages.length === 0) return 0;
+    return Math.min(Math.max(0, raw), pages.length - 1);
+  }, [isContinuous, activePageIndex, currentPageIndex, pages.length]);
+  const effectivePage = useMemo<PageObject | null>(
+    () => pages[effectivePageIndex] ?? null,
+    [pages, effectivePageIndex]
+  );
+
+  // Activate a page in the continuous scroller: it becomes the focused page
+  // (editable overlay) and drives the page-scoped panels + selection store.
+  // Cheap and idempotent — safe to call on every click.
+  const activatePage = useCallback(
+    (index: number) => {
+      setActivePageIndex(index);
+      setCanvasCurrentPage(index);
+      const page = pages[index];
+      if (page) {
+        // Keep the selection store's page in sync so panel selection logic and
+        // the next element-create target resolve to the right page.
+        selectElements([], page.pageId);
+      }
+    },
+    [setActivePageIndex, setCanvasCurrentPage, pages, selectElements]
+  );
+
+  // Unified page navigation (sidebar / TOC / header / search / keyboard).
+  // Always advances useDocument's pointer; in continuous mode it ALSO focuses
+  // the page and smooth-scrolls it into view.
+  const navigateToPage = useCallback(
+    (index: number, align: "start" | "center" = "start") => {
+      const clamped =
+        pages.length === 0
+          ? 0
+          : Math.min(Math.max(0, index), pages.length - 1);
+      goToPage(clamped);
+      if (isContinuous) {
+        activatePage(clamped);
+        continuousViewRef.current?.scrollToPage(clamped, align);
+      }
+    },
+    [pages.length, goToPage, isContinuous, activatePage]
+  );
 
   // Dynamically load embedded PDF fonts via FontFace API (backed by IndexedDB cache).
   // Maps originalFont names (like "g_d0_f1") to real CSS font-family names,
@@ -874,13 +948,14 @@ export default function EditorPage() {
   const canUndo = canvasHandle?.canUndo() ?? false;
   const canRedo = canvasHandle?.canRedo() ?? false;
 
-  // Éléments sélectionnés
+  // Éléments sélectionnés (sur la page active — = currentPage en mode page
+  // unique, = page focalisée en mode continu).
   const selectedElements = useMemo(() => {
-    if (!currentPage) return [];
-    return currentPage.elements.filter((el) =>
+    if (!effectivePage) return [];
+    return effectivePage.elements.filter((el) =>
       selectedElementIds.includes(el.elementId)
     );
-  }, [currentPage, selectedElementIds]);
+  }, [effectivePage, selectedElementIds]);
 
   // --- Champs de formulaire du document (mode Concevoir) -------------------
   // Liste plate ordonnée page par page : c'est l'ordre dans lequel les
@@ -912,10 +987,12 @@ export default function EditorPage() {
     (elementId: string, pageIndex: number) => {
       const targetPage = pages[pageIndex];
       if (!targetPage) return;
-      if (pageIndex !== currentPageIndex) goToPage(pageIndex);
+      // navigateToPage focuses + scrolls the page (continuous) or moves the
+      // single-page pointer; it clears the selection, so re-select after.
+      if (pageIndex !== effectivePageIndex) navigateToPage(pageIndex, "center");
       selectElements([elementId], targetPage.pageId);
     },
-    [pages, currentPageIndex, goToPage, selectElements],
+    [pages, effectivePageIndex, navigateToPage, selectElements],
   );
 
   // Réordonnancement d'un champ dans l'ordre de bake. Limitation moteur
@@ -1735,10 +1812,11 @@ export default function EditorPage() {
     setContentModifications(modifications);
   }, []);
 
-  // Handler pour la navigation TOC
+  // Handler pour la navigation TOC. pageNumber is 1-indexed; navigateToPage
+  // expects 0-indexed and scrolls the page into view in continuous mode.
   const handleNavigateToPage = useCallback((pageNumber: number) => {
-    goToPage(pageNumber - 1); // pageNumber is 1-indexed, goToPage expects 0-indexed
-  }, [goToPage]);
+    navigateToPage(pageNumber - 1, "start");
+  }, [navigateToPage]);
 
   // Handler pour la visibilité d'un calque (= élément de la page).
   // Décision produit : le masquage est un OUTIL D'ÉDITION uniquement — un
@@ -1820,9 +1898,9 @@ export default function EditorPage() {
         clientLogger.warn("[editor] Invalid hyperlink URL", linkUrl);
       }
     } else if (linkPage) {
-      goToPage(linkPage - 1); // linkPage is 1-indexed
+      navigateToPage(linkPage - 1, "start"); // linkPage is 1-indexed
     }
-  }, [goToPage]);
+  }, [navigateToPage]);
 
   // Handler pour l'ajout d'image
   const handleAddImage = useCallback(() => {
@@ -1933,6 +2011,21 @@ export default function EditorPage() {
         return;
       }
 
+      // Page navigation — PageDown/PageUp always, ArrowDown/ArrowUp only when
+      // nothing is selected (so arrows still nudge a selected element). Routes
+      // through navigateToPage → scrolls into view in continuous mode.
+      const noSelection = selectedElementIds.length === 0;
+      if (e.key === "PageDown" || (e.key === "ArrowDown" && noSelection)) {
+        e.preventDefault();
+        navigateToPage(effectivePageIndex + 1, "start");
+        return;
+      }
+      if (e.key === "PageUp" || (e.key === "ArrowUp" && noSelection)) {
+        e.preventDefault();
+        navigateToPage(effectivePageIndex - 1, "start");
+        return;
+      }
+
       // Tool shortcuts
       if (!cmdOrCtrl && !e.shiftKey && !e.altKey) {
         switch (e.key.toLowerCase()) {
@@ -1996,6 +2089,8 @@ export default function EditorPage() {
     setActiveTool,
     handleManualZoomChange,
     handleFitPage,
+    navigateToPage,
+    effectivePageIndex,
   ]);
 
   // Find the PDF canvas element for content edit background capture
@@ -2039,12 +2134,12 @@ export default function EditorPage() {
     );
   }
 
-  // Informations sur la page actuelle
-  const pageInfo = currentPage
+  // Informations sur la page active (suit la page focalisée en mode continu).
+  const pageInfo = effectivePage
     ? {
-        width: currentPage.dimensions.width,
-        height: currentPage.dimensions.height,
-        rotation: currentPage.dimensions.rotation,
+        width: effectivePage.dimensions.width,
+        height: effectivePage.dimensions.height,
+        rotation: effectivePage.dimensions.rotation,
       }
     : undefined;
 
@@ -2332,6 +2427,22 @@ export default function EditorPage() {
         onAnnotationTypeChange={setAnnotationType}
         fieldKind={fieldKind}
         onFieldKindChange={setFieldKind}
+        viewMode={viewMode}
+        onViewModeChange={(mode) => {
+          if (mode === viewMode) return;
+          setViewMode(mode);
+          if (mode === "continuous") {
+            // Focus the page the user was on and bring it into view once the
+            // scroller has mounted (next frame).
+            activatePage(effectivePageIndex);
+            requestAnimationFrame(() =>
+              continuousViewRef.current?.scrollToPage(effectivePageIndex, "start"),
+            );
+          } else {
+            // Leaving continuous: single-page view follows the active page.
+            goToPage(effectivePageIndex);
+          }
+        }}
         fitMode={fitMode}
         onFitPage={handleFitPage}
         onFitWidth={handleFitWidth}
@@ -2350,8 +2461,9 @@ export default function EditorPage() {
         isContentEditActive={isContentEditActive}
         onToggleContentEdit={handleToggleContentEdit}
         onSearchGoToPage={(pageNumber) => {
-          // Search returns 1-based page numbers; goToPage expects 0-based.
-          goToPage(pageNumber - 1);
+          // Search returns 1-based page numbers; navigateToPage expects 0-based
+          // and scrolls the page into view in continuous mode.
+          navigateToPage(pageNumber - 1, "start");
         }}
         onWatermarkApplied={handleWatermarkApplied}
         onCompressApplied={handleCompressApplied}
@@ -2364,8 +2476,8 @@ export default function EditorPage() {
         {/* Pages sidebar */}
         <PagesSidebar
           pages={pages}
-          currentPageIndex={currentPageIndex}
-          onPageSelect={goToPage}
+          currentPageIndex={effectivePageIndex}
+          onPageSelect={(index) => navigateToPage(index, "start")}
           onPageAdd={handleAddPage}
           onPageDelete={handleDeletePage}
           onPageReorder={handleReorderPages}
@@ -2376,64 +2488,84 @@ export default function EditorPage() {
           thumbnails={thumbnails}
         />
 
-        {/* Canvas */}
+        {/* Canvas — continuous virtualised scroller OR legacy single page.
+            Continuous mode owns its own scroll container, so the <main> does
+            not scroll there; single mode keeps the historical overflow + the
+            mouse-move collaboration cursor tracking. */}
         <main
           ref={canvasRef}
-          className="flex-1 overflow-auto relative"
-          onMouseMove={handleMouseMove}
+          className={
+            isContinuous
+              ? "relative flex-1 overflow-hidden"
+              : "relative flex-1 overflow-auto"
+          }
+          onMouseMove={isContinuous ? undefined : handleMouseMove}
         >
-          <EditorCanvas
-            page={currentPage}
-            documentId={documentId}
-            getFontFaceName={getFontFaceName}
-            tool={activeTool}
-            zoom={zoom}
-            fitMode={fitMode}
-            onFitZoomChange={setZoom}
-            shapeType={shapeType}
-            annotationType={annotationType}
-            fieldKind={fieldKind}
-            strokeColor={strokeColor}
-            fillColor={fillColor}
-            strokeWidth={strokeWidth}
-            onElementAdded={handleElementAdded}
-            onElementModified={handleElementModified}
-            onElementRemoved={handleElementRemoved}
-            onSelectionChanged={handleSelectionChanged}
-            onZoomChanged={handleManualZoomChange}
-            onCanvasReady={setCanvasHandle}
-            onHyperlinkClick={handleHyperlinkClick}
-            overlay={
-              showFormsPanel &&
-              formsMode === "fill" &&
-              loadedFormFields.length > 0 ? (
-                <FormFillOverlay
-                  fields={loadedFormFields}
-                  currentPageIndex={currentPageIndex}
-                  zoom={zoom}
-                  focusedFieldName={focusedFormField}
-                  onFieldClick={setFocusedFormField}
-                />
-              ) : null
-            }
-          />
+          {isContinuous ? (
+            <ContinuousPageView
+              ref={continuousViewRef}
+              pages={pages}
+              zoom={zoom}
+              pdfFile={currentPdfFile}
+              activePageIndex={effectivePageIndex}
+              onActivatePage={activatePage}
+            />
+          ) : (
+            <>
+              <EditorCanvas
+                page={currentPage}
+                documentId={documentId}
+                getFontFaceName={getFontFaceName}
+                tool={activeTool}
+                zoom={zoom}
+                fitMode={fitMode}
+                onFitZoomChange={setZoom}
+                shapeType={shapeType}
+                annotationType={annotationType}
+                fieldKind={fieldKind}
+                strokeColor={strokeColor}
+                fillColor={fillColor}
+                strokeWidth={strokeWidth}
+                onElementAdded={handleElementAdded}
+                onElementModified={handleElementModified}
+                onElementRemoved={handleElementRemoved}
+                onSelectionChanged={handleSelectionChanged}
+                onZoomChanged={handleManualZoomChange}
+                onCanvasReady={setCanvasHandle}
+                onHyperlinkClick={handleHyperlinkClick}
+                overlay={
+                  showFormsPanel &&
+                  formsMode === "fill" &&
+                  loadedFormFields.length > 0 ? (
+                    <FormFillOverlay
+                      fields={loadedFormFields}
+                      currentPageIndex={currentPageIndex}
+                      zoom={zoom}
+                      focusedFieldName={focusedFormField}
+                      onFieldClick={setFocusedFormField}
+                    />
+                  ) : null
+                }
+              />
 
-          {/* Content edit layer (deep PDF editing overlay) */}
-          <ContentEditLayer
-            currentFile={currentPdfFile}
-            currentPageIndex={currentPageIndex}
-            zoom={zoom}
-            isActive={isContentEditActive}
-            onModificationsChange={handleContentModificationsChange}
-            canvasRef={pdfCanvasRef as React.RefObject<HTMLCanvasElement>}
-          />
+              {/* Content edit layer (deep PDF editing overlay) */}
+              <ContentEditLayer
+                currentFile={currentPdfFile}
+                currentPageIndex={currentPageIndex}
+                zoom={zoom}
+                isActive={isContentEditActive}
+                onModificationsChange={handleContentModificationsChange}
+                canvasRef={pdfCanvasRef as React.RefObject<HTMLCanvasElement>}
+              />
 
-          {/* Overlay des curseurs des collaborateurs */}
-          <CollaborationOverlay
-            cursors={cursors}
-            currentPageId={currentPage?.pageId}
-            zoom={zoom}
-          />
+              {/* Overlay des curseurs des collaborateurs */}
+              <CollaborationOverlay
+                cursors={cursors}
+                currentPageId={currentPage?.pageId}
+                zoom={zoom}
+              />
+            </>
+          )}
         </main>
 
         {/* Properties panel */}
@@ -2445,11 +2577,12 @@ export default function EditorPage() {
           allFieldNames={allFieldNames}
         />
 
-        {/* Document info sidebar (TOC, Layers, Embedded Files) */}
+        {/* Document info sidebar (TOC, Layers, Embedded Files). Layers reflect
+            the active page (the focused page in continuous mode). */}
         <DocumentInfoSidebar
           outlines={outlines}
           layers={layers}
-          elements={currentPage?.elements ?? []}
+          elements={effectivePage?.elements ?? []}
           selectedElementIds={selectedElementIds}
           embeddedFiles={embeddedFiles}
           onNavigateToPage={handleNavigateToPage}
@@ -2457,7 +2590,7 @@ export default function EditorPage() {
           onElementLockChange={handleElementLockChange}
           onElementSelect={handleSelectElementFromLayer}
           onDownloadFile={handleDownloadFile}
-          currentPageIndex={currentPageIndex}
+          currentPageIndex={effectivePageIndex}
         />
 
         {/* Forms panel (conditionally shown) */}

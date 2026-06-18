@@ -1284,6 +1284,8 @@
       "zoomOut": "Zoom out",
       "fitWidth": "Fit width",
       "fitPage": "Fit page",
+      "viewModeSingle": "Single page",
+      "viewModeContinuous": "Continuous scroll",
       "rotate": "Rotate",
       "addPage": "Add page",
       "deletePage": "Delete page",
