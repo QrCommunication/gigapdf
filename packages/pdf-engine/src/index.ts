@@ -107,7 +107,12 @@ export type { MergeOptions, SplitOptions } from './merge-split';
 
 // Forms
 export { getFormFields, fillForm, flattenForm } from './forms';
-export type { FormFieldInfo, FillResult } from './forms';
+// `flattenForms` (inline Form XObjects → editable page runs) is re-exported
+// from the root barrel as `flattenFormXObjects` to avoid colliding with the
+// existing `flattenForms` from `./render` (which flattens AcroForm widgets).
+// The unaliased `flattenForms` stays available on the `./forms` subpath.
+export { flattenForms as flattenFormXObjects } from './forms';
+export type { FormFieldInfo, FillResult, FlattenFormsResult } from './forms';
 
 // Encrypt
 export { encryptPDF, decryptPDF, getPermissions, setPermissions } from './encrypt';

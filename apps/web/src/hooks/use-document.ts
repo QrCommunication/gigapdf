@@ -78,6 +78,13 @@ export interface UseDocumentOptions {
   storedDocumentId?: string;
   /** ID du document de session - si fourni, charge depuis la session */
   sessionDocumentId?: string;
+  /**
+   * Aplatir les Form XObjects au chargement (mode éditeur uniquement).
+   * Quand true, le texte des factures/templates (stocké dans des Form
+   * XObjects) devient éditable en place. Les visionneuses en lecture seule
+   * (embed) laissent ce flag à false pour ne JAMAIS réécrire le PDF.
+   */
+  flatten?: boolean;
 }
 
 export interface UseDocumentReturn {
@@ -131,6 +138,14 @@ export interface UseDocumentReturn {
   layers: LayerObject[];
   /** Fichiers embarqués */
   embeddedFiles: EmbeddedFileObject[];
+  /**
+   * PDF aplati (Form XObjects inlinés) renvoyé par parse-from-s3 quand
+   * `flatten` est actif ET qu'au moins un Form XObject a été inliné. Les
+   * `elements` parsés correspondent à CE binaire, donc l'éditeur doit
+   * l'adopter comme `currentPdfFile` pour rester cohérent (save + raster).
+   * `null` si form-less / flatten désactivé (le binaire S3 d'origine convient).
+   */
+  flattenedPdfFile: File | null;
 }
 
 // Génère un ID unique pour les nouvelles pages
@@ -150,7 +165,7 @@ function generatePageId(): string {
  * const { document, pages } = useDocument({ sessionDocumentId: "xyz789" });
  */
 export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
-  const { storedDocumentId, sessionDocumentId } = options;
+  const { storedDocumentId, sessionDocumentId, flatten = false } = options;
 
   const [document, setDocument] = useState<DocumentObject | null>(null);
   const [name, setName] = useState<string>("");
@@ -164,11 +179,15 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setDirty] = useState(false);
+  // Flattened PDF bytes (Form XObjects inlined) when `flatten` is active and at
+  // least one form was inlined. Decoded once at load; consumed by the editor.
+  const [flattenedPdfFile, setFlattenedPdfFile] = useState<File | null>(null);
 
   // Charger le document
   const loadDocument = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setFlattenedPdfFile(null);
 
     try {
       let docId = sessionDocumentId;
@@ -198,7 +217,7 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
           "Content-Type": "application/json",
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         },
-        body: JSON.stringify({ documentId: docId }),
+        body: JSON.stringify({ documentId: docId, flatten }),
         credentials: "include",
       });
       if (!parseResp.ok) {
@@ -210,6 +229,26 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
         document_id?: string;
         metadata?: Record<string, unknown>;
       };
+
+      // Adopt the flattened binary when the route inlined Form XObjects. The
+      // returned `elements` correspond to these bytes, so the editor must use
+      // them as currentPdfFile to keep save + raster consistent. Decoded here;
+      // surfaced via flattenedPdfFile. (Form-less loads omit these fields.)
+      const flattenCount = (docData.flattenCount as number | undefined) ?? 0;
+      const flattenedB64 = docData.flattenedPdfBase64 as string | undefined;
+      if (flatten && flattenCount > 0 && flattenedB64) {
+        try {
+          const binary = atob(flattenedB64);
+          const arr = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+          setFlattenedPdfFile(
+            new File([arr], `${docName || "document"}.pdf`, { type: "application/pdf" }),
+          );
+          clientLogger.debug("[useDocument] Adopted flattened PDF", { flattenCount });
+        } catch (err) {
+          clientLogger.warn("[useDocument] Failed to decode flattened PDF — keeping S3 binary", err);
+        }
+      }
 
       // Debug: log raw API response
       clientLogger.debug("[useDocument] Raw API response:", docData);
@@ -315,7 +354,7 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     } finally {
       setLoading(false);
     }
-  }, [storedDocumentId, sessionDocumentId]);
+  }, [storedDocumentId, sessionDocumentId, flatten]);
 
   // Charger au montage
   useEffect(() => {
@@ -607,5 +646,6 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     outlines,
     layers,
     embeddedFiles,
+    flattenedPdfFile,
   };
 }

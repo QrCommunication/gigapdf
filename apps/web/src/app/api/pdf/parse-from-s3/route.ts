@@ -31,7 +31,7 @@ import 'server-only';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { parseDocument } from '@giga-pdf/pdf-engine';
+import { parseDocument, flattenFormXObjects } from '@giga-pdf/pdf-engine';
 import {
   PDFParseError,
   PDFCorruptedError,
@@ -66,6 +66,12 @@ const RequestBodySchema = z.object({
   documentId: z
     .string({ error: 'documentId is required and must be a string' })
     .min(1, 'documentId cannot be empty'),
+  /**
+   * When true (the editor sets this), inline Form XObjects before parsing so
+   * invoice/template text becomes editable in place. Read-only viewers (e.g.
+   * the embed page) omit it, so viewing never rewrites the PDF.
+   */
+  flatten: z.boolean().optional().default(false),
 });
 
 // ─── Route Handler ─────────────────────────────────────────────────────────────
@@ -101,7 +107,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
-  const { documentId } = parsed.data;
+  const { documentId, flatten } = parsed.data;
 
   // ── 3. Fetch PDF bytes from Python backend ───────────────────────────────────
   const downloadUrl = `${PYTHON_BACKEND_URL}/api/v1/documents/${documentId}/download`;
@@ -198,11 +204,49 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
-  // ── 4. Parse PDF bytes via TS pdf-engine ─────────────────────────────────────
+  // ── 4. (Editor only) Flatten Form XObjects before parsing ────────────────────
+  // Invoice/template text lives inside reusable Form XObjects, where it carries
+  // a sentinel run index → the engine's in-place edit path can't touch it and
+  // the editor falls back to the redact+add overlay. Inlining the form XObjects
+  // turns that text into ordinary page runs with REAL indices, so editing works
+  // in place. We must parse the *flattened* bytes (so `elements` line up) AND
+  // hand the flattened PDF back to the client so its `currentPdfFile` (the
+  // binary source of truth for save + raster) stays consistent with `elements`.
+  //
+  // No-op safety: when 0 forms are inlined (form-less PDFs, or re-loading an
+  // already-flattened doc), `flattenForms` returns the original bytes untouched
+  // and we add no new response fields — byte-identical to the legacy behaviour.
+  let bytesToParse: Buffer = pdfBuffer;
+  let flattenCount = 0;
+  let flattenedPdfBase64: string | null = null;
+
+  if (flatten) {
+    try {
+      const { bytes, count } = await flattenFormXObjects(pdfBuffer);
+      flattenCount = count;
+      if (count > 0) {
+        bytesToParse = Buffer.from(bytes);
+        flattenedPdfBase64 = bytesToParse.toString('base64');
+        serverLogger.info('[api/pdf/parse-from-s3] Flattened form XObjects', {
+          documentId,
+          flattenCount: count,
+        });
+      }
+    } catch (err) {
+      // Flatten is an optimisation, never a hard requirement: on failure we
+      // fall back to parsing the original bytes (legacy overlay-edit behaviour).
+      serverLogger.warn('[api/pdf/parse-from-s3] flattenFormXObjects failed — parsing original', {
+        documentId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // ── 5. Parse PDF bytes via TS pdf-engine ─────────────────────────────────────
   serverLogger.info('[api/pdf/parse-from-s3] Parsing PDF with pdf-engine', { documentId });
 
   try {
-    const documentObject = await parseDocument(pdfBuffer, {
+    const documentObject = await parseDocument(bytesToParse, {
       extractText: true,
       extractImages: true,
       extractAnnotations: true,
@@ -216,7 +260,14 @@ export async function POST(request: NextRequest): Promise<Response> {
       pageCount: documentObject.pages?.length ?? 0,
     });
 
-    return NextResponse.json(documentObject, { status: 200 });
+    // Only attach flatten fields when something was actually inlined, so the
+    // form-less response shape is unchanged from before.
+    const responseBody =
+      flattenCount > 0
+        ? { ...documentObject, flattenCount, flattenedPdfBase64 }
+        : documentObject;
+
+    return NextResponse.json(responseBody, { status: 200 });
   } catch (error: unknown) {
     if (error instanceof PDFEncryptedError || error instanceof PDFInvalidPasswordError) {
       return NextResponse.json(
