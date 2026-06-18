@@ -10,6 +10,7 @@ import type {
   FieldCreationKind,
   Element,
   TextStyle,
+  TextElement,
 } from "@giga-pdf/types";
 import type { RulerUnit } from "@giga-pdf/editor";
 import { FontPicker } from "@giga-pdf/ui";
@@ -81,6 +82,7 @@ import { OcrDialog } from "./ocr-dialog";
 import { PdfADialog } from "./pdfa-dialog";
 import { CompressDialog } from "./compress-dialog";
 import { HeadersFootersDialog } from "./headers-footers-dialog";
+import { FormattingToolbar } from "./formatting-toolbar";
 import type { HeaderFooterKind } from "./lib/page-headers-footers";
 import type { HeaderFooterSpec } from "@qrcommunication/gigapdf-lib";
 
@@ -167,6 +169,13 @@ export interface EditorToolbarProps {
   onAddImage?: () => void;
   /** Element actuellement selectionne */
   selectedElement?: Element | null;
+  /**
+   * All currently selected *text* elements. Drives the Word-like formatting
+   * cluster (B/I/U/S, colour, highlight, alignment, line spacing) and lets its
+   * edits fan out to every selected text run. When empty/undefined the cluster
+   * is hidden.
+   */
+  selectedTextElements?: TextElement[];
   /** Callback pour mettre a jour le style d'un element */
   onElementStyleChange?: (elementId: string, style: Partial<TextStyle>) => void;
   /** Fichier PDF actuellement ouvert (pour les opérations merge/split/encrypt) */
@@ -461,6 +470,7 @@ export function EditorToolbar({
   onDuplicate,
   onAddImage,
   selectedElement,
+  selectedTextElements,
   onElementStyleChange,
   currentFile,
   onToggleFormsPanel,
@@ -878,42 +888,56 @@ export function EditorToolbar({
         </>
       )}
 
-      {/* Formatage texte (visible si sélection) */}
-      {hasSelection && onFormatAction && (
-        <>
-          <ToolButton
-            icon={<Bold size={20} />}
-            label={t("bold")}
-            onClick={() => onFormatAction("bold")}
-          />
-          <ToolButton
-            icon={<Italic size={20} />}
-            label={t("italic")}
-            onClick={() => onFormatAction("italic")}
-          />
-          <ToolButton
-            icon={<Underline size={20} />}
-            label={t("underline")}
-            onClick={() => onFormatAction("underline")}
-          />
-          <Separator />
-          <ToolButton
-            icon={<AlignLeft size={20} />}
-            label={t("alignLeft")}
-            onClick={() => onFormatAction("align-left")}
-          />
-          <ToolButton
-            icon={<AlignCenter size={20} />}
-            label={t("alignCenter")}
-            onClick={() => onFormatAction("align-center")}
-          />
-          <ToolButton
-            icon={<AlignRight size={20} />}
-            label={t("alignRight")}
-            onClick={() => onFormatAction("align-right")}
-          />
-          <Separator />
-        </>
+      {/* Word-like formatting cluster (B/I/U/S, colour, highlight, alignment,
+          line spacing). Reflects the selection's current style and drives the
+          rich TextStyle fields through onElementStyleChange. Only for text. */}
+      {onElementStyleChange &&
+      selectedTextElements &&
+      selectedTextElements.length > 0 ? (
+        <FormattingToolbar
+          selectedTextElements={selectedTextElements}
+          onElementStyleChange={onElementStyleChange}
+        />
+      ) : (
+        /* Fallback: legacy canvas-only quick format (no active state) used when
+           the rich style flow isn't wired. */
+        hasSelection &&
+        onFormatAction && (
+          <>
+            <ToolButton
+              icon={<Bold size={20} />}
+              label={t("bold")}
+              onClick={() => onFormatAction("bold")}
+            />
+            <ToolButton
+              icon={<Italic size={20} />}
+              label={t("italic")}
+              onClick={() => onFormatAction("italic")}
+            />
+            <ToolButton
+              icon={<Underline size={20} />}
+              label={t("underline")}
+              onClick={() => onFormatAction("underline")}
+            />
+            <Separator />
+            <ToolButton
+              icon={<AlignLeft size={20} />}
+              label={t("alignLeft")}
+              onClick={() => onFormatAction("align-left")}
+            />
+            <ToolButton
+              icon={<AlignCenter size={20} />}
+              label={t("alignCenter")}
+              onClick={() => onFormatAction("align-center")}
+            />
+            <ToolButton
+              icon={<AlignRight size={20} />}
+              label={t("alignRight")}
+              onClick={() => onFormatAction("align-right")}
+            />
+            <Separator />
+          </>
+        )
       )}
 
       {/* Actions sur sélection */}
@@ -955,9 +979,11 @@ export function EditorToolbar({
         </>
       )}
 
-      {/* Rulers — toggle the horizontal/vertical rulers; when on, a button
-          cycles the display unit. Right-aligns on its own only when the view
-          toggle (which already grabbed `ml-auto`) is absent. */}
+      {/* Rulers & margins — single Word-style "View → Ruler" toggle that shows
+          BOTH the horizontal/vertical rulers AND the draggable margin guides
+          together; when on, a button cycles the ruler display unit. Right-aligns
+          on its own only when the view toggle (which already grabbed `ml-auto`)
+          is absent. */}
       {onToggleRulers && (
         <>
           <div
@@ -965,7 +991,7 @@ export function EditorToolbar({
           >
             <ToolButton
               icon={<Ruler size={20} />}
-              label={t("rulers")}
+              label={t("rulersAndMargins")}
               isActive={showRulers}
               onClick={() => onToggleRulers()}
             />
