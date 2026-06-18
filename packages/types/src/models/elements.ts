@@ -33,6 +33,13 @@ export interface TextStyle {
   lineHeight: number;
   letterSpacing: number;
   writingMode: "horizontal-tb" | "vertical-rl";
+  /**
+   * Bidirectional reading direction of the run. Surfaced by the engine
+   * (`GigaPdfDoc.textElements().direction`) from the script of the text so the
+   * canvas (Fabric `direction`) and the layer properties panel (`dir`) edit
+   * right-to-left scripts (Arabic, Hebrew, …) correctly. Absent ⇒ `"ltr"`.
+   */
+  direction?: "ltr" | "rtl";
   // Additional text decorations
   underline: boolean;
   strikethrough: boolean;

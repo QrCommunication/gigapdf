@@ -1395,6 +1395,9 @@
       },
       "text": {
         "content": "Text",
+        "direction": "Direction",
+        "ltr": "Left → Right",
+        "rtl": "Right → Left",
         "contentPlaceholder": "Edit the text…",
         "fontFamily": "Font",
         "fontSize": "Size",

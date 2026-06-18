@@ -1395,6 +1395,9 @@
       },
       "text": {
         "content": "Texte",
+        "direction": "Direction",
+        "ltr": "Gauche → Droite",
+        "rtl": "Droite → Gauche",
         "contentPlaceholder": "Modifier le texte…",
         "fontFamily": "Police",
         "fontSize": "Taille",
