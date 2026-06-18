@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     storage_max_size_gb: int = 100
 
     # -------------------------------------------------------------------------
+    # Semantic search (#85)
+    # -------------------------------------------------------------------------
+    # On-disk cache for the fastembed embedding model. Read directly from the
+    # environment by app.services.embeddings (so it also works in Celery
+    # workers without importing Settings); declared here for discoverability.
+    fastembed_cache_dir: str = "/var/lib/gigapdf/fastembed-cache"
+
+    # -------------------------------------------------------------------------
     # Celery
     # -------------------------------------------------------------------------
     celery_broker_url: str = "redis://localhost:6379/1"

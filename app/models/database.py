@@ -27,6 +27,17 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+# pgvector SQLAlchemy column type (provided by the `vector` extension,
+# migration 019). Imported lazily-tolerant: the model is only used by the
+# semantic-search path; environments that never import pgvector still load
+# the rest of the models. See app/services/embeddings.py.
+from pgvector.sqlalchemy import Vector
+
+# Embedding dimensionality — must match EmbeddingService.DIMENSION
+# (intfloat/multilingual-e5-small = 384) and the vector(384) column in
+# migration 019_add_semantic_search.
+EMBEDDING_DIMENSION = 384
+
 
 class Base(DeclarativeBase):
     """Base class for all database models."""
@@ -735,6 +746,55 @@ class InfrastructureMetric(Base):
 
     __table_args__ = (
         Index("idx_infra_metrics_time", "recorded_at"),
+    )
+
+
+class OcrBlock(Base):
+    """One OCR text block with its embedding for semantic search (#85).
+
+    Each row is a contiguous chunk of OCR text (a word/line/paragraph block)
+    extracted from a document page, with its bounding box in **PDF user-space
+    coordinates** and a 384-d embedding (fastembed,
+    ``intfloat/multilingual-e5-small``). Rows are scoped to a document via
+    ``document_id`` (FK ON DELETE CASCADE) so deleting a document — or
+    re-indexing it — drops the stale blocks.
+
+    The text-to-vector embedding is computed server-side by
+    ``EmbeddingService`` at ingest time; queries use pgvector cosine distance
+    (``embedding <=> :qvec``) backed by the HNSW index from migration 019.
+    """
+
+    __tablename__ = "ocr_blocks"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    document_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("stored_documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    page: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Bounding box in PDF user-space points (bottom-left origin), produced by
+    # the TS OCR engine. Defaults to 0 when the source block carries no box.
+    bbox_x: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    bbox_y: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    bbox_w: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    bbox_h: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(EMBEDDING_DIMENSION), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        # B-tree drives the per-document re-index DELETE + page filtering.
+        Index("idx_ocr_blocks_document_page", "document_id", "page"),
+        # HNSW index for cosine ANN search. Declared here for ORM/metadata
+        # parity; the actual index is created in migration 019 with the
+        # vector_cosine_ops operator class (not expressible via Index args).
     )
 
 

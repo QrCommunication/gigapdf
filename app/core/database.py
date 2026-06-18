@@ -10,6 +10,7 @@ from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager
 
 from sqlalchemy import create_engine as create_sync_engine
+from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -23,6 +24,30 @@ from app.config import get_settings
 from app.models.database import Base
 
 logger = logging.getLogger(__name__)
+
+
+def _register_pgvector_async(engine: AsyncEngine) -> None:
+    """Register the pgvector codec on every new asyncpg connection.
+
+    Without this, asyncpg doesn't know how to encode/decode the ``vector``
+    type, so inserting/selecting embeddings on ``ocr_blocks`` raises. The
+    codec is registered per physical connection via the sync ``connect``
+    event (asyncpg exposes ``run_async`` on the DBAPI connection wrapper).
+    """
+    from pgvector.asyncpg import register_vector
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _on_connect(dbapi_connection, _connection_record):  # noqa: ANN001
+        dbapi_connection.run_async(register_vector)
+
+
+def _register_pgvector_sync(engine: Engine) -> None:
+    """Register the pgvector codec on every new psycopg2 connection (Celery)."""
+    from pgvector.psycopg2 import register_vector
+
+    @event.listens_for(engine, "connect")
+    def _on_connect(dbapi_connection, _connection_record):  # noqa: ANN001
+        register_vector(dbapi_connection)
 
 # Global async engine and session factory
 _engine: AsyncEngine | None = None
@@ -62,6 +87,9 @@ def create_engine() -> AsyncEngine:
         pool_pre_ping=True,
         pool_recycle=3600,
     )
+
+    # Teach asyncpg the pgvector `vector` type (ocr_blocks.embedding).
+    _register_pgvector_async(engine)
 
     return engine
 
@@ -179,6 +207,8 @@ def get_sync_engine() -> Engine:
             pool_pre_ping=True,
             pool_recycle=3600,
         )
+        # Teach psycopg2 the pgvector `vector` type for Celery tasks.
+        _register_pgvector_sync(_sync_engine)
     return _sync_engine
 
 

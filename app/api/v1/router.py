@@ -26,6 +26,7 @@ from app.api.v1 import (
     plans,
     public_billing,
     quota,
+    search,
     security,
     sharing,
     storage,
@@ -112,6 +113,12 @@ api_router.include_router(
     storage.router,
     prefix="/storage",
     tags=["Storage"],
+)
+
+api_router.include_router(
+    search.router,
+    prefix="/search",
+    tags=["Search"],
 )
 
 api_router.include_router(

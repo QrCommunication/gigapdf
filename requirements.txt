@@ -9,7 +9,6 @@ pydantic-settings>=2.1.0
 pypdf>=6.12.0
 pikepdf>=8.0.0
 pdfplumber>=0.10.0
-pdf2image>=1.16.0
 Pillow>=10.2.0
 # fontTools: repair subset TTFs extracted from PDFs before serving them to
 # the browser FontFace API. PDF subset fonts (Type0/CIDFontType2) often have
@@ -18,9 +17,6 @@ Pillow>=10.2.0
 # through fontTools rebuilds the missing tables and produces a TTF that
 # every browser accepts.
 fonttools>=4.50.0
-
-# OCR
-pytesseract>=0.3.10
 
 # WebSocket
 python-socketio>=5.10.0
@@ -34,6 +30,17 @@ psycopg2-binary>=2.9.9
 asyncpg>=0.29.0
 SQLAlchemy[asyncio]>=2.0.25
 alembic>=1.13.0
+# pgvector: `vector` SQLAlchemy type + asyncpg/psycopg2 codecs for the
+# ocr_blocks.embedding column (semantic search, #85). Requires the `vector`
+# PostgreSQL extension (postgresql-17-pgvector) on the server.
+pgvector>=0.3.0
+
+# Semantic search (#85): fastembed runs a 384-d multilingual model
+# (sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2, FR+EN) fully
+# offline to embed OCR text. The model is downloaded once into
+# FASTEMBED_CACHE_DIR, then cached. (fastembed has no multilingual-e5-small;
+# see app/services/embeddings.py for the model-choice rationale.)
+fastembed>=0.4.0
 
 # Authentication
 PyJWT[crypto]>=2.13.0

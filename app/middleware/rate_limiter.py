@@ -171,9 +171,16 @@ def get_endpoint_category(path: str, method: str) -> str:
         return "upload"
     elif "/export" in path_lower:
         return "export"
+    elif "/ocr-blocks" in path_lower:
+        # OCR-block ingestion embeds many texts — bucket with OCR, not search.
+        return "ocr"
     elif "/ocr" in path_lower:
         return "ocr"
-    elif "/text/search" in path_lower or "/text/replace" in path_lower:
+    elif (
+        "/text/search" in path_lower
+        or "/text/replace" in path_lower
+        or "/search/" in path_lower
+    ):
         return "search"
     elif "/unlock" in path_lower or "/login" in path_lower:
         return "auth"
