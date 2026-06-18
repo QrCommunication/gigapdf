@@ -67,6 +67,7 @@ import {
   Rows3,
   RectangleVertical,
   Ruler,
+  PanelTop,
 } from "lucide-react";
 import { MergeDialog } from "./merge-dialog";
 import { SplitDialog } from "./split-dialog";
@@ -79,6 +80,9 @@ import { WatermarkDialog } from "./watermark-dialog";
 import { OcrDialog } from "./ocr-dialog";
 import { PdfADialog } from "./pdfa-dialog";
 import { CompressDialog } from "./compress-dialog";
+import { HeadersFootersDialog } from "./headers-footers-dialog";
+import type { HeaderFooterKind } from "./lib/page-headers-footers";
+import type { HeaderFooterSpec } from "@qrcommunication/gigapdf-lib";
 
 export interface EditorToolbarProps {
   /** Outil actuellement sélectionné */
@@ -206,6 +210,26 @@ export interface EditorToolbarProps {
    * (mode « Appliquer au document » du SignDialog). Reçoit le PDF signé.
    */
   onSignApplied?: (blob: Blob) => void;
+  /**
+   * Word-style running headers & footers turned on for the document. The toggle
+   * button reflects this state. A continuous-view feature only.
+   */
+  headersFootersEnabled?: boolean;
+  /** Toggle Word-style running headers & footers on/off. */
+  onToggleHeadersFooters?: () => void;
+  /**
+   * Apply a header/footer band (header or footer) to the current document. The
+   * editor bakes the spec onto the live PDF and persists it.
+   */
+  onHeaderFooterApply?: (kind: HeaderFooterKind, spec: HeaderFooterSpec) => void;
+  /** Remove every header/footer band of the given kind from the document. */
+  onHeaderFooterRemove?: (kind: HeaderFooterKind) => void;
+  /** Pre-fill text for the header band (Word auto-detect). */
+  headerFooterInitialHeader?: string;
+  /** Pre-fill text for the footer band (Word auto-detect). */
+  headerFooterInitialFooter?: string;
+  /** Whether a header/footer apply/remove is currently running. */
+  headerFooterBusy?: boolean;
 }
 
 interface ToolButtonProps {
@@ -448,9 +472,17 @@ export function EditorToolbar({
   onCompressApplied,
   onOcrApplied,
   onSignApplied,
+  headersFootersEnabled = false,
+  onToggleHeadersFooters,
+  onHeaderFooterApply,
+  onHeaderFooterRemove,
+  headerFooterInitialHeader,
+  headerFooterInitialFooter,
+  headerFooterBusy = false,
 }: EditorToolbarProps) {
   const t = useTranslations("editor.toolbar");
   const tProperties = useTranslations("editor.properties.text");
+  const tHeadersFooters = useTranslations("editor.headersFooters");
   const [showShapeDropdown, setShowShapeDropdown] = useState(false);
   const [showAnnotationDropdown, setShowAnnotationDropdown] = useState(false);
   const [showFieldDropdown, setShowFieldDropdown] = useState(false);
@@ -467,6 +499,8 @@ export function EditorToolbar({
   const [showOcrDialog, setShowOcrDialog] = useState(false);
   const [showPdfADialog, setShowPdfADialog] = useState(false);
   const [showCompressDialog, setShowCompressDialog] = useState(false);
+  const [showHeadersFootersDialog, setShowHeadersFootersDialog] =
+    useState(false);
 
   // Font controls — derived-with-override pattern (replaces the previous
   // setState-in-useEffect sync that triggered react-hooks/set-state-in-effect):
@@ -1123,6 +1157,22 @@ export function EditorToolbar({
         label="PDF/A"
         onClick={() => setShowPdfADialog(true)}
       />
+      {/* Word-style running headers & footers — a continuous-view feature, so
+          the toggle only appears there. The button is active when bands are on;
+          clicking it opens the editor (turning the feature on if it was off). */}
+      {viewMode === "continuous" && onToggleHeadersFooters && (
+        <ToolButton
+          icon={<PanelTop size={20} />}
+          label={tHeadersFooters("toolbarLabel")}
+          isActive={headersFootersEnabled}
+          onClick={() => {
+            if (!headersFootersEnabled) {
+              onToggleHeadersFooters();
+            }
+            setShowHeadersFootersDialog(true);
+          }}
+        />
+      )}
 
       {/* PDF operation dialogs */}
       <MergeDialog
@@ -1189,6 +1239,21 @@ export function EditorToolbar({
         currentFile={currentFile ?? null}
         baseFilename={currentFile?.name}
         onApplied={onCompressApplied}
+      />
+      <HeadersFootersDialog
+        open={showHeadersFootersDialog}
+        onClose={() => setShowHeadersFootersDialog(false)}
+        onApply={(kind, spec) => {
+          onHeaderFooterApply?.(kind, spec);
+          setShowHeadersFootersDialog(false);
+        }}
+        onRemove={(kind) => {
+          onHeaderFooterRemove?.(kind);
+          setShowHeadersFootersDialog(false);
+        }}
+        initialHeaderText={headerFooterInitialHeader}
+        initialFooterText={headerFooterInitialFooter}
+        busy={headerFooterBusy}
       />
     </div>
   );

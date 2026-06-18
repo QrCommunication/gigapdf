@@ -20,6 +20,9 @@ import {
 } from "lucide-react";
 import { api, getAuthToken, StoredDocument } from "@/lib/api";
 import { clientLogger } from "@/lib/client-logger";
+import { detectHeaderFooterFromOffice } from "@/components/editor/lib/office-headers-footers";
+import { applyHeaderFooter } from "@/components/editor/lib/page-headers-footers";
+import type { HeaderFooterSpec } from "@qrcommunication/gigapdf-lib";
 
 interface Document {
   id: string;
@@ -188,6 +191,39 @@ async function extractPdfText(pdfFile: File): Promise<string | null> {
   } catch (err) {
     clientLogger.warn("documents.text-extract-failed", err);
     return null;
+  }
+}
+
+/**
+ * Word-like auto-detect: when an Office document originates from Word (.docx)
+ * with running headers/footers, preserve them on the converted PDF. We read the
+ * bands from the ORIGINAL Office bytes (the editable model the conversion
+ * discards), then bake them onto the PDF via the GigaPDF engine so they survive
+ * into the editor — where the user can edit/remove them with the headers &
+ * footers dialog. Best-effort: any failure returns the PDF unchanged, never
+ * throwing, so a detection hiccup cannot fail an import.
+ */
+async function applyDetectedHeaderFooter(
+  officeBytes: Uint8Array,
+  pdfFile: File,
+): Promise<File> {
+  try {
+    const detected = await detectHeaderFooterFromOffice(officeBytes);
+    if (!detected.header && !detected.footer) return pdfFile;
+
+    let bytes = new Uint8Array(await pdfFile.arrayBuffer());
+    if (detected.header) {
+      const spec: HeaderFooterSpec = { text: detected.header, align: "center" };
+      bytes = await applyHeaderFooter(bytes, "header", spec);
+    }
+    if (detected.footer) {
+      const spec: HeaderFooterSpec = { text: detected.footer, align: "center" };
+      bytes = await applyHeaderFooter(bytes, "footer", spec);
+    }
+    return new File([bytes], pdfFile.name, { type: "application/pdf" });
+  } catch (err) {
+    clientLogger.warn("documents.header-footer-detect-failed", err);
+    return pdfFile;
   }
 }
 
@@ -409,7 +445,10 @@ export default function DocumentsPage() {
           pdfFile = file;
           baseName = file.name.replace(/\.pdf$/i, "");
         } else {
-          // 1) Office -> PDF conversion (server-side)
+          // 1) Office -> PDF conversion (server-side). Keep the original Office
+          // bytes for Word-like header/footer auto-detection below — the
+          // conversion discards the editable model that carries the bands.
+          const officeBytes = new Uint8Array(await file.arrayBuffer());
           const formData = new FormData();
           formData.append("file", file);
           const convertRes = await fetch("/api/office/upload", {
@@ -431,6 +470,11 @@ export default function DocumentsPage() {
           pdfFile = new File([pdfBlob], `${baseName}.pdf`, {
             type: "application/pdf",
           });
+
+          // 1b) Word-like auto-detect: preserve any running header/footer the
+          // source document carried onto the converted PDF (no-op for formats
+          // without bands, e.g. spreadsheets). Best-effort — never throws.
+          pdfFile = await applyDetectedHeaderFooter(officeBytes, pdfFile);
         }
 
         // 2) Standard PDF pipeline: upload -> download -> save to storage.

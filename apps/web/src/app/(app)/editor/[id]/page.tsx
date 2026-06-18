@@ -91,6 +91,12 @@ import {
   applyPageMargins,
   type PageMargins,
 } from "@/components/editor/lib/page-margins";
+import {
+  applyHeaderFooter,
+  removeHeaderFooter,
+  type HeaderFooterKind,
+} from "@/components/editor/lib/page-headers-footers";
+import type { HeaderFooterSpec } from "@qrcommunication/gigapdf-lib";
 import { clientLogger } from "@/lib/client-logger";
 import { withRetry } from "@/lib/with-retry";
 
@@ -301,12 +307,18 @@ export default function EditorPage() {
     isContentEditActive,
     toggleFormsPanel,
     setContentEditActive,
+    headersFootersEnabled,
+    toggleHeadersFooters,
+    setHeadersFootersEnabled,
   } = useUIStore(
     useShallow((s) => ({
       showFormsPanel: s.showFormsPanel,
       isContentEditActive: s.isContentEditActive,
       toggleFormsPanel: s.toggleFormsPanel,
       setContentEditActive: s.setContentEditActive,
+      headersFootersEnabled: s.headersFootersEnabled,
+      toggleHeadersFooters: s.toggleHeadersFooters,
+      setHeadersFootersEnabled: s.setHeadersFootersEnabled,
     }))
   );
 
@@ -326,6 +338,10 @@ export default function EditorPage() {
 
   // Current PDF binary — kept local: File object (resource, not serializable)
   const [currentPdfFile, setCurrentPdfFile] = useState<File | null>(null);
+
+  // True while a Word-style header/footer band is being baked onto the PDF —
+  // drives the dialog's busy state so the user can't fire overlapping bakes.
+  const [headerFooterBusy, setHeaderFooterBusy] = useState(false);
 
   // Content modifications — backed by localStorage so a reload during the
   // 2s save debounce window doesn't drop user edits. The cache is scoped to
@@ -1714,6 +1730,108 @@ export default function EditorPage() {
     [adoptModifiedPdf, toast, t],
   );
 
+  // Bake a Word-style running header/footer onto the current PDF. The GigaPDF
+  // engine draws the band text (with {{page}}/{{pages}} tokens) in the top/
+  // bottom margin band, producing new bytes we adopt without re-parsing — the
+  // band lives outside the page content, so the editable overlay is unchanged.
+  const handleHeaderFooterApply = useCallback(
+    (kind: HeaderFooterKind, spec: HeaderFooterSpec) => {
+      const file = currentPdfFileRef.current;
+      if (!file) return;
+      void (async () => {
+        setHeaderFooterBusy(true);
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const next = await applyHeaderFooter(bytes, kind, spec);
+          adoptModifiedPdf(new Blob([next], { type: "application/pdf" }), {
+            reparse: false,
+          });
+          toast({
+            title: t("headersFooters.appliedTitle"),
+            description: t("headersFooters.appliedDescription"),
+          });
+        } catch (err) {
+          clientLogger.error("[editor] set header/footer failed:", err);
+          toast({
+            title: t("headersFooters.errorTitle"),
+            description: t("headersFooters.errorDescription"),
+            variant: "destructive",
+          });
+        } finally {
+          setHeaderFooterBusy(false);
+        }
+      })();
+    },
+    [adoptModifiedPdf, toast, t],
+  );
+
+  // Remove every header (or footer) band of the current PDF, adopting the new
+  // bytes without re-parsing (the page content is unchanged).
+  const handleHeaderFooterRemove = useCallback(
+    (kind: HeaderFooterKind) => {
+      const file = currentPdfFileRef.current;
+      if (!file) return;
+      void (async () => {
+        setHeaderFooterBusy(true);
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const next = await removeHeaderFooter(bytes, kind);
+          adoptModifiedPdf(new Blob([next], { type: "application/pdf" }), {
+            reparse: false,
+          });
+          toast({
+            title: t("headersFooters.removedTitle"),
+            description: t("headersFooters.removedDescription"),
+          });
+        } catch (err) {
+          clientLogger.error("[editor] remove header/footer failed:", err);
+          toast({
+            title: t("headersFooters.errorTitle"),
+            description: t("headersFooters.errorDescription"),
+            variant: "destructive",
+          });
+        } finally {
+          setHeaderFooterBusy(false);
+        }
+      })();
+    },
+    [adoptModifiedPdf, toast, t],
+  );
+
+  // Toggle Word-style headers & footers for the document. Turning the feature
+  // OFF clears both bands from the PDF; turning it ON just flips the flag (the
+  // dialog drives the actual band apply). Mirrors the watermark/compress flow.
+  const handleToggleHeadersFooters = useCallback(() => {
+    if (headersFootersEnabled) {
+      // Going OFF: strip both bands, then drop the flag.
+      const file = currentPdfFileRef.current;
+      setHeadersFootersEnabled(false);
+      if (!file) return;
+      void (async () => {
+        setHeaderFooterBusy(true);
+        try {
+          let bytes = new Uint8Array(await file.arrayBuffer());
+          bytes = await removeHeaderFooter(bytes, "header");
+          bytes = await removeHeaderFooter(bytes, "footer");
+          adoptModifiedPdf(new Blob([bytes], { type: "application/pdf" }), {
+            reparse: false,
+          });
+        } catch (err) {
+          clientLogger.error("[editor] clear headers/footers failed:", err);
+        } finally {
+          setHeaderFooterBusy(false);
+        }
+      })();
+    } else {
+      toggleHeadersFooters();
+    }
+  }, [
+    headersFootersEnabled,
+    setHeadersFootersEnabled,
+    toggleHeadersFooters,
+    adoptModifiedPdf,
+  ]);
+
   // Filigrane appliqué au document courant (mode « Appliquer au document »
   // du WatermarkDialog) : adopte le binaire filigrané exactement comme une
   // opération de page (swap binaire + re-parse + save immédiat), puis
@@ -2514,6 +2632,11 @@ export default function EditorPage() {
         onCompressApplied={handleCompressApplied}
         onOcrApplied={handleOcrApplied}
         onSignApplied={handleSignApplied}
+        headersFootersEnabled={headersFootersEnabled}
+        onToggleHeadersFooters={handleToggleHeadersFooters}
+        onHeaderFooterApply={handleHeaderFooterApply}
+        onHeaderFooterRemove={handleHeaderFooterRemove}
+        headerFooterBusy={headerFooterBusy}
       />
 
       {/* Main content */}
