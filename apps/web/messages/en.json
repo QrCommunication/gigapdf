@@ -1210,6 +1210,44 @@
       "marginErrorTitle": "Could not update margins",
       "marginErrorDescription": "The page margins could not be changed. Please try again."
     },
+    "insert": {
+      "menu": "Insert",
+      "image": "Image",
+      "table": "Table",
+      "tableHint": "Drag to set size",
+      "tableSize": "{rows} × {cols} table",
+      "shape": "Shape",
+      "shapes": {
+        "rectangle": "Rectangle",
+        "ellipse": "Ellipse",
+        "line": "Line",
+        "arrow": "Arrow"
+      },
+      "link": "Link",
+      "linkNeedsSelection": "Select a text element first",
+      "list": "List",
+      "listNeedsSelection": "Select a text element first",
+      "listBullet": "Bulleted list",
+      "listNumbered": "Numbered list",
+      "page": "Blank page",
+      "pageBefore": "Insert before",
+      "pageAfter": "Insert after",
+      "linkDialog": {
+        "title": "Insert link",
+        "close": "Close",
+        "cancel": "Cancel",
+        "apply": "Apply",
+        "remove": "Remove link",
+        "noTarget": "Select a single text element to attach a link.",
+        "modeLabel": "Link to",
+        "modeUrl": "Web address",
+        "modePage": "Page in document",
+        "urlLabel": "URL",
+        "urlPlaceholder": "https://example.com",
+        "urlInvalid": "Enter a valid http(s) or mailto link.",
+        "pageLabel": "Page number (1–{count})"
+      }
+    },
     "headersFooters": {
       "toolbarLabel": "Headers & footers",
       "title": "Headers & footers",

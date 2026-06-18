@@ -1210,6 +1210,44 @@
       "marginErrorTitle": "Impossible de modifier les marges",
       "marginErrorDescription": "Les marges de la page n'ont pas pu être modifiées. Veuillez réessayer."
     },
+    "insert": {
+      "menu": "Insérer",
+      "image": "Image",
+      "table": "Tableau",
+      "tableHint": "Glissez pour définir la taille",
+      "tableSize": "Tableau {rows} × {cols}",
+      "shape": "Forme",
+      "shapes": {
+        "rectangle": "Rectangle",
+        "ellipse": "Ellipse",
+        "line": "Ligne",
+        "arrow": "Flèche"
+      },
+      "link": "Lien",
+      "linkNeedsSelection": "Sélectionnez d'abord un texte",
+      "list": "Liste",
+      "listNeedsSelection": "Sélectionnez d'abord un texte",
+      "listBullet": "Liste à puces",
+      "listNumbered": "Liste numérotée",
+      "page": "Page vierge",
+      "pageBefore": "Insérer avant",
+      "pageAfter": "Insérer après",
+      "linkDialog": {
+        "title": "Insérer un lien",
+        "close": "Fermer",
+        "cancel": "Annuler",
+        "apply": "Appliquer",
+        "remove": "Supprimer le lien",
+        "noTarget": "Sélectionnez un seul élément de texte pour y attacher un lien.",
+        "modeLabel": "Lier vers",
+        "modeUrl": "Adresse web",
+        "modePage": "Page du document",
+        "urlLabel": "URL",
+        "urlPlaceholder": "https://exemple.com",
+        "urlInvalid": "Saisissez un lien http(s) ou mailto valide.",
+        "pageLabel": "Numéro de page (1–{count})"
+      }
+    },
     "headersFooters": {
       "toolbarLabel": "En-têtes et pieds de page",
       "title": "En-têtes et pieds de page",
