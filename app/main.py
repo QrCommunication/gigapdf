@@ -316,7 +316,7 @@ Rate limits vary by plan. Rate limit headers are included in every response:
 - `X-RateLimit-Remaining`: requests remaining in the current window
 - `X-RateLimit-Reset`: Unix timestamp when the limit resets
         """,
-        version="1.5.0",
+        version="1.6.0",
         openapi_url="/api/v1/openapi.json",
         docs_url="/api/docs",
         redoc_url="/api/redoc",
