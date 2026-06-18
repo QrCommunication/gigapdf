@@ -56,14 +56,14 @@
   },
   "engine": {
     "meta": {
-      "title": "The GigaPDF engine — 100% in-house, zero third-party dependency",
-      "description": "Discover the GigaPDF in-house PDF engine: low-level read/write, real content editing, high-fidelity rendering, forms, digital signing, OCR and Office conversion. Compiled to WebAssembly, zero third-party dependency."
+      "title": "The GigaPDF engine — 100% in-house, zero third-party PDF library",
+      "description": "Discover the GigaPDF in-house PDF engine: low-level read/write, real content editing, high-fidelity rendering, forms, digital signing, OCR and Office conversion. Compiled to WebAssembly, with no third-party PDF, Office or image library."
     },
     "hero": {
       "kicker": "The in-house PDF engine",
       "title": "A complete PDF engine,",
       "titleAccent": "written from scratch.",
-      "description": "Most PDF tools stitch together third-party building blocks. GigaPDF took the opposite path: a full PDF engine, designed and written in-house, that reads, writes, edits, renders, signs and converts your documents. 100% in-house, zero third-party dependency — that is what makes faithful editing and sovereign processing possible.",
+      "description": "Most PDF tools stitch together third-party building blocks. GigaPDF took the opposite path: a full PDF engine, designed and written in-house, that reads, writes, edits, renders, signs and converts your documents. 100% in-house, no third-party PDF, Office or image library — that is what makes faithful editing and sovereign processing possible.",
       "ctaTry": "Try the editor",
       "ctaTools": "See the PDF tools"
     },
@@ -75,13 +75,13 @@
     "sections": {
       "core": {
         "label": "Foundations",
-        "title": "A 100% in-house engine, zero third-party dependency",
-        "description": "At the heart of GigaPDF sits a PDF engine written entirely in-house and compiled to WebAssembly to run at full speed on the server. It manipulates the PDF format at its lowest level, never delegating to a third-party library.",
+        "title": "A 100% in-house engine, zero third-party PDF library",
+        "description": "At the heart of GigaPDF sits a PDF engine written entirely in-house and compiled to WebAssembly to run at full speed on the server. It manipulates the PDF format at its lowest level, never delegating to a third-party PDF library.",
         "points": {
           "lowLevel": "Low-level PDF reading and writing: cross-reference tables (classic xref and xref streams), compressed objects (ObjStm), and recovery of damaged files.",
           "flate": "Fully in-house Flate compression and decompression: the document's streams are decoded and re-encoded with no external dependency.",
           "wasm": "Compiled to WebAssembly: native-grade performance, web portability, and a codebase we fully control.",
-          "souverain": "Zero third-party dependency on the critical path: what the engine does, it does itself — for security, auditability and longevity."
+          "souverain": "No third-party PDF, Office or image library: the engine handles the format itself. Cryptography (the audited RustCrypto crates) and the JavaScript engine (Boa) deliberately rely on proven building blocks rather than risky in-house code — a security-first choice."
         }
       },
       "edit": {
@@ -144,7 +144,7 @@
         "title": "Encryption, signing and archiving",
         "description": "Protect a document, prove its integrity, keep it over time: the engine handles encryption, digital signing and archival compliance end to end.",
         "points": {
-          "encryption": "Document encryption in RC4 and AES (128 and 256 bits): password protection and permission control.",
+          "encryption": "Document encryption in RC4 and AES (128 and 256 bits), built on the audited RustCrypto crates: password protection and permission control.",
           "signature": "PKCS#7 digital signing with a certificate: a verifiable proof of integrity, the way major PDF viewers do it.",
           "tamper": "Any tampering with a signed document is detectable — trust is demonstrable.",
           "archive": "Long-term archival compliance (PDF/A) to preserve your documents over time."
@@ -153,11 +153,11 @@
       "html": {
         "label": "HTML → PDF",
         "title": "From HTML/CSS to PDF, natively",
-        "description": "Generating a PDF from a web page or an HTML template is a common need. GigaPDF includes its own HTML/CSS layout engine — and even an in-house JavaScript engine for dynamic pages.",
+        "description": "Generating a PDF from a web page or an HTML template is a common need. GigaPDF includes its own HTML/CSS layout engine — and the Boa JavaScript engine for dynamic pages.",
         "points": {
           "css": "In-house HTML/CSS rendering engine: style cascade, block and inline layout, tables, flexbox and pagination.",
           "fonts": "Web fonts embedded in the generated PDF, for pixel-faithful rendering.",
-          "js": "Built-in native JavaScript engine: HTML templates that run scripts are rendered correctly.",
+          "js": "Built-in Boa JavaScript engine (ES2021+): HTML templates that run scripts are rendered correctly, with no browser.",
           "noThirdParty": "All of it without a third-party browser or rendering engine: the full chain is in-house."
         }
       },
@@ -250,7 +250,7 @@
     "stack": {
       "label": "Stack",
       "title": "A modern, auditable stack",
-      "description": "GigaPDF is a pnpm + Turbo monorepo. Next.js 16 / React 19 front end, an in-house TypeScript/WebAssembly PDF engine (100% in-house, zero third-party dependency), a FastAPI / Python API, all on Node.js 24 and PostgreSQL 17.",
+      "description": "GigaPDF is a pnpm + Turbo monorepo. Next.js 16 / React 19 front end, an in-house TypeScript/WebAssembly PDF engine (no third-party PDF/Office/image library; RustCrypto for crypto, Boa for JS), a FastAPI / Python API, all on Node.js 24 and PostgreSQL 17.",
       "items": {
         "frontend": "Next.js 16 · React 19 · Tailwind v4",
         "engine": "In-house PDF engine · TypeScript · WebAssembly",
@@ -1970,8 +1970,8 @@
         "editing": "In-place editing of text, images and shapes (true redaction, not a white mask)",
         "forms": "AcroForm form designer: text, date, checkbox and dropdown fields — create, fill, flatten",
         "signature": "PKCS#7 / CAdES digital signatures with your own P12/PFX certificate",
-        "ocr": "OCR (Tesseract fra+eng): searchable text layer on scanned PDFs",
-        "office": "Office conversions: import/export of 9 formats (DOCX/XLSX/PPTX, OpenDocument, legacy OLE2) via LibreOffice",
+        "ocr": "Built-in multi-language OCR: searchable text layer on scanned PDFs",
+        "office": "Native Office conversions: import/export of 9 formats (DOCX/XLSX/PPTX, OpenDocument, legacy OLE2)",
         "ged": "DMS: folders, trash, full-text search, tags, deduplication",
         "realtime": "Real-time multi-user collaboration over WebSocket",
         "api": "Full REST API, scoped API keys, and an embed widget to integrate the editor"
@@ -1993,7 +1993,7 @@
         },
         "docker": {
           "title": "Docker (recommended)",
-          "description": "The simplest path. The web image already ships every PDF system dependency — no extra setup.",
+          "description": "The simplest path. The PDF engine (WebAssembly) is bundled into the application — no third-party system binary and no extra setup.",
           "prereq": "Prerequisites: Docker 24+ and Docker Compose 2.20+.",
           "servicesTitle": "Services started by docker compose:",
           "services": {
@@ -2005,7 +2005,7 @@
             "web": "web — Next.js app + TypeScript PDF engine (:3000)",
             "admin": "admin — admin dashboard (:3001)"
           },
-          "bundledNote": "The web image (Debian) ships LibreOffice, fontforge, Tesseract OCR (fra+eng) and Playwright Chromium. No manual install of these binaries is required.",
+          "bundledNote": "The PDF engine (WebAssembly) handles Office and HTML → PDF conversions, OCR, font embedding, rasterization, signatures and encryption. No third-party system binary (LibreOffice, Chromium, Tesseract, fontforge, poppler) is required.",
           "migrateNote": "After the first start (and after every update), apply the database migrations:"
         },
         "native": {
@@ -2018,8 +2018,8 @@
             "postgres": "PostgreSQL 17+",
             "redis": "Redis 7+"
           },
-          "sysdepsTitle": "PDF system dependencies (Debian/Ubuntu):",
-          "sysdepsNote": "LibreOffice (Office conversions), fontforge (faithful font rendering), Tesseract OCR + fra + eng, and Chromium for HTML → PDF.",
+          "sysdepsTitle": "PDF system dependencies:",
+          "sysdepsNote": "None. The PDF engine (WebAssembly) is self-contained: Office and HTML → PDF conversions, OCR, font embedding, rasterization, signatures and encryption are all built in. No third-party binary (LibreOffice, Chromium, Tesseract, fontforge, poppler) to install.",
           "backendTitle": "Backend (FastAPI + Celery)",
           "backendNote": "The pip install -r requirements.txt step installs the backend dependencies (the Python equivalent of a dependency install — this project does NOT use Composer). Then alembic upgrade head creates the schema.",
           "frontendTitle": "Frontend (Next.js web + admin + packages)",
