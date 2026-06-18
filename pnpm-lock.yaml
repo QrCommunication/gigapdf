@@ -601,8 +601,8 @@ importers:
         specifier: workspace:*
         version: link:../types
       '@qrcommunication/gigapdf-lib':
-        specifier: ^0.50.0
-        version: 0.50.0
+        specifier: ^0.51.0
+        version: 0.51.0
       fabric:
         specifier: ^7.4.0
         version: 7.4.0
@@ -766,8 +766,8 @@ importers:
         specifier: workspace:*
         version: link:../types
       '@qrcommunication/gigapdf-lib':
-        specifier: ^0.50.0
-        version: 0.50.0
+        specifier: ^0.51.0
+        version: 0.51.0
     devDependencies:
       '@giga-pdf/eslint-config':
         specifier: workspace:*
@@ -2647,8 +2647,8 @@ packages:
       react: 19.2.7
       react-dom: 19.2.7
 
-  '@qrcommunication/gigapdf-lib@0.50.0':
-    resolution: {integrity: sha512-26Y6Zd6u33WQhVGWHIfXt1fsyeZ8/YEoA9zme7HflKDCQAVlxwbiEO2u2nNJlX68Hq2Auqj+GHe5wGewuPQamQ==}
+  '@qrcommunication/gigapdf-lib@0.51.0':
+    resolution: {integrity: sha512-W6E18AsCEPCHoz0gHQdUbv0ZUIXaswxER3UWN0OfqS9AzWVI5HMbsiyzHkC/4N2I9xNaotqyYDBzQtriNC3eEw==}
     engines: {node: '>=18.17.0'}
 
   '@radix-ui/number@1.1.2':
@@ -10975,7 +10975,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react-dom'
 
-  '@qrcommunication/gigapdf-lib@0.50.0': {}
+  '@qrcommunication/gigapdf-lib@0.51.0': {}
 
   '@radix-ui/number@1.1.2': {}
 
