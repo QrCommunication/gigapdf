@@ -75,6 +75,50 @@ export async function applyHeaderFooter(
 }
 
 /**
+ * The header/footer text already baked into a PDF, as recovered by the SDK's
+ * {@link https://github.com/QrCommunication/gigapdf-lib `GigaPdfDoc.headerFooter`}
+ * reader. Each side is the faithful drawn text (with per-page tokens substituted)
+ * or `null` when no band is present.
+ */
+export interface DetectedHeaderFooter {
+  header: string | null;
+  footer: string | null;
+}
+
+/**
+ * Read back the running header/footer already baked into `source` — the reader
+ * counterpart of {@link applyHeaderFooter}. Used by the Word-like editor to
+ * auto-enable its headers/footers toggle and pre-fill the dialog when a document
+ * arrives with a header/footer already on it. Opens a short-lived read-only doc
+ * on the shared engine and closes it in `finally`; never mutates the source.
+ *
+ * Returns `{ header: null, footer: null }` (rather than throwing) on any engine
+ * failure, so a malformed PDF degrades to "no detected band" instead of breaking
+ * the editor open flow.
+ */
+export async function detectHeaderFooter(
+  source: ArrayBuffer | Uint8Array,
+  loadEngine: EngineLoader = loadPdfEngine,
+): Promise<DetectedHeaderFooter> {
+  try {
+    const engine = await loadEngine();
+    const doc = engine.open(toBytes(source));
+    try {
+      const { header, footer } = doc.headerFooter();
+      const text = (spec: HeaderFooterSpec | null): string | null => {
+        const t = spec?.text?.trim();
+        return t && t.length > 0 ? t : null;
+      };
+      return { header: text(header), footer: text(footer) };
+    } finally {
+      doc.close();
+    }
+  } catch {
+    return { header: null, footer: null };
+  }
+}
+
+/**
  * Remove every `kind` band ("header" or "footer") from `source` and return the
  * re-serialised PDF bytes. Throws if the engine rejects the change.
  */

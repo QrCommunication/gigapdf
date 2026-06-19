@@ -50,11 +50,13 @@ import {
   FileImage,
   FileCode,
   FileType,
+  type LucideIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@giga-pdf/ui";
@@ -108,8 +110,14 @@ import {
 import {
   applyHeaderFooter,
   removeHeaderFooter,
+  detectHeaderFooter,
   type HeaderFooterKind,
 } from "@/components/editor/lib/page-headers-footers";
+import {
+  exportDocumentAs,
+  exportFilename,
+} from "@/components/editor/lib/export-document";
+import type { ExportFormat } from "@/components/editor/lib/export-formats";
 import type { HeaderFooterSpec } from "@qrcommunication/gigapdf-lib";
 import { clientLogger } from "@/lib/client-logger";
 import { withRetry } from "@/lib/with-retry";
@@ -198,6 +206,24 @@ const TOOLBAR_FORMAT_TO_TEXT_FORMAT: Record<
   "align-center": "alignCenter",
   "align-right": "alignRight",
 };
+
+// Universal export menu (#84): the editable formats the GigaPDF SDK lowers the
+// current document into, with their menu icon + i18n key (under `editor.office`).
+const SDK_EXPORT_ITEMS: ReadonlyArray<{
+  format: ExportFormat;
+  icon: LucideIcon;
+  labelKey: string;
+}> = [
+  { format: "docx", icon: FileText, labelKey: "office.exportWordEditable" },
+  { format: "odt", icon: FileText, labelKey: "office.exportOdt" },
+  { format: "xlsx", icon: Sheet, labelKey: "office.exportExcelEditable" },
+  { format: "ods", icon: Sheet, labelKey: "office.exportOds" },
+  { format: "pptx", icon: Presentation, labelKey: "office.exportPowerPointEditable" },
+  { format: "odp", icon: Presentation, labelKey: "office.exportOdp" },
+  { format: "html", icon: FileCode, labelKey: "office.exportHtmlEditable" },
+  { format: "rtf", icon: FileType, labelKey: "office.exportRtf" },
+  { format: "pdf", icon: Download, labelKey: "office.exportPdf" },
+];
 
 export default function EditorPage() {
   const params = useParams();
@@ -361,6 +387,19 @@ export default function EditorPage() {
   // True while a Word-style header/footer band is being baked onto the PDF —
   // drives the dialog's busy state so the user can't fire overlapping bakes.
   const [headerFooterBusy, setHeaderFooterBusy] = useState(false);
+  // Text of the header/footer the document already carried when it was opened
+  // (recovered via the SDK's headerFooter() reader). Seeds the dialog so the
+  // Word-like editor reflects existing document state (#76, P4).
+  const [headerFooterInitialHeader, setHeaderFooterInitialHeader] = useState<
+    string | undefined
+  >(undefined);
+  const [headerFooterInitialFooter, setHeaderFooterInitialFooter] = useState<
+    string | undefined
+  >(undefined);
+  // Guards the one-shot header/footer auto-detect so it runs once per opened
+  // document and never re-fires on subsequent binary mutations (which would
+  // re-enable the toggle the user just turned off).
+  const headerFooterDetectedRef = useRef(false);
   // True while the current page is being OCR'd + ingested into the semantic
   // index (#85) — disables the toolbar button to prevent overlapping runs.
   const [indexOcrBusy, setIndexOcrBusy] = useState(false);
@@ -523,6 +562,8 @@ export default function EditorPage() {
     if (!documentId || !name) return;
     if (flattenedPdfFile) return;
     let cancelled = false;
+    // Re-arm the one-shot header/footer auto-detect for this (re)load.
+    headerFooterDetectedRef.current = false;
 
     async function loadPdfBinary() {
       try {
@@ -538,6 +579,26 @@ export default function EditorPage() {
         if (cancelled) return;
         const file = new File([blob], `${name}.pdf`, { type: 'application/pdf' });
         updateCurrentPdfFile(file);
+
+        // One-shot auto-detect of a header/footer already baked into the
+        // opened document (#76, P4). Read the freshly-fetched bytes with the
+        // SDK reader; if a band is present, enable the Word-style toggle and
+        // pre-fill the dialog. Guarded by a ref so it runs once per document
+        // and never re-fires after later binary mutations.
+        if (!headerFooterDetectedRef.current) {
+          headerFooterDetectedRef.current = true;
+          try {
+            const bytes = new Uint8Array(await blob.arrayBuffer());
+            if (cancelled) return;
+            const { header, footer } = await detectHeaderFooter(bytes);
+            if (cancelled) return;
+            if (header) setHeaderFooterInitialHeader(header);
+            if (footer) setHeaderFooterInitialFooter(footer);
+            if (header || footer) setHeadersFootersEnabled(true);
+          } catch (err) {
+            clientLogger.warn('[editor] header/footer auto-detect failed:', err);
+          }
+        }
       } catch (err) {
         clientLogger.error('[editor] Failed to load PDF binary:', err);
       }
@@ -1775,6 +1836,12 @@ export default function EditorPage() {
   const [exportingFormat, setExportingFormat] = useState<
     "png" | "jpeg" | "webp" | "txt" | "html" | null
   >(null);
+  // Universal export via the GigaPDF SDK (#84) — lowers the CURRENT document
+  // (currentPdfFile, the WYSIWYG source of truth) into any editable office /
+  // OpenDocument / web format, 100% client-side. Independent of the two
+  // server-side export paths above; null when no SDK export is running.
+  const [exportingModelFormat, setExportingModelFormat] =
+    useState<ExportFormat | null>(null);
   const handleExportOffice = useCallback(
     async (format: "docx" | "xlsx" | "pptx") => {
       if (!documentId || exportingOfficeFormat) return;
@@ -1846,6 +1913,36 @@ export default function EditorPage() {
       }
     },
     [documentId, exportingFormat, isDirty, save, name],
+  );
+
+  // Universal export (#84): lower the CURRENT document into any editable
+  // format (docx/xlsx/pptx/odt/ods/odp/html/rtf/pdf) via the GigaPDF SDK,
+  // entirely client-side. Exports from currentPdfFileRef — the WYSIWYG source
+  // of truth (cf. pdf-libraries rule) — so the result reflects unsaved edits
+  // without a server round-trip. Read-only: never touches the scene graph.
+  const handleExportModel = useCallback(
+    async (format: ExportFormat) => {
+      const file = currentPdfFileRef.current;
+      if (!file || exportingModelFormat) return;
+      setExportingModelFormat(format);
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const blob = await exportDocumentAs(bytes, format);
+        downloadBlob(blob, exportFilename(name || file.name, format));
+        toast({
+          title: t("office.exportSuccess"),
+        });
+      } catch (err) {
+        clientLogger.error(`[editor] SDK export ${format} failed:`, err);
+        toast({
+          title: t("office.exportError"),
+          variant: "destructive",
+        });
+      } finally {
+        setExportingModelFormat(null);
+      }
+    },
+    [exportingModelFormat, name, toast, t],
   );
 
   // Re-parse the PDF binary to refresh the scene graph after a page op.
@@ -3016,6 +3113,26 @@ export default function EditorPage() {
                 )}
                 <span>{t("office.exportHtml")}</span>
               </DropdownMenuItem>
+              {/* Universal export (#84): lower the current document into any
+                  editable format via the GigaPDF SDK, entirely client-side. */}
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>
+                {t("office.exportEditableGroup")}
+              </DropdownMenuLabel>
+              {SDK_EXPORT_ITEMS.map(({ format, icon: Icon, labelKey }) => (
+                <DropdownMenuItem
+                  key={format}
+                  onClick={() => handleExportModel(format)}
+                  disabled={!currentPdfFile || exportingModelFormat !== null}
+                >
+                  {exportingModelFormat === format ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Icon className="mr-2 h-4 w-4" />
+                  )}
+                  <span>{t(labelKey)}</span>
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -3102,6 +3219,8 @@ export default function EditorPage() {
         onToggleHeadersFooters={handleToggleHeadersFooters}
         onHeaderFooterApply={handleHeaderFooterApply}
         onHeaderFooterRemove={handleHeaderFooterRemove}
+        headerFooterInitialHeader={headerFooterInitialHeader}
+        headerFooterInitialFooter={headerFooterInitialFooter}
         headerFooterBusy={headerFooterBusy}
       />
 

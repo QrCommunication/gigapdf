@@ -1269,6 +1269,28 @@
         "pageLabel": "Numéro de page (1–{count})"
       }
     },
+    "office": {
+      "exportWord": "Exporter en Word (.docx)",
+      "exportExcel": "Exporter en Excel (.xlsx)",
+      "exportPowerPoint": "Exporter en PowerPoint (.pptx)",
+      "exportPng": "Exporter en PNG (.zip)",
+      "exportJpeg": "Exporter en JPEG (.zip)",
+      "exportWebp": "Exporter en WebP (.zip)",
+      "exportText": "Exporter en Texte (.txt)",
+      "exportHtml": "Exporter en HTML (.html)",
+      "exportEditableGroup": "Exporter (éditable)",
+      "exportWordEditable": "Word (.docx)",
+      "exportExcelEditable": "Excel (.xlsx)",
+      "exportPowerPointEditable": "PowerPoint (.pptx)",
+      "exportOdt": "Texte OpenDocument (.odt)",
+      "exportOds": "Classeur OpenDocument (.ods)",
+      "exportOdp": "Présentation OpenDocument (.odp)",
+      "exportHtmlEditable": "Page web (.html)",
+      "exportRtf": "Texte enrichi (.rtf)",
+      "exportPdf": "PDF (.pdf)",
+      "exportSuccess": "Export réussi",
+      "exportError": "Échec de l'export"
+    },
     "headersFooters": {
       "toolbarLabel": "En-têtes et pieds de page",
       "title": "En-têtes et pieds de page",

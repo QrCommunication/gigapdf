@@ -1269,6 +1269,28 @@
         "pageLabel": "Page number (1–{count})"
       }
     },
+    "office": {
+      "exportWord": "Export as Word (.docx)",
+      "exportExcel": "Export as Excel (.xlsx)",
+      "exportPowerPoint": "Export as PowerPoint (.pptx)",
+      "exportPng": "Export as PNG (.zip)",
+      "exportJpeg": "Export as JPEG (.zip)",
+      "exportWebp": "Export as WebP (.zip)",
+      "exportText": "Export as Text (.txt)",
+      "exportHtml": "Export as HTML (.html)",
+      "exportEditableGroup": "Export (editable)",
+      "exportWordEditable": "Word (.docx)",
+      "exportExcelEditable": "Excel (.xlsx)",
+      "exportPowerPointEditable": "PowerPoint (.pptx)",
+      "exportOdt": "OpenDocument Text (.odt)",
+      "exportOds": "OpenDocument Spreadsheet (.ods)",
+      "exportOdp": "OpenDocument Presentation (.odp)",
+      "exportHtmlEditable": "Web page (.html)",
+      "exportRtf": "Rich Text (.rtf)",
+      "exportPdf": "PDF (.pdf)",
+      "exportSuccess": "Export successful",
+      "exportError": "Export failed"
+    },
     "headersFooters": {
       "toolbarLabel": "Headers & footers",
       "title": "Headers & footers",
