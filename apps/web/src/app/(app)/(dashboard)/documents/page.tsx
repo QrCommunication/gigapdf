@@ -8,7 +8,6 @@ import { SortField, SortDirection } from "@/components/dashboard/document-table"
 import { BreadcrumbFolder } from "@/components/dashboard/folder-breadcrumb";
 import { Button, Input, Skeleton, useToast } from "@giga-pdf/ui";
 import {
-  Plus,
   Search,
   Upload,
   ChevronLeft,
@@ -18,8 +17,19 @@ import {
   Home,
   RefreshCw,
 } from "lucide-react";
-import { api, getAuthToken, StoredDocument } from "@/lib/api";
+import { api, StoredDocument } from "@/lib/api";
 import { clientLogger } from "@/lib/client-logger";
+import { ImportDialog } from "@/components/dashboard/import-dialog";
+import {
+  IMPORT_CONCURRENCY,
+  MAX_IMPORT_FILE_SIZE_BYTES,
+  isPdfFile,
+  runWithConcurrency,
+  stripExtension,
+  summarizeOutcomes,
+  validateImportFile,
+  type ImportOutcome,
+} from "@/lib/document-import";
 
 interface Document {
   id: string;
@@ -38,60 +48,6 @@ interface Folder {
   parentId: string | null;
   createdAt: Date;
   updatedAt: Date;
-}
-
-// Office formats convertible to PDF via /api/office/upload: modern + legacy
-// Microsoft formats and OpenDocument. Kept in sync with the office route
-// contract (25MB max, returns the converted PDF binary).
-const OFFICE_EXTENSION_REGEX = /\.(docx|doc|xlsx|xls|pptx|ppt|odt|ods|odp)$/i;
-const OFFICE_ACCEPT = ".docx,.doc,.xlsx,.xls,.pptx,.ppt,.odt,.ods,.odp";
-const UPLOAD_ACCEPT = `.pdf,${OFFICE_ACCEPT}`;
-const MAX_OFFICE_FILE_SIZE_BYTES = 25 * 1024 * 1024;
-
-// Pool size for parallel imports. Unbounded Promise.allSettled would open
-// one full pipeline (convert + upload + download + save) per file and
-// overwhelm the backend on large drops; sequential is too slow.
-const UPLOAD_CONCURRENCY = 3;
-
-interface ImportSuccess {
-  ok: true;
-  name: string;
-}
-
-interface ImportFailure {
-  ok: false;
-  name: string;
-  reason: string;
-}
-
-type ImportOutcome = ImportSuccess | ImportFailure;
-
-/**
- * Run `worker` over `items` with at most `concurrency` workers in flight.
- * Results preserve the input order. Workers are expected to handle their
- * own errors (a rejection aborts the remaining items of that runner).
- */
-async function runWithConcurrency<T, R>(
-  items: readonly T[],
-  concurrency: number,
-  worker: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array<R>(items.length);
-  let nextIndex = 0;
-
-  const runner = async (): Promise<void> => {
-    while (nextIndex < items.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      const item = items[index];
-      if (item === undefined) continue;
-      results[index] = await worker(item, index);
-    }
-  };
-
-  const poolSize = Math.max(1, Math.min(concurrency, items.length));
-  await Promise.all(Array.from({ length: poolSize }, () => runner()));
-  return results;
 }
 
 // Thumbnail rendering bounds (PNG ≤ 2 MB backend limit is comfortable at
@@ -205,8 +161,9 @@ export default function DocumentsPage() {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const officeFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Universal import dialog (single "Import" entry point).
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   // Get current folder + tag filter from URL
   const currentFolderId = searchParams?.get("folder") || null;
@@ -372,110 +329,66 @@ export default function DocumentsPage() {
     loadDocuments();
   }, [loadDocuments]);
 
-  const handleNewDocument = () => {
-    fileInputRef.current?.click();
-  };
+  const handleOpenImport = useCallback(() => {
+    setImportDialogOpen(true);
+  }, []);
 
-  const handleNewOfficeDocument = () => {
-    officeFileInputRef.current?.click();
-  };
-
-  // Routes one file through the right pipeline by extension:
-  // - .pdf  -> standard pipeline (uploadDocument -> download -> saveDocument)
-  // - Office (.docx/.doc/.xlsx/.xls/.pptx/.ppt/.odt/.ods/.odp)
-  //   -> POST /api/office/upload (returns the converted PDF binary), then the
-  //      same standard pipeline. An Office file becomes editable like a PDF.
-  // Never throws: every failure is returned as an ImportFailure with a
-  // precise per-file reason, so one bad file cannot abort the batch.
+  // Imports ONE file, keeping its original format. The raw bytes are stored
+  // as-is (no Office→PDF conversion): the GED keeps the source document.
+  // PDFs additionally get a first-page thumbnail + extracted full text for
+  // search; non-PDF formats are stored without that PDF-only enrichment.
+  // Never throws: every failure is returned with a precise per-file reason,
+  // so one bad file cannot abort the batch.
   const importSingleFile = useCallback(
     async (file: File): Promise<ImportOutcome> => {
-      const lowerName = file.name.toLowerCase();
-      const isPdf = lowerName.endsWith(".pdf");
-      const isOffice = OFFICE_EXTENSION_REGEX.test(lowerName);
+      // Client-side validation: size cap only (every format is accepted).
+      const validation = validateImportFile(file, MAX_IMPORT_FILE_SIZE_BYTES);
+      if (!validation.ok) {
+        return {
+          ok: false,
+          name: file.name,
+          reason: t(`import.${validation.reasonKey}`),
+        };
+      }
 
-      // Client-side validation: extension + size, per-file precise reason.
-      if (!isPdf && !isOffice) {
-        return { ok: false, name: file.name, reason: t("upload.invalidFormat") };
-      }
-      if (isOffice && file.size > MAX_OFFICE_FILE_SIZE_BYTES) {
-        return { ok: false, name: file.name, reason: t("office.importErrorSize") };
-      }
+      const baseName = stripExtension(file.name) || file.name;
+      const pdf = isPdfFile(file);
 
       try {
-        let pdfFile: File;
-        let baseName: string;
+        // PDF-only enrichment, kicked off in parallel with the upload. Both
+        // helpers are best-effort (resolve to null, never reject), so they
+        // cannot fail the import; non-PDFs skip them entirely.
+        const thumbnailPromise = pdf ? renderPdfThumbnail(file) : null;
+        const extractedTextPromise = pdf ? extractPdfText(file) : null;
 
-        if (isPdf) {
-          pdfFile = file;
-          baseName = file.name.replace(/\.pdf$/i, "");
-        } else {
-          // 1) Office -> PDF conversion (server-side)
-          const formData = new FormData();
-          formData.append("file", file);
-          const convertRes = await fetch("/api/office/upload", {
-            method: "POST",
-            credentials: "include",
-            body: formData,
-          });
-          if (!convertRes.ok) {
-            const reason =
-              convertRes.status === 503
-                ? t("office.importErrorService")
-                : convertRes.status === 413
-                  ? t("office.importErrorSize")
-                  : t("office.importErrorConvert");
-            return { ok: false, name: file.name, reason };
-          }
-          const pdfBlob = await convertRes.blob();
-          baseName = file.name.replace(OFFICE_EXTENSION_REGEX, "");
-          pdfFile = new File([pdfBlob], `${baseName}.pdf`, {
-            type: "application/pdf",
-          });
-        }
+        const extractedText = extractedTextPromise
+          ? await extractedTextPromise
+          : null;
 
-        // 2) Standard PDF pipeline: upload -> download -> save to storage.
-        // Thumbnail rendering + full-text extraction start in parallel with
-        // the upload; both helpers are best-effort (resolve to null, never
-        // reject), so they cannot fail the import nor skew the progress
-        // counter (one tick per settled file, unchanged).
-        const thumbnailPromise = renderPdfThumbnail(pdfFile);
-        const extractedTextPromise = extractPdfText(pdfFile);
-
-        const uploadResult = await api.uploadDocument(pdfFile);
-        const token = await getAuthToken();
-        const downloadRes = await fetch(
-          `/api/v1/documents/${uploadResult.document_id}/download`,
-          {
-            credentials: "include",
-            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          },
-        );
-        if (!downloadRes.ok) {
-          throw new Error(`Failed to download PDF: ${downloadRes.status}`);
-        }
-        const finalPdfBlob = await downloadRes.blob();
-        const extractedText = await extractedTextPromise;
+        // Store the ORIGINAL file as-is in the GED.
         const saved = await api.saveDocument({
-          file: finalPdfBlob,
+          file,
           name: baseName,
           tags: [],
           folderId: currentFolderId || undefined,
           extractedText: extractedText ?? undefined,
         });
 
-        // 3) Best-effort thumbnail upload (needs the stored document id,
-        // hence after save). A failure is logged and silently ignored.
-        try {
-          const thumbnail = await thumbnailPromise;
-          if (thumbnail) {
-            await api.uploadDocumentThumbnail(
-              saved.stored_document_id,
-              thumbnail,
-              `${baseName}.png`,
-            );
+        // Best-effort thumbnail upload (needs the stored document id, hence
+        // after save). A failure is logged and silently ignored.
+        if (thumbnailPromise) {
+          try {
+            const thumbnail = await thumbnailPromise;
+            if (thumbnail) {
+              await api.uploadDocumentThumbnail(
+                saved.stored_document_id,
+                thumbnail,
+                `${baseName}.png`,
+              );
+            }
+          } catch (thumbErr) {
+            clientLogger.warn("documents.thumbnail-upload-failed", thumbErr);
           }
-        } catch (thumbErr) {
-          clientLogger.warn("documents.thumbnail-upload-failed", thumbErr);
         }
 
         return { ok: true, name: file.name };
@@ -505,7 +418,7 @@ export default function DocumentsPage() {
       try {
         const outcomes = await runWithConcurrency(
           files,
-          UPLOAD_CONCURRENCY,
+          IMPORT_CONCURRENCY,
           async (file) => {
             const outcome = await importSingleFile(file);
             setUploadProgress((prev) =>
@@ -515,22 +428,19 @@ export default function DocumentsPage() {
           },
         );
 
-        const failures = outcomes.filter(
-          (outcome): outcome is ImportFailure => !outcome.ok,
-        );
-        const successCount = outcomes.length - failures.length;
+        const { successCount, failures } = summarizeOutcomes(outcomes);
 
         if (failures.length === 0) {
           toast({
-            title: t("upload.summaryAllSuccess", { count: successCount }),
+            title: t("import.summaryAllSuccess", { count: successCount }),
           });
         } else {
           toast({
             variant: "destructive",
             title:
               successCount === 0
-                ? t("upload.summaryAllFailed", { count: failures.length })
-                : t("upload.summaryPartial", {
+                ? t("import.summaryAllFailed", { count: failures.length })
+                : t("import.summaryPartial", {
                     success: successCount,
                     failed: failures.length,
                   }),
@@ -547,6 +457,9 @@ export default function DocumentsPage() {
         }
 
         if (successCount > 0) {
+          // Close the dialog once at least one file landed; the explorer-wide
+          // drop zone keeps working independently of the dialog.
+          setImportDialogOpen(false);
           await loadDocuments();
         }
       } finally {
@@ -556,17 +469,6 @@ export default function DocumentsPage() {
     },
     [importSingleFile, loadDocuments, t, toast],
   );
-
-  // Shared by both hidden file inputs (PDF + Office): extension routing is
-  // handled per file inside processFiles/importSingleFile.
-  const handleFileInputChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const files = event.target.files ? Array.from(event.target.files) : [];
-    // Reset immediately: the File references stay valid after clearing.
-    event.target.value = "";
-    void processFiles(files);
-  };
 
   const handleCreateFolder = async (name: string, parentId: string | null) => {
     await api.createFolder(name, parentId);
@@ -637,12 +539,14 @@ export default function DocumentsPage() {
     return "/" + path;
   }, [currentFolderId, breadcrumbPath]);
 
-  // Drop multiple files anywhere on the page (explorer-like UX). PDFs and
-  // Office documents are accepted; each file is routed/validated
-  // individually by processFiles. The overlay only shows when the user
-  // drags actual files from the OS; internal drag-and-drop (folder
-  // reorganization) doesn't trigger it because Radix DnD doesn't put
-  // `Files` in dataTransfer.types.
+  // Drop multiple files anywhere on the page (header/empty areas). EVERY
+  // file type is accepted; each file is validated/uploaded individually by
+  // processFiles. The overlay only shows when the user drags actual files
+  // from the OS; internal drag-and-drop (folder reorganization) doesn't
+  // trigger it because the explorer's HTML5 DnD puts only JSON in
+  // dataTransfer.types, not `Files`. The explorer area owns its own scoped
+  // drop zone (see DocumentExplorer onFilesDropped); it calls
+  // stopPropagation so a drop on the listing doesn't double-fire here.
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const dragDepthRef = useRef(0);
 
@@ -710,31 +614,14 @@ export default function DocumentsPage() {
           <div className="bg-background rounded-lg shadow-2xl px-8 py-6 flex items-center gap-4">
             <Upload className="h-12 w-12 text-primary" />
             <div>
-              <p className="text-xl font-semibold">{t("upload.dropTitle")}</p>
+              <p className="text-xl font-semibold">{t("import.dropTitle")}</p>
               <p className="text-sm text-muted-foreground">
-                {t("upload.dropHint")}
+                {t("import.dropHint")}
               </p>
             </div>
           </div>
         </div>
       )}
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept={UPLOAD_ACCEPT}
-        multiple
-        className="hidden"
-        onChange={handleFileInputChange}
-      />
-      <input
-        ref={officeFileInputRef}
-        type="file"
-        accept={OFFICE_ACCEPT}
-        multiple
-        className="hidden"
-        onChange={handleFileInputChange}
-      />
 
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -746,33 +633,24 @@ export default function DocumentsPage() {
         </div>
         <div className="flex items-center gap-2">
           <Button
-            variant="outline"
             className="gap-2"
-            onClick={handleNewOfficeDocument}
-            disabled={uploading}
-          >
-            <Upload className="h-4 w-4" />
-            {t("office.import")}
-          </Button>
-          <Button
-            className="gap-2"
-            onClick={handleNewDocument}
+            onClick={handleOpenImport}
             disabled={uploading}
           >
             {uploading ? (
               <>
                 <Upload className="h-4 w-4 animate-pulse" />
                 {uploadProgress && uploadProgress.total > 1
-                  ? t("upload.uploadingProgress", {
+                  ? t("import.uploadingProgress", {
                       done: uploadProgress.done,
                       total: uploadProgress.total,
                     })
-                  : t("upload.uploading")}
+                  : t("import.uploading")}
               </>
             ) : (
               <>
-                <Plus className="h-4 w-4" />
-                {t("newDocument")}
+                <Upload className="h-4 w-4" />
+                {t("import.button")}
               </>
             )}
           </Button>
@@ -866,9 +744,9 @@ export default function DocumentsPage() {
           <p className="mb-4 text-muted-foreground">
             {t("noDocuments.description")}
           </p>
-          <Button onClick={handleNewDocument}>
-            <Plus className="mr-2 h-4 w-4" />
-            {t("upload.title")}
+          <Button onClick={handleOpenImport}>
+            <Upload className="mr-2 h-4 w-4" />
+            {t("import.button")}
           </Button>
         </div>
       ) : displayDocuments.length === 0 &&
@@ -904,6 +782,8 @@ export default function DocumentsPage() {
             onFolderNavigate={handleFolderNavigate}
             onRefresh={loadDocuments}
             onCreateFolder={handleCreateFolder}
+            onFilesDropped={handleFilesDropped}
+            uploadingFiles={uploading}
           />
 
           {/* Pagination */}
@@ -932,6 +812,16 @@ export default function DocumentsPage() {
           )}
         </>
       )}
+
+      {/* Universal import dialog (single entry point: every file type). */}
+      <ImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onFilesSelected={(files) => void processFiles(files)}
+        uploading={uploading}
+        progress={uploadProgress}
+        destinationPath={getCurrentPath()}
+      />
     </div>
   );
 }
