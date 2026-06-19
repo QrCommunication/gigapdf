@@ -9,9 +9,12 @@ The extraction strategy is chosen from the file's MIME type / format:
 - **PDF** → text layer via :mod:`pdfplumber` (no OCR; scanned PDFs without a
   text layer yield little/nothing, which is expected — the TS engine's OCR
   pipeline handles those on demand).
-- **Image** (PNG/JPEG/WebP/TIFF/…) → OCR via ``pytesseract`` (lazy, best
-  effort: if the binding or the ``tesseract`` binary is missing, returns no
-  text instead of failing).
+- **Image** (PNG/JPEG/WebP/TIFF/…) → **no server-side OCR**. The zero-binary
+  policy (#61) removed the ``tesseract`` binary, so images are OCR'd
+  client-side through the engine's native WASM OCR (``doc.ocr``) and ingested
+  via the ``/ocr-blocks`` pipeline. Server-side extraction yields no text for
+  images (they are still stored verbatim and become searchable once the client
+  OCR pipeline indexes them).
 - **Anything else** (Office, etc.) → skipped here. Office imports are converted
   to PDF by the TS engine which carries the text layer; the PDF text is what
   gets indexed.
@@ -77,24 +80,16 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
         return ""
 
 
-def extract_text_from_image(image_bytes: bytes) -> str:
-    """OCR a raster image to text (best-effort, never raises).
+def extract_text_from_image(image_bytes: bytes) -> str:  # noqa: ARG001 — stub
+    """Images are not OCR'd server-side — always returns ``""``.
 
-    Lazily imports ``pytesseract`` + Pillow. If the OCR binding or the
-    ``tesseract`` binary is unavailable, returns an empty string (the file is
-    still imported and stored; it is simply not full-text searchable until a
-    later re-index via the OCR pipeline).
+    The zero-binary policy (#61) removed the ``tesseract`` binary, so image OCR
+    runs client-side through the engine's native WASM OCR (``doc.ocr``) and is
+    ingested via the ``/ocr-blocks`` pipeline. This stub keeps the dispatch
+    shape stable; the image is stored verbatim and becomes searchable once the
+    client OCR pipeline indexes it.
     """
-    try:
-        import pytesseract  # lazy — optional OCR dependency
-        from PIL import Image
-
-        with Image.open(io.BytesIO(image_bytes)) as image:
-            text = pytesseract.image_to_string(image) or ""
-        return _truncate(text.strip())
-    except Exception:  # noqa: BLE001 — OCR is best-effort
-        _logger.warning("Image OCR extraction failed", exc_info=True)
-        return ""
+    return ""
 
 
 def extract_text(data: bytes, mime_type: str | None) -> str:
