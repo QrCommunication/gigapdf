@@ -1391,6 +1391,18 @@
       "appliedTitle": "OCR applied",
       "appliedDescription": "An invisible text layer has been added: the document is now searchable."
     },
+    "redact": {
+      "apply": "Apply redaction",
+      "applyCount": "Redact {count, plural, one {# zone} other {# zones}}",
+      "applyHint": "Permanently delete the content under the drawn zones — this cannot be undone",
+      "applying": "Redacting…",
+      "clear": "Clear zones",
+      "irreversible": "Redaction is irreversible: the text is deleted and image pixels are erased, not just hidden.",
+      "appliedTitle": "Redaction applied",
+      "appliedDescription": "The content under the redacted zones was permanently removed.",
+      "errorTitle": "Redaction failed",
+      "errorDescription": "The redaction could not be applied. Please try again."
+    },
     "indexOcr": {
       "indexedTitle": "Document indexed",
       "indexedDescription": "{count} text blocks were added to semantic search.",
@@ -1426,6 +1438,7 @@
       "image": "Image",
       "shape": "Shape",
       "draw": "Draw",
+      "redact": "Redact (PII)",
       "annotation": "Annotation",
       "formField": "Form field",
       "pan": "Pan",

@@ -137,6 +137,17 @@ export interface EditorCanvasHandle {
    * sélection souris). No-op si l'élément n'est pas rendu sur la page affichée.
    */
   selectElement: (elementId: string) => void;
+  /**
+   * Collect the redaction zones drawn on the currently-displayed page, in web
+   * coordinates (origin top-left, Y-down, in PDF points at scale 1 — the same
+   * space as `page.dimensions`). These are transient marker rects
+   * (`data.redactionMark`), never scene-graph elements: the caller lowers them
+   * to PDF user-space and feeds them to the engine's `redactPii`. Returns an
+   * empty array when no zone is drawn.
+   */
+  getRedactionMarks: () => { x: number; y: number; width: number; height: number }[];
+  /** Remove every redaction marker rect from the canvas (e.g. after applying). */
+  clearRedactionMarks: () => void;
 }
 
 export interface EditorCanvasProps {
@@ -207,6 +218,13 @@ export interface EditorCanvasProps {
   onCanvasReady?: (handle: EditorCanvasHandle) => void;
   /** Callback pour les clics sur les liens hypertexte */
   onHyperlinkClick?: (linkUrl?: string | null, linkPage?: number | null) => void;
+  /**
+   * Fired with the live number of redaction-marker rects on the page whenever a
+   * mark is drawn or removed. Lets the toolbar reflect the count and enable the
+   * Apply/Clear cluster. Markers are transient overlays, never scene-graph
+   * elements (see the Redaction tool).
+   */
+  onRedactionMarksChanged?: (count: number) => void;
 }
 
 // Génère un ID unique
@@ -400,6 +418,7 @@ export function EditorCanvas({
   onZoomChanged,
   onCanvasReady,
   onHyperlinkClick,
+  onRedactionMarksChanged,
 }: EditorCanvasProps) {
   const t = useTranslations("editor.canvas");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -421,6 +440,7 @@ export function EditorCanvas({
   const onSelectionChangedRef = useRef(onSelectionChanged);
   const onZoomChangedRef = useRef(onZoomChanged);
   const onHyperlinkClickRef = useRef(onHyperlinkClick);
+  const onRedactionMarksChangedRef = useRef(onRedactionMarksChanged);
 
   // Refs for tool options to avoid stale closures
   const toolRef = useRef(tool);
@@ -486,6 +506,7 @@ export function EditorCanvas({
     onSelectionChangedRef.current = onSelectionChanged;
     onZoomChangedRef.current = onZoomChanged;
     onHyperlinkClickRef.current = onHyperlinkClick;
+    onRedactionMarksChangedRef.current = onRedactionMarksChanged;
     toolRef.current = tool;
     shapeTypeRef.current = shapeType;
     annotationTypeRef.current = annotationType;
@@ -1505,6 +1526,11 @@ export function EditorCanvas({
       // ce ne sont pas des éléments du scene graph, ils ne doivent jamais être
       // queués/bakés ni remontés à page.tsx.
       if ((e.target as FabricObjectWithData).data?.isHideMask) return;
+      // Ignorer les zones de rédaction (Rect semi-noirs posés par l'outil
+      // « Rédaction ») : ce sont des marqueurs transitoires, jamais des
+      // éléments du scene graph — ils ne doivent ni être queués/bakés ni
+      // remontés à page.tsx. Leur application passe par redactPii (moteur).
+      if ((e.target as FabricObjectWithData).data?.redactionMark) return;
       const element = fabricObjectToElement(e.target as FabricObjectWithData);
       if (element) {
         clientLogger.debug("[EditorCanvas] Object added:", element.elementId, element.type);
@@ -1520,6 +1546,17 @@ export function EditorCanvas({
     (e: { target?: FabricObject }) => {
       if (isUpdatingHistoryRef.current) return;
       if (!e.target) return;
+      // A redaction marker was deleted (e.g. selected + Delete) — refresh the
+      // toolbar count; markers never reach the scene-graph removal path.
+      if ((e.target as FabricObjectWithData).data?.redactionMark) {
+        const count =
+          fabricRef.current
+            ?.getObjects()
+            .filter((o) => (o as FabricObjectWithData).data?.redactionMark === true)
+            .length ?? 0;
+        onRedactionMarksChangedRef.current?.(count);
+        return;
+      }
       const elementId = (e.target as FabricObjectWithData).data?.elementId;
       if (elementId) {
         clientLogger.debug("[EditorCanvas] Object removed:", elementId);
@@ -1978,6 +2015,33 @@ export function EditorCanvas({
             newObj = signatureGroup;
             break;
           }
+
+          case "redact": {
+            // Zone de rédaction — Rect semi-noir (preview AVANT application).
+            // Marqué data.redactionMark : ce n'est PAS un élément du scene
+            // graph (jamais queué/baké). L'application réelle (suppression du
+            // texte + écrasement des pixels image + cache noir opaque,
+            // irréversible) passe par le moteur (redactPii) sur « Appliquer ».
+            const redactRect = new Rect({
+              left: pointer.x,
+              top: pointer.y,
+              width: 120,
+              height: 24,
+              fill: "rgba(0, 0, 0, 0.55)",
+              stroke: "#000000",
+              strokeWidth: 1,
+              // Coins corner pour distinguer du contenu, sélectionnable et
+              // redimensionnable comme une forme.
+              originX: "left",
+              originY: "top",
+            });
+            (redactRect as FabricObjectWithData).data = {
+              redactionMark: true,
+              elementId: generateId(),
+            };
+            newObj = redactRect;
+            break;
+          }
           }
         } catch (error) {
           clientLogger.error("[EditorCanvas] Error creating object:", error);
@@ -1989,6 +2053,15 @@ export function EditorCanvas({
           currentCanvas.setActiveObject(newObj);
           currentCanvas.renderAll();
           saveHistory(currentCanvas);
+          // Redaction markers are not scene-graph elements; report their live
+          // count so the toolbar can enable Apply/Clear.
+          if ((newObj as FabricObjectWithData).data?.redactionMark) {
+            const count = currentCanvas
+              .getObjects()
+              .filter((o) => (o as FabricObjectWithData).data?.redactionMark === true)
+              .length;
+            onRedactionMarksChangedRef.current?.(count);
+          }
           clientLogger.debug("[EditorCanvas] Object added to canvas, total objects:", currentCanvas.getObjects().length);
         } else {
           clientLogger.debug("[EditorCanvas] mouse:down - newObj is null for tool:", currentTool);
@@ -3453,6 +3526,46 @@ export function EditorCanvas({
         canvas.setActiveObject(target);
         canvas.requestRenderAll();
         onSelectionChangedRef.current?.([elementId]);
+      },
+      getRedactionMarks: () => {
+        const canvas = fabricRef.current;
+        if (!canvas) return [];
+        // Fabric object props (left/top/width/scaleX…) are in SCENE space,
+        // independent of the viewport zoom — so they already match the page's
+        // PDF-point coordinate system (the canvas is set up scale-pure at
+        // page×zoom). Multiply width/height by the live scale to honour any
+        // resize the user dragged on the marker.
+        return canvas
+          .getObjects()
+          .filter(
+            (o) => (o as FabricObjectWithData).data?.redactionMark === true,
+          )
+          .map((o) => {
+            const left = o.left ?? 0;
+            const top = o.top ?? 0;
+            const w = (o.width ?? 0) * (o.scaleX ?? 1);
+            const h = (o.height ?? 0) * (o.scaleY ?? 1);
+            return { x: left, y: top, width: w, height: h };
+          });
+      },
+      clearRedactionMarks: () => {
+        const canvas = fabricRef.current;
+        if (!canvas) return;
+        const marks = canvas
+          .getObjects()
+          .filter(
+            (o) => (o as FabricObjectWithData).data?.redactionMark === true,
+          );
+        if (marks.length === 0) return;
+        // beginProgrammaticApply so the removals don't fire onElementRemoved
+        // (markers are not scene-graph elements anyway, but stay consistent
+        // with the hide-mask / programmatic-mutation pattern).
+        beginProgrammaticApply();
+        for (const m of marks) canvas.remove(m);
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+        endProgrammaticApply();
+        onRedactionMarksChangedRef.current?.(0);
       },
     };
 

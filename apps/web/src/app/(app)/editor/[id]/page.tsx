@@ -117,6 +117,12 @@ import {
   exportDocumentAs,
   exportFilename,
 } from "@/components/editor/lib/export-document";
+import {
+  redactDocument,
+  groupRectsByPage,
+  type PageGeometry,
+  type WebRedactionRect,
+} from "@/components/editor/lib/redact-pii";
 import type { ExportFormat } from "@/components/editor/lib/export-formats";
 import type { HeaderFooterSpec } from "@qrcommunication/gigapdf-lib";
 import { clientLogger } from "@/lib/client-logger";
@@ -387,6 +393,10 @@ export default function EditorPage() {
   // True while a Word-style header/footer band is being baked onto the PDF —
   // drives the dialog's busy state so the user can't fire overlapping bakes.
   const [headerFooterBusy, setHeaderFooterBusy] = useState(false);
+  // PII redaction tool: live count of zones drawn on the active page (reported
+  // by the canvas) + busy flag while the engine bakes the redaction.
+  const [redactionMarkCount, setRedactionMarkCount] = useState(0);
+  const [redactBusy, setRedactBusy] = useState(false);
   // Text of the header/footer the document already carried when it was opened
   // (recovered via the SDK's headerFooter() reader). Seeds the dialog so the
   // Word-like editor reflects existing document state (#76, P4).
@@ -2211,6 +2221,77 @@ export default function EditorPage() {
     [adoptModifiedPdf, toast, t],
   );
 
+  // Apply the PII redaction zones drawn on the active page. The zones are
+  // transient canvas markers (read off the canvas handle in web coordinates);
+  // we tag them with the active page number, lower them to PDF user-space via
+  // the page's displayed dimensions + rotation, and hand them to the engine's
+  // redactPii (deletes overlapping text, overwrites image pixels, paints an
+  // opaque black box — irreversibly). The new binary is adopted exactly like a
+  // page op (swap binary + re-parse so the editable overlay re-aligns) and the
+  // markers are cleared.
+  const handleRedactApply = useCallback(() => {
+    const file = currentPdfFileRef.current;
+    const page = effectivePage;
+    if (!file || !page || !canvasHandle) return;
+    const marks = canvasHandle.getRedactionMarks();
+    if (marks.length === 0) return;
+
+    const pageNumber = effectivePageIndex + 1; // engine pages are 1-based
+    const webRects: WebRedactionRect[] = marks.map((m) => ({
+      ...m,
+      pageNumber,
+    }));
+    const geometries = new Map<number, PageGeometry>([
+      [
+        pageNumber,
+        {
+          width: page.dimensions.width,
+          height: page.dimensions.height,
+          rotation: page.dimensions.rotation as 0 | 90 | 180 | 270,
+        },
+      ],
+    ]);
+    const rectsByPage = groupRectsByPage(webRects, geometries);
+    if (rectsByPage.size === 0) return;
+
+    void (async () => {
+      setRedactBusy(true);
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const { bytes: next } = await redactDocument(bytes, rectsByPage);
+        adoptModifiedPdf(new Blob([next], { type: "application/pdf" }));
+        canvasHandle.clearRedactionMarks();
+        setRedactionMarkCount(0);
+        toast({
+          title: t("redact.appliedTitle"),
+          description: t("redact.appliedDescription"),
+        });
+      } catch (err) {
+        clientLogger.error("[editor] redaction failed:", err);
+        toast({
+          title: t("redact.errorTitle"),
+          description: t("redact.errorDescription"),
+          variant: "destructive",
+        });
+      } finally {
+        setRedactBusy(false);
+      }
+    })();
+  }, [
+    adoptModifiedPdf,
+    canvasHandle,
+    effectivePage,
+    effectivePageIndex,
+    toast,
+    t,
+  ]);
+
+  // Discard every redaction zone drawn on the active page without applying.
+  const handleRedactClear = useCallback(() => {
+    canvasHandle?.clearRedactionMarks();
+    setRedactionMarkCount(0);
+  }, [canvasHandle]);
+
   // On-demand OCR + semantic indexing of the document (#85). Runs OCR on the
   // in-memory PDF blob (single source of truth), then ships the resulting
   // blocks to the backend pgvector index. The whole document is indexed because
@@ -3222,6 +3303,10 @@ export default function EditorPage() {
         headerFooterInitialHeader={headerFooterInitialHeader}
         headerFooterInitialFooter={headerFooterInitialFooter}
         headerFooterBusy={headerFooterBusy}
+        redactionMarkCount={redactionMarkCount}
+        onRedactApply={handleRedactApply}
+        onRedactClear={handleRedactClear}
+        redactBusy={redactBusy}
       />
 
       {/* P7 — Édition (#83) : barre secondaire (rechercher/remplacer,
@@ -3304,6 +3389,7 @@ export default function EditorPage() {
                 onZoomChanged={handleManualZoomChange}
                 onCanvasReady={setCanvasHandle}
                 onHyperlinkClick={handleHyperlinkClick}
+                onRedactionMarksChanged={setRedactionMarkCount}
                 overlay={
                   showFormsPanel &&
                   formsMode === "fill" &&

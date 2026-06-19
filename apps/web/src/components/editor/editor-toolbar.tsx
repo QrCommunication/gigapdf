@@ -70,6 +70,9 @@ import {
   RectangleVertical,
   Ruler,
   PanelTop,
+  Eraser,
+  Check,
+  X,
 } from "lucide-react";
 import { MergeDialog } from "./merge-dialog";
 import { SplitDialog } from "./split-dialog";
@@ -268,6 +271,22 @@ export interface EditorToolbarProps {
   headerFooterInitialFooter?: string;
   /** Whether a header/footer apply/remove is currently running. */
   headerFooterBusy?: boolean;
+  /**
+   * Number of redaction zones currently drawn on the active page. Drives the
+   * Apply/Clear cluster (shown only while the Redaction tool is active) and its
+   * enabled state. The editor reads the zones off the canvas on apply.
+   */
+  redactionMarkCount?: number;
+  /**
+   * Apply the drawn redaction zones to the current document: the engine deletes
+   * the overlapping text, overwrites image pixels, and paints an opaque black
+   * box — irreversibly. The editor bakes the new binary and persists it.
+   */
+  onRedactApply?: () => void;
+  /** Discard every redaction zone drawn on the active page without applying. */
+  onRedactClear?: () => void;
+  /** Whether a redaction apply is currently running. */
+  redactBusy?: boolean;
 }
 
 interface ToolButtonProps {
@@ -526,10 +545,15 @@ export function EditorToolbar({
   headerFooterInitialHeader,
   headerFooterInitialFooter,
   headerFooterBusy = false,
+  redactionMarkCount = 0,
+  onRedactApply,
+  onRedactClear,
+  redactBusy = false,
 }: EditorToolbarProps) {
   const t = useTranslations("editor.toolbar");
   const tProperties = useTranslations("editor.properties.text");
   const tHeadersFooters = useTranslations("editor.headersFooters");
+  const tRedact = useTranslations("editor.redact");
   const [showShapeDropdown, setShowShapeDropdown] = useState(false);
   const [showAnnotationDropdown, setShowAnnotationDropdown] = useState(false);
   const [showFieldDropdown, setShowFieldDropdown] = useState(false);
@@ -783,6 +807,64 @@ export function EditorToolbar({
         isActive={activeTool === "draw"}
         onClick={() => onToolChange("draw")}
       />
+
+      {/* Outil rédaction (PII) — dessine des zones noires irréversibles.
+          Le bouton n'est rendu que si le handler d'application est fourni. */}
+      {onRedactApply && (
+        <>
+          <ToolButton
+            icon={<Eraser size={20} />}
+            label={t("redact")}
+            isActive={activeTool === "redact"}
+            onClick={() => onToolChange("redact")}
+          />
+          {/* Cluster Appliquer / Effacer — visible uniquement en mode rédaction. */}
+          {activeTool === "redact" && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onRedactApply}
+                disabled={redactBusy || redactionMarkCount === 0}
+                title={tRedact("applyHint")}
+                className={`
+                  px-2 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5
+                  transition-colors
+                  ${
+                    redactBusy || redactionMarkCount === 0
+                      ? "opacity-50 cursor-not-allowed bg-muted text-muted-foreground"
+                      : "bg-red-600 text-white hover:bg-red-700 cursor-pointer"
+                  }
+                `}
+              >
+                <Check size={14} />
+                <span>
+                  {redactBusy
+                    ? tRedact("applying")
+                    : redactionMarkCount > 0
+                      ? tRedact("applyCount", { count: redactionMarkCount })
+                      : tRedact("apply")}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={onRedactClear}
+                disabled={redactBusy || redactionMarkCount === 0}
+                title={tRedact("clear")}
+                className={`
+                  p-2 rounded-lg transition-colors
+                  ${
+                    redactBusy || redactionMarkCount === 0
+                      ? "opacity-50 cursor-not-allowed text-muted-foreground"
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                  }
+                `}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Champ de formulaire avec dropdown (text/checkbox/radio/dropdown) */}
       <div className="relative">
