@@ -1760,6 +1760,79 @@
     "serverError": {
       "title": "Erreur serveur",
       "description": "Une erreur s'est produite de notre côté. Veuillez réessayer plus tard."
+    },
+    "app": {
+      "notFound": {
+        "code": "404",
+        "title": "Page introuvable",
+        "description": "Cette page a été déplacée, supprimée, ou n'a jamais existé. Revenons à vos documents.",
+        "backDashboard": "Retour au tableau de bord",
+        "browseDocuments": "Voir mes documents"
+      },
+      "forbidden": {
+        "code": "403",
+        "title": "Accès refusé",
+        "description": "Vous n'êtes pas propriétaire de cet élément et il ne vous a pas été partagé. Demandez au propriétaire de le partager, ou retournez à vos propres documents.",
+        "ownerHint": "Seul le propriétaire d'un document ou d'un dossier — ou une personne à qui il l'a partagé — peut l'ouvrir.",
+        "backDashboard": "Retour au tableau de bord",
+        "browseShared": "Partagés avec moi",
+        "requestAccess": "Demander l'accès"
+      }
+    },
+    "marketing": {
+      "notFound": {
+        "code": "404",
+        "badge": "Erreur 404",
+        "title": "Cette page a fait fausse route",
+        "description": "Le lien est rompu ou la page a été déplacée. Mais vous êtes sur GigaPDF — la plateforme PDF complète et open source. Voici tout ce que vous pouvez faire avec vos documents.",
+        "primaryCta": "Découvrir les outils PDF",
+        "secondaryCta": "Retour à l'accueil",
+        "toolsTitle": "Outils PDF populaires",
+        "toolsSubtitle": "Gratuits, sans filigrane, auto-hébergeables.",
+        "solutionsTitle": "Des solutions pour votre métier",
+        "viewAllTools": "Voir les 20 outils",
+        "viewAllSolutions": "Voir toutes les solutions",
+        "registerCta": "Commencez à travailler vos PDF dès maintenant"
+      },
+      "forbidden": {
+        "code": "403",
+        "badge": "Erreur 403",
+        "title": "Ce contenu est privé",
+        "description": "Vous avez besoin d'un compte — ou des bonnes permissions — pour consulter cette page. La bonne nouvelle : un compte GigaPDF complet est gratuit, sans carte bancaire.",
+        "primaryCta": "Créer un compte gratuit",
+        "secondaryCta": "Se connecter",
+        "tools": {
+          "title": "Ce que GigaPDF vous offre",
+          "subtitle": "Tous les outils, inclus dans le plan gratuit."
+        },
+        "registerCta": "Obtenez votre compte gratuit et débloquez tout"
+      },
+      "features": {
+        "editor": {
+          "name": "Éditeur PDF",
+          "description": "Modifiez le texte avec les polices d'origine, ajoutez images, formes et annotations."
+        },
+        "convert": {
+          "name": "Conversion",
+          "description": "Depuis et vers Word, Excel, PowerPoint et OpenDocument."
+        },
+        "ocr": {
+          "name": "OCR",
+          "description": "Reconnaissez le texte des scans et rendez n'importe quel PDF recherchable."
+        },
+        "search": {
+          "name": "Recherche sémantique",
+          "description": "Retrouvez tout dans vos documents par le sens, pas seulement par mots-clés."
+        },
+        "redaction": {
+          "name": "Caviardage",
+          "description": "Supprimez définitivement le contenu sensible — à valeur probante."
+        },
+        "sign": {
+          "name": "Signature & protection",
+          "description": "Signature numérique et chiffrement AES-256 pour vos fichiers."
+        }
+      }
     }
   },
   "organization": {

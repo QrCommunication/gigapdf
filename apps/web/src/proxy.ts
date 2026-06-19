@@ -83,8 +83,11 @@ export const config = {
   //    de locale inconnu ou un chemin sans route → 404 NATIF (plus de soft-404).
   // Exclusions = routes app ((dashboard), editor, embed), API, assets : elles
   // conservent la résolution de locale par cookie (request.ts) et ne sont
-  // JAMAIS préfixées.
+  // JAMAIS préfixées. `forbidden` est la page d'accès refusé APP (URL /forbidden,
+  // sous (app)/(dashboard)) : exclue pour qu'elle reste non préfixée (cookie),
+  // sans collision avec la page d'accès refusé MARKETING servie à /fr/403 et
+  // /en/403 (le bare /403 reste, lui, géré par next-intl → marketing fr).
   matcher: [
-    "/((?!api|backend-api|dashboard|documents|editor|settings|billing|organization|developers|shared|trash|monitoring|embed|_next|_vercel|.*\\..*).*)",
+    "/((?!api|backend-api|dashboard|documents|editor|settings|billing|organization|developers|shared|trash|monitoring|embed|forbidden|_next|_vercel|.*\\..*).*)",
   ],
 };
