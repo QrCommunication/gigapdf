@@ -887,6 +887,25 @@
       "summaryPartial": "{success, plural, one {# file uploaded} other {# files uploaded}}, {failed, plural, one {# failed} other {# failed}}",
       "summaryAllFailed": "{count, plural, one {Failed to upload the file} other {Failed to upload # files}}"
     },
+    "import": {
+      "button": "Import",
+      "dialogTitle": "Import files",
+      "dialogDescription": "Files are imported into {path} and kept in their original format.",
+      "dropPrompt": "Drag & drop files here",
+      "dropNow": "Drop to import",
+      "anyFormatHint": "Any file type — up to {size} MB per file",
+      "browse": "Browse files",
+      "close": "Close",
+      "uploading": "Importing...",
+      "uploadingProgress": "Importing... ({done}/{total})",
+      "dropTitle": "Drop your files here",
+      "dropHint": "Any file type — imported into the current folder",
+      "errorEmpty": "The file is empty",
+      "errorTooLarge": "File too large (max 100 MB)",
+      "summaryAllSuccess": "{count, plural, one {# file imported successfully} other {# files imported successfully}}",
+      "summaryPartial": "{success, plural, one {# file imported} other {# files imported}}, {failed, plural, one {# failed} other {# failed}}",
+      "summaryAllFailed": "{count, plural, one {Failed to import the file} other {Failed to import # files}}"
+    },
     "office": {
       "import": "Import Office",
       "importing": "Converting Office...",

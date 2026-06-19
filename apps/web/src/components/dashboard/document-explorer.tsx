@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -36,6 +36,7 @@ import {
   XCircle,
   FolderInput,
   Trash2,
+  UploadCloud,
 } from "lucide-react";
 import { DocumentGrid } from "./document-grid";
 import { DocumentTable, SortField, SortDirection } from "./document-table";
@@ -94,6 +95,14 @@ interface DocumentExplorerProps {
   onFolderNavigate: (folderId: string | null) => void;
   onRefresh: () => void;
   onCreateFolder?: (name: string, parentId: string | null) => Promise<void>;
+  /**
+   * Drop external OS files anywhere on the listing area to import them into
+   * the current folder. When provided, the whole content region becomes a
+   * giant drop zone with a "drop here" overlay (OS-folder UX).
+   */
+  onFilesDropped?: (files: FileList | File[]) => void;
+  /** True while a batch import is running (suppresses the drop overlay). */
+  uploadingFiles?: boolean;
 }
 
 // Drag types for DnD
@@ -129,8 +138,11 @@ export function DocumentExplorer({
   onFolderNavigate,
   onRefresh,
   onCreateFolder,
+  onFilesDropped,
+  uploadingFiles = false,
 }: DocumentExplorerProps) {
   const t = useTranslations("documents.explorer");
+  const tImport = useTranslations("documents.import");
   const tTags = useTranslations("documents.tags");
   const { toast } = useToast();
   const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false);
@@ -140,6 +152,66 @@ export function DocumentExplorer({
   const [draggedItem, setDraggedItem] = useState<DragItem | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
+
+  // External OS-file drag over the listing area (giant drop zone). A depth
+  // counter avoids flicker (dragenter/leave bubble through every child). The
+  // overlay only reacts to real files (`Files` in dataTransfer.types), never
+  // to the internal folder-reorg DnD (which carries JSON, not files).
+  const [isDraggingExternalFiles, setIsDraggingExternalFiles] = useState(false);
+  const externalDragDepthRef = useRef(0);
+
+  const resetExternalDrag = useCallback(() => {
+    externalDragDepthRef.current = 0;
+    setIsDraggingExternalFiles(false);
+  }, []);
+
+  const hasExternalFiles = useCallback(
+    (e: React.DragEvent) =>
+      Boolean(onFilesDropped) && e.dataTransfer.types.includes("Files"),
+    [onFilesDropped],
+  );
+
+  const handleExternalDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      if (!hasExternalFiles(e)) return;
+      e.preventDefault();
+      externalDragDepthRef.current += 1;
+      setIsDraggingExternalFiles(true);
+    },
+    [hasExternalFiles],
+  );
+
+  const handleExternalDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (!hasExternalFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    },
+    [hasExternalFiles],
+  );
+
+  const handleExternalDragLeave = useCallback(
+    (e: React.DragEvent) => {
+      if (!hasExternalFiles(e)) return;
+      e.preventDefault();
+      externalDragDepthRef.current -= 1;
+      if (externalDragDepthRef.current <= 0) resetExternalDrag();
+    },
+    [hasExternalFiles, resetExternalDrag],
+  );
+
+  const handleExternalDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (!hasExternalFiles(e)) return;
+      e.preventDefault();
+      // Stop the page-level drop handler from also firing for this drop.
+      e.stopPropagation();
+      resetExternalDrag();
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) onFilesDropped?.(files);
+    },
+    [hasExternalFiles, onFilesDropped, resetExternalDrag],
+  );
 
   // Folder rename dialog (shared by the grid folder menu and the table)
   const [folderToRename, setFolderToRename] = useState<{ id: string; name: string } | null>(null);
@@ -513,7 +585,33 @@ export function DocumentExplorer({
   };
 
   return (
-    <div className="space-y-4">
+    <div
+      className="relative space-y-4"
+      onDragEnter={handleExternalDragEnter}
+      onDragOver={handleExternalDragOver}
+      onDragLeave={handleExternalDragLeave}
+      onDrop={handleExternalDrop}
+    >
+      {/* Giant drop-zone overlay — covers the whole listing while the user
+          drags external OS files over it (OS-folder UX). Hidden during an
+          in-progress import and during internal folder reorganization. */}
+      {isDraggingExternalFiles && !uploadingFiles && (
+        <div
+          className="absolute inset-0 z-30 flex items-center justify-center rounded-lg border-4 border-dashed border-primary/70 bg-primary/10 backdrop-blur-sm pointer-events-none"
+          aria-hidden="true"
+        >
+          <div className="flex items-center gap-4 rounded-lg bg-background px-8 py-6 shadow-2xl">
+            <UploadCloud className="h-12 w-12 text-primary" />
+            <div>
+              <p className="text-xl font-semibold">{tImport("dropTitle")}</p>
+              <p className="text-sm text-muted-foreground">
+                {tImport("dropHint")}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Drag indicator overlay */}
       {draggedItem && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
