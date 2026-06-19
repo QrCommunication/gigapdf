@@ -17,7 +17,7 @@ export class TextRenderer {
     canvas: fabric.Canvas,
     element: TextElement
   ): Promise<fabric.Object> {
-    const textObject = PDFText.fromElement(element);
+    const textObject = PDFText.fromPdfElement(element);
     canvas.add(textObject);
     return textObject;
   }
@@ -47,7 +47,7 @@ export class TextRenderer {
     text: string,
     x: number,
     y: number,
-    options: Partial<fabric.ITextboxOptions> = {}
+    options: Partial<fabric.TextboxProps> = {}
   ): PDFText {
     const textObject = new PDFText(text, {
       left: x,

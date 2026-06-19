@@ -6,10 +6,12 @@ import * as fabric from "fabric";
 import type { AnnotationElement, UUID } from "@giga-pdf/types";
 import { boundsToFabric, transformToFabric } from "../utils/transform";
 
-export interface PDFAnnotationOptions extends fabric.IGroupOptions {
+// Fabric v6 dropped the `IGroupOptions` namespace; options are now
+// `Partial<GroupProps>`. We compose it with our PDF-specific metadata.
+export type PDFAnnotationOptions = Partial<fabric.GroupProps> & {
   elementId?: UUID;
   element?: AnnotationElement;
-}
+};
 
 /**
  * Custom annotation object for PDF annotation elements
@@ -19,15 +21,17 @@ export class PDFAnnotation extends fabric.Group {
   element?: AnnotationElement;
 
   constructor(objects: fabric.Object[], options: PDFAnnotationOptions = {}) {
-    super(objects, options);
+    super(objects, options as Partial<fabric.GroupProps>);
     this.elementId = options.elementId;
     this.element = options.element;
   }
 
   /**
-   * Create PDFAnnotation from AnnotationElement
+   * Create PDFAnnotation from AnnotationElement.
+   *
+   * Named `fromPdfElement` for consistency with the other PDF object classes.
    */
-  static fromElement(element: AnnotationElement): PDFAnnotation {
+  static fromPdfElement(element: AnnotationElement): PDFAnnotation {
     const fabricProps = boundsToFabric(element.bounds);
     const fabricTransform = transformToFabric(element.transform);
 

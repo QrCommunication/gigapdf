@@ -6,10 +6,19 @@ import * as fabric from "fabric";
 import type { TextElement, UUID } from "@giga-pdf/types";
 import { boundsToFabric, transformToFabric } from "../utils/transform";
 
-export interface PDFTextOptions extends fabric.ITextboxOptions {
+// Fabric v6 dropped the `ITextboxOptions` namespace; options are now
+// `Partial<TextboxProps>`. We compose it with our PDF-specific metadata and a
+// couple of runtime-assigned Fabric fields that are not part of the strict
+// `TextboxProps` construction type (`textBackgroundColor` is a `FabricText`
+// class property; `lockUniScaling` is a legacy flag Fabric still stores but no
+// longer declares). Fabric assigns every option to the instance at runtime, so
+// listing them here keeps behavior identical while type-checking.
+export type PDFTextOptions = Partial<fabric.TextboxProps> & {
   elementId?: UUID;
   element?: TextElement;
-}
+  textBackgroundColor?: string;
+  lockUniScaling?: boolean;
+};
 
 /**
  * Custom text object for PDF text elements
@@ -19,21 +28,27 @@ export class PDFText extends fabric.Textbox {
   element?: TextElement;
 
   constructor(text: string, options: PDFTextOptions = {}) {
+    // Fabric stores extra (non-prop) options at runtime via assign, but its TS
+    // constructor only accepts `Partial<TextboxProps>` — cast to satisfy it
+    // while preserving `elementId`/`element` on the instance.
     super(text, {
       ...options,
       editable: true,
       splitByGrapheme: true,
       lockUniScaling: true,
-    });
+    } as Partial<fabric.TextboxProps>);
 
     this.elementId = options.elementId;
     this.element = options.element;
   }
 
   /**
-   * Create PDFText from TextElement
+   * Create PDFText from TextElement.
+   *
+   * Named `fromPdfElement` (not `fromElement`) so it doesn't clash with
+   * Fabric v6's incompatible inherited static `Textbox.fromElement(HTMLElement)`.
    */
-  static fromElement(element: TextElement): PDFText {
+  static fromPdfElement(element: TextElement): PDFText {
     const fabricProps = boundsToFabric(element.bounds);
     const fabricTransform = transformToFabric(element.transform);
 
@@ -107,6 +122,10 @@ export class PDFText extends fabric.Textbox {
             .textBackgroundColor || null,
         writingMode: "horizontal-tb",
         direction: ((this.direction as "ltr" | "rtl") || "ltr") as "ltr" | "rtl",
+        // Preserve the metadata carried on the source element so a round-trip
+        // through the canvas never drops it.
+        verticalAlign: this.element?.style.verticalAlign ?? "baseline",
+        originalFont: this.element?.style.originalFont ?? null,
       },
       locked: this.lockMovementX || false,
       visible: this.visible || true,

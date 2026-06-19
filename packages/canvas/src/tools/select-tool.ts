@@ -85,10 +85,11 @@ export class SelectTool {
   /**
    * Handle mouse down
    */
-  private onMouseDown = (e: fabric.IEvent): void => {
+  private onMouseDown = (e: fabric.TPointerEventInfo<fabric.TPointerEvent>): void => {
     if (!this.options.multiSelect) return;
 
-    const pointer = this.canvas.getPointer(e.e);
+    // Fabric v6: `getPointer` → `getScenePoint` (scene coordinates).
+    const pointer = this.canvas.getScenePoint(e.e);
     this.startPoint = { x: pointer.x, y: pointer.y };
     this.isSelecting = true;
 
@@ -110,10 +111,10 @@ export class SelectTool {
   /**
    * Handle mouse move
    */
-  private onMouseMove = (e: fabric.IEvent): void => {
+  private onMouseMove = (e: fabric.TPointerEventInfo<fabric.TPointerEvent>): void => {
     if (!this.isSelecting || !this.startPoint || !this.selectionBox) return;
 
-    const pointer = this.canvas.getPointer(e.e);
+    const pointer = this.canvas.getScenePoint(e.e);
     const width = pointer.x - this.startPoint.x;
     const height = pointer.y - this.startPoint.y;
 
@@ -163,7 +164,7 @@ export class SelectTool {
   selectObjects(objects: fabric.Object[]): void {
     if (objects.length === 0) return;
 
-    if (objects.length === 1) {
+    if (objects.length === 1 && objects[0]) {
       this.selectObject(objects[0]);
     } else {
       const selection = new fabric.ActiveSelection(objects, {
@@ -240,11 +241,8 @@ export class SelectTool {
    * Clone object
    */
   private async cloneObject(obj: fabric.Object): Promise<fabric.Object> {
-    return new Promise((resolve) => {
-      obj.clone((cloned: fabric.Object) => {
-        resolve(cloned);
-      });
-    });
+    // Fabric v6: `clone()` returns a Promise instead of taking a callback.
+    return obj.clone();
   }
 
   /**
@@ -273,8 +271,9 @@ export class SelectTool {
     const activeObject = this.canvas.getActiveObject();
     if (!(activeObject instanceof fabric.Group)) return null;
 
-    const objects = activeObject.getObjects();
-    activeObject.destroy();
+    // Fabric v6: `Group.destroy()` was removed. `removeAll()` detaches the
+    // children (restoring their absolute coordinates) and returns them.
+    const objects = activeObject.removeAll();
     this.canvas.remove(activeObject);
 
     objects.forEach((obj) => this.canvas.add(obj));
@@ -289,7 +288,8 @@ export class SelectTool {
    */
   bringToFront(): void {
     const selected = this.getSelectedObjects();
-    selected.forEach((obj) => this.canvas.bringToFront(obj));
+    // Fabric v6: `canvas.bringToFront(obj)` → `canvas.bringObjectToFront(obj)`.
+    selected.forEach((obj) => this.canvas.bringObjectToFront(obj));
     this.canvas.renderAll();
   }
 
@@ -298,7 +298,8 @@ export class SelectTool {
    */
   sendToBack(): void {
     const selected = this.getSelectedObjects();
-    selected.forEach((obj) => this.canvas.sendToBack(obj));
+    // Fabric v6: `canvas.sendToBack(obj)` → `canvas.sendObjectToBack(obj)`.
+    selected.forEach((obj) => this.canvas.sendObjectToBack(obj));
     this.canvas.renderAll();
   }
 

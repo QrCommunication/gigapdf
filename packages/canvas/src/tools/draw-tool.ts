@@ -75,8 +75,8 @@ export class DrawTool {
   /**
    * Handle mouse down
    */
-  private onMouseDown = (e: fabric.IEvent): void => {
-    const pointer = this.canvas.getPointer(e.e);
+  private onMouseDown = (e: fabric.TPointerEventInfo<fabric.TPointerEvent>): void => {
+    const pointer = this.canvas.getScenePoint(e.e);
     this.isDrawing = true;
     this.points = [{ x: pointer.x, y: pointer.y }];
   };
@@ -84,10 +84,10 @@ export class DrawTool {
   /**
    * Handle mouse move
    */
-  private onMouseMove = (e: fabric.IEvent): void => {
+  private onMouseMove = (e: fabric.TPointerEventInfo<fabric.TPointerEvent>): void => {
     if (!this.isDrawing) return;
 
-    const pointer = this.canvas.getPointer(e.e);
+    const pointer = this.canvas.getScenePoint(e.e);
     this.points.push({ x: pointer.x, y: pointer.y });
 
     if (this.currentPath) {
@@ -110,28 +110,36 @@ export class DrawTool {
    * Create path from points
    */
   private createPath(points: Point[]): fabric.Path {
-    if (points.length === 0) {
+    const first = points[0];
+    if (!first) {
       return new fabric.Path("M 0 0");
     }
 
-    let pathData = `M ${points[0].x} ${points[0].y}`;
+    let pathData = `M ${first.x} ${first.y}`;
 
     if (this.options.smoothing && points.length > 2) {
       // Use quadratic bezier curves for smooth lines
       for (let i = 1; i < points.length - 1; i++) {
+        const current = points[i];
+        const next = points[i + 1];
+        if (!current || !next) continue;
         const midPoint = {
-          x: (points[i].x + points[i + 1].x) / 2,
-          y: (points[i].y + points[i + 1].y) / 2,
+          x: (current.x + next.x) / 2,
+          y: (current.y + next.y) / 2,
         };
-        pathData += ` Q ${points[i].x} ${points[i].y} ${midPoint.x} ${midPoint.y}`;
+        pathData += ` Q ${current.x} ${current.y} ${midPoint.x} ${midPoint.y}`;
       }
       // Add the last point
       const lastPoint = points[points.length - 1];
-      pathData += ` L ${lastPoint.x} ${lastPoint.y}`;
+      if (lastPoint) {
+        pathData += ` L ${lastPoint.x} ${lastPoint.y}`;
+      }
     } else {
       // Use simple lines
       for (let i = 1; i < points.length; i++) {
-        pathData += ` L ${points[i].x} ${points[i].y}`;
+        const current = points[i];
+        if (!current) continue;
+        pathData += ` L ${current.x} ${current.y}`;
       }
     }
 
@@ -156,12 +164,18 @@ export class DrawTool {
   private simplifyPoints(points: Point[], tolerance: number): Point[] {
     if (points.length <= 2) return points;
 
+    const end = points.length - 1;
+    const startPoint = points[0];
+    const endPoint = points[end];
+    if (!startPoint || !endPoint) return points;
+
     let maxDistance = 0;
     let index = 0;
-    const end = points.length - 1;
 
     for (let i = 1; i < end; i++) {
-      const distance = this.perpendicularDistance(points[i], points[0], points[end]);
+      const current = points[i];
+      if (!current) continue;
+      const distance = this.perpendicularDistance(current, startPoint, endPoint);
       if (distance > maxDistance) {
         index = i;
         maxDistance = distance;
@@ -173,7 +187,7 @@ export class DrawTool {
       const right = this.simplifyPoints(points.slice(index), tolerance);
       return left.slice(0, left.length - 1).concat(right);
     } else {
-      return [points[0], points[end]];
+      return [startPoint, endPoint];
     }
   }
 
@@ -200,7 +214,8 @@ export class DrawTool {
    */
   setStrokeColor(color: string): void {
     this.options.strokeColor = color;
-    if (this.canvas.isDrawingMode) {
+    // Fabric v6: `freeDrawingBrush` is optional until drawing mode initialises it.
+    if (this.canvas.isDrawingMode && this.canvas.freeDrawingBrush) {
       this.canvas.freeDrawingBrush.color = color;
     }
   }
@@ -210,7 +225,8 @@ export class DrawTool {
    */
   setStrokeWidth(width: number): void {
     this.options.strokeWidth = width;
-    if (this.canvas.isDrawingMode) {
+    // Fabric v6: `freeDrawingBrush` is optional until drawing mode initialises it.
+    if (this.canvas.isDrawingMode && this.canvas.freeDrawingBrush) {
       this.canvas.freeDrawingBrush.width = width;
     }
   }

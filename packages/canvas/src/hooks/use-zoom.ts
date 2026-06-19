@@ -52,15 +52,16 @@ export function useZoom(
   useEffect(() => {
     if (!canvas || !enableMouseWheel) return;
 
-    const handleMouseWheel = (opt: fabric.IEvent) => {
-      const e = opt.e as WheelEvent;
+    const handleMouseWheel = (opt: fabric.TPointerEventInfo<WheelEvent>) => {
+      const e = opt.e;
       const delta = e.deltaY;
       let newZoom = canvas.getZoom();
 
       newZoom *= 0.999 ** delta;
       newZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
 
-      const pointer = canvas.getPointer(opt.e);
+      // Fabric v6: `getPointer` → `getScenePoint` (scene coordinates).
+      const pointer = canvas.getScenePoint(opt.e);
       canvas.zoomToPoint(new fabric.Point(pointer.x, pointer.y), newZoom);
 
       setZoomState(newZoom);
@@ -137,7 +138,9 @@ export function useZoom(
       vpt[5] = canvasHeight / 2 - center.y * newZoom;
     }
 
-    group.destroy();
+    // Fabric v6: `Group.destroy()` was removed. This group is a throwaway used
+    // only to measure the content bounds — it was never added to the canvas, so
+    // it is simply garbage-collected.
     canvas.renderAll();
   }, [canvas, setZoom]);
 

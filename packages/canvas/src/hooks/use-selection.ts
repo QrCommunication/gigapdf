@@ -67,7 +67,7 @@ export function useSelection(canvas: fabric.Canvas | null): UseSelectionReturn {
     (objects: fabric.Object[]) => {
       if (!canvas || objects.length === 0) return;
 
-      if (objects.length === 1) {
+      if (objects.length === 1 && objects[0]) {
         selectObject(objects[0]);
       } else {
         const selection = new fabric.ActiveSelection(objects, {
@@ -99,14 +99,11 @@ export function useSelection(canvas: fabric.Canvas | null): UseSelectionReturn {
     const clones: fabric.Object[] = [];
 
     for (const obj of selectedObjects) {
-      const clone = await new Promise<fabric.Object>((resolve) => {
-        obj.clone((cloned: fabric.Object) => {
-          cloned.set({
-            left: (cloned.left || 0) + 10,
-            top: (cloned.top || 0) + 10,
-          });
-          resolve(cloned);
-        });
+      // Fabric v6: `clone()` returns a Promise instead of using a callback.
+      const clone = await obj.clone();
+      clone.set({
+        left: (clone.left || 0) + 10,
+        top: (clone.top || 0) + 10,
       });
 
       canvas.add(clone);
@@ -134,8 +131,10 @@ export function useSelection(canvas: fabric.Canvas | null): UseSelectionReturn {
     if (!canvas || !activeObject) return;
     if (!(activeObject instanceof fabric.Group)) return;
 
-    const objects = activeObject.getObjects();
-    activeObject.destroy();
+    // Fabric v6: `Group.destroy()` was removed. `removeAll()` detaches the
+    // children (restoring their absolute coordinates) and returns them — the
+    // canonical ungroup path.
+    const objects = activeObject.removeAll();
     canvas.remove(activeObject);
 
     objects.forEach((obj) => canvas.add(obj));

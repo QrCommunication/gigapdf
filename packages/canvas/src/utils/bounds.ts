@@ -9,7 +9,9 @@ import * as fabric from "fabric";
  * Get the bounds of a Fabric.js object
  */
 export function getObjectBounds(obj: fabric.Object): Bounds {
-  const rect = obj.getBoundingRect(true);
+  // Fabric v6: `getBoundingRect()` takes no arguments and returns absolute,
+  // viewport-space coordinates (the v5 `absolute`/`calculate` flags were dropped).
+  const rect = obj.getBoundingRect();
   return {
     x: rect.left,
     y: rect.top,

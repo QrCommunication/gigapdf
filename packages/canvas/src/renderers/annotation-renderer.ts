@@ -17,7 +17,7 @@ export class AnnotationRenderer {
     canvas: fabric.Canvas,
     element: AnnotationElement
   ): Promise<fabric.Object> {
-    const annotationObject = PDFAnnotation.fromElement(element);
+    const annotationObject = PDFAnnotation.fromPdfElement(element);
     canvas.add(annotationObject);
     return annotationObject;
   }

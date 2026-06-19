@@ -78,7 +78,7 @@ export class ZoomTool {
   /**
    * Handle mouse wheel
    */
-  private onMouseWheel = (opt: fabric.IEvent): void => {
+  private onMouseWheel = (opt: fabric.TPointerEventInfo<WheelEvent>): void => {
     const e = opt.e as WheelEvent;
     const delta = e.deltaY;
     let zoom = this.canvas.getZoom();
@@ -86,7 +86,7 @@ export class ZoomTool {
     zoom *= 0.999 ** delta;
     zoom = this.constrainZoom(zoom);
 
-    const pointer = this.canvas.getPointer(opt.e);
+    const pointer = this.canvas.getScenePoint(opt.e);
     this.zoomToPoint({ x: pointer.x, y: pointer.y }, zoom);
 
     e.preventDefault();
@@ -169,7 +169,9 @@ export class ZoomTool {
     this.canvas.viewportTransform![4] = canvasWidth / 2 - center.x * zoom;
     this.canvas.viewportTransform![5] = canvasHeight / 2 - center.y * zoom;
 
-    group.destroy();
+    // Fabric v6: `Group.destroy()` was removed. This group is a throwaway used
+    // only to measure content bounds (never added to the canvas), so it is
+    // simply garbage-collected.
     this.canvas.requestRenderAll();
   }
 

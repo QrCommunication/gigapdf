@@ -2,24 +2,62 @@
  * React hook for managing canvas events
  */
 
-import { useEffect, useCallback } from "react";
+import { useEffect } from "react";
 import * as fabric from "fabric";
 
+/**
+ * Fabric v6/v7 replaced the single `IEvent` type with per-event payload
+ * shapes (`CanvasEvents`). We surface a permissive payload union so the
+ * generic handler props below can read `target`/`selected`/`e` regardless of
+ * which concrete event fired, and cast at each `canvas.on(...)` registration
+ * (Fabric strongly types each event name).
+ */
+type AnyCanvasEvent = Partial<
+  fabric.TPointerEventInfo<fabric.TPointerEvent>
+> & {
+  target?: fabric.FabricObject;
+  selected?: fabric.FabricObject[];
+  deselected?: fabric.FabricObject[];
+  path?: fabric.FabricObject;
+};
+
 export interface CanvasEventHandlers {
-  onObjectAdded?: (e: fabric.IEvent) => void;
-  onObjectRemoved?: (e: fabric.IEvent) => void;
-  onObjectModified?: (e: fabric.IEvent) => void;
-  onObjectSelected?: (e: fabric.IEvent) => void;
-  onSelectionCleared?: (e: fabric.IEvent) => void;
-  onSelectionCreated?: (e: fabric.IEvent) => void;
-  onSelectionUpdated?: (e: fabric.IEvent) => void;
-  onMouseDown?: (e: fabric.IEvent) => void;
-  onMouseMove?: (e: fabric.IEvent) => void;
-  onMouseUp?: (e: fabric.IEvent) => void;
-  onMouseOver?: (e: fabric.IEvent) => void;
-  onMouseOut?: (e: fabric.IEvent) => void;
-  onMouseWheel?: (e: fabric.IEvent) => void;
-  onPathCreated?: (e: fabric.IEvent) => void;
+  onObjectAdded?: (e: AnyCanvasEvent) => void;
+  onObjectRemoved?: (e: AnyCanvasEvent) => void;
+  onObjectModified?: (e: AnyCanvasEvent) => void;
+  onObjectSelected?: (e: AnyCanvasEvent) => void;
+  onSelectionCleared?: (e: AnyCanvasEvent) => void;
+  onSelectionCreated?: (e: AnyCanvasEvent) => void;
+  onSelectionUpdated?: (e: AnyCanvasEvent) => void;
+  onMouseDown?: (e: AnyCanvasEvent) => void;
+  onMouseMove?: (e: AnyCanvasEvent) => void;
+  onMouseUp?: (e: AnyCanvasEvent) => void;
+  onMouseOver?: (e: AnyCanvasEvent) => void;
+  onMouseOut?: (e: AnyCanvasEvent) => void;
+  onMouseWheel?: (e: AnyCanvasEvent) => void;
+  onPathCreated?: (e: AnyCanvasEvent) => void;
+}
+
+/**
+ * Fabric's `canvas.on(name, handler)` overload narrows the handler to that
+ * specific event payload. Our generic handlers accept a superset (`AnyCanvasEvent`),
+ * so we register through this typed bridge — the cast is sound because every
+ * field a handler reads is optional on `AnyCanvasEvent`.
+ */
+type FabricEventHandler = (e: AnyCanvasEvent) => void;
+function on(
+  canvas: fabric.Canvas,
+  name: keyof fabric.CanvasEvents,
+  handler: FabricEventHandler
+): void {
+  canvas.on(name, handler as never);
+}
+function off(
+  canvas: fabric.Canvas,
+  name: keyof fabric.CanvasEvents,
+  handler: FabricEventHandler
+): void {
+  canvas.off(name, handler as never);
 }
 
 /**
@@ -50,42 +88,42 @@ export function useCanvasEvents(
     } = handlers;
 
     // Object events
-    if (onObjectAdded) canvas.on("object:added", onObjectAdded);
-    if (onObjectRemoved) canvas.on("object:removed", onObjectRemoved);
-    if (onObjectModified) canvas.on("object:modified", onObjectModified);
+    if (onObjectAdded) on(canvas, "object:added", onObjectAdded);
+    if (onObjectRemoved) on(canvas, "object:removed", onObjectRemoved);
+    if (onObjectModified) on(canvas, "object:modified", onObjectModified);
 
     // Selection events
-    if (onObjectSelected) canvas.on("selection:created", onObjectSelected);
-    if (onSelectionCleared) canvas.on("selection:cleared", onSelectionCleared);
-    if (onSelectionCreated) canvas.on("selection:created", onSelectionCreated);
-    if (onSelectionUpdated) canvas.on("selection:updated", onSelectionUpdated);
+    if (onObjectSelected) on(canvas, "selection:created", onObjectSelected);
+    if (onSelectionCleared) on(canvas, "selection:cleared", onSelectionCleared);
+    if (onSelectionCreated) on(canvas, "selection:created", onSelectionCreated);
+    if (onSelectionUpdated) on(canvas, "selection:updated", onSelectionUpdated);
 
     // Mouse events
-    if (onMouseDown) canvas.on("mouse:down", onMouseDown);
-    if (onMouseMove) canvas.on("mouse:move", onMouseMove);
-    if (onMouseUp) canvas.on("mouse:up", onMouseUp);
-    if (onMouseOver) canvas.on("mouse:over", onMouseOver);
-    if (onMouseOut) canvas.on("mouse:out", onMouseOut);
-    if (onMouseWheel) canvas.on("mouse:wheel", onMouseWheel);
+    if (onMouseDown) on(canvas, "mouse:down", onMouseDown);
+    if (onMouseMove) on(canvas, "mouse:move", onMouseMove);
+    if (onMouseUp) on(canvas, "mouse:up", onMouseUp);
+    if (onMouseOver) on(canvas, "mouse:over", onMouseOver);
+    if (onMouseOut) on(canvas, "mouse:out", onMouseOut);
+    if (onMouseWheel) on(canvas, "mouse:wheel", onMouseWheel);
 
     // Path events
-    if (onPathCreated) canvas.on("path:created", onPathCreated);
+    if (onPathCreated) on(canvas, "path:created", onPathCreated);
 
     return () => {
-      if (onObjectAdded) canvas.off("object:added", onObjectAdded);
-      if (onObjectRemoved) canvas.off("object:removed", onObjectRemoved);
-      if (onObjectModified) canvas.off("object:modified", onObjectModified);
-      if (onObjectSelected) canvas.off("selection:created", onObjectSelected);
-      if (onSelectionCleared) canvas.off("selection:cleared", onSelectionCleared);
-      if (onSelectionCreated) canvas.off("selection:created", onSelectionCreated);
-      if (onSelectionUpdated) canvas.off("selection:updated", onSelectionUpdated);
-      if (onMouseDown) canvas.off("mouse:down", onMouseDown);
-      if (onMouseMove) canvas.off("mouse:move", onMouseMove);
-      if (onMouseUp) canvas.off("mouse:up", onMouseUp);
-      if (onMouseOver) canvas.off("mouse:over", onMouseOver);
-      if (onMouseOut) canvas.off("mouse:out", onMouseOut);
-      if (onMouseWheel) canvas.off("mouse:wheel", onMouseWheel);
-      if (onPathCreated) canvas.off("path:created", onPathCreated);
+      if (onObjectAdded) off(canvas, "object:added", onObjectAdded);
+      if (onObjectRemoved) off(canvas, "object:removed", onObjectRemoved);
+      if (onObjectModified) off(canvas, "object:modified", onObjectModified);
+      if (onObjectSelected) off(canvas, "selection:created", onObjectSelected);
+      if (onSelectionCleared) off(canvas, "selection:cleared", onSelectionCleared);
+      if (onSelectionCreated) off(canvas, "selection:created", onSelectionCreated);
+      if (onSelectionUpdated) off(canvas, "selection:updated", onSelectionUpdated);
+      if (onMouseDown) off(canvas, "mouse:down", onMouseDown);
+      if (onMouseMove) off(canvas, "mouse:move", onMouseMove);
+      if (onMouseUp) off(canvas, "mouse:up", onMouseUp);
+      if (onMouseOver) off(canvas, "mouse:over", onMouseOver);
+      if (onMouseOut) off(canvas, "mouse:out", onMouseOut);
+      if (onMouseWheel) off(canvas, "mouse:wheel", onMouseWheel);
+      if (onPathCreated) off(canvas, "path:created", onPathCreated);
     };
   }, [canvas, handlers]);
 }
@@ -100,16 +138,16 @@ export function useObjectModified(
   useEffect(() => {
     if (!canvas) return;
 
-    const handler = (e: fabric.IEvent) => {
+    const handler: FabricEventHandler = (e) => {
       if (e.target) {
         callback(e.target);
       }
     };
 
-    canvas.on("object:modified", handler);
+    on(canvas, "object:modified", handler);
 
     return () => {
-      canvas.off("object:modified", handler);
+      off(canvas, "object:modified", handler);
     };
   }, [canvas, callback]);
 }
@@ -127,7 +165,7 @@ export function useSelectionEvents(
   useEffect(() => {
     if (!canvas) return;
 
-    const handleSelectionCreated = (e: fabric.IEvent) => {
+    const handleSelectionCreated: FabricEventHandler = (e) => {
       if (!callbacks.onSelect) return;
 
       const target = e.selected;
@@ -140,20 +178,20 @@ export function useSelectionEvents(
       }
     };
 
-    const handleSelectionCleared = () => {
+    const handleSelectionCleared: FabricEventHandler = () => {
       if (callbacks.onDeselect) {
         callbacks.onDeselect();
       }
     };
 
-    canvas.on("selection:created", handleSelectionCreated);
-    canvas.on("selection:updated", handleSelectionCreated);
-    canvas.on("selection:cleared", handleSelectionCleared);
+    on(canvas, "selection:created", handleSelectionCreated);
+    on(canvas, "selection:updated", handleSelectionCreated);
+    on(canvas, "selection:cleared", handleSelectionCleared);
 
     return () => {
-      canvas.off("selection:created", handleSelectionCreated);
-      canvas.off("selection:updated", handleSelectionCreated);
-      canvas.off("selection:cleared", handleSelectionCleared);
+      off(canvas, "selection:created", handleSelectionCreated);
+      off(canvas, "selection:updated", handleSelectionCreated);
+      off(canvas, "selection:cleared", handleSelectionCleared);
     };
   }, [canvas, callbacks]);
 }

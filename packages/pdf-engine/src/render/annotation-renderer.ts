@@ -13,11 +13,28 @@ import { hexToPackedRgb } from '../utils/color';
 import { webToPdf } from '../utils/coordinates';
 import { PDFPageOutOfRangeError } from '../errors';
 
-function pageHeightOf(handle: PDFDocumentHandle, pageNumber: number): number {
+interface PageGeom {
+  width: number;
+  height: number;
+  rotation: 0 | 90 | 180 | 270;
+}
+
+/**
+ * Page geometry needed to place annotations correctly, including `/Rotate`.
+ * Annotations MUST use the same rotation-aware conversion as text/image/shape
+ * (via `webToPdf`) so markup lands on the right spot on rotated pages.
+ */
+function pageGeomOf(handle: PDFDocumentHandle, pageNumber: number): PageGeom {
   if (pageNumber < 1 || pageNumber > handle.pageCount) {
     throw new PDFPageOutOfRangeError(pageNumber, handle.pageCount);
   }
-  return handle._doc.pageInfo(pageNumber).height;
+  const info = handle._doc.pageInfo(pageNumber);
+  const rotation = (((info.rotation ?? 0) % 360) + 360) % 360;
+  return {
+    width: info.width,
+    height: info.height,
+    rotation: rotation as 0 | 90 | 180 | 270,
+  };
 }
 
 /** Current timestamp in PDF date format (D:YYYYMMDDHHmmSSZ). */
@@ -49,19 +66,27 @@ function boundsToSingleQuad(bounds: Bounds): AnnotationQuad {
 
 /**
  * Convert a web-coords quad (y growing downward) to a PDF rect `[x0,y0,x1,y1]`
- * (bottom-left origin, y growing upward) for the engine's markup API.
+ * (bottom-left origin, y growing upward) for the engine's markup API. Uses the
+ * shared rotation-aware `webToPdf` so quads land correctly on `/Rotate` pages.
  */
 function webQuadToPdfRect(
   quad: AnnotationQuad,
-  pageH: number,
+  geom: PageGeom,
 ): [number, number, number, number] {
   const xs = [quad.x1, quad.x2, quad.x3, quad.x4];
   const ys = [quad.y1, quad.y2, quad.y3, quad.y4];
-  const x0 = Math.min(...xs);
-  const x1 = Math.max(...xs);
-  const yTopWeb = Math.min(...ys); // smaller web-y = visually higher
-  const yBotWeb = Math.max(...ys);
-  return [x0, pageH - yBotWeb, x1, pageH - yTopWeb];
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  const w = Math.max(...xs) - x;
+  const h = Math.max(...ys) - y;
+  const p = webToPdf(x, y, w, h, geom.height, geom.width, geom.rotation);
+  return [p.x, p.y, p.x + p.width, p.y + p.height];
+}
+
+/** Convert a single web point `(x,y)` to PDF user space (rotation-aware). */
+function webPointToPdf(x: number, y: number, geom: PageGeom): { x: number; y: number } {
+  const p = webToPdf(x, y, 0, 0, geom.height, geom.width, geom.rotation);
+  return { x: p.x, y: p.y };
 }
 
 const MARKUP_SUBTYPE: Record<string, 'highlight' | 'underline' | 'strikeout' | 'squiggly'> = {
@@ -77,7 +102,7 @@ export async function addAnnotation(
   pageNumber: number,
   element: AnnotationElement,
 ): Promise<void> {
-  const pageH = pageHeightOf(handle, pageNumber);
+  const geom = pageGeomOf(handle, pageNumber);
   const doc = handle._doc;
   const rgb = hexToPackedRgb(element.style.color);
 
@@ -86,7 +111,9 @@ export async function addAnnotation(
     element.bounds.y,
     element.bounds.width,
     element.bounds.height,
-    pageH,
+    geom.height,
+    geom.width,
+    geom.rotation,
   );
   const rect: [number, number, number, number] = [
     pdf.x,
@@ -112,8 +139,33 @@ export async function addAnnotation(
         element.quads && element.quads.length > 0
           ? element.quads
           : [boundsToSingleQuad(element.bounds)];
-      const pdfQuads = quads.map((q) => webQuadToPdfRect(q, pageH));
+      const pdfQuads = quads.map((q) => webQuadToPdfRect(q, geom));
       doc.addMarkupAnnotation(pageNumber, subtype, pdfQuads, rgb, element.style.opacity, meta);
+      break;
+    }
+
+    case 'line':
+    case 'arrow': {
+      const lp = element.linePoints ?? {
+        x1: element.bounds.x,
+        y1: element.bounds.y,
+        x2: element.bounds.x + element.bounds.width,
+        y2: element.bounds.y + element.bounds.height,
+      };
+      const p1 = webPointToPdf(lp.x1, lp.y1, geom);
+      const p2 = webPointToPdf(lp.x2, lp.y2, geom);
+      const lineWidth = element.style.strokeWidth ?? 2;
+      // The arrowhead is drawn at the (x2,y2) end — see SDK addLineAnnotation.
+      doc.addLineAnnotation(
+        pageNumber,
+        p1.x,
+        p1.y,
+        p2.x,
+        p2.y,
+        rgb,
+        lineWidth,
+        element.annotationType === 'arrow',
+      );
       break;
     }
 

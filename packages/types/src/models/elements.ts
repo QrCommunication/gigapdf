@@ -164,6 +164,8 @@ export type AnnotationType =
   | "comment"
   | "freetext"
   | "stamp"
+  | "line"
+  | "arrow"
   | "link";
 
 export interface LinkDestination {
@@ -181,6 +183,19 @@ export interface AnnotationPopup {
 export interface AnnotationStyle {
   color: string;
   opacity: number;
+  /** Stroke width for line/arrow annotations (PDF points). Defaults to 2. */
+  strokeWidth?: number;
+}
+
+/**
+ * Endpoints of a line/arrow annotation in web coords (Y-down). The arrowhead
+ * (for `annotationType === "arrow"`) is drawn at the `(x2, y2)` end.
+ */
+export interface AnnotationLine {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
 }
 
 /**
@@ -215,6 +230,11 @@ export interface AnnotationElement extends ElementBase {
    * When omitted, the renderer falls back to a single quad covering `bounds`.
    */
   quads?: AnnotationQuad[];
+  /**
+   * Endpoints for line/arrow annotations (web coords). When omitted, the
+   * renderer falls back to the diagonal of `bounds`.
+   */
+  linePoints?: AnnotationLine;
 }
 
 // ============= Form Field Element =============

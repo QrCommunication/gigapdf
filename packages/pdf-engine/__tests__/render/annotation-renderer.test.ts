@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { loadFixture, SIMPLE_PDF, MULTI_PAGE_PDF } from '../helpers';
 import { openDocument, saveDocument } from '../../src/engine/document-handle';
 import { addAnnotation } from '../../src/render/annotation-renderer';
@@ -176,6 +176,80 @@ describe('addAnnotation — stamp', () => {
     const element = makeAnnotationElement({ annotationType: 'stamp', content: '' });
 
     await expect(addAnnotation(handle, 1, element)).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// line / arrow
+// ---------------------------------------------------------------------------
+
+describe('addAnnotation — line / arrow', () => {
+  it('adds a plain line annotation without throwing', async () => {
+    const handle = await openDocument(makeBuffer(SIMPLE_PDF));
+    const element = makeAnnotationElement({
+      annotationType: 'line',
+      style: { color: '#000000', opacity: 1, strokeWidth: 1.5 },
+    });
+
+    await expect(addAnnotation(handle, 1, element)).resolves.toBeUndefined();
+
+    const saved = await saveDocument(handle);
+    expect(saved.length).toBeGreaterThan(0);
+    expect(handle._doc.annotations(1).some((a) => a.subtype === 'Line')).toBe(true);
+  });
+
+  it('adds an arrow annotation from explicit endpoints with an /LE OpenArrow ending', async () => {
+    const handle = await openDocument(makeBuffer(SIMPLE_PDF));
+    const element = makeAnnotationElement({
+      annotationType: 'arrow',
+      linePoints: { x1: 60, y1: 80, x2: 220, y2: 160 },
+      style: { color: '#FF0000', opacity: 1, strokeWidth: 2 },
+    });
+
+    await expect(addAnnotation(handle, 1, element)).resolves.toBeUndefined();
+
+    const saved = await saveDocument(handle);
+    // The arrowhead is recorded as /LE [/None /OpenArrow] (gigapdf-lib >= 0.52.5).
+    expect(saved.toString('latin1')).toContain('OpenArrow');
+    expect(handle._doc.annotations(1).some((a) => a.subtype === 'Line')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rotation — markup must follow /Rotate (regression)
+// ---------------------------------------------------------------------------
+
+describe('addAnnotation — rotated pages', () => {
+  it('threads the page rotation into the PDF coordinate conversion', async () => {
+    const flat = await openDocument(makeBuffer(SIMPLE_PDF));
+    const rotated = await openDocument(makeBuffer(SIMPLE_PDF));
+    const { width, height } = flat._doc.pageInfo(1);
+    // The regression is only observable when width != height (portrait/landscape).
+    expect(width).not.toBe(height);
+
+    rotated._doc.rotatePage(1, 90);
+    expect(rotated._doc.pageInfo(1).rotation).toBe(90);
+
+    // Spy on the rect handed to the engine — this is exactly the converted
+    // placement, independent of how the engine reports annotations back.
+    const flatSpy = vi.spyOn(flat._doc, 'addTextNote');
+    const rotSpy = vi.spyOn(rotated._doc, 'addTextNote');
+
+    const element = makeAnnotationElement({
+      annotationType: 'note',
+      bounds: { x: 40, y: 30, width: 24, height: 24 },
+    });
+    await addAnnotation(flat, 1, element);
+    await addAnnotation(rotated, 1, element);
+
+    // addTextNote(page, rect, rgb, meta, icon, open) — rect is arg index 1.
+    const flatRect = flatSpy.mock.calls[0]![1] as [number, number, number, number];
+    const rotRect = rotSpy.mock.calls[0]![1] as [number, number, number, number];
+
+    // Before the fix, rotation was ignored and both rects were identical. With
+    // the rotation-aware conversion the effective page height (= page width on
+    // /Rotate 90) shifts the Y placement: flat uses 792, rotated uses 612.
+    expect(Math.abs(rotRect[1] - flatRect[1])).toBeGreaterThan(1);
   });
 });
 

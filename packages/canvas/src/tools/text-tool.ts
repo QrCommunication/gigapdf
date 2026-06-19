@@ -66,7 +66,7 @@ export class TextTool {
   /**
    * Handle mouse down
    */
-  private onMouseDown = (e: fabric.IEvent): void => {
+  private onMouseDown = (e: fabric.TPointerEventInfo<fabric.TPointerEvent>): void => {
     if (!this.isActive) return;
 
     // Check if we clicked on an existing text object to avoid creating a new one on top
@@ -75,7 +75,7 @@ export class TextTool {
       return;
     }
 
-    const pointer = this.canvas.getPointer(e.e);
+    const pointer = this.canvas.getScenePoint(e.e);
     
     // Find closest text object to inherit style
     const objects = this.canvas.getObjects().filter(o => o instanceof fabric.Textbox || o instanceof fabric.Text);
@@ -102,14 +102,18 @@ export class TextTool {
   createTextBox(x: number, y: number, text: string = "", referenceObject?: fabric.Object | null): PDFText {
     const defaultStyle = this.options.defaultStyle || {};
     
-    let fontSize = defaultStyle.fontSize || 16;
-    let fontFamily = defaultStyle.fontFamily || "Arial";
-    let fontWeight = defaultStyle.fontWeight || "normal";
-    let fontStyle = defaultStyle.fontStyle || "normal";
-    let fill = defaultStyle.color || "#000000";
-    let textAlign = defaultStyle.textAlign || "left";
-    let lineHeight = defaultStyle.lineHeight || 1.16;
-    let charSpacing = defaultStyle.letterSpacing || 0;
+    // Type to the Fabric Textbox prop types so a reference object's values
+    // (e.g. `fontWeight: string | number`, `fontStyle: FontStyle` with values
+    // like "oblique", `textAlign: TextAlign` with "justify-left") assign
+    // cleanly and flow into PDFText.
+    let fontSize: number = defaultStyle.fontSize || 16;
+    let fontFamily: string = defaultStyle.fontFamily || "Arial";
+    let fontWeight: string | number = defaultStyle.fontWeight || "normal";
+    let fontStyle: fabric.Textbox["fontStyle"] = defaultStyle.fontStyle || "normal";
+    let fill: string = defaultStyle.color || "#000000";
+    let textAlign: fabric.Textbox["textAlign"] = defaultStyle.textAlign || "left";
+    let lineHeight: number = defaultStyle.lineHeight || 1.16;
+    let charSpacing: number = defaultStyle.letterSpacing || 0;
 
     if (referenceObject && (referenceObject instanceof fabric.Textbox || referenceObject instanceof fabric.Text)) {
       fontSize = referenceObject.fontSize || fontSize;

@@ -6,10 +6,12 @@ import * as fabric from "fabric";
 import type { ImageElement, UUID } from "@giga-pdf/types";
 import { boundsToFabric, transformToFabric } from "../utils/transform";
 
-export interface PDFImageOptions extends fabric.IImageOptions {
+// Fabric v6 dropped the `IImageOptions` namespace; options are now
+// `Partial<ImageProps>`. We compose it with our PDF-specific metadata.
+export type PDFImageOptions = Partial<fabric.ImageProps> & {
   elementId?: UUID;
   element?: ImageElement;
-}
+};
 
 /**
  * Custom image object for PDF image elements
@@ -19,16 +21,21 @@ export class PDFImage extends fabric.Image {
   element?: ImageElement;
 
   constructor(element: HTMLImageElement | HTMLCanvasElement, options: PDFImageOptions = {}) {
-    super(element, options);
+    // Cast: Fabric's constructor only accepts `Partial<ImageProps>`, but stores
+    // the extra `elementId`/`element` metadata at runtime via assign.
+    super(element, options as Partial<fabric.ImageProps>);
 
     this.elementId = options.elementId;
     this.element = options.element;
   }
 
   /**
-   * Create PDFImage from ImageElement
+   * Create PDFImage from ImageElement.
+   *
+   * Named `fromPdfElement` (not `fromElement`) so it doesn't clash with
+   * Fabric v6's incompatible inherited static `FabricImage.fromElement(HTMLElement)`.
    */
-  static async fromElement(element: ImageElement): Promise<PDFImage> {
+  static async fromPdfElement(element: ImageElement): Promise<PDFImage> {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = "anonymous";

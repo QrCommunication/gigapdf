@@ -77,21 +77,21 @@ export class PanTool {
   /**
    * Handle mouse down
    */
-  private onMouseDown = (e: fabric.IEvent): void => {
+  private onMouseDown = (e: fabric.TPointerEventInfo<fabric.TPointerEvent>): void => {
     this.isPanning = true;
     this.canvas.defaultCursor = "grabbing";
 
-    const pointer = this.canvas.getPointer(e.e);
+    const pointer = this.canvas.getScenePoint(e.e);
     this.lastPoint = { x: pointer.x, y: pointer.y };
   };
 
   /**
    * Handle mouse move
    */
-  private onMouseMove = (e: fabric.IEvent): void => {
+  private onMouseMove = (e: fabric.TPointerEventInfo<fabric.TPointerEvent>): void => {
     if (!this.isPanning || !this.lastPoint) return;
 
-    const pointer = this.canvas.getPointer(e.e);
+    const pointer = this.canvas.getScenePoint(e.e);
     const deltaX = pointer.x - this.lastPoint.x;
     const deltaY = pointer.y - this.lastPoint.y;
 

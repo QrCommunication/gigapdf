@@ -13,7 +13,7 @@ export interface UseCanvasOptions {
 }
 
 export interface UseCanvasReturn {
-  canvasRef: React.RefObject<HTMLCanvasElement>;
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
   canvas: fabric.Canvas | null;
   isReady: boolean;
 }
@@ -51,11 +51,12 @@ export function useCanvas(options: UseCanvasOptions = {}): UseCanvasReturn {
   useEffect(() => {
     if (!canvas) return;
 
+    // Fabric v6: `setWidth`/`setHeight` were merged into `setDimensions`.
     if (options.width !== undefined) {
-      canvas.setWidth(options.width);
+      canvas.setDimensions({ width: options.width });
     }
     if (options.height !== undefined) {
-      canvas.setHeight(options.height);
+      canvas.setDimensions({ height: options.height });
     }
     if (options.backgroundColor !== undefined) {
       (canvas as any).backgroundColor = options.backgroundColor;
@@ -106,8 +107,8 @@ export function useCanvasDimensions(canvas: fabric.Canvas | null) {
     (width: number, height: number) => {
       if (!canvas) return;
 
-      canvas.setWidth(width);
-      canvas.setHeight(height);
+      // Fabric v6: `setWidth`/`setHeight` were merged into `setDimensions`.
+      canvas.setDimensions({ width, height });
       canvas.renderAll();
     },
     [canvas]

@@ -39,6 +39,8 @@ import {
   Highlighter,
   MessageCircle,
   StickyNote,
+  Strikethrough,
+  Stamp,
   ChevronDown,
   Trash2,
   Copy,
@@ -635,8 +637,15 @@ export function EditorToolbar({
       icon: <Underline size={16} />,
       labelKey: "underline",
     },
+    {
+      type: "strikeout",
+      icon: <Strikethrough size={16} />,
+      labelKey: "strikeout",
+    },
     { type: "note", icon: <StickyNote size={16} />, labelKey: "note" },
     { type: "comment", icon: <MessageCircle size={16} />, labelKey: "comment" },
+    { type: "stamp", icon: <Stamp size={16} />, labelKey: "stamp" },
+    { type: "arrow", icon: <ArrowRight size={16} />, labelKey: "arrow" },
   ];
 
   // Outils de base
