@@ -54,7 +54,12 @@ export function loadPdfEngine(): Promise<GigaPdfEngine> {
 
 /** Encode raw PNG bytes as a `data:image/png;base64,…` URL (any size). */
 function pngToDataUrl(png: Uint8Array): Promise<string> {
-  const blob = new Blob([png], { type: "image/png" });
+  // TS 5.7+ types the engine's bytes as `Uint8Array<ArrayBufferLike>`, which is
+  // not assignable to `BlobPart` (it requires `Uint8Array<ArrayBuffer>` — a
+  // SharedArrayBuffer-backed view can't be a Blob part). Re-wrap over a plain
+  // ArrayBuffer so the type — and the runtime guarantee — line up.
+  const bytes = new Uint8Array(png);
+  const blob = new Blob([bytes], { type: "image/png" });
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);

@@ -17,7 +17,7 @@ export class ShapeRenderer {
     canvas: fabric.Canvas,
     element: ShapeElement
   ): Promise<fabric.Object> {
-    const shapeObject = PDFShape.fromElement(element);
+    const shapeObject = PDFShape.fromPdfElement(element);
     canvas.add(shapeObject);
     return shapeObject;
   }
@@ -48,7 +48,7 @@ export class ShapeRenderer {
     y: number,
     width: number,
     height: number,
-    options: Partial<fabric.IRectOptions> = {}
+    options: Partial<fabric.RectProps> = {}
   ): fabric.Rect {
     const rect = new fabric.Rect({
       left: x,
@@ -75,7 +75,7 @@ export class ShapeRenderer {
     y: number,
     rx: number,
     ry: number,
-    options: Partial<fabric.IEllipseOptions> = {}
+    options: Partial<fabric.EllipseProps> = {}
   ): fabric.Ellipse {
     const ellipse = new fabric.Ellipse({
       left: x,
@@ -102,7 +102,7 @@ export class ShapeRenderer {
     y1: number,
     x2: number,
     y2: number,
-    options: Partial<fabric.ILineOptions> = {}
+    options: Partial<fabric.FabricObjectProps> = {}
   ): fabric.Line {
     const line = new fabric.Line([x1, y1, x2, y2], {
       stroke: "#000000",
@@ -121,7 +121,7 @@ export class ShapeRenderer {
   static createPolygon(
     canvas: fabric.Canvas,
     points: { x: number; y: number }[],
-    options: Partial<fabric.IPolylineOptions> = {}
+    options: Partial<fabric.FabricObjectProps> = {}
   ): fabric.Polygon {
     const polygon = new fabric.Polygon(points, {
       fill: "transparent",
@@ -141,7 +141,7 @@ export class ShapeRenderer {
   static createPath(
     canvas: fabric.Canvas,
     pathData: string,
-    options: Partial<fabric.IPathOptions> = {}
+    options: Partial<fabric.PathProps> = {}
   ): fabric.Path {
     const path = new fabric.Path(pathData, {
       fill: "transparent",
@@ -163,7 +163,7 @@ export class ShapeRenderer {
     x: number,
     y: number,
     radius: number,
-    options: Partial<fabric.ICircleOptions> = {}
+    options: Partial<fabric.CircleProps> = {}
   ): fabric.Circle {
     const circle = new fabric.Circle({
       left: x,
@@ -190,7 +190,7 @@ export class ShapeRenderer {
     width: number,
     height: number,
     radius: number,
-    options: Partial<fabric.IRectOptions> = {}
+    options: Partial<fabric.RectProps> = {}
   ): fabric.Rect {
     const rect = new fabric.Rect({
       left: x,

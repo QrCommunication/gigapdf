@@ -958,8 +958,11 @@ export function EditorCanvas({
         | 'comment'
         | 'freetext'
         | 'stamp'
+        | 'line'
+        | 'arrow'
         | 'link';
       if (dataAnnotationType) {
+        const isLineLike = dataAnnotationType === 'line' || dataAnnotationType === 'arrow';
         return {
           ...baseElement,
           type: 'annotation' as const,
@@ -968,10 +971,19 @@ export function EditorCanvas({
           style: {
             color: (obj.stroke as string) || (obj.fill as string) || '#ffff00',
             opacity: obj.opacity ?? 1,
+            // strokeWidth drives the line/arrow thickness in the PDF annotation.
+            ...(isLineLike
+              ? { strokeWidth: (obj.data?.strokeWidth as number) ?? (obj.strokeWidth as number) ?? 2 }
+              : {}),
           },
           linkDestination: (obj.data?.linkDestination as AnnotationElement['linkDestination']) ?? null,
           popup: null,
           author: (obj.data?.author as string) ?? undefined,
+          // For line/arrow, explicit endpoints when present; otherwise the
+          // backend renderer falls back to the diagonal of `bounds`.
+          ...(isLineLike && obj.data?.linePoints
+            ? { linePoints: obj.data.linePoints as AnnotationElement['linePoints'] }
+            : {}),
           // quads is omitted — renderer falls back to bounds when undefined
         } as AnnotationElement;
       }
@@ -1741,6 +1753,7 @@ export function EditorCanvas({
                   strokeWidth: 2,
                 });
                 break;
+              case "strikeout":
               case "strikethrough":
                 newObj = new Line([0, 0, 100, 0], {
                   left: pointer.x,
@@ -1770,9 +1783,42 @@ export function EditorCanvas({
                   strokeWidth: 1,
                 });
                 break;
+              case "stamp":
+                newObj = new Rect({
+                  left: pointer.x,
+                  top: pointer.y,
+                  width: 120,
+                  height: 36,
+                  fill: "rgba(192, 0, 0, 0.12)",
+                  stroke: "#c00000",
+                  strokeWidth: 2,
+                });
+                break;
+              case "line":
+              case "arrow":
+                newObj = new Line([0, 0, 120, 0], {
+                  left: pointer.x,
+                  top: pointer.y,
+                  stroke: currentStrokeColor,
+                  strokeWidth: currentStrokeWidth || 2,
+                });
+                break;
             }
             if (newObj) {
-              (newObj as FabricObjectWithData).data = { elementId: generateId() };
+              // Real PDF annotations require data.annotationType so the
+              // object→element mapping classifies them as AnnotationElement
+              // (not a shape). Without it the backend never emits a /Annot.
+              const annData: FabricObjectWithData["data"] = {
+                elementId: generateId(),
+                annotationType: currentAnnotationType,
+              };
+              if (currentAnnotationType === "stamp") {
+                annData.content = "APPROVED";
+              }
+              if (currentAnnotationType === "arrow" || currentAnnotationType === "line") {
+                annData.strokeWidth = currentStrokeWidth || 2;
+              }
+              (newObj as FabricObjectWithData).data = annData;
             }
             break;
           }

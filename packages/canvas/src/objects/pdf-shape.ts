@@ -6,32 +6,40 @@ import * as fabric from "fabric";
 import type { ShapeElement, UUID, Point } from "@giga-pdf/types";
 import { boundsToFabric, transformToFabric } from "../utils/transform";
 
-export interface PDFShapeOptions extends fabric.IObjectOptions {
+// Fabric v6 dropped the `IObjectOptions` namespace; options are now
+// `Partial<FabricObjectProps>`. We compose it with our PDF-specific metadata.
+export type PDFShapeOptions = Partial<fabric.FabricObjectProps> & {
   elementId?: UUID;
   element?: ShapeElement;
-}
+};
 
 /**
  * Base class for PDF shape objects
  */
-export class PDFShape extends fabric.Object {
+export class PDFShape extends fabric.FabricObject {
   elementId?: UUID;
   element?: ShapeElement;
 
   constructor(options: PDFShapeOptions = {}) {
-    super(options);
+    super(options as Partial<fabric.FabricObjectProps>);
     this.elementId = options.elementId;
     this.element = options.element;
   }
 
   /**
-   * Create appropriate shape object from ShapeElement
+   * Create appropriate shape object from ShapeElement.
+   *
+   * Named `fromPdfElement` (not `fromElement`) for consistency with the other
+   * PDF object classes whose `fromElement` clashes with Fabric v6 statics.
    */
-  static fromElement(element: ShapeElement): fabric.Object {
+  static fromPdfElement(element: ShapeElement): fabric.Object {
     const fabricProps = boundsToFabric(element.bounds);
     const fabricTransform = transformToFabric(element.transform);
 
-    const commonOptions = {
+    // Carries our `elementId`/`element` metadata alongside the Fabric props.
+    // Fabric stores these extra fields at runtime; we cast at each constructor
+    // since they aren't part of `RectProps`/`EllipseProps`/… types.
+    const commonOptions: PDFShapeOptions = {
       elementId: element.elementId,
       element,
       ...fabricProps,
@@ -57,43 +65,47 @@ export class PDFShape extends fabric.Object {
           ...commonOptions,
           rx: element.geometry.cornerRadius,
           ry: element.geometry.cornerRadius,
-        });
+        } as Partial<fabric.RectProps>);
 
       case "ellipse":
         return new fabric.Ellipse({
           ...commonOptions,
           rx: fabricProps.width / 2,
           ry: fabricProps.height / 2,
-        });
+        } as Partial<fabric.EllipseProps>);
 
-      case "line":
-        if (element.geometry.points.length >= 2) {
-          const [start, end] = element.geometry.points;
+      case "line": {
+        const [start, end] = element.geometry.points;
+        if (start && end) {
           return new fabric.Line([start.x, start.y, end.x, end.y], {
             ...commonOptions,
             fill: undefined,
-          });
+          } as Partial<fabric.FabricObjectProps>);
         }
         break;
+      }
 
       case "polygon":
         if (element.geometry.points.length >= 3) {
           return new fabric.Polygon(
             element.geometry.points.map((p) => ({ x: p.x, y: p.y })),
-            commonOptions
+            commonOptions as Partial<fabric.FabricObjectProps>
           );
         }
         break;
 
       case "path":
         if (element.geometry.pathData) {
-          return new fabric.Path(element.geometry.pathData, commonOptions);
+          return new fabric.Path(
+            element.geometry.pathData,
+            commonOptions as Partial<fabric.FabricObjectProps>
+          );
         }
         break;
     }
 
     // Fallback to rectangle
-    return new fabric.Rect(commonOptions);
+    return new fabric.Rect(commonOptions as Partial<fabric.RectProps>);
   }
 
   /**
@@ -161,7 +173,7 @@ export class PDFRectangle extends fabric.Rect {
   element?: ShapeElement;
 
   constructor(options: PDFShapeOptions = {}) {
-    super(options);
+    super(options as Partial<fabric.RectProps>);
     this.elementId = options.elementId;
     this.element = options.element;
   }
@@ -179,7 +191,7 @@ export class PDFEllipse extends fabric.Ellipse {
   element?: ShapeElement;
 
   constructor(options: PDFShapeOptions = {}) {
-    super(options);
+    super(options as Partial<fabric.EllipseProps>);
     this.elementId = options.elementId;
     this.element = options.element;
   }
@@ -196,8 +208,8 @@ export class PDFLine extends fabric.Line {
   elementId?: UUID;
   element?: ShapeElement;
 
-  constructor(points: number[], options: PDFShapeOptions = {}) {
-    super(points, options);
+  constructor(points: [number, number, number, number], options: PDFShapeOptions = {}) {
+    super(points, options as Partial<fabric.FabricObjectProps>);
     this.elementId = options.elementId;
     this.element = options.element;
   }

@@ -217,19 +217,19 @@ export function FabricCanvas({
 
       switch (element.type) {
         case "text":
-          obj = PDFText.fromElement(element);
+          obj = PDFText.fromPdfElement(element);
           break;
 
         case "image":
-          obj = await PDFImage.fromElement(element);
+          obj = await PDFImage.fromPdfElement(element);
           break;
 
         case "shape":
-          obj = PDFShape.fromElement(element);
+          obj = PDFShape.fromPdfElement(element);
           break;
 
         case "annotation":
-          obj = PDFAnnotation.fromElement(element);
+          obj = PDFAnnotation.fromPdfElement(element);
           break;
 
         default:

@@ -17,7 +17,7 @@ export class ImageRenderer {
     canvas: fabric.Canvas,
     element: ImageElement
   ): Promise<fabric.Object> {
-    const imageObject = await PDFImage.fromElement(element);
+    const imageObject = await PDFImage.fromPdfElement(element);
     canvas.add(imageObject);
     return imageObject;
   }
@@ -139,36 +139,36 @@ export class ImageRenderer {
       return;
     }
 
-    const fabricFilters: any[] = [];
+    // Fabric v6: filters moved off the `Image` class onto the `fabric.filters`
+    // namespace (`fabric.Image.filters.X` → `fabric.filters.X`).
+    const fabricFilters: fabric.filters.BaseFilter<string>[] = [];
 
     if (filters.brightness !== undefined) {
       fabricFilters.push(
-        new fabric.Image.filters.Brightness({ brightness: filters.brightness })
+        new fabric.filters.Brightness({ brightness: filters.brightness })
       );
     }
     if (filters.contrast !== undefined) {
       fabricFilters.push(
-        new fabric.Image.filters.Contrast({ contrast: filters.contrast })
+        new fabric.filters.Contrast({ contrast: filters.contrast })
       );
     }
     if (filters.saturation !== undefined) {
       fabricFilters.push(
-        new fabric.Image.filters.Saturation({ saturation: filters.saturation })
+        new fabric.filters.Saturation({ saturation: filters.saturation })
       );
     }
     if (filters.blur !== undefined) {
-      fabricFilters.push(
-        new fabric.Image.filters.Blur({ blur: filters.blur })
-      );
+      fabricFilters.push(new fabric.filters.Blur({ blur: filters.blur }));
     }
     if (filters.grayscale) {
-      fabricFilters.push(new fabric.Image.filters.Grayscale());
+      fabricFilters.push(new fabric.filters.Grayscale());
     }
     if (filters.sepia) {
-      fabricFilters.push(new fabric.Image.filters.Sepia());
+      fabricFilters.push(new fabric.filters.Sepia());
     }
     if (filters.invert) {
-      fabricFilters.push(new fabric.Image.filters.Invert());
+      fabricFilters.push(new fabric.filters.Invert());
     }
 
     obj.filters = fabricFilters;
@@ -209,11 +209,15 @@ export class ImageRenderer {
   /**
    * Get image data URL
    */
-  static getDataURL(obj: fabric.Object, format: string = "png"): string | null {
+  static getDataURL(
+    obj: fabric.Object,
+    format: "png" | "jpeg" | "webp" = "png"
+  ): string | null {
     if (!(obj instanceof fabric.Image)) {
       return null;
     }
 
+    // Fabric v6 `ImageFormat` is the raster union 'jpeg' | 'png' | 'webp'.
     return obj.toDataURL({ format });
   }
 

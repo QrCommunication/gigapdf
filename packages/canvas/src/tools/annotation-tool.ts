@@ -73,8 +73,8 @@ export class AnnotationTool {
   /**
    * Handle mouse down
    */
-  private onMouseDown = (e: fabric.IEvent): void => {
-    const pointer = this.canvas.getPointer(e.e);
+  private onMouseDown = (e: fabric.TPointerEventInfo<fabric.TPointerEvent>): void => {
+    const pointer = this.canvas.getScenePoint(e.e);
     this.startPoint = { x: pointer.x, y: pointer.y };
     this.isDrawing = true;
 
@@ -87,10 +87,10 @@ export class AnnotationTool {
   /**
    * Handle mouse move
    */
-  private onMouseMove = (e: fabric.IEvent): void => {
+  private onMouseMove = (e: fabric.TPointerEventInfo<fabric.TPointerEvent>): void => {
     if (!this.isDrawing || !this.startPoint || !this.currentAnnotation) return;
 
-    const pointer = this.canvas.getPointer(e.e);
+    const pointer = this.canvas.getScenePoint(e.e);
     this.updateAnnotation(this.currentAnnotation, this.startPoint, pointer);
     this.canvas.renderAll();
   };

@@ -28,9 +28,13 @@ export function exportToDataURL(
     backgroundColor,
   } = options;
 
+  // `toDataURL` only rasterizes — SVG export goes through `exportToSVG`. Coerce
+  // an "svg" request to PNG here so the raster path stays type-safe.
+  const rasterFormat: "png" | "jpeg" | "webp" = format === "svg" ? "png" : format;
+
   if (bounds) {
     return canvas.toDataURL({
-      format,
+      format: rasterFormat,
       quality,
       multiplier,
       left: bounds.x,
@@ -42,7 +46,7 @@ export function exportToDataURL(
   }
 
   return canvas.toDataURL({
-    format,
+    format: rasterFormat,
     quality,
     multiplier,
     enableRetinaScaling: true,
@@ -65,14 +69,14 @@ export async function exportToBlob(
 /**
  * Export canvas to SVG
  */
-export function exportToSVG(
+export async function exportToSVG(
   canvas: fabric.Canvas,
   options: { bounds?: Bounds } = {}
-): string {
+): Promise<string> {
   const { bounds } = options;
 
   if (bounds) {
-    const tempCanvas = new fabric.Canvas(null as any);
+    const tempCanvas = new fabric.StaticCanvas(undefined);
     const objects = canvas.getObjects().filter((obj) => {
       const objBounds = obj.getBoundingRect();
       return (
@@ -83,7 +87,10 @@ export function exportToSVG(
       );
     });
 
-    tempCanvas.add(...objects.map((obj) => fabric.util.object.clone(obj)));
+    // Fabric v6: cloning is async (`obj.clone()` returns a Promise) — the v5
+    // `fabric.util.object.clone` helper was removed.
+    const clones = await Promise.all(objects.map((obj) => obj.clone()));
+    tempCanvas.add(...clones);
     const svg = tempCanvas.toSVG();
     tempCanvas.dispose();
     return svg;
@@ -104,7 +111,7 @@ export async function downloadCanvas(
 
   let blob: Blob;
   if (format === "svg") {
-    const svg = exportToSVG(canvas, options);
+    const svg = await exportToSVG(canvas, options);
     blob = new Blob([svg], { type: "image/svg+xml" });
   } else {
     blob = await exportToBlob(canvas, options);

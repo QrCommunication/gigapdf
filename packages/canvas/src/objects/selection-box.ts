@@ -5,10 +5,12 @@
 import * as fabric from "fabric";
 import type { Bounds } from "@giga-pdf/types";
 
-export interface SelectionBoxOptions extends fabric.IRectOptions {
+// Fabric v6 dropped the `IRectOptions` namespace; options are now
+// `Partial<RectProps>`. We compose it with our selection-styling fields.
+export type SelectionBoxOptions = Partial<fabric.RectProps> & {
   selectionColor?: string;
   selectionBorderColor?: string;
-}
+};
 
 /**
  * Selection box for multi-select operations
@@ -26,7 +28,7 @@ export class SelectionBox extends fabric.Rect {
       selectable: false,
       evented: false,
       ...options,
-    });
+    } as Partial<fabric.RectProps>);
 
     this.selectionColor = options.selectionColor || "rgba(0, 153, 255, 0.1)";
     this.selectionBorderColor = options.selectionBorderColor || "#0099FF";
@@ -76,9 +78,13 @@ export class SelectionBox extends fabric.Rect {
   }
 
   /**
-   * Check if point is inside selection
+   * Check if a scene point is inside the selection.
+   *
+   * Named `containsScenePoint` (not `containsPoint`) so it doesn't override
+   * Fabric v6's `FabricObject.containsPoint(point: Point)` with an incompatible
+   * `(x, y)` signature.
    */
-  containsPoint(x: number, y: number): boolean {
+  containsScenePoint(x: number, y: number): boolean {
     const bounds = this.getBounds();
     return (
       x >= bounds.x &&
@@ -108,8 +114,9 @@ export class SelectionBox extends fabric.Rect {
    */
   getIntersectingObjects(canvas: fabric.Canvas): fabric.Object[] {
     const objects = canvas.getObjects();
+    const self = this as fabric.FabricObject;
     return objects.filter((obj) => {
-      if (obj === this) return false;
+      if (obj === self) return false;
       return this.intersectsObject(obj);
     });
   }
