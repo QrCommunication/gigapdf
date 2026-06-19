@@ -124,7 +124,18 @@ export function SemanticResultCard({ result }: SemanticResultCardProps) {
       className="group flex flex-col overflow-hidden rounded-lg border bg-card text-left transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={t("openInEditor")}
     >
-      <div className="relative aspect-[3/4] w-full overflow-hidden bg-muted/40">
+      <div
+        className="relative w-full overflow-hidden bg-muted/40"
+        style={{
+          // Match the container to the real page aspect ratio so the
+          // object-contain image fills it edge-to-edge (no letterbox); this
+          // keeps the percentage-based highlight pixel-aligned with the content.
+          aspectRatio:
+            preview && preview.imageWidth > 0 && preview.imageHeight > 0
+              ? `${preview.imageWidth} / ${preview.imageHeight}`
+              : "3 / 4",
+        }}
+      >
         {preview ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
