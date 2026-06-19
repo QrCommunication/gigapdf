@@ -1645,6 +1645,51 @@
         "signature": "Signature",
         "button": "Button"
       }
+    },
+    "editTools": {
+      "findReplace": {
+        "open": "Find & replace",
+        "title": "Find & replace",
+        "findLabel": "Find",
+        "findPlaceholder": "Find in document…",
+        "replaceLabel": "Replace with",
+        "replacePlaceholder": "Replace with…",
+        "replace": "Replace",
+        "replaceAll": "Replace all",
+        "previous": "Previous match",
+        "next": "Next match",
+        "close": "Close",
+        "caseSensitive": "Match case",
+        "caseSensitiveShort": "Aa",
+        "wholeWord": "Whole word",
+        "wholeWordShort": "Word",
+        "noResults": "No matches",
+        "hint": "Enter to find, then Replace or Replace all. Esc to close."
+      },
+      "clipboard": {
+        "copy": "Copy",
+        "cut": "Cut",
+        "paste": "Paste"
+      },
+      "formatPainter": {
+        "copy": "Copy formatting",
+        "applyHint": "Click an element to apply the copied formatting",
+        "copied": "Formatting copied — select elements to apply it"
+      },
+      "toasts": {
+        "copied": "{count} element(s) copied",
+        "cut": "{count} element(s) cut",
+        "pasted": "{count} element(s) pasted",
+        "nothingToPaste": "Clipboard is empty",
+        "nothingSelected": "Select an element first",
+        "formatCopied": "Formatting copied",
+        "formatNotText": "Pick up formatting from a text element",
+        "formatApplied": "Formatting applied to {count} element(s)",
+        "formatNoTarget": "Select text element(s) to apply formatting",
+        "replacedOne": "Replaced 1 occurrence",
+        "replacedAll": "Replaced {count} occurrence(s)",
+        "replaceFailed": "Replacement failed"
+      }
     }
   },
   "errors": {

@@ -22,6 +22,13 @@ import {
   useViewStore,
   buildTableElements,
   buildListContent,
+  clonePastedElements,
+  extractPaintableStyle,
+  applyPaintableStyle,
+} from "@giga-pdf/editor";
+import type {
+  FindOccurrence,
+  PaintableTextStyle,
 } from "@giga-pdf/editor";
 import {
   ArrowLeft,
@@ -71,6 +78,8 @@ import {
 } from "@/components/editor";
 import type { ContinuousPageViewHandle } from "@/components/editor";
 import type { InsertLinkValue } from "@/components/editor/insert-link-dialog";
+import { EditorEditTools } from "@/components/editor/editor-edit-tools";
+import { FindReplaceDialog } from "@/components/editor/find-replace-dialog";
 import type {
   EditorCanvasHandle,
   TextFormatAction,
@@ -1024,6 +1033,25 @@ export default function EditorPage() {
     [selectedElements],
   );
 
+  // === P7 — Édition (#83) : Rechercher/Remplacer + Presse-papiers + Format
+  // painter. État local (additif). Le presse-papiers est en mémoire applicative
+  // (pas l'OS) — copier/couper stocke des clones d'éléments, coller les ré-injecte
+  // via handleElementAdded (scene graph + queue + bake). Le format painter
+  // « ramasse » le style d'un texte sélectionné puis l'applique aux sélections
+  // suivantes via handleElementUpdate.
+  const [findReplaceOpen, setFindReplaceOpen] = useState(false);
+  const [clipboard, setClipboard] = useState<Element[]>([]);
+  const [copiedFormat, setCopiedFormat] = useState<PaintableTextStyle | null>(
+    null,
+  );
+  const canPaste = clipboard.length > 0;
+  const formatPainterArmed = copiedFormat !== null;
+  // Source valide du format painter : exactement un élément texte sélectionné.
+  const canCopyFormat = useMemo(
+    () => selectedElements.length === 1 && selectedElements[0]?.type === "text",
+    [selectedElements],
+  );
+
   // --- Champs de formulaire du document (mode Concevoir) -------------------
   // Liste plate ordonnée page par page : c'est l'ordre dans lequel les
   // champs seront bakés en AcroForm au save/export — soit l'ordre de
@@ -1444,6 +1472,153 @@ export default function EditorPage() {
       canvasHandle,
       queueUpdate,
     ]
+  );
+
+  // === P7 — Presse-papiers (copier / couper / coller) =====================
+  // Presse-papiers applicatif (mémoire React, pas l'OS). Copier/couper stocke
+  // des snapshots des éléments sélectionnés ; coller clone avec offset et
+  // ré-injecte via handleElementAdded (scene graph + queue apply-elements +
+  // bake S3). Coller crée une NOUVELLE copie sélectionnée.
+  const handleCopy = useCallback(() => {
+    if (selectedElements.length === 0) {
+      toast({ title: t("editTools.toasts.nothingSelected") });
+      return;
+    }
+    // Snapshot détaché (deep clone) pour que des éditions ultérieures de la
+    // source ne « contaminent » pas le presse-papiers.
+    const snapshot = selectedElements.map(
+      (el) => JSON.parse(JSON.stringify(el)) as Element,
+    );
+    setClipboard(snapshot);
+    toast({
+      title: t("editTools.toasts.copied", { count: snapshot.length }),
+    });
+  }, [selectedElements, toast, t]);
+
+  const handleCut = useCallback(() => {
+    if (selectedElements.length === 0) {
+      toast({ title: t("editTools.toasts.nothingSelected") });
+      return;
+    }
+    const snapshot = selectedElements.map(
+      (el) => JSON.parse(JSON.stringify(el)) as Element,
+    );
+    setClipboard(snapshot);
+    // Supprime via le flux d'édition existant (queueDelete + bake).
+    for (const el of snapshot) {
+      void handleElementRemoved(el.elementId);
+    }
+    toast({ title: t("editTools.toasts.cut", { count: snapshot.length }) });
+  }, [selectedElements, handleElementRemoved, toast, t]);
+
+  const handlePaste = useCallback(() => {
+    if (clipboard.length === 0) {
+      toast({ title: t("editTools.toasts.nothingToPaste") });
+      return;
+    }
+    // Clone avec offset (fresh elementId, index moteur retiré) ; chaque clone
+    // passe par handleElementAdded comme un élément utilisateur neuf.
+    const clones = clonePastedElements(clipboard);
+    for (const clone of clones) {
+      void handleElementAdded(clone);
+    }
+    // handleElementAdded auto-sélectionne le dernier ; pour un coller multiple
+    // on sélectionne l'ensemble des nouveaux éléments.
+    if (currentPage && clones.length > 1) {
+      selectElements(
+        clones.map((c) => c.elementId),
+        currentPage.pageId,
+      );
+    }
+    toast({ title: t("editTools.toasts.pasted", { count: clones.length }) });
+  }, [clipboard, handleElementAdded, currentPage, selectElements, toast, t]);
+
+  // === P7 — Format painter (copier la mise en forme) ======================
+  // Deux temps : (1) un seul élément texte sélectionné → ramasse son style
+  // peignable. (2) Réarmé : applique le style copié à toutes les sélections
+  // texte courantes via handleElementUpdate, puis désarme.
+  const handleApplyCopiedFormat = useCallback(
+    (paint: PaintableTextStyle) => {
+      const targets = selectedElements.filter((el) => el.type === "text");
+      if (targets.length === 0) {
+        toast({ title: t("editTools.toasts.formatNoTarget") });
+        return;
+      }
+      let applied = 0;
+      for (const target of targets) {
+        const nextStyle = applyPaintableStyle(target, paint);
+        if (!nextStyle) continue;
+        handleElementUpdate(target.elementId, {
+          style: nextStyle,
+        } as Partial<Element>);
+        applied += 1;
+      }
+      toast({
+        title: t("editTools.toasts.formatApplied", { count: applied }),
+      });
+    },
+    [selectedElements, handleElementUpdate, toast, t],
+  );
+
+  const handleCopyFormat = useCallback(() => {
+    // Réarmé → on applique puis on désarme.
+    if (copiedFormat) {
+      handleApplyCopiedFormat(copiedFormat);
+      setCopiedFormat(null);
+      return;
+    }
+    // Sinon → on ramasse le style de l'unique élément texte sélectionné.
+    const source = selectedElements.length === 1 ? selectedElements[0] : null;
+    const paint = source ? extractPaintableStyle(source) : null;
+    if (!paint) {
+      toast({ title: t("editTools.toasts.formatNotText") });
+      return;
+    }
+    setCopiedFormat(paint);
+    toast({ title: t("editTools.toasts.formatCopied") });
+  }, [copiedFormat, handleApplyCopiedFormat, selectedElements, toast, t]);
+
+  // === P7 — Rechercher / Remplacer ========================================
+  // Navigation : va à la page de l'occurrence et sélectionne l'élément (le
+  // panneau propriétés suit + l'élément est mis en évidence sur le canvas).
+  const handleFindReplaceGoTo = useCallback(
+    (occurrence: FindOccurrence) => {
+      if (occurrence.pageIndex !== currentPageIndex) {
+        goToPage(occurrence.pageIndex);
+      }
+      const targetPage = pages[occurrence.pageIndex];
+      if (targetPage) {
+        selectElements([occurrence.elementId], targetPage.pageId);
+      }
+    },
+    [currentPageIndex, goToPage, pages, selectElements],
+  );
+
+  // Remplacer une occurrence : applique le nouveau contenu via le flux
+  // d'édition existant (replaceText au bake).
+  const handleReplaceOne = useCallback(
+    (occurrence: FindOccurrence, newContent: string) => {
+      handleElementUpdate(occurrence.elementId, {
+        content: newContent,
+      } as Partial<Element>);
+      toast({ title: t("editTools.toasts.replacedOne") });
+    },
+    [handleElementUpdate, toast, t],
+  );
+
+  // Tout remplacer : un update par élément modifié.
+  const handleReplaceAll = useCallback(
+    (edits: { elementId: string; content: string }[]) => {
+      for (const edit of edits) {
+        handleElementUpdate(edit.elementId, {
+          content: edit.content,
+        } as Partial<Element>);
+      }
+      toast({
+        title: t("editTools.toasts.replacedAll", { count: edits.length }),
+      });
+    },
+    [handleElementUpdate, toast, t],
   );
 
   const handleFormatAction = useCallback(
@@ -2393,6 +2568,41 @@ export default function EditorPage() {
         return;
       }
 
+      // Ctrl/Cmd + F - Find & replace
+      if (cmdOrCtrl && e.key === "f") {
+        e.preventDefault();
+        setFindReplaceOpen(true);
+        return;
+      }
+
+      // Ctrl/Cmd + C - Copy selection to the app clipboard (only when elements
+      // are selected; otherwise leave native text copy alone).
+      if (cmdOrCtrl && e.key === "c") {
+        if (selectedElementIds.length > 0) {
+          e.preventDefault();
+          handleCopy();
+        }
+        return;
+      }
+
+      // Ctrl/Cmd + X - Cut selection.
+      if (cmdOrCtrl && e.key === "x") {
+        if (selectedElementIds.length > 0) {
+          e.preventDefault();
+          handleCut();
+        }
+        return;
+      }
+
+      // Ctrl/Cmd + V - Paste the app clipboard.
+      if (cmdOrCtrl && e.key === "v") {
+        if (clipboard.length > 0) {
+          e.preventDefault();
+          handlePaste();
+        }
+        return;
+      }
+
       // Delete or Backspace - Delete selected
       if (e.key === "Delete" || e.key === "Backspace") {
         if (selectedElementIds.length > 0) {
@@ -2489,6 +2699,10 @@ export default function EditorPage() {
     handleFitPage,
     navigateToPage,
     effectivePageIndex,
+    handleCopy,
+    handleCut,
+    handlePaste,
+    clipboard,
   ]);
 
   // Find the PDF canvas element for content edit background capture
@@ -2891,6 +3105,21 @@ export default function EditorPage() {
         headerFooterBusy={headerFooterBusy}
       />
 
+      {/* P7 — Édition (#83) : barre secondaire (rechercher/remplacer,
+          presse-papiers, format painter). Composant autonome rendu sous la
+          barre principale pour garder editor-toolbar.tsx intact. */}
+      <EditorEditTools
+        onFindReplace={() => setFindReplaceOpen(true)}
+        onCopy={handleCopy}
+        onCut={handleCut}
+        onPaste={handlePaste}
+        onCopyFormat={handleCopyFormat}
+        hasSelection={selectedElementIds.length > 0}
+        canCopyFormat={canCopyFormat}
+        canPaste={canPaste}
+        formatPainterArmed={formatPainterArmed}
+      />
+
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Pages sidebar */}
@@ -3051,6 +3280,16 @@ export default function EditorPage() {
         onOpenChange={setShowShareDialog}
         documentId={storedDocumentId}
         documentName={name}
+      />
+
+      {/* P7 — Rechercher & remplacer (texte du scene graph, toutes pages) */}
+      <FindReplaceDialog
+        open={findReplaceOpen}
+        onClose={() => setFindReplaceOpen(false)}
+        pages={pages}
+        onGoToOccurrence={handleFindReplaceGoTo}
+        onReplaceOne={handleReplaceOne}
+        onReplaceAll={handleReplaceAll}
       />
 
       {/* Status bar */}

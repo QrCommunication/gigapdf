@@ -16,6 +16,9 @@ export * from "./selectors";
 // Export middleware
 export * from "./middleware";
 
+// Export pure editing helpers (find & replace, clipboard, format painter)
+export * from "./lib/edit-tools";
+
 // Export types
 export type {
   DocumentState,
