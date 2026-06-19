@@ -1391,6 +1391,18 @@
       "appliedTitle": "OCR appliqué",
       "appliedDescription": "Un calque de texte invisible a été ajouté : le document est désormais cherchable."
     },
+    "redact": {
+      "apply": "Appliquer la rédaction",
+      "applyCount": "Caviarder {count, plural, one {# zone} other {# zones}}",
+      "applyHint": "Supprime définitivement le contenu sous les zones tracées — action irréversible",
+      "applying": "Caviardage en cours…",
+      "clear": "Effacer les zones",
+      "irreversible": "Le caviardage est irréversible : le texte est supprimé et les pixels des images sont effacés, pas seulement masqués.",
+      "appliedTitle": "Caviardage appliqué",
+      "appliedDescription": "Le contenu sous les zones caviardées a été supprimé définitivement.",
+      "errorTitle": "Échec du caviardage",
+      "errorDescription": "Le caviardage n'a pas pu être appliqué. Veuillez réessayer."
+    },
     "indexOcr": {
       "indexedTitle": "Document indexé",
       "indexedDescription": "{count} blocs de texte ont été ajoutés à la recherche sémantique.",
@@ -1426,6 +1438,7 @@
       "image": "Image",
       "shape": "Forme",
       "draw": "Dessin",
+      "redact": "Caviarder (PII)",
       "annotation": "Annotation",
       "formField": "Champ de formulaire",
       "pan": "Déplacer",

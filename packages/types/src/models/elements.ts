@@ -300,6 +300,7 @@ export type Tool =
   | "annotation"
   | "form_field"
   | "draw"   // creates a signature field area
+  | "redact" // draws irreversible PII redaction zones
   | "hand"
   | "zoom";
 
