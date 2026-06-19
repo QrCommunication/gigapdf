@@ -8,7 +8,6 @@ import { SortField, SortDirection } from "@/components/dashboard/document-table"
 import { BreadcrumbFolder } from "@/components/dashboard/folder-breadcrumb";
 import { Button, Input, Skeleton, useToast } from "@giga-pdf/ui";
 import {
-  Plus,
   Search,
   Upload,
   ChevronLeft,
@@ -20,9 +19,61 @@ import {
 } from "lucide-react";
 import { api, getAuthToken, StoredDocument } from "@/lib/api";
 import { clientLogger } from "@/lib/client-logger";
-import { detectHeaderFooterFromOffice } from "@/components/editor/lib/office-headers-footers";
-import { applyHeaderFooter } from "@/components/editor/lib/page-headers-footers";
-import type { HeaderFooterSpec } from "@qrcommunication/gigapdf-lib";
+import { ImportDialog } from "@/components/dashboard/import-dialog";
+import {
+  IMPORT_CONCURRENCY,
+  MAX_IMPORT_FILE_SIZE_BYTES,
+  isPdfFile,
+  runWithConcurrency,
+  stripExtension,
+  summarizeOutcomes,
+  validateImportFile,
+  type ImportOutcome,
+} from "@/lib/document-import";
+
+/**
+ * Auto-index a scanned (image-only) PDF for semantic search (#85). OCRs every
+ * page via the engine route (native WASM OCR — no server binary), then ships
+ * the blocks to the backend pgvector index. Fire-and-forget: every failure is
+ * swallowed (logged) so a failed OCR can never disrupt the import that
+ * triggered it. Called only for a PDF with no extractable text layer.
+ */
+async function autoIndexScannedDocument(
+  pdfBlob: Blob,
+  storedDocumentId: string,
+): Promise<void> {
+  try {
+    const token = await getAuthToken();
+    const form = new FormData();
+    form.append("file", pdfBlob, "document.pdf");
+    form.append("granularity", "line");
+
+    const res = await fetch("/api/pdf/ocr-page", {
+      method: "POST",
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    });
+    if (!res.ok) {
+      clientLogger.warn("documents.auto-ocr-index-failed", res.status);
+      return;
+    }
+    const data = (await res.json()) as {
+      blocks?: Array<{
+        page: number;
+        text: string;
+        bbox: { x: number; y: number; w: number; h: number };
+      }>;
+    };
+    const blocks = data.blocks ?? [];
+    if (blocks.length === 0) return;
+
+    await api.indexOcrBlocks(storedDocumentId, blocks);
+    clientLogger.debug("documents.auto-ocr-indexed", blocks.length);
+  } catch (err) {
+    clientLogger.warn("documents.auto-ocr-index-failed", err);
+  }
+}
 
 interface Document {
   id: string;
@@ -41,60 +92,6 @@ interface Folder {
   parentId: string | null;
   createdAt: Date;
   updatedAt: Date;
-}
-
-// Office formats convertible to PDF via /api/office/upload: modern + legacy
-// Microsoft formats and OpenDocument. Kept in sync with the office route
-// contract (25MB max, returns the converted PDF binary).
-const OFFICE_EXTENSION_REGEX = /\.(docx|doc|xlsx|xls|pptx|ppt|odt|ods|odp)$/i;
-const OFFICE_ACCEPT = ".docx,.doc,.xlsx,.xls,.pptx,.ppt,.odt,.ods,.odp";
-const UPLOAD_ACCEPT = `.pdf,${OFFICE_ACCEPT}`;
-const MAX_OFFICE_FILE_SIZE_BYTES = 25 * 1024 * 1024;
-
-// Pool size for parallel imports. Unbounded Promise.allSettled would open
-// one full pipeline (convert + upload + download + save) per file and
-// overwhelm the backend on large drops; sequential is too slow.
-const UPLOAD_CONCURRENCY = 3;
-
-interface ImportSuccess {
-  ok: true;
-  name: string;
-}
-
-interface ImportFailure {
-  ok: false;
-  name: string;
-  reason: string;
-}
-
-type ImportOutcome = ImportSuccess | ImportFailure;
-
-/**
- * Run `worker` over `items` with at most `concurrency` workers in flight.
- * Results preserve the input order. Workers are expected to handle their
- * own errors (a rejection aborts the remaining items of that runner).
- */
-async function runWithConcurrency<T, R>(
-  items: readonly T[],
-  concurrency: number,
-  worker: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array<R>(items.length);
-  let nextIndex = 0;
-
-  const runner = async (): Promise<void> => {
-    while (nextIndex < items.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      const item = items[index];
-      if (item === undefined) continue;
-      results[index] = await worker(item, index);
-    }
-  };
-
-  const poolSize = Math.max(1, Math.min(concurrency, items.length));
-  await Promise.all(Array.from({ length: poolSize }, () => runner()));
-  return results;
 }
 
 // Thumbnail rendering bounds (PNG ≤ 2 MB backend limit is comfortable at
@@ -194,83 +191,6 @@ async function extractPdfText(pdfFile: File): Promise<string | null> {
   }
 }
 
-/**
- * Auto-index a scanned (image-only) PDF for semantic search (#85). OCRs every
- * page via the engine route, then ships the blocks to the backend pgvector
- * index. Fire-and-forget: every failure is swallowed (logged) so a failed OCR
- * can never disrupt the import that triggered it. Called only when the document
- * has no extractable text.
- */
-async function autoIndexScannedDocument(
-  pdfBlob: Blob,
-  storedDocumentId: string,
-): Promise<void> {
-  try {
-    const token = await getAuthToken();
-    const form = new FormData();
-    form.append("file", pdfBlob, "document.pdf");
-    form.append("granularity", "line");
-
-    const res = await fetch("/api/pdf/ocr-page", {
-      method: "POST",
-      credentials: "include",
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      body: form,
-    });
-    if (!res.ok) {
-      clientLogger.warn("documents.auto-ocr-index-failed", res.status);
-      return;
-    }
-    const data = (await res.json()) as {
-      blocks?: Array<{
-        page: number;
-        text: string;
-        bbox: { x: number; y: number; w: number; h: number };
-      }>;
-    };
-    const blocks = data.blocks ?? [];
-    if (blocks.length === 0) return;
-
-    await api.indexOcrBlocks(storedDocumentId, blocks);
-    clientLogger.debug("documents.auto-ocr-indexed", blocks.length);
-  } catch (err) {
-    clientLogger.warn("documents.auto-ocr-index-failed", err);
-  }
-}
-
-/**
- * Word-like auto-detect: when an Office document originates from Word (.docx)
- * with running headers/footers, preserve them on the converted PDF. We read the
- * bands from the ORIGINAL Office bytes (the editable model the conversion
- * discards), then bake them onto the PDF via the GigaPDF engine so they survive
- * into the editor — where the user can edit/remove them with the headers &
- * footers dialog. Best-effort: any failure returns the PDF unchanged, never
- * throwing, so a detection hiccup cannot fail an import.
- */
-async function applyDetectedHeaderFooter(
-  officeBytes: Uint8Array,
-  pdfFile: File,
-): Promise<File> {
-  try {
-    const detected = await detectHeaderFooterFromOffice(officeBytes);
-    if (!detected.header && !detected.footer) return pdfFile;
-
-    let bytes = new Uint8Array(await pdfFile.arrayBuffer());
-    if (detected.header) {
-      const spec: HeaderFooterSpec = { text: detected.header, align: "center" };
-      bytes = await applyHeaderFooter(bytes, "header", spec);
-    }
-    if (detected.footer) {
-      const spec: HeaderFooterSpec = { text: detected.footer, align: "center" };
-      bytes = await applyHeaderFooter(bytes, "footer", spec);
-    }
-    return new File([bytes], pdfFile.name, { type: "application/pdf" });
-  } catch (err) {
-    clientLogger.warn("documents.header-footer-detect-failed", err);
-    return pdfFile;
-  }
-}
-
 /** Build the /documents URL preserving folder and tag query params. */
 function buildDocumentsUrl(folderId: string | null, tag: string | null): string {
   const params = new URLSearchParams();
@@ -285,8 +205,9 @@ export default function DocumentsPage() {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const officeFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Universal import dialog (single "Import" entry point).
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   // Get current folder + tag filter from URL
   const currentFolderId = searchParams?.get("folder") || null;
@@ -452,125 +373,73 @@ export default function DocumentsPage() {
     loadDocuments();
   }, [loadDocuments]);
 
-  const handleNewDocument = () => {
-    fileInputRef.current?.click();
-  };
+  const handleOpenImport = useCallback(() => {
+    setImportDialogOpen(true);
+  }, []);
 
-  const handleNewOfficeDocument = () => {
-    officeFileInputRef.current?.click();
-  };
-
-  // Routes one file through the right pipeline by extension:
-  // - .pdf  -> standard pipeline (uploadDocument -> download -> saveDocument)
-  // - Office (.docx/.doc/.xlsx/.xls/.pptx/.ppt/.odt/.ods/.odp)
-  //   -> POST /api/office/upload (returns the converted PDF binary), then the
-  //      same standard pipeline. An Office file becomes editable like a PDF.
-  // Never throws: every failure is returned as an ImportFailure with a
-  // precise per-file reason, so one bad file cannot abort the batch.
+  // Imports ONE file, keeping its original format. The raw bytes are stored
+  // as-is (no Office→PDF conversion): the GED keeps the source document.
+  // PDFs additionally get a first-page thumbnail + extracted full text for
+  // search; non-PDF formats are stored without that PDF-only enrichment.
+  // Never throws: every failure is returned with a precise per-file reason,
+  // so one bad file cannot abort the batch.
   const importSingleFile = useCallback(
     async (file: File): Promise<ImportOutcome> => {
-      const lowerName = file.name.toLowerCase();
-      const isPdf = lowerName.endsWith(".pdf");
-      const isOffice = OFFICE_EXTENSION_REGEX.test(lowerName);
+      // Client-side validation: size cap only (every format is accepted).
+      const validation = validateImportFile(file, MAX_IMPORT_FILE_SIZE_BYTES);
+      if (!validation.ok) {
+        return {
+          ok: false,
+          name: file.name,
+          reason: t(`import.${validation.reasonKey}`),
+        };
+      }
 
-      // Client-side validation: extension + size, per-file precise reason.
-      if (!isPdf && !isOffice) {
-        return { ok: false, name: file.name, reason: t("upload.invalidFormat") };
-      }
-      if (isOffice && file.size > MAX_OFFICE_FILE_SIZE_BYTES) {
-        return { ok: false, name: file.name, reason: t("office.importErrorSize") };
-      }
+      const baseName = stripExtension(file.name) || file.name;
+      const pdf = isPdfFile(file);
 
       try {
-        let pdfFile: File;
-        let baseName: string;
+        // PDF-only enrichment, kicked off in parallel with the upload. Both
+        // helpers are best-effort (resolve to null, never reject), so they
+        // cannot fail the import; non-PDFs skip them entirely.
+        const thumbnailPromise = pdf ? renderPdfThumbnail(file) : null;
+        const extractedTextPromise = pdf ? extractPdfText(file) : null;
 
-        if (isPdf) {
-          pdfFile = file;
-          baseName = file.name.replace(/\.pdf$/i, "");
-        } else {
-          // 1) Office -> PDF conversion (server-side). Keep the original Office
-          // bytes for Word-like header/footer auto-detection below — the
-          // conversion discards the editable model that carries the bands.
-          const officeBytes = new Uint8Array(await file.arrayBuffer());
-          const formData = new FormData();
-          formData.append("file", file);
-          const convertRes = await fetch("/api/office/upload", {
-            method: "POST",
-            credentials: "include",
-            body: formData,
-          });
-          if (!convertRes.ok) {
-            const reason =
-              convertRes.status === 503
-                ? t("office.importErrorService")
-                : convertRes.status === 413
-                  ? t("office.importErrorSize")
-                  : t("office.importErrorConvert");
-            return { ok: false, name: file.name, reason };
-          }
-          const pdfBlob = await convertRes.blob();
-          baseName = file.name.replace(OFFICE_EXTENSION_REGEX, "");
-          pdfFile = new File([pdfBlob], `${baseName}.pdf`, {
-            type: "application/pdf",
-          });
+        const extractedText = extractedTextPromise
+          ? await extractedTextPromise
+          : null;
 
-          // 1b) Word-like auto-detect: preserve any running header/footer the
-          // source document carried onto the converted PDF (no-op for formats
-          // without bands, e.g. spreadsheets). Best-effort — never throws.
-          pdfFile = await applyDetectedHeaderFooter(officeBytes, pdfFile);
-        }
-
-        // 2) Standard PDF pipeline: upload -> download -> save to storage.
-        // Thumbnail rendering + full-text extraction start in parallel with
-        // the upload; both helpers are best-effort (resolve to null, never
-        // reject), so they cannot fail the import nor skew the progress
-        // counter (one tick per settled file, unchanged).
-        const thumbnailPromise = renderPdfThumbnail(pdfFile);
-        const extractedTextPromise = extractPdfText(pdfFile);
-
-        const uploadResult = await api.uploadDocument(pdfFile);
-        const token = await getAuthToken();
-        const downloadRes = await fetch(
-          `/api/v1/documents/${uploadResult.document_id}/download`,
-          {
-            credentials: "include",
-            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          },
-        );
-        if (!downloadRes.ok) {
-          throw new Error(`Failed to download PDF: ${downloadRes.status}`);
-        }
-        const finalPdfBlob = await downloadRes.blob();
-        const extractedText = await extractedTextPromise;
+        // Store the ORIGINAL file as-is in the GED.
         const saved = await api.saveDocument({
-          file: finalPdfBlob,
+          file,
           name: baseName,
           tags: [],
           folderId: currentFolderId || undefined,
           extractedText: extractedText ?? undefined,
         });
 
-        // 3) Best-effort thumbnail upload (needs the stored document id,
-        // hence after save). A failure is logged and silently ignored.
-        try {
-          const thumbnail = await thumbnailPromise;
-          if (thumbnail) {
-            await api.uploadDocumentThumbnail(
-              saved.stored_document_id,
-              thumbnail,
-              `${baseName}.png`,
-            );
+        // Best-effort thumbnail upload (needs the stored document id, hence
+        // after save). A failure is logged and silently ignored.
+        if (thumbnailPromise) {
+          try {
+            const thumbnail = await thumbnailPromise;
+            if (thumbnail) {
+              await api.uploadDocumentThumbnail(
+                saved.stored_document_id,
+                thumbnail,
+                `${baseName}.png`,
+              );
+            }
+          } catch (thumbErr) {
+            clientLogger.warn("documents.thumbnail-upload-failed", thumbErr);
           }
-        } catch (thumbErr) {
-          clientLogger.warn("documents.thumbnail-upload-failed", thumbErr);
         }
 
-        // 4) Auto-index image-only PDFs (#85). When the document carries no
-        // extractable text (a scan), OCR it and feed the semantic index in the
-        // background — fire-and-forget so it never blocks or fails the import.
-        if (!extractedText || extractedText.trim().length === 0) {
-          void autoIndexScannedDocument(finalPdfBlob, saved.stored_document_id);
+        // Auto-index image-only PDFs for semantic search (#85): a scanned PDF
+        // carries no extractable text → OCR it via the engine and feed the
+        // index in the background (fire-and-forget; never blocks/fails import).
+        if (pdf && (!extractedText || extractedText.trim().length === 0)) {
+          void autoIndexScannedDocument(file, saved.stored_document_id);
         }
 
         return { ok: true, name: file.name };
@@ -600,7 +469,7 @@ export default function DocumentsPage() {
       try {
         const outcomes = await runWithConcurrency(
           files,
-          UPLOAD_CONCURRENCY,
+          IMPORT_CONCURRENCY,
           async (file) => {
             const outcome = await importSingleFile(file);
             setUploadProgress((prev) =>
@@ -610,22 +479,19 @@ export default function DocumentsPage() {
           },
         );
 
-        const failures = outcomes.filter(
-          (outcome): outcome is ImportFailure => !outcome.ok,
-        );
-        const successCount = outcomes.length - failures.length;
+        const { successCount, failures } = summarizeOutcomes(outcomes);
 
         if (failures.length === 0) {
           toast({
-            title: t("upload.summaryAllSuccess", { count: successCount }),
+            title: t("import.summaryAllSuccess", { count: successCount }),
           });
         } else {
           toast({
             variant: "destructive",
             title:
               successCount === 0
-                ? t("upload.summaryAllFailed", { count: failures.length })
-                : t("upload.summaryPartial", {
+                ? t("import.summaryAllFailed", { count: failures.length })
+                : t("import.summaryPartial", {
                     success: successCount,
                     failed: failures.length,
                   }),
@@ -642,6 +508,9 @@ export default function DocumentsPage() {
         }
 
         if (successCount > 0) {
+          // Close the dialog once at least one file landed; the explorer-wide
+          // drop zone keeps working independently of the dialog.
+          setImportDialogOpen(false);
           await loadDocuments();
         }
       } finally {
@@ -651,17 +520,6 @@ export default function DocumentsPage() {
     },
     [importSingleFile, loadDocuments, t, toast],
   );
-
-  // Shared by both hidden file inputs (PDF + Office): extension routing is
-  // handled per file inside processFiles/importSingleFile.
-  const handleFileInputChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const files = event.target.files ? Array.from(event.target.files) : [];
-    // Reset immediately: the File references stay valid after clearing.
-    event.target.value = "";
-    void processFiles(files);
-  };
 
   const handleCreateFolder = async (name: string, parentId: string | null) => {
     await api.createFolder(name, parentId);
@@ -732,12 +590,14 @@ export default function DocumentsPage() {
     return "/" + path;
   }, [currentFolderId, breadcrumbPath]);
 
-  // Drop multiple files anywhere on the page (explorer-like UX). PDFs and
-  // Office documents are accepted; each file is routed/validated
-  // individually by processFiles. The overlay only shows when the user
-  // drags actual files from the OS; internal drag-and-drop (folder
-  // reorganization) doesn't trigger it because Radix DnD doesn't put
-  // `Files` in dataTransfer.types.
+  // Drop multiple files anywhere on the page (header/empty areas). EVERY
+  // file type is accepted; each file is validated/uploaded individually by
+  // processFiles. The overlay only shows when the user drags actual files
+  // from the OS; internal drag-and-drop (folder reorganization) doesn't
+  // trigger it because the explorer's HTML5 DnD puts only JSON in
+  // dataTransfer.types, not `Files`. The explorer area owns its own scoped
+  // drop zone (see DocumentExplorer onFilesDropped); it calls
+  // stopPropagation so a drop on the listing doesn't double-fire here.
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const dragDepthRef = useRef(0);
 
@@ -805,31 +665,14 @@ export default function DocumentsPage() {
           <div className="bg-background rounded-lg shadow-2xl px-8 py-6 flex items-center gap-4">
             <Upload className="h-12 w-12 text-primary" />
             <div>
-              <p className="text-xl font-semibold">{t("upload.dropTitle")}</p>
+              <p className="text-xl font-semibold">{t("import.dropTitle")}</p>
               <p className="text-sm text-muted-foreground">
-                {t("upload.dropHint")}
+                {t("import.dropHint")}
               </p>
             </div>
           </div>
         </div>
       )}
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept={UPLOAD_ACCEPT}
-        multiple
-        className="hidden"
-        onChange={handleFileInputChange}
-      />
-      <input
-        ref={officeFileInputRef}
-        type="file"
-        accept={OFFICE_ACCEPT}
-        multiple
-        className="hidden"
-        onChange={handleFileInputChange}
-      />
 
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -841,33 +684,24 @@ export default function DocumentsPage() {
         </div>
         <div className="flex items-center gap-2">
           <Button
-            variant="outline"
             className="gap-2"
-            onClick={handleNewOfficeDocument}
-            disabled={uploading}
-          >
-            <Upload className="h-4 w-4" />
-            {t("office.import")}
-          </Button>
-          <Button
-            className="gap-2"
-            onClick={handleNewDocument}
+            onClick={handleOpenImport}
             disabled={uploading}
           >
             {uploading ? (
               <>
                 <Upload className="h-4 w-4 animate-pulse" />
                 {uploadProgress && uploadProgress.total > 1
-                  ? t("upload.uploadingProgress", {
+                  ? t("import.uploadingProgress", {
                       done: uploadProgress.done,
                       total: uploadProgress.total,
                     })
-                  : t("upload.uploading")}
+                  : t("import.uploading")}
               </>
             ) : (
               <>
-                <Plus className="h-4 w-4" />
-                {t("newDocument")}
+                <Upload className="h-4 w-4" />
+                {t("import.button")}
               </>
             )}
           </Button>
@@ -961,9 +795,9 @@ export default function DocumentsPage() {
           <p className="mb-4 text-muted-foreground">
             {t("noDocuments.description")}
           </p>
-          <Button onClick={handleNewDocument}>
-            <Plus className="mr-2 h-4 w-4" />
-            {t("upload.title")}
+          <Button onClick={handleOpenImport}>
+            <Upload className="mr-2 h-4 w-4" />
+            {t("import.button")}
           </Button>
         </div>
       ) : displayDocuments.length === 0 &&
@@ -999,6 +833,8 @@ export default function DocumentsPage() {
             onFolderNavigate={handleFolderNavigate}
             onRefresh={loadDocuments}
             onCreateFolder={handleCreateFolder}
+            onFilesDropped={handleFilesDropped}
+            uploadingFiles={uploading}
           />
 
           {/* Pagination */}
@@ -1027,6 +863,16 @@ export default function DocumentsPage() {
           )}
         </>
       )}
+
+      {/* Universal import dialog (single entry point: every file type). */}
+      <ImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onFilesSelected={(files) => void processFiles(files)}
+        uploading={uploading}
+        progress={uploadProgress}
+        destinationPath={getCurrentPath()}
+      />
     </div>
   );
 }
