@@ -117,6 +117,8 @@ import {
   exportDocumentAs,
   exportFilename,
 } from "@/components/editor/lib/export-document";
+import { exportPagesAsImages } from "@/components/editor/lib/export-pages-as-images";
+import { extractDocumentText } from "@/components/editor/lib/extract-text";
 import {
   redactDocument,
   groupRectsByPage,
@@ -1890,39 +1892,46 @@ export default function EditorPage() {
   );
 
   // Export via the backend (Celery) pipeline for raster/text/html formats.
-  // Saves the current state first, then polls the export job and downloads the
-  // result (images come back as a .zip, txt/html as their own file).
+  // Image / text / html export, entirely client-side from the CURRENT document
+  // (currentPdfFileRef — the WYSIWYG source of truth, cf. pdf-libraries rule), so
+  // the result reflects unsaved edits with no backend job. Images come back as a
+  // .zip of per-page files; txt/html as their own file. Persists to the server
+  // first (best-effort) so the stored copy stays in sync, but the export reads
+  // the local bytes regardless.
   const handleExportFormat = useCallback(
     async (format: "png" | "jpeg" | "webp" | "txt" | "html") => {
-      if (!documentId || exportingFormat) return;
+      const file = currentPdfFileRef.current;
+      if (!file || exportingFormat) return;
       setExportingFormat(format);
       try {
         if (isDirty) await save();
-        const isImage =
-          format === "png" || format === "jpeg" || format === "webp";
-        const job = await api.exportDocument(documentId, format, {
-          single_file: true,
-          dpi: isImage ? 150 : undefined,
-          quality: format === "jpeg" || format === "webp" ? 85 : undefined,
-        });
-        let status = await api.getJobStatus(job.job_id);
-        while (status.status !== "completed" && status.status !== "failed") {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          status = await api.getJobStatus(job.job_id);
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        let blob: Blob;
+        let ext: string;
+        if (format === "png" || format === "jpeg" || format === "webp") {
+          blob = await exportPagesAsImages(bytes, format, {
+            dpi: 150,
+            quality: 85,
+          });
+          ext = "zip";
+        } else if (format === "txt") {
+          const text = await extractDocumentText(bytes);
+          blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+          ext = "txt";
+        } else {
+          blob = await exportDocumentAs(bytes, "html");
+          ext = "html";
         }
-        if (status.status === "failed") {
-          throw new Error(status.error || "Export failed");
-        }
-        const blob = await api.getExportResult(documentId, job.job_id);
-        const ext = isImage ? "zip" : format;
         downloadBlob(blob, `${name || "document"}.${ext}`);
+        toast({ title: t("office.exportSuccess") });
       } catch (err) {
         clientLogger.error(`[editor] export ${format} failed:`, err);
+        toast({ title: t("office.exportError"), variant: "destructive" });
       } finally {
         setExportingFormat(null);
       }
     },
-    [documentId, exportingFormat, isDirty, save, name],
+    [exportingFormat, isDirty, save, name, toast, t],
   );
 
   // Universal export (#84): lower the CURRENT document into any editable

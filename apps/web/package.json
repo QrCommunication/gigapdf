@@ -33,6 +33,7 @@
     "@sentry/nextjs": "^10.57.0",
     "better-auth": "^1.6.18",
     "clsx": "^2.1.1",
+    "fflate": "^0.8.3",
     "fabric": "^7.4.0",
     "jose": "^6.2.3",
     "lucide-react": "^1.18.0",
