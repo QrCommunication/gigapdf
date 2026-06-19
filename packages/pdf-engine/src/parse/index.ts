@@ -30,3 +30,10 @@ export type {
   PdfPlacementContext,
   PdfWordPlacement,
 } from './ocr-searchable';
+
+export { extractOcrBlocks, ocrWordToPdfBox, pdfBoxToImageRect } from './ocr-blocks';
+export type {
+  OcrBlock,
+  ExtractOcrBlocksOptions,
+  ExtractOcrBlocksResult,
+} from './ocr-blocks';

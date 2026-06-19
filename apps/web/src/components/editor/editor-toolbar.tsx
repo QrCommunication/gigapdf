@@ -55,6 +55,7 @@ import {
   Search,
   Droplet,
   ScanText,
+  ScanSearch,
   FileCheck2,
   Minimize2,
   TextCursorInput,
@@ -234,6 +235,14 @@ export interface EditorToolbarProps {
    * courant. Reçoit le PDF avec son calque de texte invisible.
    */
   onOcrApplied?: (blob: Blob) => void;
+  /**
+   * Callback du bouton « Indexer OCR » : lance l'OCR de la page courante et
+   * envoie les blocs au moteur de recherche sémantique (#85). Le bouton n'est
+   * rendu que si ce callback est fourni.
+   */
+  onIndexOcr?: () => void;
+  /** True pendant que l'indexation OCR est en cours (désactive le bouton). */
+  indexOcrBusy?: boolean;
   /**
    * Callback quand la signature numérique est appliquée au document courant
    * (mode « Appliquer au document » du SignDialog). Reçoit le PDF signé.
@@ -507,6 +516,8 @@ export function EditorToolbar({
   onWatermarkApplied,
   onCompressApplied,
   onOcrApplied,
+  onIndexOcr,
+  indexOcrBusy = false,
   onSignApplied,
   headersFootersEnabled = false,
   onToggleHeadersFooters,
@@ -1219,6 +1230,14 @@ export function EditorToolbar({
         label="OCR"
         onClick={() => setShowOcrDialog(true)}
       />
+      {onIndexOcr && (
+        <ToolButton
+          icon={<ScanSearch size={20} />}
+          label={t("indexOcr")}
+          disabled={indexOcrBusy}
+          onClick={() => onIndexOcr()}
+        />
+      )}
       <ToolButton
         icon={<FileCheck2 size={20} />}
         label="PDF/A"

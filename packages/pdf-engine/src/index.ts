@@ -81,6 +81,9 @@ export {
   OcrUnavailableError,
   makeSearchablePdf,
   ocrWordToPdfPlacement,
+  extractOcrBlocks,
+  ocrWordToPdfBox,
+  pdfBoxToImageRect,
 } from './parse';
 export type {
   StructuredChar,
@@ -99,6 +102,9 @@ export type {
   OcrWordBox,
   PdfPlacementContext,
   PdfWordPlacement,
+  OcrBlock,
+  ExtractOcrBlocksOptions,
+  ExtractOcrBlocksResult,
 } from './parse';
 
 // Merge/Split
