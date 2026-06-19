@@ -1522,6 +1522,51 @@
         "signature": "Signature",
         "button": "Bouton"
       }
+    },
+    "editTools": {
+      "findReplace": {
+        "open": "Rechercher et remplacer",
+        "title": "Rechercher et remplacer",
+        "findLabel": "Rechercher",
+        "findPlaceholder": "Rechercher dans le document…",
+        "replaceLabel": "Remplacer par",
+        "replacePlaceholder": "Remplacer par…",
+        "replace": "Remplacer",
+        "replaceAll": "Tout remplacer",
+        "previous": "Résultat précédent",
+        "next": "Résultat suivant",
+        "close": "Fermer",
+        "caseSensitive": "Respecter la casse",
+        "caseSensitiveShort": "Aa",
+        "wholeWord": "Mot entier",
+        "wholeWordShort": "Mot",
+        "noResults": "Aucun résultat",
+        "hint": "Entrée pour rechercher, puis Remplacer ou Tout remplacer. Échap pour fermer."
+      },
+      "clipboard": {
+        "copy": "Copier",
+        "cut": "Couper",
+        "paste": "Coller"
+      },
+      "formatPainter": {
+        "copy": "Copier la mise en forme",
+        "applyHint": "Cliquez sur un élément pour appliquer la mise en forme copiée",
+        "copied": "Mise en forme copiée — sélectionnez des éléments pour l'appliquer"
+      },
+      "toasts": {
+        "copied": "{count} élément(s) copié(s)",
+        "cut": "{count} élément(s) coupé(s)",
+        "pasted": "{count} élément(s) collé(s)",
+        "nothingToPaste": "Le presse-papiers est vide",
+        "nothingSelected": "Sélectionnez d'abord un élément",
+        "formatCopied": "Mise en forme copiée",
+        "formatNotText": "Copiez la mise en forme depuis un élément texte",
+        "formatApplied": "Mise en forme appliquée à {count} élément(s)",
+        "formatNoTarget": "Sélectionnez un ou plusieurs éléments texte",
+        "replacedOne": "1 occurrence remplacée",
+        "replacedAll": "{count} occurrence(s) remplacée(s)",
+        "replaceFailed": "Le remplacement a échoué"
+      }
     }
   },
   "errors": {
