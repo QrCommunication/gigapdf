@@ -67,6 +67,14 @@ class StoredDocument(Base):
     current_version: Mapped[int] = mapped_column(Integer, default=1)
     file_size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     mime_type: Mapped[str] = mapped_column(String(100), default="application/pdf")
+    # Original uploaded format/extension (lowercase, e.g. "pdf", "docx", "png").
+    # NULL/"pdf" means a regular PDF document (back-compatible default). The
+    # stored S3 bytes are kept in this format; export converts on demand.
+    original_format: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+        comment="Original uploaded file format/extension (lowercase); NULL/'pdf' = PDF",
+    )
     tags: Mapped[dict | None] = mapped_column(JSON, default=list)
     metadata_cache: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     thumbnail_path: Mapped[str | None] = mapped_column(

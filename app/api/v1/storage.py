@@ -31,11 +31,16 @@ from app.middleware.rate_limiter import RateLimitDep
 from app.middleware.request_id import get_request_id
 from app.models.database import DocumentVersion, Folder, OcrBlock, StoredDocument
 from app.schemas.responses.common import APIResponse, MetaInfo, PaginationInfo
+from app.services import content_extraction_service
 from app.services.activity_service import ActivityAction, activity_service
 from app.services.document_service import document_service
 from app.services.embeddings import embedding_service
 from app.services.quota_service import quota_service
 from app.services.s3_service import s3_service
+from app.services.sharing.access_guard import (
+    authorize_document_access,
+    authorize_folder_access,
+)
 from app.utils.helpers import generate_uuid, now_utc
 
 _logger = logging.getLogger(__name__)
@@ -119,6 +124,112 @@ def _detect_thumbnail_format(data: bytes) -> tuple[str, str] | None:
     return None
 
 
+# ── Import format handling ──────────────────────────────────────────────
+# Documents may now be imported in their original format (kept as-is on S3,
+# with export-on-demand). PDF stays the default and its storage path is
+# unchanged (back-compatible). Magic-byte signatures recognise common
+# document/image formats so we can record a precise mime_type even when the
+# client does not send a reliable Content-Type.
+_FORMAT_SIGNATURES: tuple[tuple[bytes, str, str], ...] = (
+    (b"%PDF-", "pdf", "application/pdf"),
+    (b"\x89PNG\r\n\x1a\n", "png", "image/png"),
+    (b"\xff\xd8\xff", "jpg", "image/jpeg"),
+    (b"GIF87a", "gif", "image/gif"),
+    (b"GIF89a", "gif", "image/gif"),
+    (b"%!PS", "ps", "application/postscript"),
+    (b"{\\rtf", "rtf", "application/rtf"),
+)
+
+# ZIP-container Office formats (docx/xlsx/pptx/odt/…) all start with "PK\x03\x04";
+# OLE2 legacy Office (doc/xls/ppt) with the compound-document magic. We can't
+# distinguish them from magic bytes alone, so we fall back to the extension /
+# declared content type for those — magic only confirms the family.
+_ZIP_MAGIC = b"PK\x03\x04"
+_OLE2_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+# Extension → (canonical format token, mime type). Used when magic bytes are
+# ambiguous (ZIP/OLE2 containers) or absent.
+_EXTENSION_MIME: dict[str, tuple[str, str]] = {
+    "pdf": ("pdf", "application/pdf"),
+    "png": ("png", "image/png"),
+    "jpg": ("jpg", "image/jpeg"),
+    "jpeg": ("jpg", "image/jpeg"),
+    "gif": ("gif", "image/gif"),
+    "webp": ("webp", "image/webp"),
+    "tif": ("tiff", "image/tiff"),
+    "tiff": ("tiff", "image/tiff"),
+    "bmp": ("bmp", "image/bmp"),
+    "txt": ("txt", "text/plain"),
+    "rtf": ("rtf", "application/rtf"),
+    "csv": ("csv", "text/csv"),
+    "doc": ("doc", "application/msword"),
+    "docx": (
+        "docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ),
+    "xls": ("xls", "application/vnd.ms-excel"),
+    "xlsx": (
+        "xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ),
+    "ppt": ("ppt", "application/vnd.ms-powerpoint"),
+    "pptx": (
+        "pptx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ),
+    "odt": ("odt", "application/vnd.oasis.opendocument.text"),
+    "ods": ("ods", "application/vnd.oasis.opendocument.spreadsheet"),
+    "odp": ("odp", "application/vnd.oasis.opendocument.presentation"),
+}
+
+
+def _detect_upload_format(
+    data: bytes, filename: str | None, content_type: str | None
+) -> tuple[str, str]:
+    """Resolve an imported file's ``(original_format, mime_type)``.
+
+    Magic bytes win when unambiguous (PDF, PNG, JPEG, GIF…). For ZIP/OLE2
+    container formats (Office) the magic only confirms the family, so the
+    filename extension (then the declared content type) disambiguates. Falls
+    back to ``("bin", content_type or "application/octet-stream")`` when
+    nothing matches — the file is still stored verbatim.
+    """
+    for signature, fmt, mime in _FORMAT_SIGNATURES:
+        if data.startswith(signature):
+            return fmt, mime
+
+    extension = ""
+    if filename and "." in filename:
+        extension = filename.rsplit(".", 1)[-1].strip().lower()
+
+    if data.startswith(_ZIP_MAGIC) or data.startswith(_OLE2_MAGIC):
+        if extension in _EXTENSION_MIME:
+            return _EXTENSION_MIME[extension]
+        # Known container but unknown member: keep a generic-but-honest type.
+        if data.startswith(_ZIP_MAGIC):
+            return "zip", "application/zip"
+        return "bin", "application/x-ole-storage"
+
+    if extension in _EXTENSION_MIME:
+        return _EXTENSION_MIME[extension]
+
+    return "bin", (content_type or "application/octet-stream")
+
+
+def _original_document_key(
+    user_id: str, document_id: str, version: int, original_format: str
+) -> str:
+    """S3 key for a stored document version, preserving the original format.
+
+    PDFs keep the historical ``…/v{n}.pdf`` key (identical to
+    :meth:`s3_service.get_document_key`) so nothing about existing documents
+    changes. Other formats use the same prefix with their own extension.
+    """
+    if original_format in ("", "pdf"):
+        return s3_service.get_document_key(user_id, document_id, version)
+    return f"documents/{user_id}/{document_id}/v{version}.{original_format}"
+
+
 def _next_copy_name(base_name: str, existing_names: set[str]) -> str:
     """Compute the duplicate name: "{name} (copie)", then "(copie 2)", "(copie 3)"…
 
@@ -165,6 +276,8 @@ def _serialize_stored_document(doc: StoredDocument) -> dict:
         "folder_id": doc.folder_id,
         "tags": doc.tags or [],
         "file_size_bytes": doc.file_size_bytes or 0,
+        "mime_type": doc.mime_type or "application/pdf",
+        "original_format": doc.original_format or "pdf",
         "created_at": doc.created_at.isoformat(),
         "modified_at": doc.updated_at.isoformat(),
         "thumbnail_url": _thumbnail_url_for(doc.thumbnail_path),
@@ -252,6 +365,68 @@ async def store_ocr_blocks(
     return len(normalized)
 
 
+async def index_document_content(
+    session: AsyncSession,
+    document_id: str,
+    data: bytes,
+    mime_type: str | None,
+) -> str:
+    """Extract + index a document's text at import time (best-effort).
+
+    Pulls searchable text from the uploaded bytes according to *mime_type*
+    (PDF text layer / image OCR — see :mod:`content_extraction_service`),
+    persists it on ``StoredDocument.extracted_text`` (feeds the full-text
+    ``search_vector``) and, when any text is found, (re-)indexes it as a single
+    OCR block with an embedding so the **semantic** search also covers the
+    import.
+
+    The caller owns the transaction (this does **not** commit). Never raises:
+    a failure here must not fail the import — it just means the document is not
+    (yet) searchable. Returns the extracted text (possibly empty).
+    """
+    try:
+        text = await asyncio.to_thread(
+            content_extraction_service.extract_text, data, mime_type
+        )
+    except Exception:  # noqa: BLE001 — extraction must never break the import
+        _logger.warning(
+            "index_document_content: extraction failed (doc=%s)",
+            document_id,
+            exc_info=True,
+        )
+        return ""
+
+    text = (text or "").strip()[:_MAX_EXTRACTED_TEXT_CHARS]
+
+    # Persist the full-text material on the document (auto-populates the
+    # generated tsvector). Load the row in this session to set the attribute.
+    doc = (
+        await session.execute(
+            select(StoredDocument).where(StoredDocument.id == document_id)
+        )
+    ).scalar_one_or_none()
+    if doc is not None:
+        doc.extracted_text = text or None
+
+    # Feed the semantic index too (one block = the whole document text). This
+    # is best-effort; embedding unavailability stores the block without vector.
+    if text:
+        try:
+            await store_ocr_blocks(
+                session,
+                document_id,
+                [{"page": 0, "bbox": {}, "text": text}],
+            )
+        except Exception:  # noqa: BLE001 — semantic indexing is best-effort
+            _logger.warning(
+                "index_document_content: semantic indexing failed (doc=%s)",
+                document_id,
+                exc_info=True,
+            )
+
+    return text
+
+
 class CreateFolderRequest(BaseModel):
     """Request to create a folder."""
 
@@ -272,28 +447,33 @@ class CreateFolderRequest(BaseModel):
     status_code=201,
     summary="Save document to storage",
     description="""
-Save a PDF document directly to persistent storage via multipart upload.
+Save a document to persistent storage via multipart upload.
 
-The frontend sends the rendered PDF bytes (produced by the TypeScript pdf-engine) along
-with document metadata as form fields. No active editing session is required.
+The file is stored in its **original format** (PDF, Office, image, …) — it is
+**not** forced to PDF; export converts it on demand. PDF remains the default
+and its storage path is unchanged.
 
 ## Features
+- Keeps the original file format (`original_format` + precise `mime_type`)
+- Server-side **content indexing** for search: PDF text layer (pdfplumber)
+  or image OCR (Tesseract) is extracted at import and made full-text + semantic
+  searchable. Best-effort — a failed extraction never fails the upload.
 - Automatic version tracking (initial version = 1)
 - Tag-based organization for searchability
 - Folder hierarchy support
 - Storage quota enforcement (personal or organization-based)
-- PDF magic-bytes validation (`%PDF-`)
+- Format detection via magic bytes (+ extension/Content-Type fallback)
 - File size limit: 100 MB
 
 ## Multipart Form Fields
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| file | file | Yes | PDF file bytes |
+| file | file | Yes | File bytes in any supported format (PDF, docx/xlsx/pptx, odt/ods/odp, png/jpg/webp/tiff, …) |
 | name | string | Yes | Display name (1-255 characters) |
 | folder_id | string | No | Target folder UUID (null for root) |
 | tags | string | No | JSON array of tag strings, e.g. `["contract","legal"]` (max 20 tags of 50 chars, normalized lowercase/trim) |
 | version_comment | string | No | Comment describing this version |
-| extracted_text | string | No | Plain text content of the PDF for full-text search (truncated server-side to 500k chars) |
+| extracted_text | string | No | Pre-computed plain text for full-text search (truncated to 500k chars). If omitted, the text is extracted server-side from the file. |
 """,
     responses={
         201: {
@@ -435,9 +615,9 @@ async def save_document(
         extra={"document_name": name, "user_id": user.user_id},
     )
 
-    # ── 1. Read + validate PDF bytes ────────────────────────────────────
-    pdf_bytes = await file.read()
-    file_size = len(pdf_bytes)
+    # ── 1. Read bytes + detect the original format (PDF or other) ───────
+    file_bytes = await file.read()
+    file_size = len(file_bytes)
 
     _FILE_SIZE_LIMIT = 100 * 1024 * 1024  # 100 MB
     if file_size > _FILE_SIZE_LIMIT:
@@ -446,17 +626,35 @@ async def save_document(
             detail=f"File too large: {file_size} bytes (limit: {_FILE_SIZE_LIMIT} bytes)",
         )
 
-    if not pdf_bytes.startswith(b"%PDF-"):
-        raise HTTPException(status_code=400, detail="Invalid PDF format: missing %PDF- header")
+    if file_size == 0:
+        raise HTTPException(status_code=400, detail="Empty file: no bytes received")
 
-    file_hash = hashlib.sha256(pdf_bytes).hexdigest()
-    _logger.debug("save_document: received %d bytes (sha256=%s)", file_size, file_hash[:16])
+    # Documents are now stored in their ORIGINAL format (export converts on
+    # demand). PDF keeps its historical storage path; other formats are kept
+    # verbatim on S3 with a precise mime_type.
+    original_format, mime_type = _detect_upload_format(
+        file_bytes, file.filename, file.content_type
+    )
+    is_pdf = original_format == "pdf"
 
-    # ── 2. Count pages via pikepdf (offloaded — CPU-bound, not async-safe) ─
-    try:
-        page_count = await asyncio.to_thread(_count_pdf_pages_sync, pdf_bytes)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Cannot read PDF structure: {exc}") from exc
+    file_hash = hashlib.sha256(file_bytes).hexdigest()
+    _logger.debug(
+        "save_document: received %d bytes (sha256=%s, format=%s)",
+        file_size,
+        file_hash[:16],
+        original_format,
+    )
+
+    # ── 2. Count pages — only meaningful for PDF (pikepdf). Non-PDF imports
+    #       have no page concept here (0); the editor derives it on open. ──
+    page_count = 0
+    if is_pdf:
+        try:
+            page_count = await asyncio.to_thread(_count_pdf_pages_sync, file_bytes)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400, detail=f"Cannot read PDF structure: {exc}"
+            ) from exc
 
     # ── 3. Parse + normalize tags (JSON array string → list[str]) ────────
     parsed_tags: list[str] = []
@@ -492,7 +690,7 @@ async def save_document(
 
     # ── 5. Derive IDs before DB commit so S3 key is deterministic ───────
     stored_doc_id = generate_uuid()
-    s3_key = s3_service.get_document_key(user.user_id, stored_doc_id, 1)
+    s3_key = _original_document_key(user.user_id, stored_doc_id, 1, original_format)
 
     # ── 6. Commit DB records first (rollback-safe) ───────────────────────
     # If anything inside the `async with` block raises, SQLAlchemy rolls
@@ -506,6 +704,8 @@ async def save_document(
             page_count=page_count,
             current_version=1,
             file_size_bytes=file_size,
+            mime_type=mime_type,
+            original_format=original_format,
             tags=parsed_tags,
             extracted_text=extracted_text,
         )
@@ -528,14 +728,15 @@ async def save_document(
     # ── 7. Upload to S3 after DB commit (compensation on failure) ────────
     try:
         s3_service.upload_file(
-            file_data=pdf_bytes,
+            file_data=file_bytes,
             key=s3_key,
-            content_type="application/pdf",
+            content_type=mime_type,
             metadata={
                 "document_id": stored_doc_id,
                 "user_id": user.user_id,
                 "version": "1",
                 "name": name,
+                "original_format": original_format,
             },
         )
         _logger.info("save_document: S3 upload OK (key=%s)", s3_key)
@@ -567,6 +768,31 @@ async def save_document(
             user.user_id, file_size, delta_documents=1
         )
 
+    # ── 9. Index content for search (best-effort, never fails the import) ─
+    # If the client already supplied extracted_text (e.g. the TS engine's text
+    # layer) we trust it and only feed the semantic index; otherwise we derive
+    # the text server-side from the stored bytes (PDF text / image OCR).
+    indexed_text = extracted_text or ""
+    try:
+        async with get_db_session() as index_session:
+            if extracted_text:
+                if extracted_text.strip():
+                    await store_ocr_blocks(
+                        index_session,
+                        stored_doc_id,
+                        [{"page": 0, "bbox": {}, "text": extracted_text}],
+                    )
+            else:
+                indexed_text = await index_document_content(
+                    index_session, stored_doc_id, file_bytes, mime_type
+                )
+    except Exception:  # noqa: BLE001 — indexing must never break the upload
+        _logger.warning(
+            "save_document: content indexing failed (doc=%s)",
+            stored_doc_id,
+            exc_info=True,
+        )
+
     processing_time = int((time.time() - start_time) * 1000)
 
     return APIResponse(
@@ -576,6 +802,9 @@ async def save_document(
             "name": name,
             "page_count": page_count,
             "version": 1,
+            "original_format": original_format,
+            "mime_type": mime_type,
+            "content_indexed": bool(indexed_text.strip()),
             "created_at": stored_doc.created_at.isoformat(),
             "quota_source": "tenant" if effective_limits.is_tenant_based else "personal",
         },
@@ -956,7 +1185,8 @@ modified_at, deleted_at).
 
 ## Permissions
 - **Owner**: always allowed.
-- **Non-owner**: 404 (storage documents are private).
+- **Shared user**: allowed (active share grant on the document).
+- **Anyone else**: **403 Forbidden** (the document exists but is not yours).
 
 ## Trashed documents
 By default, a soft-deleted document returns **404**. Pass
@@ -987,7 +1217,8 @@ By default, a soft-deleted document returns **404**. Pass
                 }
             },
         },
-        404: {"description": "Document not found or belongs to another user"},
+        403: {"description": "You do not have access to this document"},
+        404: {"description": "Document not found"},
     },
 )
 async def get_stored_document(
@@ -996,13 +1227,17 @@ async def get_stored_document(
     include_trashed: bool = False,
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
-    """Return a single stored document owned by the authenticated user."""
+    """Return a single stored document the user owns or has been shared.
+
+    Access: owner OR active share grant. A non-owner without a grant gets
+    **403** (not 404). ``include_trashed`` browses the trash and is restricted
+    to the owner.
+    """
     start = time.perf_counter()
 
-    query = select(StoredDocument).where(
-        StoredDocument.id == stored_document_id,
-        StoredDocument.owner_id == user.user_id,
-    )
+    # Load by id (ownership is enforced by the access guard, not the query, so
+    # shared users can open the document too — and IDOR is closed by the guard).
+    query = select(StoredDocument).where(StoredDocument.id == stored_document_id)
     if not include_trashed:
         query = query.where(~StoredDocument.is_deleted)
 
@@ -1010,6 +1245,13 @@ async def get_stored_document(
     stored_doc = result.scalar_one_or_none()
     if not stored_doc:
         raise NotFoundError(f"Document not found: {stored_document_id}")
+
+    # Owner-or-shared gate → 403 for anyone else. The trash is owner-only.
+    decision = await authorize_document_access(db, stored_doc, user.user_id)
+    if include_trashed and not decision.is_owner:
+        raise HTTPException(
+            status_code=403, detail="You do not have access to this document"
+        )
 
     processing_time = int((time.perf_counter() - start) * 1000)
     return APIResponse(
@@ -1063,6 +1305,7 @@ Returns a session document_id that can be used with the Document APIs.
                 }
             }
         },
+        403: {"description": "You do not have access to this document"},
         404: {"description": "Stored document not found"},
     },
     openapi_extra={
@@ -1136,14 +1379,18 @@ async def load_stored_document(
     user: AuthenticatedUser,
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
-    """Load stored document to session."""
+    """Load (open) a stored document into an editing session.
+
+    Access: owner OR active share grant — a non-owner without a grant gets
+    **403** (not 404). The file is read from the **owner's** S3 prefix so a
+    shared user can open it.
+    """
     start_time = time.time()
 
-    # Get stored document
+    # Load by id; the access guard (not the query) enforces owner-or-shared.
     result = await db.execute(
         select(StoredDocument).where(
             StoredDocument.id == stored_document_id,
-            StoredDocument.owner_id == user.user_id,
             ~StoredDocument.is_deleted,
         )
     )
@@ -1152,9 +1399,16 @@ async def load_stored_document(
     if not stored_doc:
         raise NotFoundError(f"Stored document not found: {stored_document_id}")
 
-    # Download from S3
-    s3_key = s3_service.get_document_key(
-        user.user_id, stored_document_id, stored_doc.current_version
+    # Owner-or-shared gate → 403 for anyone else.
+    await authorize_document_access(db, stored_doc, user.user_id)
+
+    # Download from S3 — keyed by the OWNER's id and the original format so
+    # shared documents (and non-PDF originals) resolve to the right object.
+    s3_key = _original_document_key(
+        stored_doc.owner_id,
+        stored_document_id,
+        stored_doc.current_version,
+        stored_doc.original_format or "pdf",
     )
 
     try:
@@ -1162,7 +1416,7 @@ async def load_stored_document(
     except Exception as e:
         raise NotFoundError(f"Document file not found in storage: {str(e)}")
 
-    # Upload to session
+    # Upload to session (owned by the requesting user's session)
     document_id, document = await document_service.upload_document(
         file_data=file_data,
         filename=f"{stored_doc.name}.pdf",
@@ -1566,6 +1820,7 @@ Every time a document is saved to storage, a new version is created. This endpoi
                 }
             }
         },
+        403: {"description": "You do not have access to this document"},
         404: {"description": "Stored document not found"},
     },
     openapi_extra={
@@ -1638,20 +1893,22 @@ async def list_versions(
     user: AuthenticatedUser,
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
-    """List document versions."""
+    """List document versions (owner or shared user; 403 otherwise)."""
     start_time = time.time()
 
-    # Verify ownership
+    # Load by id; owner-or-shared is enforced by the access guard below.
     result = await db.execute(
         select(StoredDocument).where(
             StoredDocument.id == stored_document_id,
-            StoredDocument.owner_id == user.user_id,
         )
     )
     stored_doc = result.scalar_one_or_none()
 
     if not stored_doc:
         raise NotFoundError(f"Stored document not found: {stored_document_id}")
+
+    # Owner-or-shared gate → 403 for anyone else.
+    await authorize_document_access(db, stored_doc, user.user_id)
 
     # Get versions
     versions_result = await db.execute(
@@ -4376,6 +4633,7 @@ This endpoint calculates statistics for the specified folder and all its descend
                 }
             }
         },
+        403: {"description": "You do not have access to this folder"},
         404: {"description": "Folder not found"},
     },
     openapi_extra={
@@ -4446,26 +4704,31 @@ async def get_folder_stats(
     user: AuthenticatedUser,
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
-    """Get folder statistics (size, document count, etc.)."""
+    """Get folder statistics (size, document count, etc.).
+
+    Access: owner OR a user who has an active share on a document inside the
+    folder subtree. Anyone else gets **403** (not 404).
+    """
     start_time = time.time()
 
-    # Get folder
-    result = await db.execute(
-        select(Folder).where(
-            Folder.id == folder_id,
-            Folder.owner_id == user.user_id,
-        )
-    )
+    # Load by id; owner-or-shared is enforced by the access guard below.
+    result = await db.execute(select(Folder).where(Folder.id == folder_id))
     folder = result.scalar_one_or_none()
 
     if not folder:
         raise NotFoundError(f"Folder not found: {folder_id}")
 
+    # Owner-or-shared gate → 403 for anyone else.
+    await authorize_folder_access(db, folder, user.user_id)
+    # Stats are computed over the folder OWNER's documents (correct counts for
+    # an owner; a shared viewer sees the same subtree they were granted into).
+    stats_owner_id = folder.owner_id
+
     # Get all folders in this subtree (including the folder itself)
     folder_ids = [folder_id]
     descendants_result = await db.execute(
         select(Folder.id).where(
-            Folder.owner_id == user.user_id,
+            Folder.owner_id == stats_owner_id,
             Folder.path.startswith(folder.path + folder_id + "/"),
         )
     )
@@ -4480,7 +4743,7 @@ async def get_folder_stats(
             func.count(StoredDocument.id),
             func.coalesce(func.sum(StoredDocument.file_size_bytes), 0)
         ).where(
-            StoredDocument.owner_id == user.user_id,
+            StoredDocument.owner_id == stats_owner_id,
             StoredDocument.folder_id.in_(folder_ids),
             ~StoredDocument.is_deleted,
         )
