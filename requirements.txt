@@ -8,7 +8,6 @@ pydantic-settings>=2.1.0
 # PDF manipulation
 pypdf>=6.12.0
 pikepdf>=8.0.0
-pdfplumber>=0.10.0
 Pillow>=10.2.0
 # fontTools: repair subset TTFs extracted from PDFs before serving them to
 # the browser FontFace API. PDF subset fonts (Type0/CIDFontType2) often have

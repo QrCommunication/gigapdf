@@ -26,9 +26,9 @@ changes. Every function is **synchronous** (meant to be offloaded with
 ``asyncio.to_thread``) and **never raises**: extraction is an enhancement, not a
 precondition for a successful import.
 
-Note: ``pdfplumber`` is still a project dependency — it is used elsewhere
-(``app.tasks.export_tasks``, ``app.core.preview``) — it is simply no longer used
-in the content-indexing path.
+Note: ``pdfplumber`` has been removed from the project entirely. PDF/image
+rendering (previews, raster export) is now done by the WASM engine — client-side
+or via the Next.js ``@giga-pdf/pdf-engine`` route. The server holds no PDF parser.
 """
 
 from __future__ import annotations

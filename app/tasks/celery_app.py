@@ -54,13 +54,9 @@ celery_app.conf.update(
     # Result settings
     result_expires=3600,  # 1 hour
 
-    # Rate limiting
-    task_annotations={
-        "app.tasks.export_tasks.export_document": {"rate_limit": "20/m"},
-    },
-
     # Queues
     task_routes={
+        # Only cleanup_expired_exports remains in export_tasks; route it here.
         "app.tasks.export_tasks.*": {"queue": "export"},
         "app.tasks.billing_tasks.*": {"queue": "billing"},
         "app.tasks.infra_tasks.*": {"queue": "infra"},
