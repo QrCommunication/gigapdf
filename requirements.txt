@@ -10,11 +10,6 @@ pypdf>=6.12.0
 pikepdf>=8.0.0
 pdfplumber>=0.10.0
 Pillow>=10.2.0
-# pytesseract: optional, best-effort OCR of imported images at storage time
-# (content_extraction_service) so scans become full-text/semantic searchable.
-# Requires the system `tesseract` binary; the import path degrades gracefully
-# (no text) when either the binding or the binary is missing.
-pytesseract>=0.3.10
 # fontTools: repair subset TTFs extracted from PDFs before serving them to
 # the browser FontFace API. PDF subset fonts (Type0/CIDFontType2) often have
 # incomplete cmap/name/OS-2 tables that pikepdf preserves verbatim but
