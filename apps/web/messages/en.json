@@ -1760,6 +1760,79 @@
     "serverError": {
       "title": "Server error",
       "description": "Something went wrong on our end. Please try again later."
+    },
+    "app": {
+      "notFound": {
+        "code": "404",
+        "title": "Page not found",
+        "description": "This page has been moved, deleted, or never existed. Let's get you back to your documents.",
+        "backDashboard": "Back to dashboard",
+        "browseDocuments": "Browse my documents"
+      },
+      "forbidden": {
+        "code": "403",
+        "title": "Access denied",
+        "description": "You're not the owner of this item, and it hasn't been shared with you. Ask the owner to share it, or head back to your own documents.",
+        "ownerHint": "Only the owner of a document or folder — or someone they have shared it with — can open it.",
+        "backDashboard": "Back to dashboard",
+        "browseShared": "Shared with me",
+        "requestAccess": "Request access"
+      }
+    },
+    "marketing": {
+      "notFound": {
+        "code": "404",
+        "badge": "Error 404",
+        "title": "This page took a wrong turn",
+        "description": "The link is broken or the page has moved. But you're on GigaPDF — the complete, open-source PDF platform. Here's everything you can do with your documents.",
+        "primaryCta": "Explore PDF tools",
+        "secondaryCta": "Back to home",
+        "toolsTitle": "Popular PDF tools",
+        "toolsSubtitle": "Free, no watermark, self-hostable.",
+        "solutionsTitle": "Solutions for your profession",
+        "viewAllTools": "View all 20 tools",
+        "viewAllSolutions": "View all solutions",
+        "registerCta": "Start working on your PDFs right now"
+      },
+      "forbidden": {
+        "code": "403",
+        "badge": "Error 403",
+        "title": "This content is private",
+        "description": "You need an account — or the right permissions — to view this page. The good news: a complete GigaPDF account is free, with no credit card required.",
+        "primaryCta": "Create a free account",
+        "secondaryCta": "Log in",
+        "tools": {
+          "title": "What you get with GigaPDF",
+          "subtitle": "Every tool, included in the free plan."
+        },
+        "registerCta": "Get your free account and unlock everything"
+      },
+      "features": {
+        "editor": {
+          "name": "PDF editor",
+          "description": "Edit text with the original fonts, add images, shapes and annotations."
+        },
+        "convert": {
+          "name": "Convert",
+          "description": "To and from Word, Excel, PowerPoint and OpenDocument."
+        },
+        "ocr": {
+          "name": "OCR",
+          "description": "Recognize text in scans and make any PDF searchable."
+        },
+        "search": {
+          "name": "Semantic search",
+          "description": "Find anything across your documents by meaning, not just keywords."
+        },
+        "redaction": {
+          "name": "Redaction",
+          "description": "Permanently remove sensitive content — evidence-grade."
+        },
+        "sign": {
+          "name": "Sign & protect",
+          "description": "Digital signatures and AES-256 encryption for your files."
+        }
+      }
     }
   },
   "organization": {
