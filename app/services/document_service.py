@@ -8,9 +8,10 @@ and session management.
 
 import logging
 
+import httpx
+
 from app.config import get_settings
 from app.core.pdf_engine import pdf_engine
-from app.core.preview import PreviewGenerator
 from app.middleware.error_handler import (
     DocumentNotFoundError,
     InvalidOperationError,
@@ -22,6 +23,81 @@ from app.repositories.document_repo import document_sessions
 from app.utils.helpers import generate_uuid, sanitize_filename
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Next.js engine integration (page rendering)
+# ---------------------------------------------------------------------------
+# Page rendering is performed by the Next.js TypeScript engine via
+# POST /api/pdf/preview (which renders a PDF page to PNG/JPEG/WebP through
+# @giga-pdf/pdf-engine). The Python process no longer rasterises pages itself.
+_NEXTJS_PREVIEW_PATH = "/api/pdf/preview"
+_TS_ENGINE_TIMEOUT = 30.0  # seconds per page render request
+# Image formats the TS engine can produce.
+_TS_PREVIEW_FORMATS = frozenset({"png", "jpeg", "webp"})
+
+
+def _render_page_via_ts_sync(
+    pdf_bytes: bytes,
+    page_number: int,
+    fmt: str,
+    dpi: int,
+    quality: int,
+) -> bytes:
+    """
+    Render a single PDF page to an image via the Next.js @giga-pdf/pdf-engine.
+
+    Synchronous (uses httpx.Client) so it can be called from the synchronous
+    DocumentService.get_page_preview without spinning up an event loop.
+
+    Args:
+        pdf_bytes: Raw PDF file bytes.
+        page_number: 1-based page number to render.
+        fmt: Output image format — "png", "jpeg", or "webp".
+        dpi: Render resolution.
+        quality: Compression quality for jpeg/webp (1-100).
+
+    Returns:
+        Raw image bytes in the requested format.
+
+    Raises:
+        httpx.HTTPStatusError: If the TS engine returns a non-2xx response.
+        httpx.TimeoutException: If the request exceeds _TS_ENGINE_TIMEOUT seconds.
+        RuntimeError: If the response body is unexpectedly empty.
+    """
+    settings = get_settings()
+    base_url = settings.nextjs_internal_url.rstrip("/")
+    url = f"{base_url}{_NEXTJS_PREVIEW_PATH}"
+
+    # /api/pdf/preview requires authentication (requireSession). As a
+    # server-to-server caller the API process has no user session, so it
+    # authenticates with the shared internal secret instead. Must match
+    # INTERNAL_API_SECRET in the Next.js environment.
+    headers: dict[str, str] = {}
+    if settings.internal_api_secret:
+        headers["X-Internal-Secret"] = settings.internal_api_secret
+
+    with httpx.Client(timeout=_TS_ENGINE_TIMEOUT) as client:
+        response = client.post(
+            url,
+            headers=headers,
+            files={"file": ("document.pdf", pdf_bytes, "application/pdf")},
+            data={
+                "mode": "page",
+                "pageNumber": str(page_number),
+                "format": fmt,
+                "dpi": str(dpi),
+                "quality": str(quality),
+            },
+        )
+        response.raise_for_status()
+
+    image_bytes = response.content
+    if not image_bytes:
+        raise RuntimeError(
+            f"TS engine returned empty body for page {page_number} "
+            f"(format={fmt}, status={response.status_code})"
+        )
+    return image_bytes
 
 
 class DocumentService:
@@ -239,21 +315,32 @@ class DocumentService:
         if not session:
             raise DocumentNotFoundError(document_id)
 
-        generator = PreviewGenerator(session.pdf_doc)
-
-        image_data = generator.render_page(
-            page_number=page_number,
-            dpi=min(dpi, self.settings.preview_max_dpi),
-            format=format,
-            quality=quality,
-        )
-
         content_type_map = {
             "png": "image/png",
             "jpeg": "image/jpeg",
             "webp": "image/webp",
             "svg": "image/svg+xml",
         }
+
+        # SVG is not produced by the TS engine (nor was it ever truly rendered
+        # Python-side — the old PreviewGenerator returned an empty SVG stub).
+        # Preserve that behaviour so the endpoint contract does not change.
+        if format == "svg":
+            return (
+                b'<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+                content_type_map["svg"],
+            )
+
+        # Raster formats are rendered by @giga-pdf/pdf-engine via the Next.js
+        # POST /api/pdf/preview route. session.pdf_doc exposes .tobytes().
+        pdf_bytes = session.pdf_doc.tobytes()
+        image_data = _render_page_via_ts_sync(
+            pdf_bytes=pdf_bytes,
+            page_number=page_number,
+            fmt=format,
+            dpi=min(dpi, self.settings.preview_max_dpi),
+            quality=quality,
+        )
 
         return image_data, content_type_map.get(format, "image/png")
 

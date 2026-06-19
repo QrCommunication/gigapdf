@@ -14,7 +14,6 @@ from app.api.v1 import (
     documents,
     elements,
     embed,
-    export,
     fonts,
     forms,
     history,
@@ -77,12 +76,6 @@ api_router.include_router(
     bookmarks.router,
     prefix="/documents",
     tags=["Bookmarks"],
-)
-
-api_router.include_router(
-    export.router,
-    prefix="/documents",
-    tags=["Export"],
 )
 
 api_router.include_router(

@@ -40,7 +40,7 @@ class TestTaskPostrunSignal:
     """Test task_postrun signal handler for all task families."""
 
     @pytest.mark.parametrize("task_name,should_handle", [
-        ("app.tasks.export_tasks.export_document", True),
+        ("app.tasks.export_tasks.cleanup_expired_exports", True),
         # Removed family must no longer be tracked (dead code guard)
         ("app.tasks.ocr_tasks.process_ocr", False),
         ("billing.sync_plans_to_stripe", True),
@@ -87,7 +87,7 @@ class TestTaskPostrunSignal:
     def test_postrun_handler_ignores_none_task_id(self, mock_update_completed):
         """Verify handler gracefully handles None task_id."""
         mock_task = Mock()
-        mock_task.name = "app.tasks.export_tasks.export_document"
+        mock_task.name = "app.tasks.export_tasks.cleanup_expired_exports"
 
         task_postrun_handler(
             sender=None,

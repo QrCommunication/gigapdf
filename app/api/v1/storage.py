@@ -502,9 +502,10 @@ and its storage path is unchanged.
 
 ## Features
 - Keeps the original file format (`original_format` + precise `mime_type`)
-- Server-side **content indexing** for search: PDF text layer (pdfplumber)
-  or image OCR (Tesseract) is extracted at import and made full-text + semantic
-  searchable. Best-effort — a failed extraction never fails the upload.
+- **Content indexing** for search: the client (WASM engine) ships the extracted
+  text via the `extracted_text` field; the server chunks, embeds and makes it
+  full-text + semantic searchable. Best-effort — a failed index never fails the
+  upload.
 - Automatic version tracking (initial version = 1)
 - Tag-based organization for searchability
 - Folder hierarchy support
