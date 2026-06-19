@@ -41,6 +41,7 @@ from app.services.sharing.access_guard import (
     authorize_document_access,
     authorize_folder_access,
 )
+from app.services.text_chunking import chunk_text_for_embedding
 from app.utils.helpers import generate_uuid, now_utc
 
 _logger = logging.getLogger(__name__)
@@ -383,6 +384,13 @@ async def index_document_content(
     The caller owns the transaction (this does **not** commit). Never raises:
     a failure here must not fail the import — it just means the document is not
     (yet) searchable. Returns the extracted text (possibly empty).
+
+    Note: server-side extraction is now a stub for every format (the client's
+    WASM engine ships the text via ``extracted_text`` on upload — see
+    :mod:`content_extraction_service`). This path therefore indexes ``""`` for
+    most imports, which simply purges any stale index for the document. It is
+    kept so the dispatch shape stays stable and a future server-side extractor
+    can re-enable it with zero call-site changes.
     """
     try:
         text = await asyncio.to_thread(
@@ -394,37 +402,76 @@ async def index_document_content(
             document_id,
             exc_info=True,
         )
-        return ""
+        text = ""
 
     text = (text or "").strip()[:_MAX_EXTRACTED_TEXT_CHARS]
 
-    # Persist the full-text material on the document (auto-populates the
-    # generated tsvector). Load the row in this session to set the attribute.
-    doc = (
-        await session.execute(
-            select(StoredDocument).where(StoredDocument.id == document_id)
-        )
-    ).scalar_one_or_none()
-    if doc is not None:
-        doc.extracted_text = text or None
-
-    # Feed the semantic index too (one block = the whole document text). This
-    # is best-effort; embedding unavailability stores the block without vector.
-    if text:
-        try:
-            await store_ocr_blocks(
-                session,
-                document_id,
-                [{"page": 0, "bbox": {}, "text": text}],
-            )
-        except Exception:  # noqa: BLE001 — semantic indexing is best-effort
-            _logger.warning(
-                "index_document_content: semantic indexing failed (doc=%s)",
-                document_id,
-                exc_info=True,
-            )
-
+    # Single point of truth: persist the full-text material AND (re)build the
+    # semantic index from the same text (chunked). Best-effort inside.
+    await reindex_document_text(session, document_id, text)
     return text
+
+
+async def reindex_document_text(
+    session: AsyncSession,
+    document_id: str,
+    text: str | None,
+) -> int:
+    """(Re)build a document's full-text + semantic index from its plain text.
+
+    This is **the** single entry point that turns a document's extracted text
+    into both search indexes, used by every path that creates or mutates a
+    document (upload, new version, metadata update, duplicate):
+
+    - sets ``StoredDocument.extracted_text`` (truncated) → feeds the generated
+      ``search_vector`` (keyword/full-text search);
+    - chunks the text (:func:`chunk_text_for_embedding`) and (re-)indexes the
+      chunks as ``ocr_blocks`` via :func:`store_ocr_blocks` (a **replace**, so
+      re-running yields a clean current index — no duplicates, no stale rows).
+
+    Empty/whitespace text still calls :func:`store_ocr_blocks` with an **empty**
+    list so any previous semantic index is **purged** (a document whose text was
+    cleared must not keep stale vectors). The chunks carry ``page=0`` and an
+    empty ``bbox`` because the client sends concatenated document text without
+    per-block geometry; true positioned OCR blocks (image OCR) keep their bbox
+    through the dedicated ``/ocr-blocks`` endpoint.
+
+    The caller **owns the transaction** (this does not commit). Best-effort:
+    the whole body is guarded so indexing never fails an upload / version /
+    update / duplicate. Returns the number of semantic blocks indexed (0 on any
+    failure or empty text).
+    """
+    try:
+        normalized = (text or "").strip()[:_MAX_EXTRACTED_TEXT_CHARS]
+
+        # Persist the full-text material on the document row (loaded in this
+        # session so the attribute change is part of the caller's transaction).
+        doc = (
+            await session.execute(
+                select(StoredDocument).where(StoredDocument.id == document_id)
+            )
+        ).scalar_one_or_none()
+        if doc is not None:
+            doc.extracted_text = normalized or None
+
+        # Build the semantic index: one block per chunk. Empty text → empty
+        # list → store_ocr_blocks purges the previous index (REPLACE).
+        blocks = (
+            [
+                {"page": 0, "bbox": {}, "text": chunk}
+                for chunk in chunk_text_for_embedding(normalized)
+            ]
+            if normalized
+            else []
+        )
+        return await store_ocr_blocks(session, document_id, blocks)
+    except Exception:  # noqa: BLE001 — indexing must never break the caller
+        _logger.warning(
+            "reindex_document_text: indexing failed (doc=%s)",
+            document_id,
+            exc_info=True,
+        )
+        return 0
 
 
 class CreateFolderRequest(BaseModel):
@@ -769,19 +816,18 @@ async def save_document(
         )
 
     # ── 9. Index content for search (best-effort, never fails the import) ─
-    # If the client already supplied extracted_text (e.g. the TS engine's text
-    # layer) we trust it and only feed the semantic index; otherwise we derive
-    # the text server-side from the stored bytes (PDF text / image OCR).
+    # The client (TS/WASM engine) ships the document text via extracted_text;
+    # we index it for BOTH full-text and semantic search (chunked). When the
+    # client did not supply any text we fall back to server-side extraction —
+    # now a stub for every format, so it indexes nothing until the client OCR /
+    # text pipeline runs and posts to /ocr-blocks.
     indexed_text = extracted_text or ""
     try:
         async with get_db_session() as index_session:
-            if extracted_text:
-                if extracted_text.strip():
-                    await store_ocr_blocks(
-                        index_session,
-                        stored_doc_id,
-                        [{"page": 0, "bbox": {}, "text": extracted_text}],
-                    )
+            if extracted_text is not None:
+                await reindex_document_text(
+                    index_session, stored_doc_id, extracted_text
+                )
             else:
                 indexed_text = await index_document_content(
                     index_session, stored_doc_id, file_bytes, mime_type
@@ -1740,6 +1786,25 @@ async def duplicate_stored_document(
         tenant_id=effective_limits.tenant_id if effective_limits.is_tenant_based else None,
     )
 
+    # ── 8. Build the duplicate's search index (best-effort) ──────────────
+    # ocr_blocks are keyed by document_id, so the copy starts with an EMPTY
+    # semantic index even though extracted_text was copied verbatim. Re-index
+    # from the source text so the duplicate is immediately searchable (full-text
+    # was already copied via the column; this adds the semantic vectors). The
+    # duplicate row is already durably committed above, so a failure here only
+    # means "not yet semantically searchable" — never a lost duplicate.
+    if source_doc.extracted_text:
+        await reindex_document_text(db, new_doc_id, source_doc.extracted_text)
+        try:
+            await db.commit()
+        except Exception:  # noqa: BLE001 — index commit is best-effort
+            _logger.warning(
+                "duplicate: search-index commit failed (doc=%s)",
+                new_doc_id,
+                exc_info=True,
+            )
+            await db.rollback()
+
     processing_time = int((time.time() - start_time) * 1000)
 
     data = _serialize_stored_document(new_doc)
@@ -1966,11 +2031,13 @@ version history tracking and rollback capabilities.
 |-------|------|----------|-------------|
 | file | file | Yes | PDF file bytes |
 | comment | string | No | Description of changes in this version |
+| extracted_text | string | No | Updated plain text of the edited document (truncated to 500k chars). When provided, the full-text + semantic search index is rebuilt (re-vectorized) for this document so search reflects the new content. |
 
 ## Use Cases
 - Save incremental changes while editing
 - Create checkpoints before major modifications
 - Track document evolution with descriptive comments
+- Keep search in sync with edits (pass `extracted_text` to re-vectorize)
 
 ## File Constraints
 - Maximum size: 100 MB
@@ -2074,10 +2141,20 @@ async def create_version(
     user: AuthenticatedUser,
     file: UploadFile = File(..., description="PDF file bytes"),
     comment: str | None = Form(default=None, description="Description of changes in this version"),
+    extracted_text: str | None = Form(
+        default=None,
+        description="Updated plain text of the edited document for full-text + "
+        "semantic search (truncated to 500k chars). When provided, the search "
+        "index is rebuilt (re-vectorized) for this document.",
+    ),
 ) -> APIResponse[dict]:
     """Create a new version of a stored document via multipart PDF upload.
 
     The frontend sends the rendered PDF bytes directly — no active editing session required.
+
+    When ``extracted_text`` is provided, the document's search index is rebuilt
+    from it (full-text material + chunked semantic ``ocr_blocks``, a REPLACE) so
+    the index always reflects the latest edited content.
 
     Atomicity guarantee (Saga pattern):
       1. Validate PDF bytes (magic bytes + size) + verify DB ownership.
@@ -2145,6 +2222,14 @@ async def create_version(
         stored_doc.current_version = new_version_number
         stored_doc.page_count = page_count
         stored_doc.file_size_bytes = file_size
+
+        # Re-vectorize from the edited text (best-effort, same transaction):
+        # rebuilds full-text + semantic index so search reflects the new
+        # version. Skipped when the client did not ship updated text — the
+        # previous index then stays as-is. ``ocr_blocks`` are keyed by
+        # document_id (unchanged across versions), so this is a clean REPLACE.
+        if extracted_text is not None:
+            await reindex_document_text(session, stored_document_id, extracted_text)
         # session commits on __aexit__ — version row + updated StoredDocument are durable
 
     _logger.info(
@@ -2630,12 +2715,13 @@ async def update_stored_document(
         updated_fields.append("tags")
 
     if "extracted_text" in provided_fields:
-        # Explicit null clears the search material; strings are truncated.
-        stored_doc.extracted_text = (
-            request.extracted_text[:_MAX_EXTRACTED_TEXT_CHARS]
-            if request.extracted_text is not None
-            else None
-        )
+        # Re-vectorize on every text change: this updates the full-text material
+        # (StoredDocument.extracted_text → search_vector) AND rebuilds the
+        # semantic ocr_blocks index from the new text (chunked, REPLACE).
+        # Explicit null clears both (empty list purges the previous index).
+        # reindex_document_text reloads the row in this session and is
+        # best-effort, so a failure here never fails the metadata update.
+        await reindex_document_text(db, stored_document_id, request.extracted_text)
         updated_fields.append("extracted_text")
 
     if not updated_fields:

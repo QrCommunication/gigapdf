@@ -89,6 +89,13 @@ class FakeSession:
         self._stamp = stamp_timestamps
 
     async def execute(self, stmt, *args, **kwargs):
+        # DELETE statements (store_ocr_blocks clears the previous semantic index
+        # on every reindex, including an empty-text purge) don't consume a
+        # scripted result — return an empty one so callers don't have to script
+        # the index-clearing step.
+        if str(stmt).lstrip().lower().startswith("delete"):
+            self.deleted.append(stmt)
+            return FakeResult()
         if not self._results:
             raise AssertionError(f"FakeSession: unexpected execute() for: {stmt}")
         return self._results.pop(0)

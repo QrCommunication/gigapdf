@@ -78,9 +78,17 @@ class FakeSession:
         self._results = list(results or [])
         self.added: list = []
         self.deleted: list = []
+        self.deleted_stmts: list = []
         self.commit_count = 0
 
     async def execute(self, stmt, *args, **kwargs):
+        # DELETE statements (store_ocr_blocks clears the previous semantic index
+        # on every reindex, e.g. when a PATCH updates extracted_text) don't
+        # consume a scripted result — return an empty one. Tracked in a separate
+        # list so ORM-row deletions (`self.deleted`) assertions stay clean.
+        if str(stmt).lstrip().lower().startswith("delete"):
+            self.deleted_stmts.append(stmt)
+            return FakeResult()
         if not self._results:
             raise AssertionError(
                 f"FakeSession: unexpected execute() call for statement: {stmt}"
@@ -224,6 +232,12 @@ def services(monkeypatch):
         upload_file=MagicMock(return_value={"key": "x"}),
         delete_file=MagicMock(return_value=True),
         get_presigned_url=MagicMock(return_value=SIGNED_URL),
+        # Deterministic, model-free embeddings: reindex paths (duplicate, PATCH
+        # extracted_text) call embedding_service.embed_passages — keep the
+        # 470 MB fastembed model out of the unit/integration runs.
+        embed_passages=MagicMock(
+            side_effect=lambda texts: [[0.1] * 384 for _ in texts]
+        ),
     )
 
     qs = storage_module.quota_service
@@ -241,6 +255,12 @@ def services(monkeypatch):
     monkeypatch.setattr(s3, "delete_file", mocks.delete_file)
     monkeypatch.setattr(s3, "get_presigned_url", mocks.get_presigned_url)
 
+    monkeypatch.setattr(
+        storage_module.embedding_service,
+        "embed_passages",
+        mocks.embed_passages,
+    )
+
     return mocks
 
 
@@ -256,6 +276,9 @@ class TestDuplicateDocument:
             FakeResult(scalar=source),                       # source doc
             FakeResult(scalar=version),                      # current version
             FakeResult(rows=[("Contrat.pdf",)]),             # sibling names
+            # reindex_document_text reloads the freshly-committed copy by id to
+            # build its semantic index (the copy has empty ocr_blocks).
+            FakeResult(scalar=_make_doc(extracted_text="contenu indexé")),
         ]
 
         resp = client.post(f"/api/v1/storage/documents/{DOC_ID}/duplicate")
@@ -277,13 +300,18 @@ class TestDuplicateDocument:
             f"documents/{TEST_USER_ID}/{data['stored_document_id']}/v1.pdf"
         )
 
-        # New StoredDocument + DocumentVersion rows committed
-        assert len(fake_db.added) == 2
+        # New StoredDocument + DocumentVersion rows committed, plus the
+        # duplicate's semantic blocks (re-indexed from the copied text).
         new_doc = next(o for o in fake_db.added if isinstance(o, StoredDocument))
         new_version = next(o for o in fake_db.added if isinstance(o, DocumentVersion))
         assert new_doc.extracted_text == "contenu indexé"  # search material kept
         assert new_version.version_number == 1             # versions NOT copied
-        assert fake_db.commit_count == 1
+        # The duplicate was re-indexed (semantic vectors built + previous purged).
+        from app.models.database import OcrBlock
+        assert any(isinstance(o, OcrBlock) for o in fake_db.added)
+        assert len(fake_db.deleted_stmts) == 1
+        # One commit for the duplicate row + one for its search index.
+        assert fake_db.commit_count == 2
 
         # Quota consumed like an upload
         services.update_storage_usage.assert_awaited_once_with(
@@ -487,7 +515,10 @@ class TestUpdateDocument:
 
     def test_patch_updates_extracted_text_and_name(self, client, fake_db, services):
         doc = _make_doc()
-        fake_db._results = [FakeResult(scalar=doc)]
+        # Two lookups of the same row: the handler's ownership check, then
+        # reindex_document_text reloading it to set extracted_text + rebuild
+        # the semantic index (REPLACE → one DELETE).
+        fake_db._results = [FakeResult(scalar=doc), FakeResult(scalar=doc)]
 
         resp = client.patch(
             f"/api/v1/storage/documents/{DOC_ID}",
@@ -497,6 +528,11 @@ class TestUpdateDocument:
         assert resp.status_code == 200
         assert resp.json()["data"]["name"] == "Renommé.pdf"
         assert doc.extracted_text == "nouveau contenu"
+        # Semantic index rebuilt: previous index purged, new vectors added.
+        from app.models.database import OcrBlock
+        assert len(fake_db.deleted_stmts) == 1
+        assert any(isinstance(o, OcrBlock) for o in fake_db.added)
+        services.embed_passages.assert_called_once()
 
     def test_patch_empty_body_returns_400(self, client, fake_db, services):
         resp = client.patch(f"/api/v1/storage/documents/{DOC_ID}", json={})
