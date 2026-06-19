@@ -505,57 +505,6 @@ class APIClient {
     return response.data;
   }
 
-  async exportDocument(
-    documentId: string,
-    format: "png" | "jpeg" | "webp" | "svg" | "html" | "txt" | "docx" | "xlsx",
-    options: {
-      page_range?: string;
-      dpi?: number;
-      quality?: number;
-      single_file?: boolean;
-    } = {}
-  ): Promise<{ job_id: string; status: string }> {
-    const params = new URLSearchParams({ format });
-    if (options.page_range) params.set("page_range", options.page_range);
-    if (options.dpi) params.set("dpi", options.dpi.toString());
-    if (options.quality) params.set("quality", options.quality.toString());
-    if (options.single_file) params.set("single_file", "true");
-
-    const response = await this.request<APIResponse<{
-      job_id: string;
-      status: string;
-    }>>(`/api/v1/documents/${documentId}/export?${params.toString()}`, {
-      method: "POST",
-    });
-    return response.data;
-  }
-
-  async getExportResult(documentId: string, jobId: string): Promise<Blob> {
-    const url = `${this.baseUrl}/api/v1/documents/${documentId}/export/${jobId}`;
-    const response = await fetch(url, { credentials: "include" });
-    if (!response.ok) {
-      throw new Error(`Export failed: ${response.status}`);
-    }
-    return response.blob();
-  }
-
-  async getJobStatus(jobId: string): Promise<{
-    id: string;
-    status: string;
-    progress: number;
-    result?: Record<string, unknown>;
-    error?: string;
-  }> {
-    const response = await this.request<APIResponse<{
-      id: string;
-      status: string;
-      progress: number;
-      result?: Record<string, unknown>;
-      error?: string;
-    }>>(`/api/v1/jobs/${jobId}`);
-    return response.data;
-  }
-
   async getDocumentVersions(storedDocumentId: string): Promise<{
     stored_document_id: string;
     current_version: number;

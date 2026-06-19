@@ -58,6 +58,10 @@ import { cn } from "@/lib/utils";
 import { ShareDialog } from "@/components/sharing";
 import { clientLogger } from "@/lib/client-logger";
 import { triggerBlobDownload } from "./blob-download";
+import {
+  downloadDocumentBytes,
+  convertDocumentBytes,
+} from "./download-document-bytes";
 import { ManageTagsDialog } from "./manage-tags-dialog";
 
 export type SortField = "name" | "size" | "createdAt" | "updatedAt";
@@ -163,7 +167,6 @@ export function DocumentTable({
   // Data states
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
-  const [sessionDocId, setSessionDocId] = useState<string | null>(null);
 
   const handleOpenEditor = async (doc: Document) => {
     // Navigate to editor with stored document ID (not session ID)
@@ -273,7 +276,6 @@ export function DocumentTable({
       setSelectedDoc(doc);
       setPreviewOpen(true);
       const result = await api.loadDocument(doc.id);
-      setSessionDocId(result.document_id);
       const downloadUrl = api.getDocumentDownloadUrl(result.document_id);
       setPreviewUrl(downloadUrl);
     } catch (err) {
@@ -299,40 +301,12 @@ export function DocumentTable({
       setSelectedDoc(doc);
       setExportDialogOpen(true);
 
-      let docId = sessionDocId;
-      if (!docId) {
-        const result = await api.loadDocument(doc.id);
-        docId = result.document_id;
-        setSessionDocId(docId);
-      }
-
-      const job = await api.exportDocument(docId, format, {
-        single_file: true,
-        dpi: format === "png" || format === "jpeg" ? 150 : undefined,
-        quality: format === "jpeg" ? 85 : undefined,
-      });
-
-      let status = await api.getJobStatus(job.job_id);
-      while (status.status !== "completed" && status.status !== "failed") {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        status = await api.getJobStatus(job.job_id);
-      }
-
-      if (status.status === "failed") {
-        throw new Error(status.error || tCard("errors.exportFailed"));
-      }
-
-      const blob = await api.getExportResult(docId, job.job_id);
-      const extensionMap: Record<string, string> = {
-        png: "zip",
-        jpeg: "zip",
-        webp: "zip",
-        html: "html",
-        txt: "txt",
-        docx: "docx",
-        xlsx: "xlsx",
-      };
-      triggerBlobDownload(blob, `${doc.name}.${extensionMap[format] || format}`);
+      // Fetch the stored document's bytes and convert entirely client-side via
+      // the GigaPDF SDK (no backend job): images → per-page .zip, docx/xlsx/html
+      // via the SDK exporter, txt via text extraction.
+      const bytes = await downloadDocumentBytes(doc.id);
+      const { blob, extension } = await convertDocumentBytes(bytes, format);
+      triggerBlobDownload(blob, `${doc.name}.${extension}`);
 
       setExportDialogOpen(false);
     } catch (err) {
