@@ -1,8 +1,9 @@
 """Unit tests for the best-effort content extraction service.
 
-Verifies the MIME dispatch (PDF text layer / image OCR / skip) and the
-"never raises" contract — extraction is an enhancement, not a precondition for
-a successful import.
+Server-side extraction is now a stub for **every** format (PDF/image/Office):
+text extraction is done 100% client-side by the WASM engine, which sends the
+result via ``extracted_text``. These tests pin the MIME dispatch shape and the
+"never raises" contract — every branch returns ``""``.
 """
 
 from __future__ import annotations
@@ -74,16 +75,17 @@ class TestExtractText:
         )
         assert ce.extract_text(b"PK\x03\x04stuff", docx_mime) == ""
 
-    def test_pdf_text_layer_is_extracted(self):
-        text = ce.extract_text(_PDF_BYTES, "application/pdf")
-        assert "Hello World" in text
+    def test_pdf_is_not_extracted_server_side(self):
+        # PDF extraction is neutralized server-side (done client-side via the
+        # WASM engine → extracted_text). Even a valid text layer yields "".
+        assert ce.extract_text(_PDF_BYTES, "application/pdf") == ""
 
-    def test_pdf_dispatch_by_magic_without_mime(self):
-        text = ce.extract_text(_PDF_BYTES, None)
-        assert "Hello World" in text
+    def test_pdf_dispatch_by_magic_returns_empty(self):
+        # Dispatch still recognizes the PDF by magic, but the stub returns "".
+        assert ce.extract_text(_PDF_BYTES, None) == ""
 
     def test_corrupt_pdf_never_raises(self):
-        # Not a real PDF body → pdfplumber fails internally → empty string.
+        # Stub returns "" regardless; the contract is "never raises".
         assert ce.extract_text(b"%PDF-1.4\nnot-a-real-pdf", "application/pdf") == ""
 
     def test_corrupt_image_never_raises(self):
