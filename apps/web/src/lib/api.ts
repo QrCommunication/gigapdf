@@ -55,6 +55,52 @@ export interface DocumentListResponse {
   pagination: PaginationInfo;
 }
 
+// ===== Semantic search (OCR) types — #85 =====
+// Field names mirror the backend Pydantic models EXACTLY (app/api/v1/storage.py,
+// app/api/v1/search.py). bbox keys are x/y/w/h in PDF points (bottom-left origin).
+
+/** A bounding box in PDF user space (points, lower-left origin). */
+export interface OcrBlockBBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** One OCR block sent to the ingestion endpoint. */
+export interface OcrBlockInput {
+  /** Page number this block belongs to (as produced by OCR; 1-based). */
+  page: number;
+  /** Recognized text. */
+  text: string;
+  /** Bounding box in PDF points; omit when geometry is unknown. */
+  bbox?: OcrBlockBBox;
+}
+
+export interface IndexOcrBlocksResponse {
+  stored_document_id: string;
+  blocks_indexed: number;
+  semantic_search_available: boolean;
+}
+
+/** One semantic-search hit. */
+export interface SemanticSearchResult {
+  document_id: string;
+  document_name: string;
+  page: number;
+  bbox: OcrBlockBBox;
+  snippet: string;
+  /** Cosine similarity in [0, 1] (1 = identical). */
+  score: number;
+}
+
+export interface SemanticSearchResponse {
+  query: string;
+  results: SemanticSearchResult[];
+  count: number;
+  semantic_search_available: boolean;
+}
+
 export interface QuotaSummary {
   storage: {
     used_bytes: number;
@@ -1443,6 +1489,49 @@ class APIClient {
         total_pages: 1,
       },
     };
+  }
+
+  // ===== Semantic search (OCR) API — #85 =====
+
+  /**
+   * Ingest OCR blocks for a stored document into the semantic index (pgvector).
+   * The backend embeds each block's text and stores it owner-scoped.
+   *
+   * Contract: POST /api/v1/storage/documents/{id}/ocr-blocks
+   *   body { blocks: [{ page, bbox: { x, y, w, h }, text }] }
+   */
+  async indexOcrBlocks(
+    storedDocumentId: string,
+    blocks: OcrBlockInput[]
+  ): Promise<IndexOcrBlocksResponse> {
+    const response = await this.request<APIResponse<IndexOcrBlocksResponse>>(
+      `/api/v1/storage/documents/${storedDocumentId}/ocr-blocks`,
+      {
+        method: "POST",
+        body: JSON.stringify({ blocks }),
+      }
+    );
+    return response.data;
+  }
+
+  /**
+   * Semantic search across the caller's indexed OCR blocks.
+   *
+   * Contract: POST /api/v1/search/semantic
+   *   body { query, limit? } → { query, results[], count, semantic_search_available }
+   */
+  async semanticSearch(
+    query: string,
+    limit = 20
+  ): Promise<SemanticSearchResponse> {
+    const response = await this.request<APIResponse<SemanticSearchResponse>>(
+      "/api/v1/search/semantic",
+      {
+        method: "POST",
+        body: JSON.stringify({ query, limit }),
+      }
+    );
+    return response.data;
   }
 }
 

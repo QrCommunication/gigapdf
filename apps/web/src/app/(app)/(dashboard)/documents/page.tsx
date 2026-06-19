@@ -195,6 +195,50 @@ async function extractPdfText(pdfFile: File): Promise<string | null> {
 }
 
 /**
+ * Auto-index a scanned (image-only) PDF for semantic search (#85). OCRs every
+ * page via the engine route, then ships the blocks to the backend pgvector
+ * index. Fire-and-forget: every failure is swallowed (logged) so a failed OCR
+ * can never disrupt the import that triggered it. Called only when the document
+ * has no extractable text.
+ */
+async function autoIndexScannedDocument(
+  pdfBlob: Blob,
+  storedDocumentId: string,
+): Promise<void> {
+  try {
+    const token = await getAuthToken();
+    const form = new FormData();
+    form.append("file", pdfBlob, "document.pdf");
+    form.append("granularity", "line");
+
+    const res = await fetch("/api/pdf/ocr-page", {
+      method: "POST",
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    });
+    if (!res.ok) {
+      clientLogger.warn("documents.auto-ocr-index-failed", res.status);
+      return;
+    }
+    const data = (await res.json()) as {
+      blocks?: Array<{
+        page: number;
+        text: string;
+        bbox: { x: number; y: number; w: number; h: number };
+      }>;
+    };
+    const blocks = data.blocks ?? [];
+    if (blocks.length === 0) return;
+
+    await api.indexOcrBlocks(storedDocumentId, blocks);
+    clientLogger.debug("documents.auto-ocr-indexed", blocks.length);
+  } catch (err) {
+    clientLogger.warn("documents.auto-ocr-index-failed", err);
+  }
+}
+
+/**
  * Word-like auto-detect: when an Office document originates from Word (.docx)
  * with running headers/footers, preserve them on the converted PDF. We read the
  * bands from the ORIGINAL Office bytes (the editable model the conversion
@@ -520,6 +564,13 @@ export default function DocumentsPage() {
           }
         } catch (thumbErr) {
           clientLogger.warn("documents.thumbnail-upload-failed", thumbErr);
+        }
+
+        // 4) Auto-index image-only PDFs (#85). When the document carries no
+        // extractable text (a scan), OCR it and feed the semantic index in the
+        // background — fire-and-forget so it never blocks or fails the import.
+        if (!extractedText || extractedText.trim().length === 0) {
+          void autoIndexScannedDocument(finalPdfBlob, saved.stored_document_id);
         }
 
         return { ok: true, name: file.name };

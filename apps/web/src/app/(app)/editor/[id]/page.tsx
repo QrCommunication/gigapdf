@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useShallow } from "zustand/react/shallow";
 import Link from "next/link";
@@ -193,11 +193,16 @@ const TOOLBAR_FORMAT_TO_TEXT_FORMAT: Record<
 export default function EditorPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const t = useTranslations("editor");
   const { toast } = useToast();
 
   // ID du document stocké (depuis l'URL)
   const storedDocumentId = params?.id as string;
+
+  // Deep-link target page (?page=N, 1-based) — e.g. opened from a semantic
+  // search hit. Applied once, after the pages load (see effect below).
+  const deepLinkAppliedRef = useRef(false);
 
   // Share dialog (GED) — partage le document STOCKÉ (storedDocumentId)
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -347,6 +352,9 @@ export default function EditorPage() {
   // True while a Word-style header/footer band is being baked onto the PDF —
   // drives the dialog's busy state so the user can't fire overlapping bakes.
   const [headerFooterBusy, setHeaderFooterBusy] = useState(false);
+  // True while the current page is being OCR'd + ingested into the semantic
+  // index (#85) — disables the toolbar button to prevent overlapping runs.
+  const [indexOcrBusy, setIndexOcrBusy] = useState(false);
 
   // Content modifications — backed by localStorage so a reload during the
   // 2s save debounce window doesn't drop user edits. The cache is scoped to
@@ -469,6 +477,23 @@ export default function EditorPage() {
     },
     [pages.length, goToPage, isContinuous, activatePage]
   );
+
+  // Apply the ?page=N deep link once the document's pages are available (opened
+  // from a semantic-search result). Runs a single time per mount.
+  useEffect(() => {
+    if (deepLinkAppliedRef.current) return;
+    if (pages.length === 0) return;
+    const pageParam = searchParams?.get("page");
+    if (!pageParam) {
+      deepLinkAppliedRef.current = true;
+      return;
+    }
+    const target = Number(pageParam);
+    if (Number.isInteger(target) && target >= 1) {
+      navigateToPage(target - 1, "start");
+    }
+    deepLinkAppliedRef.current = true;
+  }, [pages.length, searchParams, navigateToPage]);
 
   // Dynamically load embedded PDF fonts via FontFace API (backed by IndexedDB cache).
   // Maps originalFont names (like "g_d0_f1") to real CSS font-family names,
@@ -1914,6 +1939,77 @@ export default function EditorPage() {
     [adoptModifiedPdf, toast, t],
   );
 
+  // On-demand OCR + semantic indexing of the document (#85). Runs OCR on the
+  // in-memory PDF blob (single source of truth), then ships the resulting
+  // blocks to the backend pgvector index. The whole document is indexed because
+  // the backend ingestion REPLACES the document's index — sending one page
+  // would drop the others. Non-blocking UI: a busy flag disables the button.
+  const handleIndexOcr = useCallback(() => {
+    const pdfFile = currentPdfFileRef.current;
+    if (!pdfFile || !storedDocumentId) return;
+
+    void (async () => {
+      setIndexOcrBusy(true);
+      try {
+        const token = await getAuthToken();
+        const form = new FormData();
+        form.append("file", pdfFile, pdfFile.name);
+        // `page` omitted → OCR every page (full, consistent index).
+        form.append("granularity", "line");
+
+        const res = await fetch("/api/pdf/ocr-page", {
+          method: "POST",
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          body: form,
+        });
+        if (!res.ok) {
+          throw new Error(`OCR route returned ${res.status}`);
+        }
+        const data = (await res.json()) as {
+          success: boolean;
+          blocks: Array<{
+            page: number;
+            text: string;
+            bbox: { x: number; y: number; w: number; h: number };
+          }>;
+        };
+        const blocks = data.blocks ?? [];
+        if (blocks.length === 0) {
+          toast({
+            title: t("indexOcr.emptyTitle"),
+            description: t("indexOcr.emptyDescription"),
+          });
+          return;
+        }
+
+        const result = await api.indexOcrBlocks(storedDocumentId, blocks);
+        if (!result.semantic_search_available) {
+          toast({
+            title: t("indexOcr.unavailableTitle"),
+            description: t("indexOcr.unavailableDescription"),
+          });
+          return;
+        }
+        toast({
+          title: t("indexOcr.indexedTitle"),
+          description: t("indexOcr.indexedDescription", {
+            count: result.blocks_indexed,
+          }),
+        });
+      } catch (err) {
+        clientLogger.error("[editor] OCR index failed:", err);
+        toast({
+          title: t("indexOcr.errorTitle"),
+          description: t("indexOcr.errorDescription"),
+          variant: "destructive",
+        });
+      } finally {
+        setIndexOcrBusy(false);
+      }
+    })();
+  }, [storedDocumentId, toast, t]);
+
   // Signature numérique appliquée au document courant (mode « Appliquer au
   // document » du SignDialog) : swap du binaire + save immédiat. Pas de
   // re-parse — la signature n'ajoute qu'un dictionnaire /Sig invisible, la
@@ -2785,6 +2881,8 @@ export default function EditorPage() {
         onWatermarkApplied={handleWatermarkApplied}
         onCompressApplied={handleCompressApplied}
         onOcrApplied={handleOcrApplied}
+        onIndexOcr={handleIndexOcr}
+        indexOcrBusy={indexOcrBusy}
         onSignApplied={handleSignApplied}
         headersFootersEnabled={headersFootersEnabled}
         onToggleHeadersFooters={handleToggleHeadersFooters}

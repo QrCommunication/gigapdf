@@ -40,7 +40,28 @@
     "developers": "Développeurs",
     "billing": "Facturation",
     "sharedWithMe": "Partagés avec moi",
+    "semanticSearch": "Recherche sémantique",
     "trash": "Corbeille"
+  },
+  "semanticSearch": {
+    "title": "Recherche sémantique",
+    "subtitle": "Recherchez le texte de vos documents par le sens, pas seulement par mots-clés.",
+    "placeholder": "Rechercher dans vos documents…",
+    "searchButton": "Rechercher",
+    "searching": "Recherche…",
+    "emptyTitle": "Aucun résultat",
+    "emptyDescription": "Essayez d'autres termes, ou indexez plus de documents avec le bouton OCR dans l'éditeur.",
+    "idleTitle": "Recherchez dans vos documents",
+    "idleDescription": "Saisissez une requête pour trouver des pages par leur sens. Les résultats affichent la page correspondante avec l'extrait surligné.",
+    "errorTitle": "Échec de la recherche",
+    "errorDescription": "Une erreur est survenue pendant la recherche. Veuillez réessayer.",
+    "unavailableTitle": "Recherche sémantique indisponible",
+    "unavailableDescription": "Le service de recherche est actuellement indisponible. Veuillez réessayer plus tard.",
+    "resultsCount": "{count, plural, =0 {Aucun résultat} one {# résultat} other {# résultats}}",
+    "page": "Page {page}",
+    "scoreLabel": "Pertinence {percent} %",
+    "openInEditor": "Ouvrir dans l'éditeur",
+    "previewFailed": "Aperçu indisponible"
   },
   "meta": {
     "title": {
@@ -1348,6 +1369,16 @@
       "appliedTitle": "OCR appliqué",
       "appliedDescription": "Un calque de texte invisible a été ajouté : le document est désormais cherchable."
     },
+    "indexOcr": {
+      "indexedTitle": "Document indexé",
+      "indexedDescription": "{count} blocs de texte ont été ajoutés à la recherche sémantique.",
+      "emptyTitle": "Aucun texte trouvé",
+      "emptyDescription": "L'OCR n'a reconnu aucun texte dans ce document.",
+      "unavailableTitle": "Recherche indisponible",
+      "unavailableDescription": "Le texte a été extrait mais le service de recherche sémantique est hors ligne.",
+      "errorTitle": "Échec de l'indexation OCR",
+      "errorDescription": "Impossible d'effectuer l'OCR ou l'indexation de ce document. Veuillez réessayer."
+    },
     "shortcuts": {
       "hint": "Appuyez sur ? pour voir les raccourcis clavier"
     },
@@ -1414,6 +1445,7 @@
       "flatten": "Aplatir",
       "compress": "Compresser",
       "zoomLevel": "Niveau de zoom",
+      "indexOcr": "Indexer OCR",
       "fields": {
         "text": "Texte",
         "multiline": "Texte multiligne",
