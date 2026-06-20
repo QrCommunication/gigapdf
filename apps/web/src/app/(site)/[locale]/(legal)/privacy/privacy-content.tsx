@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Shield, Database, Lock, Eye, Cookie, Bell, Code2, Mail, Scale } from "lucide-react";
+import { Shield, Database, Lock, Eye, Cookie, Bell, Code2, Mail, Scale, Cpu } from "lucide-react";
 import { env } from "@/lib/env";
 
 export default function PrivacyContent() {
@@ -46,6 +46,31 @@ export default function PrivacyContent() {
           <p><span className="text-terminal-cyan">siren:</span> "{env.NEXT_PUBLIC_LEGAL_SIREN}"</p>
           <p><span className="text-terminal-cyan">address:</span> "{env.NEXT_PUBLIC_LEGAL_ADDRESS}"</p>
           <p><span className="text-terminal-cyan">email:</span> <a href={`mailto:${env.NEXT_PUBLIC_LEGAL_CONTACT_EMAIL}`} className="text-primary hover:underline">"{env.NEXT_PUBLIC_LEGAL_CONTACT_EMAIL}"</a></p>
+        </div>
+      </section>
+
+      {/* Privacy by design — client-side OCR + local embeddings */}
+      <section className="mb-12">
+        <div className="flex items-center gap-3 mb-4 not-prose">
+          <div className="w-10 h-10 rounded-lg bg-terminal-green/10 flex items-center justify-center">
+            <Cpu className="h-5 w-5 text-terminal-green" />
+          </div>
+          <h2 className="text-2xl font-bold m-0">{t("processing.title")}</h2>
+        </div>
+        <p className="text-muted-foreground leading-relaxed">{t("processing.description")}</p>
+        <div className="grid gap-4 md:grid-cols-3 not-prose mt-6">
+          <div className="rounded-xl border border-border bg-card/50 p-5">
+            <h4 className="font-semibold mb-2">{t("processing.clientSide.title")}</h4>
+            <p className="text-sm text-muted-foreground">{t("processing.clientSide.description")}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card/50 p-5">
+            <h4 className="font-semibold mb-2">{t("processing.localAi.title")}</h4>
+            <p className="text-sm text-muted-foreground">{t("processing.localAi.description")}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card/50 p-5">
+            <h4 className="font-semibold mb-2">{t("processing.noAiSubprocessor.title")}</h4>
+            <p className="text-sm text-muted-foreground">{t("processing.noAiSubprocessor.description")}</p>
+          </div>
         </div>
       </section>
 
@@ -145,7 +170,20 @@ export default function PrivacyContent() {
             <h4 className="font-semibold mb-1">Stripe</h4>
             <p className="text-sm text-muted-foreground">{t("sharing.providers.payment")}</p>
           </div>
+          <div className="rounded-xl border border-border bg-card/50 p-5">
+            <h4 className="font-semibold mb-1">SMTP</h4>
+            <p className="text-sm text-muted-foreground">{t("sharing.providers.email")}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card/50 p-5">
+            <h4 className="font-semibold mb-1">Sentry</h4>
+            <p className="text-sm text-muted-foreground">{t("sharing.providers.monitoring")}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card/50 p-5">
+            <h4 className="font-semibold mb-1">Google Fonts</h4>
+            <p className="text-sm text-muted-foreground">{t("sharing.providers.fonts")}</p>
+          </div>
         </div>
+        <p className="mt-4 text-sm text-muted-foreground italic">{t("sharing.providers.note")}</p>
       </section>
 
       {/* Your Rights */}

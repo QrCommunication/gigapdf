@@ -1,5 +1,13 @@
 # Migration Python → TypeScript : Résumé des Phases A à G
 
+> **⚠️ Document historique (snapshot du 22 avril 2026).** Ce résumé décrit un
+> état intermédiaire où l'OCR (`pytesseract`), le fallback de rendu
+> (`pdfplumber`) et les opérations PDF (`pdf-lib`) restaient présents. Cet état
+> est **dépassé** : le moteur in-house **`@qrcommunication/gigapdf-lib`**
+> (Rust → WebAssembly) assure désormais l'intégralité du traitement PDF (OCR
+> client-side WASM inclus). `pytesseract`, `pdfplumber`, `pdf-lib`, `playwright`
+> et `mupdf` ont été **retirés** du projet. À conserver comme trace historique.
+
 **Date de finalisation** : 22 avril 2026  
 **Historique** : Phases A–G exécutées avec succès  
 **Scope** : Migration intégrale du PDF engine Python vers TypeScript  

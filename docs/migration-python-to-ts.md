@@ -1,5 +1,15 @@
 # Migration Python → TypeScript PDF Engine
 
+> **⚠️ Document historique (snapshot de migration).** L'état décrit ci-dessous
+> (shims `pdfplumber`, OCR `pytesseract` gardé côté Python, `pdf-lib`) est
+> **dépassé**. État **actuel** : tout le traitement PDF — lecture/écriture,
+> édition, redaction, OCR, conversions Office↔PDF, rendu HTML/CSS→PDF,
+> rasterisation, crypto/signatures — passe par le moteur in-house
+> **`@qrcommunication/gigapdf-lib`** (Rust → WebAssembly, zéro dépendance
+> tierce). `pdfplumber`, `pytesseract`, `pdf-lib`, `playwright`, `mupdf` ont
+> tous été **retirés** ; ils ne sont plus dans `requirements.txt` ni dans
+> `apps/web/package.json`. Conserver ci-dessous comme trace de la migration.
+
 ## Contexte
 
 GigaPDF utilise deux paths parallèles pour le traitement PDF :

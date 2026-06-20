@@ -73,7 +73,7 @@ sudo -u postgres psql -p 5432 -d gigapdf -tAc \
 # python deps + dim
 /opt/gigapdf/.venv/bin/python -c "import fastembed,pgvector; print(fastembed.__version__)"
 # app still imports after the pip (numpy/onnxruntime upgrades are additive)
-/opt/gigapdf/.venv/bin/python -c "import numpy,PIL,fastapi,sqlalchemy,celery,pdfplumber; print('ok')"
+/opt/gigapdf/.venv/bin/python -c "import numpy,PIL,fastapi,sqlalchemy,celery,pypdf; print('ok')"
 # services healthy
 for s in gigapdf-api gigapdf-celery gigapdf-celery-billing gigapdf-web gigapdf-admin; do \
   echo "$s: $(systemctl is-active $s)"; done

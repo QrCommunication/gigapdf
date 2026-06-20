@@ -1007,31 +1007,36 @@ POST /api/v1/documents/{document_id}/export
 
 ## OCR
 
-### Run OCR / Exécuter l'OCR
+OCR runs **client-side** inside the in-house `@qrcommunication/gigapdf-lib`
+WASM engine (a zero-dependency CNN model — no Tesseract or any third-party OCR
+binary). The extracted `{page, bbox, text}` blocks are then ingested by the API
+to power full-text and semantic search.
 
-Extract text from scanned documents.
+L'OCR s'exécute **côté client** dans le moteur WASM `@qrcommunication/gigapdf-lib`
+(modèle CNN zéro dépendance — aucun binaire OCR tiers type Tesseract). Les blocs
+extraits sont ensuite ingérés par l'API pour alimenter la recherche.
+
+### Index OCR blocks / Indexer les blocs OCR
+
+Stores OCR text blocks produced by the client (idempotent **replace** of the
+existing index for the document; max 5000 blocks per request).
 
 ```http
-POST /api/v1/documents/{document_id}/ocr
+POST /api/v1/storage/documents/{stored_document_id}/ocr-blocks
 ```
 
 #### Body / Corps
 
 ```json
 {
-  "languages": ["eng", "fra"],
-  "pages": [1, 2, 3],
-  "output_format": "searchable_pdf"
+  "blocks": [
+    { "page": 1, "bbox": [12.0, 34.0, 210.0, 48.0], "text": "Invoice #123" }
+  ]
 }
 ```
 
-#### Options / Options
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `languages` | array | ISO 639-3 language codes |
-| `pages` | array | Page numbers (empty for all) |
-| `output_format` | string | `text`, `searchable_pdf`, `hocr` |
+Indexed blocks are searchable via `POST /api/v1/search/semantic`
+(vector similarity, owner-scoped) — see the Search section.
 
 ---
 
