@@ -120,6 +120,8 @@ const OCR_LANG_CHIPS: readonly string[] = [
 
 /** Étapes du front-end de restauration automatique (engine.ocrSection.restore.steps.<key>). */
 const OCR_RESTORE_STEPS: readonly string[] = [
+  "autocrop",
+  "illumination",
   "deskew",
   "despeckle",
   "binarize",

@@ -299,11 +299,13 @@
 			"restore": {
 				"label": "Front-end de restauration",
 				"title": "Vos scans dégradés, restaurés automatiquement",
-				"description": "Avant même la reconnaissance, le moteur restaure les documents abîmés — photos, reçus, scans inclinés ou ombrés deviennent lisibles, sans aucune intervention de votre part. Une variante de modèle dédiée « photo / dégradé » prend le relais sur les cas difficiles.",
+				"description": "Avant même la reconnaissance, le moteur recadre, redresse et éclaircit les documents abîmés — photos, reçus, scans inclinés ou ombrés deviennent lisibles, sans aucune intervention de votre part. Une variante de modèle dédiée « photo / dégradé » prend le relais sur les cas difficiles.",
 				"steps": {
-					"deskew": "Redressement automatique (deskew, jusqu'à ±5,7°) : les pages photographiées de travers sont remises d'aplomb.",
+					"autocrop": "Recadrage perspective automatique : le moteur détecte le quadrilatère du document (photo de page, reçu posé sur une table) et le redresse de face par homographie — fini les pages prises de biais.",
+					"illumination": "Correction d'illumination (flat-field) : l'éclairage inégal et les ombres des photos au smartphone sont aplatis, sans toucher aux scans déjà propres.",
+					"deskew": "Redressement fin (deskew, jusqu'à ±5,7°) : les pages encore légèrement de travers sont remises d'aplomb.",
 					"despeckle": "Dé-bruitage (despeckle) : le grain et les taches des scans bas de gamme sont effacés.",
-					"binarize": "Binarisation adaptative Sauvola + correction d'illumination : les ombres et l'éclairage inégal des photos de documents sont compensés.",
+					"binarize": "Binarisation adaptative Sauvola : le texte est nettement isolé du fond, même sous un éclairage irrégulier.",
 					"model": "Variante de modèle « photo / dégradé » dédiée pour les cas les plus difficiles."
 				}
 			}

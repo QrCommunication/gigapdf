@@ -299,11 +299,13 @@
 			"restore": {
 				"label": "Restoration front-end",
 				"title": "Your degraded scans, restored automatically",
-				"description": "Before recognition even starts, the engine restores damaged documents — photos, receipts, skewed or shadowed scans become legible, with no action on your part. A dedicated \"photo / degraded\" model variant takes over on the hard cases.",
+				"description": "Before recognition even starts, the engine crops, straightens and brightens damaged documents — photos, receipts, skewed or shadowed scans become legible, with no action on your part. A dedicated \"photo / degraded\" model variant takes over on the hard cases.",
 				"steps": {
-					"deskew": "Automatic deskew (up to ±5.7°): pages photographed at an angle are straightened back up.",
+					"autocrop": "Automatic perspective crop: the engine detects the document quadrilateral (a photographed page, a receipt on a desk) and rectifies it head-on via homography — no more pages shot at an angle.",
+					"illumination": "Illumination correction (flat-field): uneven lighting and shadows from phone photos are flattened, while already-clean scans are left untouched.",
+					"deskew": "Fine deskew (up to ±5.7°): pages still slightly tilted are straightened back up.",
 					"despeckle": "Despeckle: grain and specks from low-end scans are wiped out.",
-					"binarize": "Adaptive Sauvola binarization + illumination correction: shadows and uneven lighting in document photos are compensated for.",
+					"binarize": "Adaptive Sauvola binarization: text is cleanly separated from the background, even under uneven lighting.",
 					"model": "Dedicated \"photo / degraded\" model variant for the toughest cases."
 				}
 			}
