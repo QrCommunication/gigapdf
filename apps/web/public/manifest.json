@@ -4,8 +4,8 @@
   "description": "Éditeur PDF open source et gratuit avec collaboration en temps réel. Modifiez, annotez et fusionnez vos PDF facilement.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#2563eb",
+  "background_color": "#0A0E16",
+  "theme_color": "#16C088",
   "orientation": "portrait-primary",
   "categories": ["productivity", "utilities", "business"],
   "icons": [
