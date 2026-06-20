@@ -9,7 +9,7 @@
  * Accepted body formats:
  *
  *   1. multipart/form-data
- *      file              — PDF file bytes (required, ≤ 100 MB)
+ *      file              — PDF file bytes (required, ≤ 250 MB)
  *      extractText       — "true" | "false" (default: true)
  *      extractImages     — "true" | "false" (default: true)
  *      extractDrawings   — "true" | "false" (default: true)
@@ -33,7 +33,7 @@
  * Error codes:
  *   401 — not authenticated
  *   400 — missing/invalid input
- *   413 — file too large (> 100 MB)
+ *   413 — file too large (> 250 MB)
  *   422 — PDF is encrypted or corrupted
  *   500 — internal error
  *
@@ -63,10 +63,10 @@ import {
 import type { ParseOptions } from '@giga-pdf/pdf-engine';
 import { auth } from '@/lib/auth';
 import { serverLogger } from '@/lib/server-logger';
+import { MAX_FILE_SIZE_BYTES } from '@/lib/request-validation';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
 const REQUEST_TIMEOUT_MS = 30_000; // 30 s
 
 const PYTHON_API_BASE =

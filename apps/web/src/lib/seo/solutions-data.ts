@@ -42,7 +42,7 @@ export const SOLUTIONS: SolutionData[] = [
     intro: [
       "Le scandale est documenté et récurrent : des conclusions et des pièces « caviardées » au rectangle noir dont le texte réapparaît d'un simple copier-coller, parce que l'outil a dessiné un masque par-dessus au lieu de supprimer le contenu. Pour un cabinet, c'est la violation du secret professionnel en un clic. La première exigence d'un outil PDF pour avocat est là : que la suppression soit une suppression.",
       "GigaPDF applique une redaction réelle, portée par le moteur PDF maison de GigaPDF : les opérateurs de texte situés dans la zone caviardée sont physiquement retirés du flux de contenu du fichier. Après traitement, le texte n'existe plus — ni au copier-coller, ni à l'extraction, ni dans les métadonnées de la zone. À cela s'ajoutent les trois autres piliers du document juridique : la signature numérique PKCS#7 avec votre propre certificat P12 (intégrité prouvable, identité vérifiable), l'archivage conforme PDF/A-1b et 2b, et le chiffrement AES-256 pour les pièces qui circulent.",
-      "Reste la question que tout cabinet doit poser à son prestataire : où vont les documents ? GigaPDF y répond par construction — code open source auditable, et auto-hébergement complet : l'instance tourne sur le serveur du cabinet, les dossiers clients ne transitent par aucun cloud tiers. Le plan gratuit inclut l'intégralité des fonctions, 5 Go et 100 documents.",
+      "Reste la question que tout cabinet doit poser à son prestataire : où vont les documents ? GigaPDF y répond par construction — code open source auditable, et auto-hébergement complet : l'instance tourne sur le serveur du cabinet, les dossiers clients ne transitent par aucun cloud tiers. Le plan gratuit inclut l'intégralité des fonctions, 5 Go et 1000 documents.",
     ],
     workflows: [
       {
@@ -109,7 +109,7 @@ export const SOLUTIONS: SolutionData[] = [
     intro: [
       "Le quotidien d'un cabinet comptable, ce sont des pièces qui arrivent dans tous les états : factures photographiées au téléphone, relevés scannés de travers, liasses PDF de quarante pages mélangeant exercices et fournisseurs, tickets illisibles. Avant même la saisie, il y a un travail ingrat de tri, de découpe et de remise en ordre — et chaque pièce introuvable au moment du contrôle coûte des heures.",
       "GigaPDF outille précisément cette couche documentaire. L'OCR maison (français + anglais) rend les factures scannées exploitables : montants, numéros et mentions deviennent du texte cherchable, indexé par la recherche plein texte de la GED. La division découpe les liasses en pièces unitaires, la fusion reconstitue des dossiers par exercice ou par client, et les tags croisent les classements — un même document visible sous « Client X », « 2025 » et « TVA » sans duplication.",
-      "Tout est inclus dans le plan gratuit — 5 Go, 100 documents, 1 000 appels API mensuels pour automatiser les flux récurrents — et le cabinet qui veut garder les données comptables de ses clients hors de tout cloud tiers installe GigaPDF sur son propre serveur : le code est open source, source-available sous licence PolyForm Noncommercial.",
+      "Tout est inclus dans le plan gratuit — 5 Go, 1000 documents, 1 000 appels API mensuels pour automatiser les flux récurrents — et le cabinet qui veut garder les données comptables de ses clients hors de tout cloud tiers installe GigaPDF sur son propre serveur : le code est open source, source-available sous licence PolyForm Noncommercial.",
     ],
     workflows: [
       {
@@ -243,7 +243,7 @@ export const SOLUTIONS: SolutionData[] = [
     intro: [
       "Une location ou une vente, c'est une avalanche documentaire à délais courts : dossiers de candidature en pièces éparses, baux à signer vite avant que le candidat ne se rétracte, états des lieux qu'il faut documenter précisément sous peine de litige au départ, diagnostics et annexes à joindre sans rien oublier. Les agences et gestionnaires jonglent en permanence entre scans, photos et pièces jointes.",
       "GigaPDF structure ce flux. Les dossiers locataires se fusionnent en liasses uniques et ordonnées — pièce d'identité, justificatifs, garanties — au lieu de six pièces jointes. Le bail et ses annexes se signent numériquement en PKCS#7 : document scellé, intégrité vérifiable par toutes les parties, sans rendez-vous physique. L'état des lieux s'annote directement sur le PDF — remarques positionnées pièce par pièce, photos intégrées au dossier — et les versions d'entrée et de sortie se comparent dans l'historique.",
-      "Le tout vit dans la GED : un dossier par bien, des tags par statut (en cours, signé, archivé), la recherche plein texte qui retrouve un nom de locataire dans des centaines de documents, et le partage par lien qui remplace les pièces jointes trop lourdes. Gratuit jusqu'à 5 Go et 100 documents, toutes fonctions incluses.",
+      "Le tout vit dans la GED : un dossier par bien, des tags par statut (en cours, signé, archivé), la recherche plein texte qui retrouve un nom de locataire dans des centaines de documents, et le partage par lien qui remplace les pièces jointes trop lourdes. Gratuit jusqu'à 5 Go et 1000 documents, toutes fonctions incluses.",
     ],
     workflows: [
       {
@@ -376,7 +376,7 @@ export const SOLUTIONS: SolutionData[] = [
     h1: "Étudiants : un outil PDF complet, vraiment gratuit",
     intro: [
       "La vie étudiante tourne autour du PDF : polycopiés à annoter, articles à surligner pour le mémoire, rapports à rendre dans un format imposé, dossiers de candidature à assembler — le tout avec un budget logiciel égal à zéro. Les outils « gratuits » du marché l'ont bien compris, qui plafonnent les opérations à deux par jour ou tamponnent leur publicité sur les devoirs rendus.",
-      "GigaPDF prend le contre-pied : toutes les fonctions sont incluses dans le plan gratuit — 5 Go de stockage, 100 documents — sans filigrane ajouté ni compteur d'opérations. Surlignez et annotez vos cours dans le navigateur, sur n'importe quelle machine, y compris celles de la bibliothèque universitaire : il n'y a rien à installer. Convertissez votre mémoire Word en PDF impeccable avant le dépôt, compressez le rapport de stage gorgé de captures d'écran sous la limite de la plateforme de rendu, fusionnez CV, lettre et relevés en un dossier de candidature unique.",
+      "GigaPDF prend le contre-pied : toutes les fonctions sont incluses dans le plan gratuit — 5 Go de stockage, 1000 documents — sans filigrane ajouté ni compteur d'opérations. Surlignez et annotez vos cours dans le navigateur, sur n'importe quelle machine, y compris celles de la bibliothèque universitaire : il n'y a rien à installer. Convertissez votre mémoire Word en PDF impeccable avant le dépôt, compressez le rapport de stage gorgé de captures d'écran sous la limite de la plateforme de rendu, fusionnez CV, lettre et relevés en un dossier de candidature unique.",
       "Et parce que GigaPDF est open source (source-available), c'est aussi un objet d'étude : le code de l'éditeur, du moteur PDF et de la GED est public. Les étudiants en informatique peuvent regarder sous le capot — voire contribuer, ce qui fait toujours bien sur un CV.",
     ],
     workflows: [
@@ -402,7 +402,7 @@ export const SOLUTIONS: SolutionData[] = [
       },
     ],
     capabilities: [
-      "Toutes les fonctions gratuites : 5 Go, 100 documents, sans filigrane ni compteur",
+      "Toutes les fonctions gratuites : 5 Go, 1000 documents, sans filigrane ni compteur",
       "Annotations natives : surlignage, notes, dessins, lisibles partout",
       "Conversion Word, OpenDocument, Excel et PowerPoint vers PDF",
       "Compression du moteur maison pour passer sous les limites des plateformes de rendu",
@@ -413,7 +413,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Est-ce vraiment gratuit, ou y a-t-il un piège ?",
         answer:
-          "Le plan gratuit inclut toutes les fonctionnalités — édition, annotation, conversion, OCR, signature — avec pour seules limites le volume : 5 Go de stockage, 100 documents et 1 000 appels API par mois. Pas de filigrane sur vos fichiers, pas de quota d'opérations journalier. Le projet est open source : le modèle est transparent, le code aussi.",
+          "Le plan gratuit inclut toutes les fonctionnalités — édition, annotation, conversion, OCR, signature — avec pour seules limites le volume : 5 Go de stockage, 1000 documents et 1 000 appels API par mois. Pas de filigrane sur vos fichiers, pas de quota d'opérations journalier. Le projet est open source : le modèle est transparent, le code aussi.",
       },
       {
         question: "Puis-je utiliser GigaPDF sur les ordinateurs de la fac ?",
@@ -577,7 +577,7 @@ export const SOLUTIONS: SolutionData[] = [
     h1: "Associations : un outil PDF complet au prix associatif — zéro",
     intro: [
       "Une association produit une paperasse de PME avec un budget de tirelire : dossiers de subvention à assembler pièce par pièce, procès-verbaux d'assemblée générale à faire approuver et archiver, convocations à diffuser, adhésions à collecter — le tout porté par des bénévoles qui changent, travaillent depuis leur propre ordinateur et n'ont ni licence Acrobat ni serveur de fichiers.",
-      "GigaPDF correspond trait pour trait à cette situation, par philosophie autant que par fonctions : le plan gratuit inclut toutes les capacités — pas une version de démonstration — avec 5 Go et 100 documents, de quoi couvrir la vie documentaire d'une association. La fusion assemble les dossiers de subvention (statuts, budget, RIB, comptes rendus d'activité) en liasses uniques conformes aux attentes des financeurs ; les PV se signent numériquement ; les formulaires d'adhésion se remplissent en ligne ; et le partage par lien diffuse les documents au bureau sans pièce jointe.",
+      "GigaPDF correspond trait pour trait à cette situation, par philosophie autant que par fonctions : le plan gratuit inclut toutes les capacités — pas une version de démonstration — avec 5 Go et 1000 documents, de quoi couvrir la vie documentaire d'une association. La fusion assemble les dossiers de subvention (statuts, budget, RIB, comptes rendus d'activité) en liasses uniques conformes aux attentes des financeurs ; les PV se signent numériquement ; les formulaires d'adhésion se remplissent en ligne ; et le partage par lien diffuse les documents au bureau sans pièce jointe.",
       "La collaboration en temps réel permet de préparer un dossier à plusieurs bénévoles, chacun depuis chez soi, sur le même document. Et l'alignement va jusqu'à la licence : GigaPDF est un projet open source, source-available — auditable et auto-hébergeable, qu'une association équipée peut même héberger elle-même.",
     ],
     workflows: [
@@ -603,7 +603,7 @@ export const SOLUTIONS: SolutionData[] = [
       },
     ],
     capabilities: [
-      "Plan gratuit complet : toutes les fonctions, 5 Go, 100 documents",
+      "Plan gratuit complet : toutes les fonctions, 5 Go, 1000 documents",
       "Fusion et compression des dossiers de subvention multi-pièces",
       "Signature numérique PKCS#7 des PV et documents officiels",
       "Formulaires d'adhésion remplissables en ligne puis aplatis",
@@ -614,7 +614,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Le plan gratuit suffit-il vraiment pour une association ?",
         answer:
-          "Pour la grande majorité, oui : 5 Go et 100 documents couvrent les dossiers de subvention, PV, convocations et bulletins d'une saison associative, et toutes les fonctions — signature, OCR, conversion, collaboration — sont incluses sans bridage. Il n'y a pas de filigrane publicitaire sur vos documents officiels.",
+          "Pour la grande majorité, oui : 5 Go et 1000 documents couvrent les dossiers de subvention, PV, convocations et bulletins d'une saison associative, et toutes les fonctions — signature, OCR, conversion, collaboration — sont incluses sans bridage. Il n'y a pas de filigrane publicitaire sur vos documents officiels.",
       },
       {
         question: "Comment travailler à plusieurs bénévoles sur le même dossier ?",

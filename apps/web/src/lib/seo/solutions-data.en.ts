@@ -22,7 +22,7 @@ export const SOLUTIONS: SolutionData[] = [
     intro: [
       "The scandal is documented and keeps repeating: briefs and exhibits 'redacted' with black rectangles whose text reappears with a simple copy-paste, because the tool drew a mask over the content instead of removing it. For a firm, that is privileged information breached in one click. The first requirement of a legal PDF tool sits right there: a deletion must actually delete.",
       "GigaPDF performs real redaction, powered by GigaPDF's in-house engine: the text operators inside the redacted zone are physically stripped from the file's content stream. After processing, the text no longer exists — not in copy-paste, not in extraction, not in the zone's metadata. Around it stand the three other pillars of the legal document: PKCS#7 digital signing with your own P12 certificate (provable integrity, verifiable identity), PDF/A-1b and 2b compliant archiving, and AES-256 encryption for the exhibits that travel.",
-      "Then comes the question every firm should put to its vendors: where do the documents go? GigaPDF answers it structurally — auditable open-source code, and complete self-hosting: the instance runs on the firm's own server, and client matters never pass through a third-party cloud. The free plan includes every feature, 5 GB, and 100 documents.",
+      "Then comes the question every firm should put to its vendors: where do the documents go? GigaPDF answers it structurally — auditable open-source code, and complete self-hosting: the instance runs on the firm's own server, and client matters never pass through a third-party cloud. The free plan includes every feature, 5 GB, and 1000 documents.",
     ],
     workflows: [
       {
@@ -89,7 +89,7 @@ export const SOLUTIONS: SolutionData[] = [
     intro: [
       "Daily life at an accounting firm means records arriving in every possible state: invoices photographed on a phone, statements scanned at an angle, forty-page PDF bundles mixing fiscal years and vendors, unreadable receipts. Before any entry gets booked, there's a thankless layer of sorting, splitting, and reordering — and every document that can't be found at audit time costs hours.",
       "GigaPDF equips precisely that document layer. In-house OCR (English and French) makes scanned invoices usable: amounts, reference numbers, and legal mentions become searchable text indexed by the document manager. Splitting cuts bundles into individual records, merging rebuilds files by year or by client, and tags cross-reference the filing — the same document visible under 'Client X', '2025', and 'VAT' without a single duplicate.",
-      "Everything fits in the free plan — 5 GB, 100 documents, 1,000 monthly API calls to automate recurring flows — and a firm that wants its clients' financial data off third-party clouds installs GigaPDF on its own server: the code is open source, source-available under PolyForm Noncommercial.",
+      "Everything fits in the free plan — 5 GB, 1000 documents, 1,000 monthly API calls to automate recurring flows — and a firm that wants its clients' financial data off third-party clouds installs GigaPDF on its own server: the code is open source, source-available under PolyForm Noncommercial.",
     ],
     workflows: [
       {
@@ -223,7 +223,7 @@ export const SOLUTIONS: SolutionData[] = [
     intro: [
       "A rental or a sale is a document avalanche on short deadlines: application files arriving in scattered pieces, leases to sign before the applicant walks, inspection reports that must be documented precisely or the deposit dispute is lost, disclosures and annexes to attach without forgetting one. Agencies and property managers juggle scans, photos, and attachments all day.",
       "GigaPDF gives that flow a structure. Tenant files merge into single, ordered bundles — ID, proof of income, guarantees — instead of six attachments. The lease and its annexes get signed digitally with PKCS#7: a sealed document, integrity verifiable by every party, no in-person meeting required. The inspection report is annotated straight on the PDF — remarks pinned room by room, photos kept with the property's file — and the move-in and move-out versions sit side by side in the history.",
-      "It all lives in the document manager: one folder per property, status tags (in progress, signed, archived), full-text search that finds a tenant's name across hundreds of documents, and link sharing that replaces oversized attachments. Free up to 5 GB and 100 documents, every feature included.",
+      "It all lives in the document manager: one folder per property, status tags (in progress, signed, archived), full-text search that finds a tenant's name across hundreds of documents, and link sharing that replaces oversized attachments. Free up to 5 GB and 1000 documents, every feature included.",
     ],
     workflows: [
       {
@@ -356,7 +356,7 @@ export const SOLUTIONS: SolutionData[] = [
     h1: "Students: a complete PDF tool that is genuinely free",
     intro: [
       "Student life runs on PDFs: handouts to annotate, papers to highlight for the thesis, reports due in a mandated format, application files to assemble — all on a software budget of exactly zero. The market's 'free' tools know it well, capping you at two operations a day or stamping their ad on the homework you submit.",
-      "GigaPDF takes the opposite stance: every feature is included in the free plan — 5 GB of storage, 100 documents — with no watermark added and no operation counter. Highlight and annotate your lectures in the browser, on any machine including the university library's: there is nothing to install. Convert your thesis from Word to a spotless PDF before submission, squeeze the screenshot-loaded internship report under the upload platform's limit, merge CV, cover letter, and transcripts into one application file.",
+      "GigaPDF takes the opposite stance: every feature is included in the free plan — 5 GB of storage, 1000 documents — with no watermark added and no operation counter. Highlight and annotate your lectures in the browser, on any machine including the university library's: there is nothing to install. Convert your thesis from Word to a spotless PDF before submission, squeeze the screenshot-loaded internship report under the upload platform's limit, merge CV, cover letter, and transcripts into one application file.",
       "And because GigaPDF is open source (source-available), it doubles as study material: the code of the editor, the PDF engine, and the document manager is public. Computer-science students can look under the hood — or contribute, which never hurts a CV.",
     ],
     workflows: [
@@ -382,7 +382,7 @@ export const SOLUTIONS: SolutionData[] = [
       },
     ],
     capabilities: [
-      "Everything free: 5 GB, 100 documents, no watermark, no counters",
+      "Everything free: 5 GB, 1000 documents, no watermark, no counters",
       "Native annotations: highlights, notes, drawings, readable everywhere",
       "Word, OpenDocument, Excel, and PowerPoint to PDF conversion",
       "In-house compression to fit submission platform limits",
@@ -393,7 +393,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Is it really free, or is there a catch?",
         answer:
-          "The free plan includes every capability — editing, annotation, conversion, OCR, signing — with volume as the only limit: 5 GB of storage, 100 documents, and 1,000 API calls a month. No watermark on your files, no daily operation quota. The project is open source: the model is transparent, and so is the code.",
+          "The free plan includes every capability — editing, annotation, conversion, OCR, signing — with volume as the only limit: 5 GB of storage, 1000 documents, and 1,000 API calls a month. No watermark on your files, no daily operation quota. The project is open source: the model is transparent, and so is the code.",
       },
       {
         question: "Can I use GigaPDF on university computers?",
@@ -557,7 +557,7 @@ export const SOLUTIONS: SolutionData[] = [
     h1: "Nonprofits: a complete PDF tool at the right price — zero",
     intro: [
       "A nonprofit produces the paperwork of a mid-size company on a piggy-bank budget: grant applications assembled piece by piece, board and general-assembly minutes to approve and archive, notices to circulate, memberships to collect — carried by volunteers who rotate, work from their own machines, and own neither an Acrobat license nor a file server.",
-      "GigaPDF matches that situation point for point, in philosophy as much as in features: the free plan includes every capability — not a demo edition — with 5 GB and 100 documents, enough for an organization's document life. Merging assembles grant applications (bylaws, budget, bank details, activity reports) into single bundles in the funder's required order; minutes get signed digitally; membership forms are filled online; and link sharing distributes documents to the board without attachments.",
+      "GigaPDF matches that situation point for point, in philosophy as much as in features: the free plan includes every capability — not a demo edition — with 5 GB and 1000 documents, enough for an organization's document life. Merging assembles grant applications (bylaws, budget, bank details, activity reports) into single bundles in the funder's required order; minutes get signed digitally; membership forms are filled online; and link sharing distributes documents to the board without attachments.",
       "Real-time collaboration lets several volunteers prepare an application on the same document, each from home. And the alignment reaches the license itself: GigaPDF is a source-available open-source project — auditable and self-hostable, which a well-equipped organization can even host on its own.",
     ],
     workflows: [
@@ -583,7 +583,7 @@ export const SOLUTIONS: SolutionData[] = [
       },
     ],
     capabilities: [
-      "Complete free plan: every feature, 5 GB, 100 documents",
+      "Complete free plan: every feature, 5 GB, 1000 documents",
       "Merging and compression of multi-piece grant applications",
       "PKCS#7 digital signing of minutes and official documents",
       "Membership forms filled online, then flattened",
@@ -594,7 +594,7 @@ export const SOLUTIONS: SolutionData[] = [
       {
         question: "Is the free plan really enough for a nonprofit?",
         answer:
-          "For the vast majority, yes: 5 GB and 100 documents cover a season's grant applications, minutes, notices, and membership forms, and every feature — signing, OCR, conversion, collaboration — is included without crippling. No advertising appears on your official documents.",
+          "For the vast majority, yes: 5 GB and 1000 documents cover a season's grant applications, minutes, notices, and membership forms, and every feature — signing, OCR, conversion, collaboration — is included without crippling. No advertising appears on your official documents.",
       },
       {
         question: "How do several volunteers work on the same application?",

@@ -541,7 +541,7 @@
 					"features": {
 						"storage": "5 GB storage",
 						"apiCalls": "1,000 API calls/month",
-						"documents": "100 documents",
+						"documents": "1000 documents",
 						"editing": "Full PDF editor",
 						"support": "Community support"
 					}
@@ -1016,7 +1016,7 @@
 			"dropTitle": "Drop your files here",
 			"dropHint": "Any file type — imported into the current folder",
 			"errorEmpty": "The file is empty",
-			"errorTooLarge": "File too large (max 100 MB)",
+			"errorTooLarge": "File too large (max 250 MB)",
 			"summaryAllSuccess": "{count, plural, one {# file imported successfully} other {# files imported successfully}}",
 			"summaryPartial": "{success, plural, one {# file imported} other {# files imported}}, {failed, plural, one {# failed} other {# failed}}",
 			"summaryAllFailed": "{count, plural, one {Failed to import the file} other {Failed to import # files}}"

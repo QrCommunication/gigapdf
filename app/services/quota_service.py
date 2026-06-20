@@ -129,7 +129,7 @@ PLANS = {
     "free": {
         "storage_limit_bytes": 5 * 1024 * 1024 * 1024,  # 5GB
         "api_calls_limit": 1000,  # per month
-        "document_limit": 100,
+        "document_limit": 1000,
     },
     "starter": {
         "storage_limit_bytes": 25 * 1024 * 1024 * 1024,  # 25GB

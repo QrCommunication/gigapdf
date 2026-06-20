@@ -30,7 +30,7 @@ class TestPlanConfigurationsMatchSeed:
     def test_free_plan_limits_match_seed(self):
         assert PLANS["free"]["storage_limit_bytes"] == 5 * GB
         assert PLANS["free"]["api_calls_limit"] == 1000
-        assert PLANS["free"]["document_limit"] == 100
+        assert PLANS["free"]["document_limit"] == 1000
 
     def test_starter_plan_limits_match_seed(self):
         assert PLANS["starter"]["storage_limit_bytes"] == 25 * GB
@@ -62,10 +62,10 @@ class TestUserQuotaModelDefaultsMatchFreePlan:
         return UserQuota.__table__.c[name].default.arg
 
     def test_document_limit_default_is_free_plan_value(self):
-        """Regression guard: default was 1000 while the free plan says 100
-        (fixed by migration 018_free_doc_limit)."""
+        """Regression guard: ORM default must equal the free-plan limit
+        (raised from 100 to 1000 in migration 021_free_doc_1000)."""
         assert self._column_default("document_limit") == PLANS["free"]["document_limit"]
-        assert self._column_default("document_limit") == 100
+        assert self._column_default("document_limit") == 1000
 
     def test_storage_limit_default_is_free_plan_value(self):
         assert (

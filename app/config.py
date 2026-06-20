@@ -81,11 +81,11 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # Limits
     # -------------------------------------------------------------------------
-    # Upload size unified at 100 MB across Python, nginx, and .env examples.
+    # Upload size unified at 250 MB across Python, nginx, and .env examples.
     # nginx client_max_body_size, MAX_UPLOAD_SIZE_MB in env files, and Next.js
     # server action body limit must all stay aligned with this value.
     # See SESSION_20260423_023327 (security audit — SSRF/upload-size hardening).
-    max_upload_size_mb: int = 100
+    max_upload_size_mb: int = 250
     max_pages_per_document: int = 5000
     preview_max_dpi: int = 600
     history_max_states: int = 100

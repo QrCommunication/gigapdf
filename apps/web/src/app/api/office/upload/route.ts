@@ -18,7 +18,7 @@
  *   - Magic bytes must match the container family of the extension (400):
  *       ZIP  (PK\x03\x04)                          → docx/xlsx/pptx/odt/ods/odp
  *       OLE2 (\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1)    → doc/xls/ppt
- *   - Size limit: 25 MB (413)
+ *   - Size limit: 250 MB (413)
  *
  * Returns: application/pdf binary (pure conversion — caller uploads to storage)
  *
@@ -45,7 +45,7 @@ import { sanitizeContentDisposition } from '@/lib/content-disposition';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
+const MAX_FILE_SIZE = 250 * 1024 * 1024; // 250 MB
 
 /** ZIP magic bytes shared by OOXML (docx/xlsx/pptx) and ODF (odt/ods/odp). */
 const ZIP_MAGIC = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);

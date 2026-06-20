@@ -667,7 +667,7 @@ async def save_document(
     file_bytes = await file.read()
     file_size = len(file_bytes)
 
-    _FILE_SIZE_LIMIT = 100 * 1024 * 1024  # 100 MB
+    _FILE_SIZE_LIMIT = 250 * 1024 * 1024  # 250 MB
     if file_size > _FILE_SIZE_LIMIT:
         raise HTTPException(
             status_code=400,
@@ -2171,7 +2171,7 @@ async def create_version(
     doc_bytes = await file.read()
     file_size = len(doc_bytes)
 
-    _FILE_SIZE_LIMIT = 100 * 1024 * 1024  # 100 MB
+    _FILE_SIZE_LIMIT = 250 * 1024 * 1024  # 250 MB
     if file_size > _FILE_SIZE_LIMIT:
         raise HTTPException(
             status_code=400,
