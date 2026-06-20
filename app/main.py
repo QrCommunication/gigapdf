@@ -256,8 +256,8 @@ and fully self-hostable. Source code:
 - **Page Operations**: Add, remove, reorder, rotate, and resize pages
 - **Element Editing**: True in-place editing of text, images, shapes, and annotations
 - **Forms**: Create, fill, and flatten AcroForm fields
-- **OCR**: Searchable text layer extraction from scanned documents (Tesseract)
-- **Office Conversions**: Import and export 9 Office formats (DOCX/XLSX/PPTX, ODF, legacy OLE2) via LibreOffice
+- **OCR**: Searchable text from scanned documents — in-house OCR engine (gigapdf-lib, WebAssembly, client-side), no third-party binary
+- **Office Conversions**: Import and export 9 Office formats (DOCX/XLSX/PPTX, ODF, legacy OLE2) via the in-house engine (no LibreOffice)
 - **Digital Signatures**: PKCS#7 / CAdES signing
 - **Collaboration**: Real-time multi-user editing over WebSocket
 - **Export**: Render PDFs to PNG, JPEG, HTML, and Office formats

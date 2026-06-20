@@ -23,10 +23,20 @@ documents/versions).
 ## Core Components
 
 ### Backend (FastAPI)
-- REST API: Document CRUD, export, OCR, storage, billing.
+- REST API: Document CRUD, export, storage, search, billing.
 - WebSocket: Real-time collaboration, cursors, element locks.
-- Services: Encapsulated business logic (storage, billing, collaboration).
-- Celery: Async jobs (exports, OCR, batch operations).
+- Services: Encapsulated business logic (storage, billing, collaboration,
+  semantic search embeddings).
+- Celery: Async jobs (preview proxying, embeddings, batch operations).
+
+### PDF engine (gigapdf-lib, Rust → WebAssembly)
+- All PDF processing runs through the in-house `@qrcommunication/gigapdf-lib`
+  (read/write/edit, redaction, AcroForm, annotations, OCR, HTML/CSS→PDF via a
+  native JS interpreter, Office↔PDF conversion, rasterisation, crypto/signatures,
+  image codecs). No third-party PDF binary (Tesseract, poppler, LibreOffice,
+  Ghostscript, Chromium/Playwright, mupdf, pdf-lib) is required.
+- The WASM module ships with the frontend; OCR, rendering and conversion run
+  client-side. The backend proxies preview rendering and persists results.
 
 ### Frontend (Next.js)
 - Web App: Main editor UI and user dashboard.
@@ -69,10 +79,14 @@ documents/versions).
 
 ## External Dependencies
 
-- PostgreSQL: Primary database.
+- PostgreSQL 17 (+ pgvector): Primary database and semantic search index.
 - Redis: Cache, queue, rate limiting.
 - S3: Long-term document storage.
-- Tesseract: OCR (optional but recommended).
+- fastembed: Local, offline multilingual embeddings (no external API).
+
+No third-party PDF/OCR binary (Tesseract, poppler, LibreOffice, Ghostscript,
+Chromium/Playwright, fontforge) is required — all PDF processing is handled by
+the in-house gigapdf-lib (Rust → WASM).
 
 ## Environments
 
