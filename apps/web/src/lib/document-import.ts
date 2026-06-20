@@ -3,7 +3,7 @@
  *
  * The GED accepts ANY file type now: the original bytes are stored as-is
  * (no client-side Office→PDF conversion). Validation is therefore limited to
- * a size cap that matches the storage backend (`_FILE_SIZE_LIMIT` = 100 MB)
+ * a size cap that matches the storage backend (`_FILE_SIZE_LIMIT` = 250 MB)
  * and a non-empty check. Format-specific enrichment (PDF thumbnail + text
  * extraction) is decided downstream from `isPdfFile`.
  *
@@ -11,7 +11,7 @@
  */
 
 /** Storage backend hard cap (POST /api/v1/storage/documents → 413 above this). */
-export const MAX_IMPORT_FILE_SIZE_BYTES = 100 * 1024 * 1024;
+export const MAX_IMPORT_FILE_SIZE_BYTES = 250 * 1024 * 1024;
 
 /**
  * Bounded concurrency: at most 3 full upload pipelines in flight. Unbounded

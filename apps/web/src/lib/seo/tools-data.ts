@@ -48,7 +48,7 @@ export const TOOLS: ToolData[] = [
     intro: [
       "Corriger une faute dans un contrat déjà exporté, mettre à jour un tarif sur une plaquette, remplacer un logo : la plupart des outils en ligne se contentent de poser un cadre blanc par-dessus l'ancien contenu. GigaPDF travaille autrement. Son éditeur WYSIWYG ouvre la page telle qu'elle s'imprimera et vous laisse cliquer sur un bloc de texte, une image ou une forme pour le modifier, le déplacer ou le supprimer réellement.",
       "La fidélité typographique fait la différence : GigaPDF identifie les polices utilisées dans le document, les télécharge automatiquement depuis Google Fonts quand elles y sont disponibles, puis les embarque dans le fichier au moment de l'enregistrement. Votre correction reprend la même police que le paragraphe d'origine, sans substitution Arial disgracieuse. Pour les suppressions, le moteur maison retire les opérateurs de texte du flux de contenu au lieu de les masquer — rien ne réapparaît au copier-coller.",
-      "L'éditeur fonctionne dans le navigateur, sans installation. Le plan gratuit inclut toutes les fonctions d'édition, avec 5 Go de stockage et 100 documents. Le code est open source, source-available sous licence PolyForm Noncommercial : les équipes qui manipulent des documents sensibles peuvent héberger l'application sur leur propre serveur.",
+      "L'éditeur fonctionne dans le navigateur, sans installation. Le plan gratuit inclut toutes les fonctions d'édition, avec 5 Go de stockage et 1000 documents. Le code est open source, source-available sous licence PolyForm Noncommercial : les équipes qui manipulent des documents sensibles peuvent héberger l'application sur leur propre serveur.",
     ],
     howTo: {
       title: "Comment modifier un PDF en ligne",
@@ -83,7 +83,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "L'éditeur PDF de GigaPDF est-il vraiment gratuit ?",
         answer:
-          "Oui. Le plan gratuit donne accès à toutes les fonctions, édition comprise, avec 5 Go de stockage, 100 documents et 1 000 appels API par mois. Il n'existe pas de version bridée de l'éditeur : les limites portent sur le volume, pas sur les fonctionnalités.",
+          "Oui. Le plan gratuit donne accès à toutes les fonctions, édition comprise, avec 5 Go de stockage, 1000 documents et 1 000 appels API par mois. Il n'existe pas de version bridée de l'éditeur : les limites portent sur le volume, pas sur les fonctionnalités.",
       },
       {
         question: "Mes documents confidentiels sont-ils en sécurité ?",
@@ -139,7 +139,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Combien de fichiers PDF puis-je fusionner à la fois ?",
         answer:
-          "GigaPDF ne fixe pas de plafond sur le nombre de fichiers d'une fusion. La seule limite est celle de votre espace de stockage : le plan gratuit offre 5 Go et 100 documents, ce qui couvre largement des liasses de plusieurs centaines de pages.",
+          "GigaPDF ne fixe pas de plafond sur le nombre de fichiers d'une fusion. La seule limite est celle de votre espace de stockage : le plan gratuit offre 5 Go et 1000 documents, ce qui couvre largement des liasses de plusieurs centaines de pages.",
       },
       {
         question: "La fusion dégrade-t-elle la qualité des documents ?",
@@ -357,29 +357,30 @@ export const TOOLS: ToolData[] = [
   {
     slug: "ocr-pdf",
     name: "OCR PDF",
-    metaTitle: "OCR PDF en ligne : scan vers texte | GigaPDF",
+    metaTitle: "OCR en ligne : scans et images vers texte | GigaPDF",
     metaDescription:
-      "Reconnaissance de texte maison (français + anglais) sur vos PDF scannés : copiez, cherchez, exportez le contenu. Gratuit et open source.",
-    h1: "OCR : extraire le texte de vos PDF scannés",
+      "Reconnaissance de texte maison multilingue (latin, cyrillique, grec, arabe, hébreu, écritures indiennes et chinois) sur vos scans et images (PDF scannés, JPG, PNG, photos de documents) : copiez, cherchez, exportez le contenu. Gratuit et open source.",
+    h1: "OCR : extraire le texte de vos scans et images",
     intro: [
-      "Un document scanné n'est qu'une suite de photographies de pages : impossible d'y rechercher un mot, de copier un paragraphe ou d'en extraire les montants. Tant que le texte n'est pas reconnu, le fichier reste muet pour vos outils — y compris pour la recherche de votre propre GED. La reconnaissance optique de caractères (OCR) transforme ces images en texte exploitable.",
-      "GigaPDF embarque son propre moteur de reconnaissance optique, configuré pour le français et l'anglais — accents, cédilles et ligatures compris, là où beaucoup de services entraînés sur l'anglais seul écorchent les textes français. Le traitement s'exécute côté serveur : vous lancez l'OCR sur un document, le moteur analyse chaque page et restitue le texte reconnu, prêt à être copié, exporté ou indexé.",
-      "L'OCR alimente directement le reste de la plateforme : une fois le document reconnu, la recherche plein texte de la GED le retrouve par son contenu, et l'outil de PDF cherchable peut incruster le texte en calque invisible sous l'image d'origine. Le tout fonctionne dans le plan gratuit, et sur votre propre serveur si vous auto-hébergez — un point décisif quand les documents scannés sont confidentiels.",
+      "Un document composé uniquement d'images — un PDF scanné, mais aussi une photo de document ou un fichier JPG ou PNG — n'est qu'une suite de photographies de pages : impossible d'y rechercher un mot, de copier un paragraphe ou d'en extraire les montants. Tant que le texte n'est pas reconnu, le fichier reste muet pour vos outils — y compris pour la recherche de votre propre GED. La reconnaissance optique de caractères (OCR) transforme ces images en texte exploitable.",
+      "GigaPDF embarque son propre moteur de reconnaissance optique, qui charge par défaut l'ensemble de ses modèles : il lit non seulement le français, l'anglais, l'allemand, l'espagnol, l'italien, le portugais… mais aussi le cyrillique, le grec, l'arabe, l'hébreu, le tamoul, le devanagari, le bengali et le chinois — accents, cédilles et ligatures compris. Le moteur reste le plus solide sur les écritures latines, tout en prenant en charge les autres alphabets. Il s'applique aussi bien à un PDF scanné qu'à une image seule (JPG, PNG) ou à la photo d'un document : vous lancez l'OCR, le moteur analyse chaque page ou image et restitue le texte reconnu, prêt à être copié, exporté ou indexé.",
+      "L'OCR alimente directement le reste de la plateforme : une fois le document reconnu, la recherche plein texte de la GED le retrouve par son contenu, et l'outil de PDF cherchable peut incruster le texte en calque invisible sous l'image d'origine. Le tout fonctionne dans le plan gratuit, et sur votre propre serveur si vous auto-hébergez — un point décisif quand les documents et images scannés sont confidentiels.",
     ],
     howTo: {
-      title: "Comment appliquer l'OCR à un PDF scanné",
+      title: "Comment appliquer l'OCR à un scan ou à une image",
       steps: [
-        "Importez votre PDF scanné (ou vos photos de documents converties en PDF) dans GigaPDF.",
+        "Importez votre PDF scanné ou directement une image (JPG, PNG, photo de document) dans GigaPDF.",
         "Lancez l'OCR depuis le menu d'actions du document.",
-        "Le moteur OCR analyse chaque page et reconnaît le texte en français et en anglais.",
+        "Le moteur OCR analyse chaque page ou image et reconnaît le texte dans de nombreuses langues et écritures.",
         "Récupérez le texte : copie directe, export TXT, ou génération d'un PDF cherchable.",
         "Le document devient trouvable par son contenu dans la recherche plein texte de votre espace.",
       ],
     },
     capabilities: [
-      "Moteur OCR maison avec modèles français et anglais (fra+eng)",
+      "Moteur OCR maison multilingue (latin, cyrillique, grec, arabe, hébreu, écritures indiennes et chinois)",
+      "Prise en charge des PDF scannés comme des images seules (JPG, PNG, photos de documents)",
       "Reconnaissance fidèle des accents et caractères spéciaux du français",
-      "Traitement page par page des documents multipages",
+      "Traitement page par page des documents et images multipages",
       "Export du texte reconnu (TXT) ou génération d'un calque cherchable invisible",
       "Indexation du contenu reconnu dans la recherche plein texte de la GED",
       "Exécution sur votre propre serveur en auto-hébergement : les scans ne quittent pas votre infrastructure",
@@ -388,12 +389,12 @@ export const TOOLS: ToolData[] = [
       {
         question: "Quelles langues l'OCR de GigaPDF reconnaît-il ?",
         answer:
-          "Le moteur OCR est configuré avec les modèles français et anglais, utilisables simultanément : un contrat bilingue ou une facture mêlant les deux langues est traité en une seule passe. Les caractères accentués du français sont correctement restitués.",
+          "Le moteur OCR charge l'ensemble de ses modèles par défaut : au-delà du français et de l'anglais, il reconnaît de nombreuses écritures — latine (allemand, espagnol, italien, portugais…), cyrillique, grecque, arabe, hébraïque, indiennes (tamoul, devanagari, bengali) et chinoise. Un contrat bilingue ou une facture mêlant plusieurs langues est traité en une seule passe, et les caractères accentués sont correctement restitués. Le moteur reste le plus précis sur les écritures latines.",
       },
       {
-        question: "Quelle qualité de scan faut-il pour un bon résultat ?",
+        question: "Quelle qualité de scan ou d'image faut-il pour un bon résultat ?",
         answer:
-          "L'OCR donne d'excellents résultats sur des scans nets à 300 dpi avec un texte d'imprimerie. Les documents inclinés, les photocopies de photocopies ou les très petites tailles de caractères dégradent la reconnaissance ; mieux vaut numériser à plat et en bonne résolution quand c'est possible.",
+          "L'OCR donne d'excellents résultats sur des scans nets à 300 dpi, ou des photos bien éclairées et cadrées, avec un texte d'imprimerie. Les documents inclinés, les photocopies de photocopies, les clichés flous ou les très petites tailles de caractères dégradent la reconnaissance ; mieux vaut numériser à plat, ou photographier bien à plat et en bonne résolution quand c'est possible.",
       },
       {
         question: "L'OCR reconnaît-il l'écriture manuscrite ?",
@@ -401,15 +402,15 @@ export const TOOLS: ToolData[] = [
           "Non, et il faut s'en méfier des promesses contraires : l'OCR est conçu pour les caractères imprimés. Une mention manuscrite isolée sur un formulaire ne sera généralement pas reconnue, même si le reste du document imprimé l'est parfaitement.",
       },
       {
-        question: "Que devient le document original après l'OCR ?",
+        question: "Que devient le document ou l'image d'origine après l'OCR ?",
         answer:
-          "Il n'est pas altéré. L'OCR produit du texte que vous exploitez comme vous voulez : copie, export, ou création d'un PDF cherchable où le texte reconnu est posé en calque invisible sous l'image du scan — le document garde alors son apparence exacte tout en devenant sélectionnable.",
+          "Il n'est pas altéré. L'OCR produit du texte que vous exploitez comme vous voulez : copie, export, ou création d'un PDF cherchable où le texte reconnu est posé en calque invisible sous l'image du scan ou de la photo — le document garde alors son apparence exacte tout en devenant sélectionnable.",
       },
     ],
     useCases: [
-      "Rendre exploitables des factures scannées : montants et références deviennent copiables et cherchables",
+      "Rendre exploitables des factures scannées ou photographiées : montants et références deviennent copiables et cherchables",
       "Numériser des archives papier et les retrouver ensuite par leur contenu, pas seulement par leur nom de fichier",
-      "Extraire le texte d'un contrat reçu en scan pour le citer ou le réviser",
+      "Extraire le texte d'un contrat reçu en scan, ou d'une photo de document prise au téléphone, pour le citer ou le réviser",
     ],
     relatedTools: ["pdf-cherchable", "compresser-pdf", "pdf-vers-word"],
     relatedSolutions: ["experts-comptables", "avocats", "sante"],
@@ -423,16 +424,16 @@ export const TOOLS: ToolData[] = [
       "Ajoutez un calque de texte invisible sur vos scans : le PDF garde son apparence et devient sélectionnable et cherchable. Gratuit, open source.",
     h1: "Rendre un PDF scanné cherchable sans changer son apparence",
     intro: [
-      "C'est la technique dite du « PDF sandwich » : l'image numérisée reste affichée telle quelle, et le texte reconnu par OCR est inséré en dessous, dans un calque invisible parfaitement aligné sur les mots de l'image. Visuellement, rien ne change — le tampon, la signature manuscrite et la mise en page d'origine restent intacts. Mais le document répond désormais à Ctrl+F, le texte se sélectionne à la souris et les lecteurs d'écran peuvent le lire.",
-      "GigaPDF construit ce calque à partir de la reconnaissance OCR maison (français et anglais) : chaque mot reconnu est positionné aux coordonnées exactes où il apparaît dans l'image, si bien qu'une recherche surligne le bon endroit de la page et qu'un copier-coller suit l'ordre de lecture. C'est la différence avec un simple export texte, qui perd toute correspondance avec la page.",
+      "C'est la technique dite du « PDF sandwich » : l'image numérisée — un scan, mais aussi une photo de document ou une image (JPG, PNG) convertie en PDF — reste affichée telle quelle, et le texte reconnu par OCR est inséré en dessous, dans un calque invisible parfaitement aligné sur les mots de l'image. Visuellement, rien ne change — le tampon, la signature manuscrite et la mise en page d'origine restent intacts. Mais le document répond désormais à Ctrl+F, le texte se sélectionne à la souris et les lecteurs d'écran peuvent le lire.",
+      "GigaPDF construit ce calque à partir de son moteur OCR maison multilingue (latin, cyrillique, grec, arabe, hébreu, écritures indiennes et chinois) : chaque mot reconnu est positionné aux coordonnées exactes où il apparaît dans l'image, si bien qu'une recherche surligne le bon endroit de la page et qu'un copier-coller suit l'ordre de lecture. C'est la différence avec un simple export texte, qui perd toute correspondance avec la page.",
       "Pour une GED, c'est l'étape qui change tout : un fonds documentaire scanné devient interrogeable en texte intégral. Combinée à la recherche plein texte de GigaPDF, la sandwich-isation transforme des années d'archives papier numérisées en base documentaire réellement consultable — sur le cloud ou sur votre propre serveur en auto-hébergement.",
     ],
     howTo: {
       title: "Comment ajouter un calque cherchable à un scan",
       steps: [
-        "Importez le PDF scanné dans votre espace GigaPDF.",
+        "Importez le PDF scanné — ou une image (JPG, PNG, photo de document) — dans votre espace GigaPDF.",
         "Lancez la création du PDF cherchable depuis le menu d'actions.",
-        "Le moteur OCR reconnaît le texte de chaque page (français + anglais).",
+        "Le moteur OCR reconnaît le texte de chaque page (moteur multilingue).",
         "Le texte est incrusté en calque invisible, mot par mot, aux coordonnées de l'image.",
         "Téléchargez le résultat : apparence identique, mais texte sélectionnable et cherchable partout.",
       ],
@@ -442,7 +443,7 @@ export const TOOLS: ToolData[] = [
       "Apparence du document strictement inchangée : tampons et signatures visibles conservés",
       "Recherche Ctrl+F fonctionnelle dans toutes les visionneuses PDF",
       "Sélection et copier-coller du texte directement sur le scan",
-      "Reconnaissance OCR maison français + anglais",
+      "Reconnaissance OCR maison multilingue (latin, cyrillique, grec, arabe, hébreu, écritures indiennes et chinois)",
       "Indexation automatique dans la recherche plein texte de la GED GigaPDF",
     ],
     faq: [
@@ -791,7 +792,7 @@ export const TOOLS: ToolData[] = [
     intro: [
       "Le PDF fige, Word libère : quand il faut reprendre intégralement un document — restructurer un rapport, réutiliser les paragraphes d'un contrat type, repartir d'une trame existante — l'édition ponctuelle ne suffit plus, il faut retrouver un fichier traitement de texte. La conversion PDF vers DOCX reconstruit le document dans un format où chaque élément redevient malléable.",
       "GigaPDF analyse la structure du PDF — blocs de texte, paragraphes, images, tableaux — et génère un fichier .docx ouvert par Word, votre suite bureautique ou Google Docs. Les conversions fidèles exigent un vrai travail de reconstruction : respecter l'enchaînement des paragraphes plutôt que de produire une zone de texte par ligne, conserver les images à leur place, restituer les tableaux en tableaux. C'est ce que vise le moteur de conversion, exécuté côté serveur.",
-      "Un cas mérite une mention : les PDF scannés. Sans texte numérique, il n'y a rien à convertir — passez d'abord le document à l'OCR de GigaPDF (français + anglais), puis convertissez. La chaîne scan → OCR → DOCX transforme un papier numérisé en document Word retravaillable, entièrement dans la même plateforme, gratuitement.",
+      "Un cas mérite une mention : les PDF scannés. Sans texte numérique, il n'y a rien à convertir — passez d'abord le document à l'OCR multilingue de GigaPDF, puis convertissez. La chaîne scan → OCR → DOCX transforme un papier numérisé en document Word retravaillable, entièrement dans la même plateforme, gratuitement.",
     ],
     howTo: {
       title: "Comment convertir un PDF en Word",
@@ -820,7 +821,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Puis-je convertir un PDF scanné en Word ?",
         answer:
-          "Oui, en deux temps : l'OCR d'abord, la conversion ensuite. Un scan ne contient que des images ; l'OCR maison de GigaPDF en extrait le texte (français et anglais), qui alimente alors la conversion DOCX. Sans cette étape, le fichier Word ne contiendrait que des images de pages.",
+          "Oui, en deux temps : l'OCR d'abord, la conversion ensuite. Un scan ne contient que des images ; l'OCR maison multilingue de GigaPDF en extrait le texte, qui alimente alors la conversion DOCX. Sans cette étape, le fichier Word ne contiendrait que des images de pages.",
       },
       {
         question: "Les tableaux du PDF restent-ils des tableaux dans Word ?",
@@ -1095,7 +1096,7 @@ export const TOOLS: ToolData[] = [
     h1: "Convertir un PDF en ODT modifiable dans votre suite OpenDocument",
     intro: [
       "Pour qui travaille sous une suite OpenDocument, convertir un PDF en .docx est un détour absurde : il faut ensuite réimporter le fichier Word dans le traitement de texte, avec une couche de conversion supplémentaire et son lot d'écarts. GigaPDF offre le chemin direct : du PDF vers l'ODT, le format natif des traitements de texte OpenDocument, en une seule transformation.",
-      "Le moteur analyse le PDF — paragraphes, images, structure de page — et reconstruit un document texte OpenDocument : le texte redevient des paragraphes éditables avec leurs attributs, les images reprennent leur place, et le fichier s'ouvre dans Writer comme n'importe quel .odt, prêt à être restylé avec vos modèles. Pour les PDF scannés, l'OCR maison intégré (français + anglais) fournit d'abord le texte, la conversion fait le reste.",
+      "Le moteur analyse le PDF — paragraphes, images, structure de page — et reconstruit un document texte OpenDocument : le texte redevient des paragraphes éditables avec leurs attributs, les images reprennent leur place, et le fichier s'ouvre dans Writer comme n'importe quel .odt, prêt à être restylé avec vos modèles. Pour les PDF scannés, l'OCR maison intégré (moteur multilingue) fournit d'abord le texte, la conversion fait le reste.",
       "Ce choix de format n'est pas anodin : l'ODT est une norme ISO ouverte, lisible aujourd'hui et dans vingt ans, sans dépendance à un éditeur. GigaPDF — open source, auto-hébergeable, sans filigrane — complète logiquement cette philosophie : vos documents repassent du format figé au format libre, avec des outils libres.",
     ],
     howTo: {
@@ -1130,7 +1131,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Puis-je convertir un scan en ODT ?",
         answer:
-          "Oui, en chaînant deux outils GigaPDF : l'OCR d'abord, qui reconnaît le texte du scan en français et en anglais, puis l'export ODT, qui le structure en document Writer. Sans l'étape OCR, un scan n'a pas de texte à convertir.",
+          "Oui, en chaînant deux outils GigaPDF : l'OCR d'abord, qui reconnaît le texte du scan dans de nombreuses langues et écritures, puis l'export ODT, qui le structure en document Writer. Sans l'étape OCR, un scan n'a pas de texte à convertir.",
       },
       {
         question: "Le fichier ODT produit est-il standard ?",

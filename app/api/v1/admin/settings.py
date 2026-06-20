@@ -88,7 +88,7 @@ def get_current_settings() -> SystemSettings:
         "system_name": os.getenv("SYSTEM_NAME", "GigaPDF"),
         "system_url": os.getenv("SYSTEM_URL", "http://localhost:3000"),
         "support_email": os.getenv("SUPPORT_EMAIL", "support@gigapdf.com"),
-        "max_file_size_mb": int(os.getenv("MAX_FILE_SIZE_MB", "100")),
+        "max_file_size_mb": int(os.getenv("MAX_FILE_SIZE_MB", "250")),
         "max_pages_per_document": int(os.getenv("MAX_PAGES_PER_DOCUMENT", "1000")),
         "max_documents_per_user": int(os.getenv("MAX_DOCUMENTS_PER_USER", "1000")),
         "storage_provider": os.getenv("STORAGE_PROVIDER", "s3"),

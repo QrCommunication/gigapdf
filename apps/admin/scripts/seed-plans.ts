@@ -39,7 +39,7 @@ const PLANS = [
     interval: "month",
     storage_limit_bytes: GB(5),
     api_calls_limit: 1000,
-    document_limit: 100,
+    document_limit: 1000,
     is_tenant_plan: false,
     max_members: 1,
     features: {

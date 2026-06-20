@@ -305,10 +305,12 @@ describe('POST /api/office/upload', () => {
 
   // ── Size validation ───────────────────────────────────────────────────────
 
-  it('returns 413 when file exceeds 25 MB', async () => {
-    const bigContent = new Uint8Array(25 * 1024 * 1024 + 1);
-    bigContent.set(ZIP_MAGIC, 0);
-    const file = makeFile('huge.docx', bigContent);
+  it('returns 413 when file exceeds 250 MB', async () => {
+    // Mock the reported size (250 MB + 1) instead of allocating it: the route
+    // rejects on file.size before reading the body, so a tiny file with an
+    // overridden size getter exercises the same 413 path without the OOM.
+    const file = makeFile('huge.docx', ZIP_MAGIC);
+    Object.defineProperty(file, 'size', { value: 250 * 1024 * 1024 + 1, configurable: true });
     const req = makeRequest(file);
     const res = await POST(req);
     expect(res.status).toBe(413);
@@ -317,10 +319,11 @@ describe('POST /api/office/upload', () => {
     expect(body.error).toMatch(/too large/i);
   });
 
-  it('accepts a file exactly at the 25 MB limit', async () => {
-    const atLimit = new Uint8Array(25 * 1024 * 1024);
-    atLimit.set(ZIP_MAGIC, 0);
-    const file = makeFile('at-limit.pptx', atLimit);
+  it('accepts a file exactly at the 250 MB limit', async () => {
+    // Override size to exactly the limit (≤ MAX_FILE_SIZE passes); the tiny
+    // ZIP-magic body still satisfies the magic-bytes check + mocked conversion.
+    const file = makeFile('at-limit.pptx', ZIP_MAGIC);
+    Object.defineProperty(file, 'size', { value: 250 * 1024 * 1024, configurable: true });
     const req = makeRequest(file);
     const res = await POST(req);
     expect(res.status).toBe(200);
