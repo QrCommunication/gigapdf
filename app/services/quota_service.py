@@ -134,12 +134,12 @@ PLANS = {
     "starter": {
         "storage_limit_bytes": 25 * 1024 * 1024 * 1024,  # 25GB
         "api_calls_limit": 10000,  # per month
-        "document_limit": 500,
+        "document_limit": 5000,
     },
     "pro": {
         "storage_limit_bytes": 100 * 1024 * 1024 * 1024,  # 100GB
         "api_calls_limit": 100000,  # per month
-        "document_limit": 2000,
+        "document_limit": UNLIMITED,  # unlimited (matches seed + landing)
     },
     "enterprise": {
         "storage_limit_bytes": UNLIMITED,  # unlimited (matches seed + landing)

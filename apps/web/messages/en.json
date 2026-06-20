@@ -553,7 +553,7 @@
 					"features": {
 						"storage": "25 GB storage",
 						"apiCalls": "10,000 API calls/month",
-						"documents": "500 documents",
+						"documents": "5000 documents",
 						"members": "5 team members",
 						"support": "E-mail support",
 						"trial": "14-day free trial"
@@ -566,7 +566,7 @@
 					"features": {
 						"storage": "100 GB storage",
 						"apiCalls": "100,000 API calls/month",
-						"documents": "2,000 documents",
+						"documents": "Unlimited documents",
 						"branding": "Custom branding",
 						"support": "Priority support",
 						"api": "Extended API access",

@@ -394,12 +394,12 @@ export const TOOLS: ToolData[] = [
       {
         question: "Quelle qualité de scan ou d'image faut-il pour un bon résultat ?",
         answer:
-          "L'OCR donne d'excellents résultats sur des scans nets à 300 dpi, ou des photos bien éclairées et cadrées, avec un texte d'imprimerie. Les documents inclinés, les photocopies de photocopies, les clichés flous ou les très petites tailles de caractères dégradent la reconnaissance ; mieux vaut numériser à plat, ou photographier bien à plat et en bonne résolution quand c'est possible.",
+          "L'OCR donne d'excellents résultats sur des scans nets à 300 dpi, ou des photos bien éclairées et cadrées, qu'il s'agisse de texte imprimé ou d'écriture manuscrite soignée. Les documents inclinés, les photocopies de photocopies, les clichés flous ou les très petites tailles de caractères dégradent la reconnaissance ; mieux vaut numériser à plat, ou photographier bien à plat et en bonne résolution quand c'est possible.",
       },
       {
         question: "L'OCR reconnaît-il l'écriture manuscrite ?",
         answer:
-          "Non, et il faut s'en méfier des promesses contraires : l'OCR est conçu pour les caractères imprimés. Une mention manuscrite isolée sur un formulaire ne sera généralement pas reconnue, même si le reste du document imprimé l'est parfaitement.",
+          "Oui. Le moteur embarque un modèle dédié à l'écriture manuscrite : sur le benchmark de référence IAM, GigaPDF est le premier moteur sans dépendance tierce à dépasser Tesseract sur du manuscrit réel. La reconnaissance reste plus fiable sur une écriture soignée que sur un tracé très cursif ou négligé, et l'imprimé net donne toujours les meilleurs résultats — mais le manuscrit est bel et bien pris en charge.",
       },
       {
         question: "Que devient le document ou l'image d'origine après l'OCR ?",

@@ -369,12 +369,12 @@ export const TOOLS: ToolData[] = [
       {
         question: "What scan or image quality do I need for good results?",
         answer:
-          "The OCR performs best on clean 300 dpi scans, or well-lit, well-framed photos, of printed text. Skewed pages, photocopies of photocopies, blurry shots, and tiny font sizes drag recognition down — when it matters, scan or photograph flat and at a decent resolution.",
+          "The OCR performs best on clean 300 dpi scans, or well-lit, well-framed photos, of printed or neatly handwritten text. Skewed pages, photocopies of photocopies, blurry shots, and tiny font sizes drag recognition down — when it matters, scan or photograph flat and at a decent resolution.",
       },
       {
         question: "Does OCR read handwriting?",
         answer:
-          "No, and be wary of tools that promise otherwise: the OCR is built for printed characters. A handwritten note on a form will usually go unrecognized even when the printed body of the document reads perfectly.",
+          "Yes. The engine ships a dedicated handwriting model: on the reference IAM benchmark, GigaPDF is the first dependency-free engine to beat Tesseract on real handwriting. Recognition is more reliable on neat handwriting than on heavily cursive or messy strokes, and clean print still gives the best results — but handwriting is genuinely supported.",
       },
       {
         question: "What happens to the original document or image after OCR?",
