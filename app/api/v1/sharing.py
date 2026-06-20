@@ -38,11 +38,25 @@ class ShareDocumentRequest(BaseModel):
         default=7, ge=1, le=30, description="Days until invitation expires"
     )
 
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "invitee_email": "teammate@example.com",
+                "permission": "edit",
+                "message": "Here is the Q1 report — feel free to edit.",
+                "expires_in_days": 7,
+            }
+        }
+
 
 class UpdatePermissionRequest(BaseModel):
     """Request body for updating share permission."""
 
     permission: Literal["view", "edit"] = Field(..., description="New permission level")
+
+    class Config:
+        json_schema_extra = {"example": {"permission": "view"}}
 
 
 class CreatePublicLinkRequest(BaseModel):
@@ -51,6 +65,9 @@ class CreatePublicLinkRequest(BaseModel):
     expires_in_days: int | None = Field(
         default=None, ge=1, le=365, description="Days until link expires (optional)"
     )
+
+    class Config:
+        json_schema_extra = {"example": {"expires_in_days": 30}}
 
 
 # Endpoints

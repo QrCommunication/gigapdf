@@ -154,6 +154,15 @@ from the SDK (the key is sent as a header, never in the URL).
 - The JWT is signed with `EMBED_JWT_SECRET` (different from `APP_SECRET_KEY`).
 - Origin restrictions encoded in the token — `validate-token` enforces them
   without a DB round-trip.
+
+## Example
+
+```bash
+curl -X POST https://api.giga-pdf.com/api/v1/embed/session-token \\
+  -H "X-API-Key: giga_pub_xxxxxxxxxxxxxxxxxxxx" \\
+  -H "Origin: https://your-app.example.com"
+# → { "data": { "session_token": "<jwt>", "expires_in": 1800 } }
+```
 """,
     responses={
         200: {"description": "Session token issued"},
@@ -356,6 +365,17 @@ Create a new embed editing session by uploading a PDF file.
 Requires a publishable API key (`giga_pub_*`) in the `X-API-Key` header.
 The PDF is uploaded and parsed, returning a session ID and document ID
 that can be used to load the document in the embed editor.
+
+Maximum upload size for embed sessions is **100 MB**.
+
+## Example
+
+```bash
+curl -X POST https://api.giga-pdf.com/api/v1/embed/sessions \\
+  -H "X-API-Key: giga_pub_xxxxxxxxxxxxxxxxxxxx" \\
+  -F "file=@contract.pdf"
+# → { "data": { "session_id": "...", "document_id": "..." } }
+```
 """,
     responses={
         201: {"description": "Session created — document ready for editing"},

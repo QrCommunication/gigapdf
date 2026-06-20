@@ -150,6 +150,18 @@ Leave null to allow requests from any origin.
 
 The ``rate_limit`` field (requests per minute) is independent of the
 plan-level quota. It defaults to 60 req/min.
+
+## Example
+
+```bash
+curl -X POST https://api.giga-pdf.com/api/v1/api-keys \\
+  -H "Authorization: Bearer <jwt>" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name": "My mobile app", "scopes": "read,write", "rate_limit": 60}'
+```
+
+The created secret key (``data.key``, ``giga_pk_*``) is returned **once** —
+use it afterwards as ``X-API-Key: giga_pk_...`` on other endpoints.
 """,
     responses={
         201: {

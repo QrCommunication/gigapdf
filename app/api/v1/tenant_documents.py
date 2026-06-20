@@ -43,6 +43,14 @@ class ShareDocumentRequest(BaseModel):
         description="Access level: 'read' for view-only, 'write' for edit access"
     )
 
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "access_level": "write",
+            }
+        }
+
 
 class SharedDocumentResponse(BaseModel):
     """Shared document response."""
