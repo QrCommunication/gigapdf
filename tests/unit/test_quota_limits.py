@@ -35,12 +35,14 @@ class TestPlanConfigurationsMatchSeed:
     def test_starter_plan_limits_match_seed(self):
         assert PLANS["starter"]["storage_limit_bytes"] == 25 * GB
         assert PLANS["starter"]["api_calls_limit"] == 10000
-        assert PLANS["starter"]["document_limit"] == 500
+        assert PLANS["starter"]["document_limit"] == 5000
 
     def test_pro_plan_limits_match_seed(self):
         assert PLANS["pro"]["storage_limit_bytes"] == 100 * GB
         assert PLANS["pro"]["api_calls_limit"] == 100000
-        assert PLANS["pro"]["document_limit"] == 2000
+        # pro documents are now unlimited (-1), like enterprise — mirrors
+        # the seed (apps/admin/scripts/seed-plans.ts) and landing pricing.
+        assert PLANS["pro"]["document_limit"] == UNLIMITED
 
     def test_enterprise_plan_is_unlimited_on_all_axes(self):
         """Enterprise = unlimited (-1) everywhere, like the seed and landing.

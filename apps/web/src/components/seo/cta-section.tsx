@@ -26,7 +26,7 @@ const COPY: Record<
 > = {
   fr: {
     freePlan:
-      "Plan gratuit complet : toutes les fonctionnalités, 5 Go de stockage, 100 documents et 1 000 appels API par mois. Sans carte bancaire.",
+      "Plan gratuit complet : toutes les fonctionnalités, 5 Go de stockage, 1 000 documents et 1 000 appels API par mois. Sans carte bancaire.",
     register: "Créer un compte gratuit",
     openEditor: "Ouvrir l'éditeur",
     ossTitle: "100 % open source, auto-hébergeable",
@@ -36,7 +36,7 @@ const COPY: Record<
   },
   en: {
     freePlan:
-      "The free plan is complete: every feature, 5 GB of storage, 100 documents and 1,000 API calls per month. No credit card required.",
+      "The free plan is complete: every feature, 5 GB of storage, 1,000 documents and 1,000 API calls per month. No credit card required.",
     register: "Create a free account",
     openEditor: "Open the editor",
     ossTitle: "100% open source, self-hostable",

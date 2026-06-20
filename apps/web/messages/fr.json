@@ -553,7 +553,7 @@
 					"features": {
 						"storage": "25 Go de stockage",
 						"apiCalls": "10 000 appels API/mois",
-						"documents": "500 documents",
+						"documents": "5000 documents",
 						"members": "5 membres d'équipe",
 						"support": "Support par e-mail",
 						"trial": "Essai gratuit de 14 jours"
@@ -566,7 +566,7 @@
 					"features": {
 						"storage": "100 Go de stockage",
 						"apiCalls": "100 000 appels API/mois",
-						"documents": "2 000 documents",
+						"documents": "Documents illimités",
 						"branding": "Personnalisation de marque",
 						"support": "Support prioritaire",
 						"api": "Accès API étendu",
