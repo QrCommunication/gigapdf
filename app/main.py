@@ -164,7 +164,11 @@ def create_application() -> FastAPI:
         },
         {
             "name": "export",
-            "description": "Export documents to various formats (PNG, JPEG, PDF, HTML)",
+            "description": (
+                "Deprecated server-side export. Rendering and export to images "
+                "and other formats now runs client-side in the editor "
+                "(gigapdf-lib); the backend no longer exposes export endpoints."
+            ),
         },
         {
             "name": "merge-split",
@@ -239,29 +243,47 @@ def create_application() -> FastAPI:
     app = FastAPI(
         title="GigaPDF API",
         description="""
-# GigaPDF — Open-Source WYSIWYG PDF Engine
+# GigaPDF — Source-Available WYSIWYG PDF Engine
 
 A comprehensive REST API for PDF manipulation, powering a visual,
 canvas-based PDF editor, a document management system (GED) and
 real-time collaboration.
 
-GigaPDF is **open source**, licensed under the
-[GNU AGPL-3.0](https://github.com/QrCommunication/gigapdf/blob/main/LICENSE),
-and fully self-hostable. Source code:
+GigaPDF is **source-available** software, licensed under the
+[PolyForm Noncommercial License 1.0.0](https://github.com/QrCommunication/gigapdf/blob/main/LICENSE):
+**free for any noncommercial use**, while commercial use requires a separate
+commercial license (contact QR Communication). The platform is fully
+self-hostable. Source code:
 [github.com/QrCommunication/gigapdf](https://github.com/QrCommunication/gigapdf).
+
+## Sovereign by Design — Zero Third-Party Binaries
+
+GigaPDF runs **no external binaries** (no Tesseract, LibreOffice, Playwright,
+MuPDF or pdf-lib). Every PDF operation is handled by the in-house engine
+(`gigapdf-lib`), making the whole pipeline self-contained and auditable.
 
 ## Features
 
-- **Document Management**: Upload, parse, download, organize (GED), and version PDF documents
+- **Document Management**: Upload, parse, download, organize (GED), and version PDF documents (up to **250 MB per file**)
 - **Page Operations**: Add, remove, reorder, rotate, and resize pages
 - **Element Editing**: True in-place editing of text, images, shapes, and annotations
 - **Forms**: Create, fill, and flatten AcroForm fields
-- **OCR**: Searchable text from scanned documents — in-house OCR engine (gigapdf-lib, WebAssembly, client-side), no third-party binary
-- **Office Conversions**: Import and export 9 Office formats (DOCX/XLSX/PPTX, ODF, legacy OLE2) via the in-house engine (no LibreOffice)
+- **OCR**: Searchable text from scanned documents via the in-house OCR engine
+  compiled to **WebAssembly and executed client-side** (in the browser).
+  It is **multi-script** — Latin, Cyrillic, Greek, Arabic, Hebrew, Tamil,
+  Devanagari, Bengali and Chinese. Recognised OCR blocks are persisted through
+  `POST /api/v1/storage/documents/{id}/ocr-blocks`. No server-side Tesseract.
+- **Office Conversions**: Import and export Office formats (DOCX/XLSX/PPTX, ODF,
+  legacy OLE2) via the **in-house engine** — no LibreOffice.
 - **Digital Signatures**: PKCS#7 / CAdES signing
 - **Collaboration**: Real-time multi-user editing over WebSocket
-- **Export**: Render PDFs to PNG, JPEG, HTML, and Office formats
+- **Semantic Search**: full-text and meaning-based search powered by
+  **fastembed embeddings computed locally** — no third-party AI API.
 - **Security**: Encrypt/decrypt PDFs, manage permissions, true redaction
+
+> **Note on export**: Rendering/export to images and other formats now runs
+> **entirely client-side** in the editor (via `gigapdf-lib`). The backend no
+> longer ships an export endpoint.
 
 ## Authentication
 
@@ -284,13 +306,14 @@ Users can create or join organizations (tenants) to share documents and quotas:
 ## Billing & Subscriptions
 
 When billing is enabled, GigaPDF integrates Stripe. Every feature ships on every
-plan (free included) — plans differ by volume (storage, documents, API calls,
+plan — the **free plan includes 1000 documents, 5 GB of storage and 1000 API
+calls per month**. Paid plans differ by volume (storage, documents, API calls,
 team members), branding and support. Self-hosted instances can run entirely
 without Stripe.
 
 ## Async Operations
 
-Large file operations (OCR, export, Office conversion, merge) are processed
+Large file operations (OCR persistence, Office conversion, merge) are processed
 asynchronously by Celery workers. Use the `/api/v1/jobs/{job_id}` endpoint to
 track progress.
 
@@ -316,7 +339,7 @@ Rate limits vary by plan. Rate limit headers are included in every response:
 - `X-RateLimit-Remaining`: requests remaining in the current window
 - `X-RateLimit-Reset`: Unix timestamp when the limit resets
         """,
-        version="1.6.0",
+        version="1.7.0",
         openapi_url="/api/v1/openapi.json",
         docs_url="/api/docs",
         redoc_url="/api/redoc",
@@ -327,7 +350,7 @@ Rate limits vary by plan. Rate limit headers are included in every response:
             "email": "support@giga-pdf.com",
         },
         license_info={
-            "name": "AGPL-3.0-or-later",
+            "name": "PolyForm Noncommercial License 1.0.0",
             "url": "https://github.com/QrCommunication/gigapdf/blob/main/LICENSE",
         },
         servers=openapi_servers,

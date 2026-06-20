@@ -19,12 +19,20 @@ class DocumentUploadParams(BaseModel):
     )
     ocr_enabled: bool = Field(
         default=False,
-        description="Enable OCR (Optical Character Recognition) for scanned pages with no embedded text.",
+        description=(
+            "Enable OCR (Optical Character Recognition) for scanned pages with no "
+            "embedded text. OCR runs client-side in the browser via the in-house "
+            "WebAssembly engine; this flag marks the document as OCR-eligible."
+        ),
         examples=[False],
     )
     ocr_languages: str = Field(
         default="fra+eng",
-        description="Tesseract language codes for OCR, combined with '+'. See https://tesseract-ocr.github.io/tessdoc/Data-Files-in-different-versions.html for available codes.",
+        description=(
+            "Hint for the OCR scripts to recognise, combined with '+'. The in-house "
+            "multi-script engine supports Latin, Cyrillic, Greek, Arabic, Hebrew, "
+            "Tamil, Devanagari, Bengali and Chinese (no Tesseract)."
+        ),
         examples=["fra+eng", "eng", "deu+fra"],
     )
     generate_previews: bool = Field(

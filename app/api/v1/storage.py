@@ -487,6 +487,14 @@ class CreateFolderRequest(BaseModel):
         description="Parent folder ID (null for root)",
     )
 
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "Invoices 2026",
+                "parent_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            }
+        }
+
 
 @router.post(
     "/documents",
@@ -2548,6 +2556,15 @@ class UpdateDocumentRequest(BaseModel):
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
 
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "Q1 Financial Report (final).pdf",
+                "extracted_text": "Quarterly results... revenue grew 12% ...",
+                "tags": ["finance", "q1", "report"],
+            }
+        }
+
 
 # Backwards-compatible alias (historical name of the rename-only request model)
 RenameDocumentRequest = UpdateDocumentRequest
@@ -2782,6 +2799,15 @@ class OcrBlockIn(BaseModel):
     text: str = Field(min_length=1, description="OCR text of the block")
     bbox: OcrBlockBBox | None = Field(default=None, description="Block bounding box")
 
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "page": 0,
+                "text": "INVOICE N° 2026-0042",
+                "bbox": {"x": 72.0, "y": 760.0, "w": 220.0, "h": 18.0},
+            }
+        }
+
 
 class IndexOcrBlocksRequest(BaseModel):
     """Request body for (re-)indexing a document's OCR blocks."""
@@ -2789,6 +2815,24 @@ class IndexOcrBlocksRequest(BaseModel):
     blocks: list[OcrBlockIn] = Field(
         description="OCR blocks to index (replaces any existing index for the document)",
     )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "blocks": [
+                    {
+                        "page": 0,
+                        "text": "INVOICE N° 2026-0042",
+                        "bbox": {"x": 72.0, "y": 760.0, "w": 220.0, "h": 18.0},
+                    },
+                    {
+                        "page": 0,
+                        "text": "Total due: 1 250,00 €",
+                        "bbox": {"x": 360.0, "y": 120.0, "w": 150.0, "h": 14.0},
+                    },
+                ]
+            }
+        }
 
 
 @router.post(
@@ -3808,6 +3852,9 @@ class RenameFolderRequest(BaseModel):
         max_length=255,
     )
 
+    class Config:
+        json_schema_extra = {"example": {"name": "Archived invoices"}}
+
 
 @router.patch(
     "/folders/{folder_id}",
@@ -4206,6 +4253,11 @@ class MoveDocumentRequest(BaseModel):
         description="Target folder ID (null for root)",
     )
 
+    class Config:
+        json_schema_extra = {
+            "example": {"folder_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"}
+        }
+
 
 @router.patch(
     "/documents/{stored_document_id}/move",
@@ -4431,6 +4483,11 @@ class MoveFolderRequest(BaseModel):
         default=None,
         description="Target parent folder ID (null for root)",
     )
+
+    class Config:
+        json_schema_extra = {
+            "example": {"parent_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"}
+        }
 
 
 @router.patch(

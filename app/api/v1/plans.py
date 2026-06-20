@@ -58,6 +58,37 @@ class PlanCreate(BaseModel):
     cta_text: str = Field(default="Get Started", description="Call-to-action text")
     trial_days: int | None = Field(None, description="Trial period in days")
 
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "slug": "pro",
+                "name": "Pro",
+                "description": "For power users who need more volume and branding.",
+                "price": 19.0,
+                "currency": "EUR",
+                "interval": "month",
+                "stripe_price_id": "price_1OxAbCDeFgHiJkLm",
+                "storage_limit_bytes": 53687091200,
+                "api_calls_limit": 50000,
+                "document_limit": 10000,
+                "is_tenant_plan": False,
+                "max_members": 1,
+                "features": {
+                    "storageGb": 50,
+                    "apiCallsPerMonth": 50000,
+                    "customBranding": True,
+                    "prioritySupport": True,
+                    "sla": False,
+                    "dedicatedAccount": False,
+                },
+                "is_active": True,
+                "is_popular": True,
+                "display_order": 2,
+                "cta_text": "Upgrade to Pro",
+                "trial_days": 14,
+            }
+        }
+
 
 class PlanUpdate(BaseModel):
     """Schema for updating a plan."""
@@ -80,6 +111,17 @@ class PlanUpdate(BaseModel):
     display_order: int | None = None
     cta_text: str | None = None
     trial_days: int | None = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "Pro (annual)",
+                "price": 190.0,
+                "interval": "year",
+                "is_popular": True,
+                "cta_text": "Save 2 months",
+            }
+        }
 
 
 class PlanResponse(BaseModel):
