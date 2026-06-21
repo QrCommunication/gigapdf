@@ -57,6 +57,21 @@ documents/versions).
   component, so editing behaves identically. In the continuous view the focused
   page is a full editor; other pages are fast, read-only page bitmaps.
 
+### Editor element editing & layers
+- Every element parsed from the PDF — text, **images and vector shapes** — is
+  addressable by a single **unified engine index**. Move/resize/delete are
+  applied **in place** (`transformElement`/`removeElement`) — lossless, no image
+  re-compression or shape re-draw. Geometry/rotation changes that can't be
+  expressed as a pure affine fall back to redact + re-add.
+- **Vector restyle** (fill/stroke/width/dash) is baked in place via
+  `setPathStyle`. Opacity changes fall back to re-add (PDF opacity needs an
+  ExtGState the in-place edit can't create).
+- **Layers** are an editor-side construct (not PDF OCGs): create/rename/reorder,
+  assign elements, lock/hide a whole layer (cascades to member elements). Layers
+  + element→layer membership are persisted per stored document via
+  `GET/PUT /api/v1/storage/documents/{id}/layers` (opaque JSONB), keyed by the
+  element's deterministic id so they survive a reload.
+
 ### Storage
 - PostgreSQL: Core data, users, tenants, permissions, metadata.
 - Redis: Cache, rate limits, async job queues.
