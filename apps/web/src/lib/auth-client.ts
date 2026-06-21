@@ -41,9 +41,11 @@ export const sendVerificationEmail = async (params: { email: string }) => {
   }
 };
 
+// Better Auth >= 1.6 renamed POST /api/auth/forget-password to
+// /api/auth/request-password-reset (the old path now returns 404).
 export const forgetPassword = async (params: { email: string; redirectTo?: string }) => {
   try {
-    const response = await fetch(`${baseURL}/api/auth/forget-password`, {
+    const response = await fetch(`${baseURL}/api/auth/request-password-reset`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params),
