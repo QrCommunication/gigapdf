@@ -1228,6 +1228,25 @@ export default function EditorPage() {
     saveWithPriority("debounced");
   }, [canvasHandle, setDirty, saveWithPriority]);
 
+  // Z-order: bring the selected element(s) to the front / send to the back.
+  // The canvas persists the new stacking order via the scene graph (no PDF
+  // binary reorder op exists in the engine — see EditorCanvasHandle docs).
+  const handleBringToFront = useCallback(() => {
+    for (const id of selectedElementIds) canvasHandle?.bringToFront(id);
+    if (selectedElementIds.length > 0) {
+      setDirty(true);
+      saveWithPriority("debounced");
+    }
+  }, [canvasHandle, selectedElementIds, setDirty, saveWithPriority]);
+
+  const handleSendToBack = useCallback(() => {
+    for (const id of selectedElementIds) canvasHandle?.sendToBack(id);
+    if (selectedElementIds.length > 0) {
+      setDirty(true);
+      saveWithPriority("debounced");
+    }
+  }, [canvasHandle, selectedElementIds, setDirty, saveWithPriority]);
+
   // Operations queue: records user-added/modified/deleted elements so the
   // save flow can apply them to the PDF binary before uploading. Without
   // this, edits only exist in the scene_graph (Redis) and vanish from the
@@ -2862,6 +2881,24 @@ export default function EditorPage() {
         return;
       }
 
+      // Ctrl/Cmd + ] - Bring selection to front (z-order)
+      if (cmdOrCtrl && e.key === "]") {
+        if (selectedElementIds.length > 0) {
+          e.preventDefault();
+          handleBringToFront();
+        }
+        return;
+      }
+
+      // Ctrl/Cmd + [ - Send selection to back (z-order)
+      if (cmdOrCtrl && e.key === "[") {
+        if (selectedElementIds.length > 0) {
+          e.preventDefault();
+          handleSendToBack();
+        }
+        return;
+      }
+
       // Ctrl/Cmd + F - Find & replace
       if (cmdOrCtrl && e.key === "f") {
         e.preventDefault();
@@ -2983,6 +3020,8 @@ export default function EditorPage() {
     handleRedo,
     handleDelete,
     handleDuplicate,
+    handleBringToFront,
+    handleSendToBack,
     handleAddImage,
     save,
     selectedElementIds,
@@ -3389,6 +3428,8 @@ export default function EditorPage() {
         onStrokeWidthChange={setStrokeWidth}
         onDelete={handleDelete}
         onDuplicate={handleDuplicate}
+        onBringToFront={handleBringToFront}
+        onSendToBack={handleSendToBack}
         onAddImage={handleAddImage}
         onInsertTable={handleInsertTable}
         onInsertLink={handleInsertLink}

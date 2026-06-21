@@ -43,7 +43,21 @@ export interface ElementObjectData {
   elementId?: string;
   type?: string;
   isPdfBackground?: boolean;
+  /**
+   * Engine UNIFIED element index (text run / image / vector path) carried from
+   * the parsed element. Round-tripped back onto `element.index` by
+   * `fabricObjectToElement` so the apply pipeline fires the lossless in-place
+   * ops (`replaceText`/`transformElement`/`removeElement`) instead of redact+add.
+   * Undefined for newly-added elements (no original engine element).
+   */
   index?: number;
+  /**
+   * Original element rotation (degrees) at parse time. Compared against the
+   * Fabric object's current `angle` to decide whether an image/shape in-place
+   * edit can use an affine `transformElement` (rotation unchanged) or must fall
+   * back to redact+add (rotation changed — affine can't express it here).
+   */
+  rotation0?: number;
   originalFont?: string | null;
   [key: string]: unknown;
 }
@@ -333,6 +347,9 @@ export async function renderElementsOverlay(
         (textObj as FabricObjectWithData).data = {
           elementId: textElement.elementId,
           type: "text",
+          // Engine text-run index → lossless in-place replaceText/moveElement.
+          index: textElement.index,
+          rotation0: textElement.transform?.rotation ?? 0,
           originalFont: textElement.style.originalFont,
           originalFill: textColour,
           originalBgColor: textElement.style.backgroundColor || "",
@@ -376,6 +393,10 @@ export async function renderElementsOverlay(
               (img as FabricObjectWithData).data = {
                 elementId: imgElement.elementId,
                 type: "image",
+                // Engine unified element index → lossless in-place
+                // transformElement (move/resize) / removeElement (delete).
+                index: imgElement.index,
+                rotation0: imgElement.transform?.rotation ?? 0,
               };
               canvas.add(img);
             })
@@ -494,6 +515,10 @@ export async function renderElementsOverlay(
           (fabricObj as FabricObjectWithData).data = {
             elementId: shapeElement.elementId,
             type: "shape",
+            // Engine unified element index → lossless in-place
+            // transformElement (move/resize) / removeElement (delete).
+            index: shapeElement.index,
+            rotation0: shapeElement.transform?.rotation ?? 0,
             originalFill: hasFill ? fillCss : null,
             originalStroke: hasStroke ? strokeCss : null,
             originalStrokeWidth: hasStroke ? shapeElement.style.strokeWidth : 0,

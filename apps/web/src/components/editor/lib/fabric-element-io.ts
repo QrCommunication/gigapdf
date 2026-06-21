@@ -209,6 +209,11 @@ export function fabricObjectToElement(
         blendMode: "normal" as const,
       },
       crop: null,
+      // Carry the ORIGINAL engine unified element index (stamped on data by the
+      // renderer for parsed images) so a moved/resized image keeps its in-place
+      // identity: apply-operations fires transformElement/removeElement instead
+      // of redact+add. Newly-added images have no index → stays undefined → add.
+      index: obj.data?.index as number | undefined,
     };
   }
 
@@ -311,6 +316,11 @@ export function fabricObjectToElement(
         strokeOpacity: 1,
         strokeDashArray: [],
       },
+      // Carry the ORIGINAL engine unified element index (stamped on data by the
+      // renderer for parsed shapes) so a moved/resized shape keeps its in-place
+      // identity: apply-operations fires transformElement/removeElement instead
+      // of redact+add. Newly-added shapes have no index → stays undefined → add.
+      index: obj.data?.index as number | undefined,
     };
   }
 

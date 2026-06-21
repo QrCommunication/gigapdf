@@ -71,6 +71,18 @@ export interface EditorCanvasHandle {
   deleteSelected: () => void;
   /** Dupliquer les éléments sélectionnés */
   duplicateSelected: () => void;
+  /**
+   * Remonter un élément au premier plan (z-order). Localise l'objet Fabric par
+   * `data.elementId`, le passe devant tous les autres (Fabric v6
+   * `canvas.bringObjectToFront`) et persiste l'ordre via le scene graph
+   * (`onElementModified`). No-op si l'élément n'est pas sur la page affichée.
+   */
+  bringToFront: (elementId: string) => void;
+  /**
+   * Renvoyer un élément à l'arrière-plan (z-order). Pendant du `bringToFront`
+   * via `canvas.sendObjectToBack`. Persiste l'ordre via le scene graph.
+   */
+  sendToBack: (elementId: string) => void;
   /** Obtenir les IDs des éléments sélectionnés */
   getSelectedIds: () => string[];
   /** Appliquer un formatage (gras/italique/souligné/alignement) aux textes sélectionnés */
@@ -2140,19 +2152,84 @@ export function EditorCanvas({
         const activeObjects = fabricRef.current.getActiveObjects();
         fabricRef.current.discardActiveObject();
         activeObjects.forEach((obj) => {
+          const srcData = (obj as FabricObjectWithData).data;
           obj.clone().then((cloned: FabricObject) => {
             cloned.set({
               left: (cloned.left || 0) + 20,
               top: (cloned.top || 0) + 20,
             });
-            (cloned as FabricObjectWithData).data = { elementId: generateId() };
+            // Preserve the source's editing metadata (type, originalFont,
+            // formFieldElement…) so the duplicate round-trips as the SAME
+            // element kind, but give it a FRESH elementId and DROP the engine
+            // `index`/`rotation0`: a duplicate is brand-new content with no
+            // original engine element, so it must take the `add` path (never an
+            // in-place transform of the original it was copied from).
+            const { index: _index, rotation0: _rotation0, ...keep } =
+              (srcData ?? {}) as FabricObjectWithData["data"] & {
+                index?: number;
+                rotation0?: number;
+              };
+            void _index;
+            void _rotation0;
+            (cloned as FabricObjectWithData).data = {
+              ...keep,
+              elementId: generateId(),
+            };
+            // `canvas.add` fires `object:added` → handleObjectAdded →
+            // onElementAdded → queueAdd, so the duplicate PERSISTS on save
+            // (previously it was Fabric-only and vanished on reload).
             fabricRef.current?.add(cloned);
+            fabricRef.current?.setActiveObject(cloned);
+            fabricRef.current?.requestRenderAll();
           });
         });
         fabricRef.current.renderAll();
         if (fabricRef.current) {
           saveHistory(fabricRef.current);
         }
+      },
+      bringToFront: (elementId: string) => {
+        const canvas = fabricRef.current;
+        if (!canvas) return;
+        const obj = canvas
+          .getObjects()
+          .find(
+            (o) => (o as FabricObjectWithData).data?.elementId === elementId,
+          ) as FabricObjectWithData | undefined;
+        if (!obj) return;
+        // Fabric v6 renamed the z-order API to the `*Object*` form.
+        canvas.bringObjectToFront(obj);
+        canvas.requestRenderAll();
+        // Persist the new stacking position in the scene graph. The PDF-binary
+        // pass has no unified "reorder" op (the engine exposes
+        // transform/remove/replace but not z-reorder), so the canonical
+        // z-order lives in the scene-graph element ORDER — re-emitting the
+        // element keeps the editor/collab state authoritative. The bounds are
+        // unchanged, so this records no redaction.
+        const element = fabricObjectToElement(obj);
+        if (element) {
+          const oldBounds = lastKnownBoundsRef.current.get(element.elementId);
+          onElementModifiedRef.current?.(element, oldBounds);
+        }
+        saveHistory(canvas);
+      },
+      sendToBack: (elementId: string) => {
+        const canvas = fabricRef.current;
+        if (!canvas) return;
+        const obj = canvas
+          .getObjects()
+          .find(
+            (o) => (o as FabricObjectWithData).data?.elementId === elementId,
+          ) as FabricObjectWithData | undefined;
+        if (!obj) return;
+        canvas.sendObjectToBack(obj);
+        canvas.requestRenderAll();
+        const element = fabricObjectToElement(obj);
+        if (element) {
+          const oldBounds = lastKnownBoundsRef.current.get(element.elementId);
+          onElementModifiedRef.current?.(element, oldBounds);
+        }
+        saveHistory(canvas);
       },
       getSelectedIds: () => {
         if (!fabricRef.current) return [];

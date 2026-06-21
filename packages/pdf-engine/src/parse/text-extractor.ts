@@ -1,4 +1,4 @@
-import { randomUUID, createHash } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import type { TextElement } from '@giga-pdf/types';
 import type { TextElementInfo } from '@qrcommunication/gigapdf-lib';
 import { rgbToHex } from '../utils';
@@ -72,15 +72,8 @@ function colorHex(color: [number, number, number]): string {
   return rgbToHex(color[0], color[1], color[2]);
 }
 
-/**
- * Derive a stable UUID from the block content + position so the same text at
- * the same location always gets the same id (useful for diffing/editing).
- */
-function deriveStableId(content: string, x: number, y: number, page: number): string {
-  const hash = createHash('sha256')
-    .update(`${page}:${x.toFixed(2)}:${y.toFixed(2)}:${content}`)
-    .digest('hex')
-    .slice(0, 32);
+/** Format a 32-hex digest as a UUID v4-shaped id (RFC 4122 variant bits). */
+function hashToUuid(hash: string): string {
   return [
     hash.slice(0, 8),
     hash.slice(8, 12),
@@ -88,6 +81,28 @@ function deriveStableId(content: string, x: number, y: number, page: number): st
     ((parseInt(hash[16]!, 16) & 0x3) | 0x8).toString(16) + hash.slice(17, 20),
     hash.slice(20, 32),
   ].join('-');
+}
+
+/**
+ * Derive a stable UUID from the block content + position so the same text at
+ * the same location always gets the same id (useful for diffing/editing the
+ * coalesced TextBlock API).
+ */
+function deriveBlockId(content: string, x: number, y: number, page: number): string {
+  const hash = createHash('sha256')
+    .update(`${page}:${x.toFixed(2)}:${y.toFixed(2)}:${content}`)
+    .digest('hex')
+    .slice(0, 32);
+  return hashToUuid(hash);
+}
+
+/**
+ * Derive a deterministic UUID-shaped id from a seed (per-run text elements).
+ * Seeded by `(page, type, text-run index)` — the engine's durable run identity —
+ * so two parses of the same PDF produce identical elementIds for the same run.
+ */
+function deriveStableId(seed: string): string {
+  return hashToUuid(createHash('sha256').update(seed).digest('hex').slice(0, 32));
 }
 
 // ---------------------------------------------------------------------------
@@ -195,9 +210,13 @@ function detectAlignment(
 // ---------------------------------------------------------------------------
 
 /** Map one engine text run to an editor `TextElement` (web coordinates). */
-function runToTextElement(run: TextElementInfo, pageHeight: number): TextElement {
+function runToTextElement(run: TextElementInfo, pageHeight: number, pageNumber: number): TextElement {
   return {
-    elementId: randomUUID(),
+    // Deterministic id seeded by (page, type, text-run index): parsing the SAME
+    // PDF twice yields the SAME elementId — required for cross-session layer
+    // persistence keying. The text-run index is the engine's durable identity
+    // for the run (stable across position edits via `moveElement`).
+    elementId: deriveStableId(`${pageNumber}:text:${run.index}`),
     type: 'text',
     // The engine text-run index drives true in-place editing downstream
     // (`replaceText`/`moveElement`/`removeElement`). A negative sentinel marks
@@ -273,7 +292,7 @@ export async function extractTextElementsByPage(
         const elements: TextElement[] = [];
         for (const run of doc.textElements(pageNumber)) {
           if (!run.text || run.text.trim() === '' || run.fontSize < 0.1) continue;
-          elements.push(runToTextElement(run, pageHeight));
+          elements.push(runToTextElement(run, pageHeight, pageNumber));
         }
         if (elements.length > 0) byPage.set(pageNumber, elements);
       }
@@ -374,7 +393,7 @@ export async function extractTextBlocks(
             rtlCharCount > content.length * 0.4 ? 'rtl' : 'ltr';
 
           allBlocks.push({
-            elementId: deriveStableId(content, blockX, blockY, pgNum),
+            elementId: deriveBlockId(content, blockX, blockY, pgNum),
             pageNumber: pgNum,
             content,
             bounds: {

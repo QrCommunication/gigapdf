@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import type { ShapeElement, ShapeType, Point } from '@giga-pdf/types';
 import type { VectorPathInfo } from '@qrcommunication/gigapdf-lib';
 import { rgbToHex } from '../utils';
@@ -144,8 +144,25 @@ function webBoundsFromPath(
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
+/**
+ * Derive a deterministic UUID-shaped id from a seed. Parsing the SAME PDF twice
+ * yields the SAME elementId (needed for cross-session layer persistence keying),
+ * seeded by `(page, type, unified-index)` — the engine's durable element
+ * identity, stable across moves.
+ */
+function deriveStableId(seed: string): string {
+  const hash = createHash('sha256').update(seed).digest('hex').slice(0, 32);
+  return [
+    hash.slice(0, 8),
+    hash.slice(8, 12),
+    '4' + hash.slice(13, 16),
+    ((parseInt(hash[16]!, 16) & 0x3) | 0x8).toString(16) + hash.slice(17, 20),
+    hash.slice(20, 32),
+  ].join('-');
+}
+
 /** Map one engine VectorPathInfo to a ShapeElement, or null when degenerate. */
-function toShape(path: VectorPathInfo, pageHeight: number): ShapeElement | null {
+function toShape(path: VectorPathInfo, pageHeight: number, pageNumber: number): ShapeElement | null {
   const segments = path.segments.map(toSegment).filter((s): s is PathSegment => s !== null);
   if (segments.length === 0) return null;
 
@@ -161,8 +178,13 @@ function toShape(path: VectorPathInfo, pageHeight: number): ShapeElement | null 
   const strokeColor = path.stroke ? rgbToHex(path.stroke[0], path.stroke[1], path.stroke[2]) : null;
 
   return {
-    elementId: randomUUID(),
+    elementId: deriveStableId(`${pageNumber}:shape:${path.index}`),
     type: 'shape',
+    // Engine UNIFIED element index (from `vectorPaths().index`) — the value
+    // `transformElement`/`removeElement`/`setPathStyle` accept directly. Stored
+    // straight from the engine item (not a re-derived local counter), so it is
+    // the true unified index, correct on pages that also have text/images.
+    index: path.index,
     bounds,
     transform: { rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
     layerId: null,
@@ -199,7 +221,7 @@ export async function extractDrawingElementsByPage(
         const pageHeight = doc.pageInfo(pageNumber).height;
         const shapes: ShapeElement[] = [];
         for (const path of doc.vectorPaths(pageNumber)) {
-          const shape = toShape(path, pageHeight);
+          const shape = toShape(path, pageHeight, pageNumber);
           if (shape) shapes.push(shape);
         }
         if (shapes.length > 0) byPage.set(pageNumber, shapes);

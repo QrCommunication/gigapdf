@@ -1583,6 +1583,8 @@
       "fillColor": "Couleur de remplissage",
       "strokeWidth": "Épaisseur du contour",
       "duplicate": "Dupliquer",
+      "bringToFront": "Mettre au premier plan",
+      "sendToBack": "Mettre à l'arrière-plan",
       "delete": "Supprimer",
       "transparent": "Transparent",
       "contentEdit": "Modifier le contenu",

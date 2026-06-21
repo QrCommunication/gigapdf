@@ -105,6 +105,8 @@ export interface ApplyOperationsResult {
   inPlaceReplaced: number;
   /** Number of `moveElement` in-place repositions applied. */
   inPlaceMoved: number;
+  /** Number of `transformElement` in-place affine edits applied (image/shape move/resize). */
+  inPlaceTransformed: number;
   /** Number of `removeElement` in-place deletes applied. */
   inPlaceRemoved: number;
 }
@@ -134,6 +136,19 @@ const MAX_RUN_INDEX = 2 ** 31;
 
 /** A position delta below this (in PDF points) is treated as "no move". */
 const MOVE_TOLERANCE = 0.5;
+
+/** A rotation delta below this (in degrees) is treated as "rotation unchanged". */
+const ROTATION_TOLERANCE = 0.5;
+
+/**
+ * Whether two rotation angles (degrees) are equal within `ROTATION_TOLERANCE`,
+ * normalising both into `[0, 360)` first so e.g. `-90` and `270` compare equal.
+ */
+function rotationUnchanged(a: number, b: number): boolean {
+  const norm = (deg: number) => ((deg % 360) + 360) % 360;
+  const d = Math.abs(norm(a) - norm(b));
+  return Math.min(d, 360 - d) <= ROTATION_TOLERANCE;
+}
 
 /**
  * Validate an engine run index. The engine assigns a negative sentinel (e.g.
@@ -189,18 +204,88 @@ function styleMatchesRun(
   return true;
 }
 
-/** One classified in-place op, resolved against the run currently at `index`. */
+/** One classified in-place op, resolved against the element currently at `index`. */
 interface InPlaceOp {
   pageNumber: number;
   index: number;
-  /** `replace`: set new text (+ optional move); `remove`: delete the run. */
-  kind: 'replace' | 'remove';
+  /**
+   * `replace`: set new text (+ optional move) on a TEXT run.
+   * `transform`: apply an affine `matrix` to an IMAGE/SHAPE element in place.
+   * `remove`: delete the element (text/image/shape).
+   */
+  kind: 'replace' | 'transform' | 'remove';
   /** New text content (for `replace`). */
   newText?: string;
   /** PDF-space deltas for an accompanying `moveElement` (for `replace`). */
   move?: { dx: number; dy: number };
+  /** Affine matrix `[a,b,c,d,e,f]` for `transformElement` (for `transform`). */
+  matrix?: [number, number, number, number, number, number];
   /** Diagnostics. */
   originalIndex: number;
+}
+
+/** Element types eligible for index-based in-place edits beyond text. */
+type InPlaceGeometryType = 'image' | 'shape';
+
+/**
+ * Compute the affine matrix `transformElement` must apply to move/resize an
+ * `image` or `shape` from `oldPdf` to `newPdf` (both in PDF user space, origin
+ * bottom-left), with NO rotation/shear (a rotation change falls back upstream).
+ *
+ * The engine wraps the element in `q a b c d e f cm <ops> Q`, but the frame in
+ * which `[a,b,c,d,e,f]` acts DIFFERS by element kind (verified empirically — see
+ * `apply-operations-geometry-inplace.test.ts`):
+ *
+ *  - SHAPE / TEXT — vector ops carry PAGE-space coordinates, so the matrix is a
+ *    plain page-space scale+translate mapping the old PDF box onto the new one:
+ *        sx = newW/oldW, sy = newH/oldH
+ *        e  = newX - sx*oldX, f = newY - sy*oldY
+ *    (A pure move `[1,0,0,1,Δx,Δy]` shifts the path by `(Δx,Δy)` PDF points.)
+ *
+ *  - IMAGE — the image is drawn as a 1×1 unit square scaled into place by its
+ *    OWN placement `cm = [oldW,0,0,oldH, oldX,oldY]`, and `transformElement`
+ *    applies the matrix in that LOCAL (pre-placement) unit frame. So a page-space
+ *    delta must be divided by the placement size, and the matrix that maps the
+ *    old placement box to the new one is `M = cm_old⁻¹ · cm_new`:
+ *        a = newW/oldW, d = newH/oldH
+ *        e = (newX - oldX)/oldW, f = (newY - oldY)/oldH
+ *    (A page-space move of `(Δx,Δy)` becomes `e=Δx/oldW, f=Δy/oldH`.)
+ *
+ * Returns `null` when the move/resize is within `MOVE_TOLERANCE` (treated as a
+ * no-op) or when the old box is degenerate (zero width/height — undefined scale).
+ */
+function computeAffineMatrix(
+  geometryType: InPlaceGeometryType,
+  oldPdf: { x: number; y: number; width: number; height: number },
+  newPdf: { x: number; y: number; width: number; height: number },
+): [number, number, number, number, number, number] | null {
+  if (oldPdf.width <= 0 || oldPdf.height <= 0) return null;
+  const sx = newPdf.width / oldPdf.width;
+  const sy = newPdf.height / oldPdf.height;
+
+  let e: number;
+  let f: number;
+  if (geometryType === 'image') {
+    // Local (unit) frame: divide the page-space translation by the old size.
+    e = (newPdf.x - oldPdf.x) / oldPdf.width;
+    f = (newPdf.y - oldPdf.y) / oldPdf.height;
+  } else {
+    // Page-space frame: scale-about-origin + translate.
+    e = newPdf.x - sx * oldPdf.x;
+    f = newPdf.y - sy * oldPdf.y;
+  }
+
+  // No-op short-circuit: identity scale AND sub-tolerance PAGE-space translation.
+  // (Compare the page-space delta directly so the tolerance has the same
+  // meaning for both frames — the image `e/f` are unit-space and would compare
+  // against a different magnitude.)
+  const isIdentityScale = Math.abs(sx - 1) < 1e-3 && Math.abs(sy - 1) < 1e-3;
+  const pageDx = newPdf.x - oldPdf.x;
+  const pageDy = newPdf.y - oldPdf.y;
+  if (isIdentityScale && Math.abs(pageDx) <= MOVE_TOLERANCE && Math.abs(pageDy) <= MOVE_TOLERANCE) {
+    return null;
+  }
+  return [sx, 0, 0, sy, e, f];
 }
 
 export async function applyOperations(
@@ -252,6 +337,30 @@ export async function applyOperations(
     return runs;
   };
 
+  // Same idea for image/shape geometry: snapshot each page's image and vector
+  // elements once so we can (a) validate that the unified index still resolves
+  // to an element of the expected geometry kind, and (b) read its ORIGINAL
+  // rotation to decide whether an affine `transformElement` is expressible
+  // (rotation unchanged) or the op must fall back (rotation changed).
+  const imagesByPage = new Map<number, ReturnType<typeof inPlaceHandle._doc.imageElements>>();
+  const imagesFor = (page: number) => {
+    let images = imagesByPage.get(page);
+    if (!images) {
+      images = inPlaceHandle._doc.imageElements(page);
+      imagesByPage.set(page, images);
+    }
+    return images;
+  };
+  const pathsByPage = new Map<number, ReturnType<typeof inPlaceHandle._doc.vectorPaths>>();
+  const pathsFor = (page: number) => {
+    let paths = pathsByPage.get(page);
+    if (!paths) {
+      paths = inPlaceHandle._doc.vectorPaths(page);
+      pathsByPage.set(page, paths);
+    }
+    return paths;
+  };
+
   const inPlaceOps: InPlaceOp[] = [];
   const fallbackOps: ElementOperation[] = [];
 
@@ -260,15 +369,77 @@ export async function applyOperations(
     const { action, pageNumber, element } = op;
     const elementType = element['type'] as string | undefined;
 
-    // Only text elements carrying a valid engine run index are eligible. `add`
-    // always materialises brand-new content (no existing run to edit).
-    const rawIndex = (element as Partial<TextElement>).index;
-    const eligible =
-      (action === 'update' || action === 'delete') &&
-      elementType === 'text' &&
-      isValidRunIndex(rawIndex);
+    // `add` always materialises brand-new content (no existing element to edit).
+    if (action !== 'update' && action !== 'delete') {
+      fallbackOps.push(op);
+      continue;
+    }
 
-    if (!eligible) {
+    const rawIndex = (element as Partial<TextElement>).index;
+    const hasValidIndex = isValidRunIndex(rawIndex);
+
+    // ── Image / shape in-place (index-based geometry edits) ─────────────────
+    // An image/shape carrying a valid unified index can be deleted or
+    // moved/resized losslessly via removeElement / transformElement.
+    if (elementType === 'image' || elementType === 'shape') {
+      if (!hasValidIndex) {
+        fallbackOps.push(op);
+        continue;
+      }
+      const index = rawIndex as number;
+      const geometryType = elementType as InPlaceGeometryType;
+      // Resolve the element in the engine snapshot to read its ORIGINAL
+      // rotation; if the index no longer resolves (stale edit), fall back.
+      const original =
+        geometryType === 'image'
+          ? imagesFor(pageNumber).find((e) => e.index === index)
+          : pathsFor(pageNumber).find((e) => e.index === index);
+      if (!original) {
+        fallbackOps.push(op);
+        continue;
+      }
+
+      if (action === 'delete') {
+        inPlaceOps.push({ pageNumber, index, kind: 'remove', originalIndex: opIndex });
+        continue;
+      }
+
+      // action === 'update' — only a geometry (move/resize) change with the
+      // rotation UNCHANGED is expressible by an affine `transformElement`.
+      // A rotation change (or anything we can't express, e.g. a shape style
+      // change) falls back to redact + add — left for a later phase.
+      const geomElement = element as unknown as { transform?: { rotation?: number }; bounds?: Bounds };
+      // Shapes only have `rotation` on stored vector paths via the placement
+      // CTM; the engine reports the path's effective rotation as 0 for the
+      // axis-aligned content we extract, so treat a missing field as 0.
+      const originalRotation =
+        geometryType === 'image' ? (original as { rotation: number }).rotation : 0;
+      const newRotation = geomElement.transform?.rotation ?? originalRotation;
+      if (!rotationUnchanged(originalRotation, newRotation)) {
+        fallbackOps.push(op);
+        continue;
+      }
+      if (!op.oldBounds || !geomElement.bounds) {
+        // No old box to map FROM → cannot compute the affine; fall back.
+        fallbackOps.push(op);
+        continue;
+      }
+      const matrix = computeAffineMatrix(
+        geometryType,
+        toPdfBounds(inPlaceHandle, pageNumber, op.oldBounds),
+        toPdfBounds(inPlaceHandle, pageNumber, geomElement.bounds),
+      );
+      if (matrix === null) {
+        // No-op (within tolerance) or degenerate old box — skip silently.
+        continue;
+      }
+      inPlaceOps.push({ pageNumber, index, kind: 'transform', matrix, originalIndex: opIndex });
+      continue;
+    }
+
+    // ── Text in-place (replaceText / moveElement / removeElement) ───────────
+    // Only text elements carrying a valid engine run index are eligible.
+    if (elementType !== 'text' || !hasValidIndex) {
       fallbackOps.push(op);
       continue;
     }
@@ -323,6 +494,7 @@ export async function applyOperations(
   // `removeElement` never invalidates a not-yet-processed lower index.
   let inPlaceReplaced = 0;
   let inPlaceMoved = 0;
+  let inPlaceTransformed = 0;
   let inPlaceRemoved = 0;
 
   if (inPlaceOps.length > 0) {
@@ -352,6 +524,10 @@ export async function applyOperations(
         try {
           if (ip.kind === 'remove') {
             if (inPlaceHandle._doc.removeElement(page, ip.index)) inPlaceRemoved++;
+          } else if (ip.kind === 'transform') {
+            if (ip.matrix && inPlaceHandle._doc.transformElement(page, ip.index, ip.matrix)) {
+              inPlaceTransformed++;
+            }
           } else {
             if (inPlaceHandle._doc.replaceText(page, ip.index, ip.newText ?? '')) {
               inPlaceReplaced++;
@@ -512,6 +688,7 @@ export async function applyOperations(
     addsApplied,
     inPlaceReplaced,
     inPlaceMoved,
+    inPlaceTransformed,
     inPlaceRemoved,
   };
 }

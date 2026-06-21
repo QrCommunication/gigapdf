@@ -44,6 +44,8 @@ import {
   ChevronDown,
   Trash2,
   Copy,
+  ArrowUp,
+  ArrowDown,
   Palette,
   Merge,
   Scissors,
@@ -176,6 +178,10 @@ export interface EditorToolbarProps {
   onDelete?: () => void;
   /** Callback pour dupliquer les éléments sélectionnés */
   onDuplicate?: () => void;
+  /** Callback z-order : remonter la sélection au premier plan (Ctrl/Cmd+]). */
+  onBringToFront?: () => void;
+  /** Callback z-order : renvoyer la sélection à l'arrière-plan (Ctrl/Cmd+[). */
+  onSendToBack?: () => void;
   /** Callback pour ajouter une image */
   onAddImage?: () => void;
   /**
@@ -518,6 +524,8 @@ export function EditorToolbar({
   onStrokeWidthChange,
   onDelete,
   onDuplicate,
+  onBringToFront,
+  onSendToBack,
   onAddImage,
   onInsertTable,
   onInsertLink,
@@ -1090,6 +1098,16 @@ export function EditorToolbar({
             icon={<Copy size={20} />}
             label={t("duplicate")}
             onClick={() => onDuplicate?.()}
+          />
+          <ToolButton
+            icon={<ArrowUp size={20} />}
+            label={t("bringToFront")}
+            onClick={() => onBringToFront?.()}
+          />
+          <ToolButton
+            icon={<ArrowDown size={20} />}
+            label={t("sendToBack")}
+            onClick={() => onSendToBack?.()}
           />
           <ToolButton
             icon={<Trash2 size={20} />}
