@@ -484,6 +484,53 @@ async def reindex_document_text(
         return 0
 
 
+async def reindex_document_blocks(
+    session: AsyncSession,
+    document_id: str,
+    blocks: list[dict],
+) -> int:
+    """(Re)build a document's index from POSITIONED blocks (text + page + bbox).
+
+    The positioned-geometry counterpart of :func:`reindex_document_text`: instead
+    of one concatenated text blob (``page=0``, empty bbox), the caller provides
+    per-line blocks ``{page, bbox:{x,y,w,h}, text}`` in PDF user-space points.
+    This:
+
+    - (re)indexes the semantic ``ocr_blocks`` WITH their geometry via
+      :func:`store_ocr_blocks` (a REPLACE), so a search hit can be highlighted on
+      the rendered page;
+    - sets ``StoredDocument.extracted_text`` to the concatenated block text so the
+      generated ``search_vector`` (keyword search) stays in sync.
+
+    This is the single positioned-index entry point shared by the ``/ocr-blocks``
+    endpoint, the upload/version-save paths and the server-side backfill — so every
+    path produces the SAME index. The caller owns the transaction. Best-effort:
+    never raises. Returns the number of blocks indexed.
+    """
+    try:
+        indexed = await store_ocr_blocks(session, document_id, blocks)
+        combined = (
+            " ".join((b.get("text") or "") for b in blocks if (b.get("text") or "").strip())
+            .replace("\x00", "")
+            .strip()[:_MAX_EXTRACTED_TEXT_CHARS]
+        )
+        doc = (
+            await session.execute(
+                select(StoredDocument).where(StoredDocument.id == document_id)
+            )
+        ).scalar_one_or_none()
+        if doc is not None:
+            doc.extracted_text = combined or None
+        return indexed
+    except Exception:  # noqa: BLE001 — indexing must never break the caller
+        _logger.warning(
+            "reindex_document_blocks: indexing failed (doc=%s)",
+            document_id,
+            exc_info=True,
+        )
+        return 0
+
+
 class CreateFolderRequest(BaseModel):
     """Request to create a folder."""
 
@@ -2900,15 +2947,10 @@ async def index_ocr_blocks(
     if not stored_doc:
         raise NotFoundError(f"Stored document not found: {stored_document_id}")
 
+    # Single positioned-index entry point: stores the geometry-carrying blocks
+    # (semantic) AND keeps StoredDocument.extracted_text (keyword search) in sync.
     blocks_payload = [block.model_dump() for block in request.blocks]
-    indexed = await store_ocr_blocks(db, stored_document_id, blocks_payload)
-
-    # Keep the doc-level full-text material in sync with the OCR text so the
-    # existing tsvector keyword search and the new semantic search agree.
-    combined_text = " ".join(
-        block.text for block in request.blocks if block.text.strip()
-    )[:_MAX_EXTRACTED_TEXT_CHARS]
-    stored_doc.extracted_text = combined_text or None
+    indexed = await reindex_document_blocks(db, stored_document_id, blocks_payload)
     stored_doc.updated_at = now_utc()
 
     await db.commit()

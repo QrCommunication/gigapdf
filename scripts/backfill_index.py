@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import subprocess
 import sys
 import tempfile
@@ -42,22 +43,23 @@ if str(_REPO_ROOT_FOR_PATH) not in sys.path:
 from sqlalchemy import select  # noqa: E402
 from sqlalchemy import text as sql_text  # noqa: E402
 
-from app.api.v1.storage import reindex_document_text  # noqa: E402
+from app.api.v1.storage import reindex_document_blocks  # noqa: E402
 from app.core.database import get_session_factory  # noqa: E402
 from app.models.database import DocumentVersion, StoredDocument  # noqa: E402
 from app.services.s3_service import s3_service  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _WEB_DIR = _REPO_ROOT / "apps" / "web"
-_NODE_SCRIPT = _WEB_DIR / "scripts" / "extract_pdf_text.mjs"
+_NODE_SCRIPT = _WEB_DIR / "scripts" / "extract_pdf_blocks.mjs"
 
 
-def _extract_text(pdf_bytes: bytes, ocr: bool = False) -> str:
-    """Run the WASM Node extractor on *pdf_bytes*; return the text.
+def _extract_blocks(pdf_bytes: bytes, ocr: bool = False) -> list[dict]:
+    """Run the WASM Node extractor on *pdf_bytes*; return POSITIONED blocks.
 
-    With *ocr*, the extractor falls back to OCR (Latin model) when the embedded
-    text layer is empty — for scanned/image-only PDFs. Raises RuntimeError with
-    the extractor's stderr on failure so the caller can log it and skip.
+    Each block is ``{page, bbox:{x,y,w,h}, text}`` in PDF user-space points — the
+    geometry-carrying shape consumed by :func:`reindex_document_blocks` so search
+    hits can be highlighted on the rendered page. With *ocr*, scanned pages (no
+    text layer) fall back to OCR (Latin model). Raises RuntimeError on failure.
     """
     with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
         tmp.write(pdf_bytes)
@@ -74,7 +76,7 @@ def _extract_text(pdf_bytes: bytes, ocr: bool = False) -> str:
         )
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or f"node exit {proc.returncode}")
-    return proc.stdout
+    return json.loads(proc.stdout or "[]")
 
 
 async def _resolve_owner_id(session, email: str) -> str | None:
@@ -156,19 +158,22 @@ async def run(args: argparse.Namespace) -> int:
                     skipped += 1
                     continue
 
-                text = _extract_text(pdf_bytes, ocr=args.ocr)
-                chars = len(text.strip())
+                blocks = _extract_blocks(pdf_bytes, ocr=args.ocr)
+                chars = sum(len(b.get("text", "")) for b in blocks)
 
                 if args.dry_run:
-                    print(f"  · {label} — {len(pdf_bytes)}B → {chars} chars (dry-run)")
+                    print(
+                        f"  · {label} — {len(pdf_bytes)}B → {len(blocks)} blocks, "
+                        f"{chars} chars (dry-run)"
+                    )
                     skipped += 1
                     continue
 
-                blocks = await reindex_document_text(session, doc.id, text)
+                indexed_blocks = await reindex_document_blocks(session, doc.id, blocks)
                 await session.commit()
-                total_blocks += blocks
+                total_blocks += indexed_blocks
                 indexed += 1
-                print(f"  ✓ {label} — {chars} chars, {blocks} blocks")
+                print(f"  ✓ {label} — {len(blocks)} blocks ({chars} chars)")
         except Exception as exc:  # noqa: BLE001 — one bad doc must not abort the run
             failed += 1
             print(f"  ✗ {label} — {type(exc).__name__}: {exc}", file=sys.stderr)
