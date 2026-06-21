@@ -2,7 +2,33 @@
 
 import dynamic from "next/dynamic";
 import { useEffect } from "react";
-import { setApiConfig, QueryProvider } from "@giga-pdf/api";
+import { apiClient, setApiConfig, QueryProvider } from "@giga-pdf/api";
+import { getAuthToken } from "@/lib/auth-token";
+
+// The shared apiClient (packages/api) attaches its bearer token from
+// localStorage by default — but the better-auth JWT is kept IN MEMORY only
+// (anti-XSS, see lib/auth-token.ts). Without this, every editor request that
+// goes through apiClient (notably the document /layers query, v1.9.0) sends NO
+// Authorization header → 401 → the client's 401 handler then logs the user out
+// and the editor breaks on scroll. Install an async request interceptor that
+// injects the in-memory token. Module-level + guard so it registers exactly
+// once (survives React StrictMode's double effect run), browser-only.
+let apiAuthInterceptorInstalled = false;
+function installApiAuthInterceptor(): void {
+  if (apiAuthInterceptorInstalled) return;
+  apiAuthInterceptorInstalled = true;
+  apiClient.interceptors.request.use(async (config) => {
+    const token = await getAuthToken();
+    if (token) {
+      config.headers = config.headers ?? {};
+      (config.headers as Record<string, string>).Authorization = `Bearer ${token}`;
+    }
+    return config;
+  });
+}
+if (typeof window !== "undefined") {
+  installApiAuthInterceptor();
+}
 
 // Lazy load ThemeProvider to avoid SSG issues
 const DynamicThemeProvider = dynamic(
