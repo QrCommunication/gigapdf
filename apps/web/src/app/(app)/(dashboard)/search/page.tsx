@@ -7,11 +7,41 @@ import { Button, Input } from "@giga-pdf/ui";
 import { Search, ScanSearch, Loader2 } from "lucide-react";
 import { api, type SemanticSearchResult } from "@/lib/api";
 import { clientLogger } from "@/lib/client-logger";
-import { SemanticResultCard } from "@/components/search/semantic-result-card";
+import {
+  SemanticResultCard,
+  type GroupedSemanticResult,
+} from "@/components/search/semantic-result-card";
 
 type SearchStatus = "idle" | "loading" | "done" | "error" | "unavailable";
 
-const RESULT_LIMIT = 24;
+// Fetch more blocks than we display: many blocks collapse into one card per
+// (document, page) after grouping, so we over-fetch to keep enough cards.
+const RESULT_LIMIT = 60;
+
+/** Collapse per-line results into one entry per (document, page), best score first. */
+function groupResultsByPage(results: SemanticSearchResult[]): GroupedSemanticResult[] {
+  const groups = new Map<string, GroupedSemanticResult>();
+  for (const r of results) {
+    const key = `${r.document_id}#${r.page}`;
+    const hasBox = !!r.bbox && (r.bbox.w > 0 || r.bbox.h > 0);
+    const existing = groups.get(key);
+    if (existing) {
+      if (r.score > existing.score) existing.score = r.score;
+      if (hasBox) existing.bboxes.push(r.bbox);
+      if (r.snippet && existing.snippets.length < 3) existing.snippets.push(r.snippet);
+    } else {
+      groups.set(key, {
+        document_id: r.document_id,
+        document_name: r.document_name,
+        page: r.page,
+        score: r.score,
+        bboxes: hasBox ? [r.bbox] : [],
+        snippets: r.snippet ? [r.snippet] : [],
+      });
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.score - a.score);
+}
 
 // useSearchParams() exige une frontière <Suspense> côté Next 16 (la page se
 // suspend tant que les search params client ne sont pas résolus).
@@ -179,15 +209,18 @@ function SearchBody({
     );
   }
 
+  // One card per (document, page): all of a page's hits are merged so the same
+  // page is never shown twice.
+  const grouped = groupResultsByPage(results);
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        {t("resultsCount", { count: results.length })}
+        {t("resultsCount", { count: grouped.length })}
       </p>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {results.map((result) => (
+        {grouped.map((result) => (
           <SemanticResultCard
-            key={`${result.document_id}-${result.page}-${result.snippet.slice(0, 16)}`}
+            key={`${result.document_id}-${result.page}`}
             result={result}
             query={query}
           />

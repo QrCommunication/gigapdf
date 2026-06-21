@@ -61,6 +61,7 @@
     "resultsCount": "{count, plural, =0 {Aucun résultat} one {# résultat} other {# résultats}}",
     "page": "Page {page}",
     "scoreLabel": "Pertinence {percent} %",
+    "matchCount": "{count, plural, one {# correspondance} other {# correspondances}}",
     "openInEditor": "Ouvrir dans l'éditeur",
     "previewFailed": "Aperçu indisponible"
   },

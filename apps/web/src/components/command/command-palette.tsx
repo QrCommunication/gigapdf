@@ -121,36 +121,13 @@ export function CommandPalette() {
       }}
     >
       <CommandInput
+        autoFocus
         placeholder={t("placeholder")}
         value={query}
         onValueChange={setQuery}
       />
       <CommandList>
         <CommandEmpty>{t("noResults")}</CommandEmpty>
-
-        {trimmedQuery.length > 0 && (
-          <>
-            <CommandGroup heading={t("groups.search")}>
-              {/*
-                Item d'action recherche sémantique : forceMount le garde monté,
-                et un `value` qui inclut le query courant garantit que le filtre
-                interne de cmdk le matche TOUJOURS (il n'est jamais éliminé tant
-                que l'input est non vide).
-              */}
-              <CommandItem
-                forceMount
-                value={`search-documents ${trimmedQuery}`}
-                onSelect={() =>
-                  navigateTo(`/search?q=${encodeURIComponent(trimmedQuery)}`)
-                }
-              >
-                <ScanSearch className="h-4 w-4" aria-hidden="true" />
-                <span>{t("searchInDocuments", { query: trimmedQuery })}</span>
-              </CommandItem>
-            </CommandGroup>
-            <CommandSeparator />
-          </>
-        )}
 
         <CommandGroup heading={t("groups.navigation")}>
           {NAV_ENTRIES.map((entry) => {
@@ -186,6 +163,31 @@ export function CommandPalette() {
             );
           })}
         </CommandGroup>
+
+        {/*
+          Semantic-search FALLBACK. forceMount keeps it mounted, but its `value`
+          deliberately does NOT include the query — so a matching tool/nav entry
+          always outranks it (typing a tool name highlights the tool → Enter
+          launches it). When nothing else matches, this is the only visible item
+          → it gets highlighted → Enter runs a semantic search on the query.
+        */}
+        {trimmedQuery.length > 0 && (
+          <>
+            <CommandSeparator />
+            <CommandGroup heading={t("groups.search")}>
+              <CommandItem
+                forceMount
+                value="semantic-document-search"
+                onSelect={() =>
+                  navigateTo(`/search?q=${encodeURIComponent(trimmedQuery)}`)
+                }
+              >
+                <ScanSearch className="h-4 w-4" aria-hidden="true" />
+                <span>{t("searchInDocuments", { query: trimmedQuery })}</span>
+              </CommandItem>
+            </CommandGroup>
+          </>
+        )}
       </CommandList>
 
       <div className="flex items-center justify-end gap-1 border-t px-3 py-2 text-xs text-muted-foreground">

@@ -61,6 +61,7 @@
     "resultsCount": "{count, plural, =0 {No results} one {# result} other {# results}}",
     "page": "Page {page}",
     "scoreLabel": "Match {percent}%",
+    "matchCount": "{count, plural, one {# match} other {# matches}}",
     "openInEditor": "Open in editor",
     "previewFailed": "Preview unavailable"
   },
