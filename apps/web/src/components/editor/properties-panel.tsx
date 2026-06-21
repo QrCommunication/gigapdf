@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   AlignStartVertical,
@@ -349,6 +349,191 @@ function BatchProperties({ elements, onElementUpdate }: BatchPropertiesProps) {
             </button>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ============= Style d'une forme (P3 "vector restyle") =============
+
+/** Presets de pointillé proposés dans le menu déroulant (clé i18n → tableau). */
+const DASH_PRESETS: ReadonlyArray<{ value: number[]; labelKey: string }> = [
+  { value: [], labelKey: "shape.dashSolid" },
+  { value: [4, 4], labelKey: "shape.dashDashed" },
+  { value: [1, 4], labelKey: "shape.dashDotted" },
+  { value: [8, 4], labelKey: "shape.dashLong" },
+];
+
+/** Tableaux de pointillé égaux élément par élément (ordre inclus). */
+function dashEquals(a: number[], b: number[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+/** Index du preset de pointillé correspondant, ou 0 (Solid) si aucun. */
+function dashPresetIndex(dash: number[] | undefined): number {
+  const arr = dash ?? [];
+  const found = DASH_PRESETS.findIndex((p) => dashEquals(p.value, arr));
+  return found >= 0 ? found : 0;
+}
+
+interface ShapeStylePropertiesProps {
+  element: ShapeElement;
+  onElementUpdate?: (elementId: string, updates: Partial<Element>) => void;
+}
+
+/**
+ * Section "Shape Style" — éditeur de remplissage / contour / épaisseur /
+ * pointillé / opacités pour une forme vectorielle. Chaque changement renvoie le
+ * style ENTIER (spread + champ écrasé) via `onElementUpdate` : le pipeline
+ * update → operations-store → apply-operations bake la modif IN PLACE
+ * (`setPathStyle`) quand la géométrie est inchangée, sinon redact + add.
+ *
+ * Les curseurs d'opacité sont anti-rebond (~150 ms) — un drag ne génère qu'un
+ * seul update final (l'opacité passe forcément par le fallback redact + add côté
+ * moteur, donc on évite d'empiler des dizaines de re-bakes). Les sélecteurs de
+ * couleur, l'épaisseur et le pointillé propagent immédiatement (changement
+ * discret). Monté avec `key={elementId}` : l'état local se réinitialise au
+ * changement de sélection.
+ */
+function ShapeStyleProperties({ element, onElementUpdate }: ShapeStylePropertiesProps) {
+  const t = useTranslations("editor.properties");
+
+  // Curseurs d'opacité : valeur locale réactive + propagation anti-rebond.
+  const [fillOpacity, setFillOpacity] = useState(element.style?.fillOpacity ?? 1);
+  const [strokeOpacity, setStrokeOpacity] = useState(element.style?.strokeOpacity ?? 1);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const update = (patch: Partial<ShapeElement["style"]>) => {
+    onElementUpdate?.(element.elementId, {
+      style: { ...element.style, ...patch },
+    } as Partial<ShapeElement>);
+  };
+
+  const debouncedUpdate = (patch: Partial<ShapeElement["style"]>) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => update(patch), 150);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">
+          {t("shape.type")}
+        </label>
+        <div className="text-sm">{element.shapeType}</div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">
+            {t("shape.fill")}
+          </label>
+          <input
+            type="color"
+            value={element.style?.fillColor || "#ffffff"}
+            onChange={(e) => update({ fillColor: e.target.value })}
+            aria-label={t("shape.fill")}
+            className="w-full h-8 rounded border bg-background"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">
+            {t("shape.stroke")}
+          </label>
+          <input
+            type="color"
+            value={element.style?.strokeColor || "#000000"}
+            onChange={(e) => update({ strokeColor: e.target.value })}
+            aria-label={t("shape.stroke")}
+            className="w-full h-8 rounded border bg-background"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">
+          {t("shape.strokeWidth")}
+        </label>
+        <input
+          type="number"
+          value={element.style?.strokeWidth ?? 1}
+          onChange={(e) => {
+            const parsed = parseFloat(e.target.value);
+            if (Number.isFinite(parsed) && parsed >= 0) {
+              update({ strokeWidth: parsed });
+            }
+          }}
+          min={0}
+          max={50}
+          step={0.5}
+          aria-label={t("shape.strokeWidth")}
+          className="w-full h-8 px-2 rounded border bg-background text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">
+          {t("shape.dash")}
+        </label>
+        <select
+          value={dashPresetIndex(element.style?.strokeDashArray)}
+          onChange={(e) => {
+            const preset = DASH_PRESETS[parseInt(e.target.value, 10)];
+            if (preset) update({ strokeDashArray: [...preset.value] });
+          }}
+          aria-label={t("shape.dash")}
+          className="w-full h-8 px-2 rounded border bg-background text-sm"
+        >
+          {DASH_PRESETS.map((preset, index) => (
+            <option key={preset.labelKey} value={index}>
+              {t(preset.labelKey)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">
+          {t("shape.fillOpacity")}
+        </label>
+        <input
+          type="range"
+          value={fillOpacity * 100}
+          onChange={(e) => {
+            const next = parseInt(e.target.value, 10) / 100;
+            setFillOpacity(next);
+            debouncedUpdate({ fillOpacity: next });
+          }}
+          min={0}
+          max={100}
+          aria-label={t("shape.fillOpacity")}
+          className="w-full"
+        />
+      </div>
+
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1">
+          {t("shape.strokeOpacity")}
+        </label>
+        <input
+          type="range"
+          value={strokeOpacity * 100}
+          onChange={(e) => {
+            const next = parseInt(e.target.value, 10) / 100;
+            setStrokeOpacity(next);
+            debouncedUpdate({ strokeOpacity: next });
+          }}
+          min={0}
+          max={100}
+          aria-label={t("shape.strokeOpacity")}
+          className="w-full"
+        />
       </div>
     </div>
   );
@@ -907,70 +1092,6 @@ export function PropertiesPanel({
     </div>
   );
 
-  // Render pour élément forme
-  const renderShapeProperties = (element: ShapeElement) => (
-    <div className="space-y-3">
-      <div>
-        <label className="text-xs text-muted-foreground block mb-1">
-          {t("shape.type")}
-        </label>
-        <div className="text-sm">{element.shapeType}</div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1">
-            {t("shape.fill")}
-          </label>
-          <input
-            type="color"
-            value={element.style?.fillColor || "#ffffff"}
-            onChange={(e) =>
-              onElementUpdate?.(element.elementId, {
-                style: { ...element.style, fillColor: e.target.value },
-              } as Partial<ShapeElement>)
-            }
-            className="w-full h-8 rounded border bg-background"
-          />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1">
-            {t("shape.stroke")}
-          </label>
-          <input
-            type="color"
-            value={element.style?.strokeColor || "#000000"}
-            onChange={(e) =>
-              onElementUpdate?.(element.elementId, {
-                style: { ...element.style, strokeColor: e.target.value },
-              } as Partial<ShapeElement>)
-            }
-            className="w-full h-8 rounded border bg-background"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="text-xs text-muted-foreground block mb-1">
-          {t("shape.strokeWidth")}
-        </label>
-        <input
-          type="number"
-          value={element.style?.strokeWidth || 1}
-          onChange={(e) =>
-            onElementUpdate?.(element.elementId, {
-              style: { ...element.style, strokeWidth: parseFloat(e.target.value) },
-            } as Partial<ShapeElement>)
-          }
-          min={0}
-          max={50}
-          step={0.5}
-          className="w-full h-8 px-2 rounded border bg-background text-sm"
-        />
-      </div>
-    </div>
-  );
-
   // Render pour élément annotation (highlight, underline, note, comment, …)
   const renderAnnotationProperties = (element: AnnotationElement) => (
     <div className="space-y-3">
@@ -1182,7 +1303,13 @@ export function PropertiesPanel({
             {/* Propriétés spécifiques par type */}
             <div className="border-t pt-3">
               {selectedElement.type === "text" && renderTextProperties(selectedElement as TextElement)}
-              {selectedElement.type === "shape" && renderShapeProperties(selectedElement as ShapeElement)}
+              {selectedElement.type === "shape" && (
+                <ShapeStyleProperties
+                  key={selectedElement.elementId}
+                  element={selectedElement as ShapeElement}
+                  onElementUpdate={onElementUpdate}
+                />
+              )}
               {selectedElement.type === "image" && renderImageProperties(selectedElement as ImageElement)}
               {selectedElement.type === "annotation" && renderAnnotationProperties(selectedElement as AnnotationElement)}
               {selectedElement.type === "form_field" && (

@@ -717,6 +717,11 @@ export async function renderElementsOverlay(
   if (onElementSelected && !readonly) {
     attachSelectionHandlers(canvas, onElementSelected);
   }
+
+  // Révélation du style réel des formes à la sélection (feedback d'édition P3).
+  if (!readonly) {
+    attachShapeStyleReveal(canvas);
+  }
 }
 
 /**
@@ -769,4 +774,68 @@ function attachSelectionHandlers(
 
   canvas.on("selection:created", handleSelection);
   canvas.on("selection:updated", handleSelection);
+}
+
+/**
+ * Révèle le VRAI remplissage / contour d'une forme quand elle est sélectionnée,
+ * et le remasque (transparent) à la désélection. En mode 1:1 les formes du PDF
+ * sont visibles via le raster de fond ; l'overlay Fabric est transparent (simple
+ * hit-target). À la sélection on peint l'overlay avec `data.originalFill` /
+ * `data.originalStroke` / `data.originalStrokeWidth` pour donner un retour visuel
+ * pendant l'édition de style (P3 "vector restyle").
+ *
+ * CAVEAT connu (acceptable pour P3) : le raster de fond montre TOUJOURS l'ancien
+ * style sous l'overlay révélé tant que la page n'a pas été re-bakée / re-rendue
+ * (le moteur n'expose pas de `renderPageNoShapes`). La révélation est donc une
+ * pré-visualisation par-dessus le fond, pas un remplacement du raster.
+ *
+ * Idempotent : un seul jeu de handlers par canvas.
+ */
+function attachShapeStyleReveal(canvas: FabricCanvas): void {
+  const canvasWithMeta = canvas as unknown as {
+    _shapeRevealHandlerAttached?: boolean;
+    _shapeRevealed?: FabricObjectWithData[];
+  };
+  if (canvasWithMeta._shapeRevealHandlerAttached) return;
+  canvasWithMeta._shapeRevealHandlerAttached = true;
+  canvasWithMeta._shapeRevealed = [];
+
+  const restore = (obj: FabricObjectWithData) => {
+    obj.set({ fill: "transparent", stroke: "transparent", strokeWidth: 0 });
+  };
+
+  const reveal = (obj: FabricObjectWithData) => {
+    const data = obj.data;
+    if (!data || data.type !== "shape") return;
+    const fill =
+      typeof data.originalFill === "string" ? data.originalFill : "transparent";
+    const stroke =
+      typeof data.originalStroke === "string" ? data.originalStroke : "transparent";
+    const strokeWidth =
+      typeof data.originalStrokeWidth === "number" ? data.originalStrokeWidth : 0;
+    obj.set({ fill, stroke, strokeWidth });
+  };
+
+  const clearRevealed = () => {
+    const revealed = canvasWithMeta._shapeRevealed ?? [];
+    for (const obj of revealed) restore(obj);
+    canvasWithMeta._shapeRevealed = [];
+  };
+
+  const handle = (e: { selected?: FabricObject[] }) => {
+    // Remasquer les formes précédemment révélées (changement de sélection).
+    clearRevealed();
+    const selected = (e.selected ?? []) as FabricObjectWithData[];
+    const shapes = selected.filter((o) => o.data?.type === "shape");
+    for (const obj of shapes) reveal(obj);
+    canvasWithMeta._shapeRevealed = shapes;
+    if (shapes.length > 0) canvas.requestRenderAll();
+  };
+
+  canvas.on("selection:created", handle);
+  canvas.on("selection:updated", handle);
+  canvas.on("selection:cleared", () => {
+    clearRevealed();
+    canvas.requestRenderAll();
+  });
 }
