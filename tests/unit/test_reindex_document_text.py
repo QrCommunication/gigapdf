@@ -101,6 +101,23 @@ async def test_indexes_text_into_fulltext_and_semantic(fake_embeddings):
     assert all(b.bbox_x == 0 and b.bbox_y == 0 for b in blocks)
 
 
+async def test_strips_nul_bytes(fake_embeddings):
+    # PDF text layers sometimes carry NUL (0x00), which PostgreSQL text columns
+    # reject ("invalid byte sequence for encoding UTF8: 0x00"). Both the
+    # extracted_text and every OcrBlock text must be NUL-free.
+    doc = _make_doc()
+    session = _FakeSession(doc)
+
+    text = "Dossier\x00 d'inscription\x00\x00 complet."
+    count = await reindex_document_text(session, DOC_ID, text)
+
+    assert "\x00" not in (doc.extracted_text or "")
+    assert doc.extracted_text == "Dossier d'inscription complet."
+    blocks = [o for o in session.added if isinstance(o, OcrBlock)]
+    assert count == len(blocks) and blocks
+    assert all("\x00" not in b.text for b in blocks)
+
+
 async def test_empty_text_purges_index(fake_embeddings):
     # Document already had searchable text; reindexing with "" must clear it.
     doc = _make_doc(extracted_text="ancien contenu")
