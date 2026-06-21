@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@giga-pdf/types": "workspace:*",
-    "@qrcommunication/gigapdf-lib": "^0.58.2",
+    "@qrcommunication/gigapdf-lib": "^0.58.3",
     "fabric": "^7.4.0"
   },
   "devDependencies": {

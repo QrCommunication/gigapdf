@@ -70,15 +70,25 @@ const fabricMock = {
 
 function makeCanvas() {
   const objects: FakeObj[] = [];
+  const handlers: Record<string, Array<(e: unknown) => void>> = {};
   return {
     add: (o: FakeObj) => objects.push(o),
     remove: vi.fn(),
     getObjects: () => objects,
     renderAll: vi.fn(),
     requestRenderAll: vi.fn(),
-    on: vi.fn(),
+    on: (event: string, cb: (e: unknown) => void) => {
+      (handlers[event] ??= []).push(cb);
+    },
+    fire: (event: string, e: unknown) => {
+      for (const cb of handlers[event] ?? []) cb(e);
+    },
     _objects: objects,
-  } as unknown as import("fabric").Canvas & { _objects: FakeObj[] };
+    _handlers: handlers,
+  } as unknown as import("fabric").Canvas & {
+    _objects: FakeObj[];
+    fire: (event: string, e: unknown) => void;
+  };
 }
 
 function textElement(over: Partial<Record<string, unknown>> = {}): Element {
@@ -128,7 +138,7 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     expect(it_.opts.fontFamily).toBe("gigapdf-doc-font-abc");
   });
 
-  it("renders shapes with their REAL fill (direct-edit: raster omits the shape)", async () => {
+  it("renders shapes as TRANSPARENT hit-targets (raster shows the real shape)", async () => {
     const canvas = makeCanvas();
     const shape = {
       type: "shape",
@@ -152,17 +162,22 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     const rect = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
       (o) => o instanceof Rect,
     ) as Rect;
-    // The raster background is rendered WITHOUT this shape (renderPageExcluding
-    // on its unified index), so the overlay IS the visible shape — painted in
-    // its real fill/stroke/width (no doubling).
-    expect(rect.opts.fill).toBe("#ff0000");
-    expect(rect.opts.stroke).toBe("#0000ff");
-    expect(rect.opts.strokeWidth).toBe(2);
-    // Originals are still stashed on .data for the properties panel.
-    expect((rect.data as Record<string, unknown>).originalFill).toBe("#ff0000");
+    // The shape stays BAKED in the text-free raster background (the visual
+    // ground truth — exact PDF z-order, no `renderPageExcluding` index quirk),
+    // so the overlay is a TRANSPARENT, editable hit-target. Painting it would
+    // double the shape over the raster.
+    expect(rect.opts.fill).toBe("transparent");
+    expect(rect.opts.stroke).toBe("transparent");
+    expect(rect.opts.strokeWidth).toBe(0);
+    // The real fill/stroke are stashed on .data — used by the properties panel
+    // and to REVEAL the overlay while the shape is selected.
+    const data = rect.data as Record<string, unknown>;
+    expect(data.originalFill).toBe("#ff0000");
+    expect(data.originalStroke).toBe("#0000ff");
+    expect(data.originalStrokeWidth).toBe(2);
   });
 
-  it("applies fillOpacity into the shape's rendered fill colour", async () => {
+  it("stashes the alpha-composited fill on .data (revealed on selection)", async () => {
     const canvas = makeCanvas();
     const shape = {
       type: "shape",
@@ -180,8 +195,12 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     const rect = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
       (o) => o instanceof Rect,
     ) as Rect;
-    // 50% alpha → rgba string (no stale background underneath to double).
-    expect(rect.opts.fill).toBe("rgba(255, 0, 0, 0.5)");
+    // Overlay is transparent in view; the 50%-alpha fill is preserved on .data
+    // so selection-reveal restores the exact colour.
+    expect(rect.opts.fill).toBe("transparent");
+    expect((rect.data as Record<string, unknown>).originalFill).toBe(
+      "rgba(255, 0, 0, 0.5)",
+    );
   });
 
   it("deduplicates a stacked twin text run at the same position", async () => {
@@ -194,5 +213,46 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
       canvas as unknown as { _objects: FakeObj[] }
     )._objects.filter((o) => o instanceof IText);
     expect(texts).toHaveLength(1);
+  });
+
+  it("reveals a shape's real fill on selection and re-masks it on clear", async () => {
+    const canvas = makeCanvas();
+    const fire = (canvas as unknown as { fire: (e: string, p: unknown) => void })
+      .fire;
+    const shape = {
+      type: "shape",
+      elementId: "s3",
+      shapeType: "rectangle",
+      bounds: { x: 0, y: 0, width: 50, height: 50 },
+      visible: true,
+      locked: false,
+      index: 9,
+      geometry: {},
+      style: {
+        fillColor: "#00ff00",
+        fillOpacity: 1,
+        strokeColor: "#000000",
+        strokeWidth: 3,
+        strokeOpacity: 1,
+      },
+    } as unknown as Element;
+    await renderElementsOverlay(canvas, [shape], fabricMock);
+
+    const rect = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof Rect,
+    ) as Rect;
+    // Transparent in view…
+    expect(rect.opts.fill).toBe("transparent");
+
+    // …revealed (real fill/stroke/width) while selected…
+    fire("selection:created", { selected: [rect] });
+    expect(rect.opts.fill).toBe("#00ff00");
+    expect(rect.opts.stroke).toBe("#000000");
+    expect(rect.opts.strokeWidth).toBe(3);
+
+    // …re-masked on deselection.
+    fire("selection:cleared", {});
+    expect(rect.opts.fill).toBe("transparent");
+    expect(rect.opts.strokeWidth).toBe(0);
   });
 });

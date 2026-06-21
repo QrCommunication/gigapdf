@@ -299,6 +299,33 @@ export function fabricObjectToElement(
     if (typeName === "line") shapeTypeResult = "line";
     if (typeName === "triangle") shapeTypeResult = "triangle";
 
+    // Parsed shapes are TRANSPARENT hit-targets in view (the raster shows the
+    // real shape) and only reveal their real fill/stroke while selected. So
+    // prefer the originals stashed on `data.*` — `obj.fill`/`obj.stroke` are
+    // "transparent" whenever the shape is currently masked (not selected),
+    // which would otherwise bake "transparent" into the PDF on save/move.
+    // Newly-drawn shapes have no `data.original*` → fall back to the live value.
+    const liveFill = (obj.fill as string) || null;
+    const liveStroke = (obj.stroke as string) || null;
+    const isMasked = (v: string | null) => v === null || v === "transparent";
+    const stashedFill = obj.data?.originalFill;
+    const stashedStroke = obj.data?.originalStroke;
+    const stashedStrokeWidth = obj.data?.originalStrokeWidth;
+    const resolvedFill =
+      isMasked(liveFill) && typeof stashedFill === "string"
+        ? stashedFill
+        : liveFill;
+    const resolvedStroke =
+      isMasked(liveStroke) && typeof stashedStroke === "string"
+        ? stashedStroke
+        : liveStroke;
+    const resolvedStrokeWidth =
+      (!obj.strokeWidth || obj.strokeWidth === 0) &&
+      typeof stashedStrokeWidth === "number" &&
+      stashedStrokeWidth > 0
+        ? stashedStrokeWidth
+        : obj.strokeWidth || 1;
+
     return {
       ...baseElement,
       type: "shape" as const,
@@ -309,10 +336,10 @@ export function fabricObjectToElement(
         cornerRadius: 0,
       },
       style: {
-        fillColor: (obj.fill as string) || null,
+        fillColor: resolvedFill,
         fillOpacity: obj.opacity ?? 1,
-        strokeColor: (obj.stroke as string) || null,
-        strokeWidth: obj.strokeWidth || 1,
+        strokeColor: resolvedStroke,
+        strokeWidth: resolvedStrokeWidth,
         strokeOpacity: 1,
         strokeDashArray: [],
       },

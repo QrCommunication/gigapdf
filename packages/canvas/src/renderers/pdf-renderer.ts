@@ -136,10 +136,19 @@ export class PDFRenderer {
 
     let png: Uint8Array;
     if (excludeIndices && excludeIndices.length > 0) {
-      // Exclude the given elements (e.g. shapes rendered as overlays). When
-      // skipText is also set, union in EVERY text-run index so the text-free
-      // guarantee of renderPageNoText is preserved (renderPageExcluding renders
-      // non-excluded text normally, which would double the text overlay).
+      // ⚠ Combining `skipText` with `excludeIndices` is UNSAFE — do not rely on
+      // it for a faithful background. Two engine realities break it:
+      //   1. `textElements().index` is a TEXT-RUN ordinal (dense 0..N), NOT the
+      //      unified `pageElements` index that `renderPageExcluding` consumes.
+      //      Unioning it in (to keep the raster text-free) therefore excludes
+      //      whatever UNRELATED unified elements happen to share those numbers.
+      //   2. `renderPageExcluding` honours `vectorPaths().index` for only SOME
+      //      paths on real documents (it drops e.g. index 34 but keeps 101).
+      // The net effect blanked whole coloured shape backgrounds, so the editor
+      // now keeps shapes IN the raster (`renderPageNoText`) and overlays them as
+      // transparent hit-targets instead (see editor `loadPage`). This branch is
+      // kept only for callers that pass `excludeIndices` WITHOUT `skipText`
+      // (exclude specific elements while leaving text in the raster).
       const indices = skipText
         ? [...this.textRunIndices(pageNumber), ...excludeIndices]
         : excludeIndices;
@@ -152,7 +161,13 @@ export class PDFRenderer {
     return pngToDataUrl(png);
   }
 
-  /** Every text run's unified element index on `pageNumber` (1-indexed). */
+  /**
+   * Each text run's **text-run ordinal** on `pageNumber` (1-indexed) — the value
+   * `replaceText` accepts. NOTE: this is NOT the unified `pageElements` index
+   * that `renderPageExcluding` consumes (the two spaces only overlap by
+   * coincidence), so do not feed the result into `renderPageExcluding` expecting
+   * it to suppress those exact text runs.
+   */
   private textRunIndices(pageNumber: number): number[] {
     if (!this.doc) return [];
     return this.doc.textElements(pageNumber).map((t) => t.index);
