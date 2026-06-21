@@ -70,7 +70,7 @@ for file in $STAGED; do
     # ----- Python logging : extra={"name": ...} ecrase LogRecord.name -----
     *.py)
       check_pattern "$file" \
-        'extra\s*=\s*\{[^}]*["'\'']name["'\'']\s*:' \
+        '\bextra\s*=\s*\{[^}]*["'\'']name["'\'']\s*:' \
         'PY-LOGGING-NAME' \
         'extra={"name": ...} declenche KeyError "Attempt to overwrite name in LogRecord"' \
         'Renommer en document_name, user_name, resource_name, etc.'
