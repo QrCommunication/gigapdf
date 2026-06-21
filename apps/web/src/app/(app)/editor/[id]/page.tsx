@@ -99,6 +99,8 @@ import {
   downloadBlob,
   useApplyElements,
   useElementUpdates,
+  useDocumentLayers,
+  useSaveDocumentLayers,
   socketClient,
   type SocketEventData,
 } from "@giga-pdf/api";
@@ -129,6 +131,10 @@ import type { ExportFormat } from "@/components/editor/lib/export-formats";
 import type { HeaderFooterSpec } from "@qrcommunication/gigapdf-lib";
 import { clientLogger } from "@/lib/client-logger";
 import { withRetry } from "@/lib/with-retry";
+import {
+  buildMembership,
+  mergeSavedLayers,
+} from "@/lib/layer-persistence";
 
 /**
  * Convert a frontend Element to API ElementCreateRequest format.
@@ -487,6 +493,7 @@ export default function EditorPage() {
     setLayerVisible,
     setLayerLocked,
     assignElementToLayer,
+    restoreLayers,
     embeddedFiles,
     flattenedPdfFile,
   } = useDocument({ storedDocumentId, flatten: true });
@@ -527,6 +534,62 @@ export default function EditorPage() {
     },
     [setActivePageIndex, setCanvasCurrentPage, pages, selectElements]
   );
+
+  // ── Cross-session layer persistence (P2b) ─────────────────────────────────
+  // User layers + element→layer membership are keyed by the STORED document id
+  // (not any transient session id) and survive a reload. On open we fetch the
+  // saved snapshot, then merge it into the freshly-parsed scene graph: restore
+  // the layers and re-attach membership for elements whose deterministic id
+  // still exists (P1). Subsequent layer mutations are PUT back debounced.
+  const { data: savedLayersData } = useDocumentLayers(storedDocumentId);
+  const saveDocumentLayers = useSaveDocumentLayers();
+  // Guards the one-shot load-merge: blocks the debounced save from firing while
+  // restoring, and prevents the merge from running twice for the same load.
+  const layersMergedRef = useRef(false);
+  const layersSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Re-arm the merge guard whenever a new document finishes (re)loading.
+  useEffect(() => {
+    layersMergedRef.current = false;
+  }, [storedDocumentId]);
+
+  // Load + merge: runs once, after the parse completes AND the saved snapshot
+  // has arrived. `savedLayersData` is undefined while the query is in flight.
+  useEffect(() => {
+    if (layersMergedRef.current) return;
+    if (loading) return; // wait for parse
+    if (pages.length === 0) return;
+    if (savedLayersData === undefined) return; // wait for the GET
+    const { layers: restoredLayers, membership } = mergeSavedLayers(
+      savedLayersData,
+      pages,
+    );
+    layersMergedRef.current = true;
+    if (restoredLayers.length === 0) return; // nothing saved → no-op
+    restoreLayers(restoredLayers, membership);
+  }, [loading, pages, savedLayersData, restoreLayers]);
+
+  // Debounced save (~800ms trailing) on any layer mutation. Skipped until the
+  // initial load-merge has run (avoids overwriting the saved snapshot with the
+  // pre-restore empty state). `userLayers` identity changes on every mutation,
+  // and `pages` identity changes on membership/visibility/lock cascades, so
+  // both drive the snapshot rebuild.
+  useEffect(() => {
+    if (!storedDocumentId) return;
+    if (!layersMergedRef.current) return; // not yet restored → don't clobber
+    if (layersSaveTimerRef.current) clearTimeout(layersSaveTimerRef.current);
+    layersSaveTimerRef.current = setTimeout(() => {
+      saveDocumentLayers.mutate({
+        storedDocumentId,
+        data: { layers: userLayers, membership: buildMembership(pages) },
+      });
+    }, 800);
+    return () => {
+      if (layersSaveTimerRef.current) clearTimeout(layersSaveTimerRef.current);
+    };
+    // saveDocumentLayers identity is stable across renders (TanStack mutation).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storedDocumentId, userLayers, pages]);
 
   // Unified page navigation (sidebar / TOC / header / search / keyboard).
   // Always advances useDocument's pointer; in continuous mode it ALSO focuses

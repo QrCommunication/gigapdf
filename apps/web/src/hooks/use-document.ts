@@ -157,6 +157,17 @@ export interface UseDocumentReturn {
   setLayerLocked: (layerId: string, locked: boolean) => void;
   /** Affecter un élément à un calque utilisateur (ou null pour le détacher). */
   assignElementToLayer: (elementId: string, layerId: string | null) => void;
+  /**
+   * Restaurer (cross-session) les calques utilisateur + le membership en UN
+   * seul batch d'état : remplace `userLayers` et ré-attache `element.layerId`
+   * pour chaque entrée `membership[elementId] = layerId`. N'affecte PAS
+   * `isDirty` (c'est une restauration, pas une édition). Les ré-renders sont
+   * minimisés (un seul passage sur les pages).
+   */
+  restoreLayers: (
+    layers: LayerObject[],
+    membership: Record<string, string>,
+  ) => void;
   /** Fichiers embarqués */
   embeddedFiles: EmbeddedFileObject[];
   /**
@@ -746,6 +757,45 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     [updateElementInPage],
   );
 
+  // Restaure (cross-session) les calques utilisateur + le membership en un
+  // seul batch. Appelé une fois après le parse (cf. page.tsx). Ne marque PAS
+  // le document comme dirty : une restauration n'est pas une édition (sinon on
+  // déclencherait une sauvegarde immédiate juste après le chargement).
+  const restoreLayers = useCallback(
+    (restoredLayers: LayerObject[], membership: Record<string, string>) => {
+      setUserLayers(restoredLayers);
+      // Index par layerId pour cascader visible/locked depuis le calque.
+      const layerById = new Map(restoredLayers.map((l) => [l.layerId, l]));
+      setDocument((prev) => {
+        if (!prev) return prev;
+        let touched = false;
+        const pages = prev.pages.map((p) => {
+          let pageTouched = false;
+          const elements = p.elements.map((el) => {
+            const layerId = membership[el.elementId];
+            if (layerId === undefined) return el;
+            const layer = layerById.get(layerId);
+            if (!layer) return el;
+            pageTouched = true;
+            // Le membership porte aussi l'effet visible/locked du calque sur
+            // ses membres (cohérent avec setLayerVisible/setLayerLocked).
+            return {
+              ...el,
+              layerId,
+              visible: layer.visible,
+              locked: layer.locked,
+            };
+          });
+          if (!pageTouched) return p;
+          touched = true;
+          return { ...p, elements };
+        });
+        return touched ? { ...prev, pages } : prev;
+      });
+    },
+    [],
+  );
+
   // Remplace les pages du scene graph. Utilisé après un re-parse du PDF
   // (rotate/add/delete/reorder modifient le layout, donc les coords des
   // text items changent — il faut refeed le canvas avec les nouveaux
@@ -806,6 +856,7 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     setLayerVisible,
     setLayerLocked,
     assignElementToLayer,
+    restoreLayers,
     embeddedFiles,
     flattenedPdfFile,
   };
