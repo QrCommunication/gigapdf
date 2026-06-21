@@ -9,6 +9,8 @@ export { uploadService } from './uploads';
 export { exportService } from './exports';
 export { jobService } from './jobs';
 export { storageService } from './storage';
+export { documentLayersService } from './document-layers';
+export type { DocumentLayersData } from './document-layers';
 export { billingService } from './billing';
 export { pdfService } from './pdf';
 export type {

@@ -28,9 +28,11 @@ export {
   exportService,
   jobService,
   storageService,
+  documentLayersService,
   billingService,
   pdfService,
 } from './services';
+export type { DocumentLayersData } from './services';
 export type {
   OpenPdfOptions,
   OpenPdfResult,
@@ -164,6 +166,11 @@ export {
   useEffectiveQuota,
   useQuotaPlans,
   storageKeys,
+
+  // Document layers hooks (cross-session layer persistence)
+  useDocumentLayers,
+  useSaveDocumentLayers,
+  documentLayersKeys,
 
   // Billing hooks
   useSubscription,
