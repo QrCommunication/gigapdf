@@ -5,6 +5,21 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-06-21
+
+### Added
+- **Element transparency** — set the opacity of any shape or image; it is baked
+  into the PDF (no quality loss).
+- **Stacking order is saved** — bring to front / send to back is now written into
+  the PDF itself, so the order is kept when the file is reopened anywhere.
+
+### Changed
+- **Live shape styling** — editing a vector shape's fill, stroke, width or dash
+  now updates instantly on the page (WYSIWYG); shapes are rendered as real
+  editable objects instead of a flat picture, so there is no stale preview.
+- Powered by gigapdf-lib 0.58.1 (in-place opacity via ExtGState, native z-order
+  that preserves each element's appearance, and per-element raster exclusion).
+
 ## [1.9.0] - 2026-06-21
 
 ### Added

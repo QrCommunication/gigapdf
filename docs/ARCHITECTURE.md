@@ -63,9 +63,13 @@ documents/versions).
   applied **in place** (`transformElement`/`removeElement`) — lossless, no image
   re-compression or shape re-draw. Geometry/rotation changes that can't be
   expressed as a pure affine fall back to redact + re-add.
-- **Vector restyle** (fill/stroke/width/dash) is baked in place via
-  `setPathStyle`. Opacity changes fall back to re-add (PDF opacity needs an
-  ExtGState the in-place edit can't create).
+- **Vector restyle** (fill/stroke/width/dash **and opacity**) is baked in place
+  via `setPathStyle`; image/element opacity via `setElementOpacity` (both use a
+  page `/ExtGState`). Shapes are excluded from the background raster
+  (`renderPageExcluding`) and drawn as **live, visible Fabric overlays**, so
+  restyling is WYSIWYG with no stale preview (same model as text).
+- **Stacking order** is baked natively via `reorderElement` (op-range splice that
+  re-emits the element's effective graphics state, so appearance is preserved).
 - **Layers** are an editor-side construct (not PDF OCGs): create/rename/reorder,
   assign elements, lock/hide a whole layer (cascades to member elements). Layers
   + element→layer membership are persisted per stored document via
