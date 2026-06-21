@@ -69,10 +69,10 @@
       "default": "GigaPDF — Éditez vos PDF comme un document Word. Open source.",
       "template": "%s | GigaPDF"
     },
-    "description": "Éditeur PDF open source avec collaboration en temps réel : modifiez le texte avec les polices d'origine, signez (PKCS#7), océrisez vos scans, convertissez 9 formats Office. Auto-hébergeable, chiffré AES-256, conforme RGPD.",
-    "keywords": "éditeur PDF open source, modifier PDF en ligne, éditeur PDF gratuit, modifier texte PDF, signer PDF PKCS#7, OCR PDF cherchable, convertir Word en PDF, convertir PDF en Word, PDF collaboratif temps réel, PDF auto-hébergé, GED open source, compression PDF, PDF/A, GigaPDF",
+    "description": "Éditeur PDF open source avec collaboration en temps réel : modifiez texte, images et formes avec les polices d'origine, signez (PKCS#7), océrisez vos scans, convertissez 9 formats Office. Auto-hébergeable, chiffré AES-256, conforme RGPD.",
+    "keywords": "éditeur PDF open source, modifier PDF en ligne, éditeur PDF gratuit, modifier texte PDF, modifier images PDF, modifier formes PDF, calques PDF, style de formes PDF, signer PDF PKCS#7, OCR PDF cherchable, convertir Word en PDF, convertir PDF en Word, PDF collaboratif temps réel, PDF auto-hébergé, GED open source, compression PDF, PDF/A, GigaPDF",
     "ogTitle": "GigaPDF — Éditez vos PDF comme un document Word. Vraiment.",
-    "ogDescription": "Éditeur PDF open source : texte modifiable avec polices fidèles, collaboration live, signature PKCS#7, OCR, 9 formats Office. Auto-hébergeable.",
+    "ogDescription": "Éditeur PDF open source : texte, images et formes modifiables avec polices fidèles, collaboration live, signature PKCS#7, OCR, 9 formats Office. Auto-hébergeable.",
     "twitterTitle": "GigaPDF — L'éditeur PDF open source",
     "twitterDescription": "Modifiez vos PDF comme un document Word : polices fidèles, collaboration live, signature, OCR. Open source, auto-hébergeable."
   },
@@ -82,7 +82,7 @@
       "description": "Découvrez le moteur PDF maison de GigaPDF : lecture/écriture bas niveau, édition réelle du contenu, rendu haute fidélité, formulaires, signature numérique, OCR et conversion Office. Compilé en WebAssembly, sans aucune bibliothèque PDF, Office ou image tierce."
     },
     "hero": {
-      "kicker": "Le moteur PDF maison",
+      "kicker": "Le moteur PDF maison — gigapdf-lib 0.58.1",
       "title": "Un moteur PDF complet,",
       "titleAccent": "écrit de zéro.",
       "description": "La plupart des outils PDF assemblent des briques tierces. GigaPDF a fait le choix inverse : un moteur PDF intégral, conçu et écrit en interne, qui lit, écrit, édite, rend, signe et convertit vos documents. 100 % maison, zéro bibliothèque PDF, Office ou image tierce — c'est ce qui rend l'édition fidèle et le traitement souverain possibles.",
@@ -111,7 +111,11 @@
         "title": "Éditer réellement le contenu, pas le recouvrir",
         "description": "Modifier un PDF, ce n'est pas coller un autocollant blanc par-dessus le texte. GigaPDF réécrit véritablement le flux de contenu de la page pour supprimer, déplacer ou remplacer texte, formes et images — exactement comme un traitement de texte.",
         "points": {
-          "realEdit": "Édition réelle du texte, des formes et des images : ajout, déplacement, redimensionnement et reformatage directement dans le contenu de la page.",
+          "realEdit": "Édition réelle du texte, des formes et des images : ajout, déplacement, redimensionnement, rotation et reformatage directement dans le contenu de la page.",
+          "inPlace": "Transformations sur place et sans perte : chaque élément — texte, image ou forme — est déplacé ou redimensionné via une transformation affine, sans recompression des images ni redessin des vecteurs.",
+          "restyle": "Restyle des formes vectorielles : remplissage, couleur de contour, épaisseur et pointillés modifiés et réécrits dans la page.",
+          "opacity": "Opacité et transparence par élément, appliquées via l'état graphique propre au PDF (ExtGState).",
+          "stacking": "Ordre d'empilement inscrit dans le document : premier ou arrière-plan est préservé à la réouverture du fichier.",
           "trueDelete": "Suppression réelle des objets : le contenu effacé disparaît du fichier, pas masqué sous un cache — aucune donnée fantôme ne subsiste.",
           "redaction": "Caviardage à valeur probante : le texte et les images expurgés sont retirés du document de façon irréversible.",
           "fidelity": "Mise en page d'origine préservée : les modifications s'intègrent au document sans en casser la structure."
@@ -124,6 +128,7 @@
         "points": {
           "vector": "Rendu vectoriel fidèle : tracés, courbes, remplissages et dégradés sont dessinés à la résolution voulue.",
           "glyphs": "Rendu des glyphes des polices embarquées (TrueType et CFF) : le texte s'affiche exactement comme dans le document d'origine.",
+          "selective": "Rasterisation sélective : une page peut être rendue sans certains éléments — par exemple sans son texte — pour superposer un contenu réellement éditable sur un fond fidèle au pixel près.",
           "previews": "Aperçus et miniatures haute définition pour chaque page, à n'importe quelle échelle.",
           "images": "Export d'images nettes des pages, sans perte de qualité ni artefact."
         }
@@ -420,13 +425,16 @@
     "sections": {
       "editing": {
         "label": "Édition",
-        "title": "Le texte se corrige. La mise en page ne bouge pas.",
-        "description": "Un éditeur WYSIWYG qui travaille dans le PDF, pas par-dessus : vous cliquez, vous tapez, le document reste fidèle au pixel près.",
+        "title": "Chaque élément se modifie. La mise en page ne bouge pas.",
+        "description": "Un éditeur WYSIWYG qui travaille dans le PDF, pas par-dessus : texte, images et formes sont tous modifiables sur place — vous cliquez, vous modifiez, le document reste fidèle au pixel près.",
         "points": {
-          "wysiwyg": "Édition visuelle directe : ce que vous voyez est exactement ce qui sera enregistré",
+          "wysiwyg": "Édition visuelle directe du texte, des images et des formes : déplacez, redimensionnez, dupliquez ou supprimez n'importe quel élément sur place, sans perte",
           "fonts": "Polices fidèles : les polices d'origine sont identifiées, téléchargées depuis Google Fonts et embarquées automatiquement",
           "formatting": "Formatage réel — gras, italique, souligné, alignement, taille et couleur",
-          "layers": "Calques pour organiser textes, images et formes sans rien écraser",
+          "shapeStyling": "Restyler les formes vectorielles : remplissage, couleur de contour, épaisseur et pointillés",
+          "opacity": "Opacité et transparence des éléments, intégrées dans le PDF",
+          "stacking": "Ordre d'empilement — premier ou arrière-plan, enregistré dans le PDF lui-même",
+          "layers": "Calques pour organiser textes, images et formes — créer, renommer, verrouiller et masquer, conservés d'une session à l'autre",
           "multiselect": "Multi-sélection pour déplacer, aligner ou supprimer plusieurs éléments d'un geste"
         }
       },

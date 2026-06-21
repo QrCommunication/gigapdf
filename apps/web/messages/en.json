@@ -69,10 +69,10 @@
       "default": "GigaPDF — Edit your PDFs like a Word document. Open source.",
       "template": "%s | GigaPDF"
     },
-    "description": "Open-source PDF editor with real-time collaboration: edit text with the original fonts, sign (PKCS#7), OCR your scans, convert 9 Office formats. Self-hostable, AES-256 encrypted, GDPR compliant.",
-    "keywords": "open source PDF editor, edit PDF online, free PDF editor, edit PDF text, sign PDF PKCS#7, searchable OCR PDF, convert Word to PDF, convert PDF to Word, real-time collaborative PDF, self-hosted PDF, open source DMS, PDF compression, PDF/A, GigaPDF",
+    "description": "Open-source PDF editor with real-time collaboration: edit text, images and shapes with the original fonts, sign (PKCS#7), OCR your scans, convert 9 Office formats. Self-hostable, AES-256 encrypted, GDPR compliant.",
+    "keywords": "open source PDF editor, edit PDF online, free PDF editor, edit PDF text, edit PDF images, edit PDF shapes, PDF layers, PDF shape styling, sign PDF PKCS#7, searchable OCR PDF, convert Word to PDF, convert PDF to Word, real-time collaborative PDF, self-hosted PDF, open source DMS, PDF compression, PDF/A, GigaPDF",
     "ogTitle": "GigaPDF — Edit your PDFs like a Word document. Really.",
-    "ogDescription": "Open-source PDF editor: editable text with faithful fonts, live collaboration, PKCS#7 signature, OCR, 9 Office formats. Self-hostable.",
+    "ogDescription": "Open-source PDF editor: editable text, images and shapes with faithful fonts, live collaboration, PKCS#7 signature, OCR, 9 Office formats. Self-hostable.",
     "twitterTitle": "GigaPDF — The open-source PDF editor",
     "twitterDescription": "Edit your PDFs like a Word document: faithful fonts, live collaboration, signing, OCR. Open source, self-hostable."
   },
@@ -82,7 +82,7 @@
       "description": "Discover the GigaPDF in-house PDF engine: low-level read/write, real content editing, high-fidelity rendering, forms, digital signing, OCR and Office conversion. Compiled to WebAssembly, with no third-party PDF, Office or image library."
     },
     "hero": {
-      "kicker": "The in-house PDF engine",
+      "kicker": "The in-house PDF engine — gigapdf-lib 0.58.1",
       "title": "A complete PDF engine,",
       "titleAccent": "written from scratch.",
       "description": "Most PDF tools stitch together third-party building blocks. GigaPDF took the opposite path: a full PDF engine, designed and written in-house, that reads, writes, edits, renders, signs and converts your documents. 100% in-house, no third-party PDF, Office or image library — that is what makes faithful editing and sovereign processing possible.",
@@ -111,7 +111,11 @@
         "title": "Truly edit the content, not cover it up",
         "description": "Editing a PDF isn't slapping a white sticker over the text. GigaPDF genuinely rewrites the page's content stream to delete, move or replace text, shapes and images — exactly like a word processor.",
         "points": {
-          "realEdit": "Real editing of text, shapes and images: adding, moving, resizing and reformatting directly inside the page content.",
+          "realEdit": "Real editing of text, shapes and images: adding, moving, resizing, rotating and reformatting directly inside the page content.",
+          "inPlace": "In-place, lossless transforms: every element — text, image or shape — is moved or scaled via an affine transform, with no re-compression of images and no re-drawing of vectors.",
+          "restyle": "Vector shape restyling: fill, stroke colour, stroke width and dash pattern edited and written back into the page.",
+          "opacity": "Per-element opacity and transparency, applied through the PDF's own graphics state (ExtGState).",
+          "stacking": "Stacking order written into the document: bring to front / send to back is preserved when the file is reopened.",
           "trueDelete": "True object deletion: erased content disappears from the file, not hidden under a mask — no ghost data remains.",
           "redaction": "Evidence-grade redaction: redacted text and images are removed from the document irreversibly.",
           "fidelity": "Original layout preserved: changes blend into the document without breaking its structure."
@@ -124,6 +128,7 @@
         "points": {
           "vector": "Faithful vector rendering: paths, curves, fills and gradients are drawn at the resolution you need.",
           "glyphs": "Rendering of embedded font glyphs (TrueType and CFF): text appears exactly as in the original document.",
+          "selective": "Selective rasterization: a page can be rendered without chosen elements — for example without its text — so real, editable content can be overlaid on a pixel-perfect background.",
           "previews": "High-definition previews and thumbnails for every page, at any scale.",
           "images": "Crisp page-image export, with no loss of quality and no artifacts."
         }
@@ -420,13 +425,16 @@
     "sections": {
       "editing": {
         "label": "Editing",
-        "title": "Text gets fixed. The layout doesn't move.",
-        "description": "A WYSIWYG editor that works inside the PDF, not on top of it: you click, you type, the document stays pixel-faithful.",
+        "title": "Edit every element. The layout doesn't move.",
+        "description": "A WYSIWYG editor that works inside the PDF, not on top of it: text, images and shapes are all editable in place — you click, you change it, the document stays pixel-faithful.",
         "points": {
-          "wysiwyg": "Direct visual editing: what you see is exactly what gets saved",
+          "wysiwyg": "Direct visual editing of text, images and shapes: move, resize, duplicate or delete any element in place, losslessly",
           "fonts": "Faithful fonts: originals are identified, fetched from Google Fonts and embedded automatically",
           "formatting": "Real formatting — bold, italic, underline, alignment, size and color",
-          "layers": "Layers to organize text, images and shapes without overwriting anything",
+          "shapeStyling": "Restyle vector shapes: fill, stroke color, stroke width and dash pattern",
+          "opacity": "Element opacity and transparency, baked into the PDF",
+          "stacking": "Stacking order — bring to front or send to back, saved in the PDF itself",
+          "layers": "Layers to organize text, images and shapes — create, rename, lock and hide, kept across sessions",
           "multiselect": "Multi-selection to move, align or delete several elements in one gesture"
         }
       },

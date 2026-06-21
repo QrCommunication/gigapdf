@@ -43,7 +43,7 @@ const CONTACT_EMAIL = "contact@giga-pdf.com";
 
 /** Les 5 sections numérotées du cahier (zigzag 2 colonnes alternées). */
 const NOTEBOOK_SECTIONS = [
-  { id: "features", number: "01", key: "editing", points: ["wysiwyg", "fonts", "formatting", "layers", "multiselect"] },
+  { id: "features", number: "01", key: "editing", points: ["wysiwyg", "fonts", "formatting", "shapeStyling", "opacity", "stacking", "layers", "multiselect"] },
   { id: "collaboration", number: "02", key: "collaboration", points: ["live", "sharing", "versions", "activity"] },
   { id: "confiance", number: "03", key: "trust", points: ["signature", "encryption", "pdfa", "ocr"] },
   { id: "formats", number: "04", key: "formats", points: ["imports", "exports", "compression"] },

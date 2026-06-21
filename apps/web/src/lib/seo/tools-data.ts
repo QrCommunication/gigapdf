@@ -55,7 +55,7 @@ export const TOOLS: ToolData[] = [
     metaTitle: "Éditer un PDF en ligne gratuitement | GigaPDF",
     metaDescription:
       "Modifiez texte, images et formes directement dans vos PDF, avec les polices d'origine. Éditeur WYSIWYG gratuit, open source et auto-hébergeable.",
-    h1: "Éditeur PDF en ligne : modifiez le texte directement dans le fichier",
+    h1: "Éditeur PDF en ligne : modifiez le texte, les images et les formes directement dans le fichier",
     intro: [
       "Corriger une faute dans un contrat déjà exporté, mettre à jour un tarif sur une plaquette, remplacer un logo : la plupart des outils en ligne se contentent de poser un cadre blanc par-dessus l'ancien contenu. GigaPDF travaille autrement. Son éditeur WYSIWYG ouvre la page telle qu'elle s'imprimera et vous laisse cliquer sur un bloc de texte, une image ou une forme pour le modifier, le déplacer ou le supprimer réellement.",
       "La fidélité typographique fait la différence : GigaPDF identifie les polices utilisées dans le document, les télécharge automatiquement depuis Google Fonts quand elles y sont disponibles, puis les embarque dans le fichier au moment de l'enregistrement. Votre correction reprend la même police que le paragraphe d'origine, sans substitution Arial disgracieuse. Pour les suppressions, le moteur maison retire les opérateurs de texte du flux de contenu au lieu de les masquer — rien ne réapparaît au copier-coller.",
@@ -74,7 +74,12 @@ export const TOOLS: ToolData[] = [
     },
     capabilities: [
       "Édition WYSIWYG du texte, des images et des formes existantes",
+      "Déplacer, redimensionner, supprimer et dupliquer n'importe quel élément sur place, sans perte",
       "Polices d'origine détectées, téléchargées depuis Google Fonts et embarquées à l'enregistrement",
+      "Restyler les formes vectorielles : remplissage, couleur de contour, épaisseur et pointillés",
+      "Opacité et transparence des éléments, intégrées dans le PDF",
+      "Ordre d'empilement — premier ou arrière-plan, enregistré dans le PDF lui-même",
+      "Calques persistants : créer, renommer, verrouiller et masquer, conservés d'une session à l'autre",
       "Suppression réelle du contenu par le moteur maison (pas de masque blanc)",
       "Annotations natives, filigranes et remplissage de formulaires depuis le même éditeur",
       "Historique de versions et miniatures de pages dans la GED intégrée",
