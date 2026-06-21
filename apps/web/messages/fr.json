@@ -2386,7 +2386,11 @@
         "office": "Conversions Office natives : import/export de 9 formats (DOCX/XLSX/PPTX, OpenDocument, OLE2 legacy)",
         "ged": "GED : dossiers, corbeille, recherche plein-texte, tags, déduplication",
         "realtime": "Collaboration multi-utilisateur en temps réel via WebSocket",
-        "api": "API REST complète, clés API scopées et widget embed pour intégrer l'éditeur"
+        "api": "API REST complète, clés API scopées et widget embed pour intégrer l'éditeur",
+        "search": "Recherche sémantique : retrouvez un passage dans vos documents par le sens, pas seulement par mot-clé (embeddings + pgvector).",
+        "palette": "Palette de commandes globale (Ctrl/Cmd+K) : ouvrez n’importe quel outil ou page et lancez une recherche depuis partout.",
+        "merge": "Fusion universelle : combinez n’importe quels fichiers (PDF, Word, Excel, PowerPoint, OpenDocument, images, HTML, texte, RTF) en un seul PDF, chacun converti automatiquement.",
+        "tools": "29 outils PDF dédiés, classés par catégorie et accessibles via le méga-menu : éditer, convertir, sécuriser, OCR, organiser…"
       },
       "selfhost": {
         "title": "Auto-hébergement",

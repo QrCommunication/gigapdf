@@ -28,6 +28,10 @@ const LICENSE_URL = "https://github.com/QrCommunication/gigapdf/blob/main/LICENS
 /** Static lucide icon per feature key (no dynamic class names — purge-safe). */
 const FEATURE_KEYS = [
   "editing",
+  "merge",
+  "tools",
+  "search",
+  "palette",
   "forms",
   "signature",
   "ocr",
