@@ -13,7 +13,10 @@
 
 import { describe, it, expect, vi } from "vitest";
 import type { Element } from "@giga-pdf/types";
-import { renderElementsOverlay } from "../render-elements";
+import {
+  renderElementsOverlay,
+  groupTextRunsIntoParagraphs,
+} from "../render-elements";
 
 // --- Minimal Fabric mock: each shape records its constructor options. --------
 class FakeObj {
@@ -34,6 +37,17 @@ class IText extends FakeObj {
   }
   // Fabric's IText.set({ text }) updates the live `.text` property; mirror that
   // so click-toggle assertions (which read obj.text) behave like real Fabric.
+  set(patch: Record<string, unknown>) {
+    if (typeof patch.text === "string") this.text = patch.text;
+    super.set(patch);
+  }
+}
+class Textbox extends FakeObj {
+  text: string;
+  constructor(text: string, opts: Record<string, unknown>) {
+    super(opts);
+    this.text = text;
+  }
   set(patch: Record<string, unknown>) {
     if (typeof patch.text === "string") this.text = patch.text;
     super.set(patch);
@@ -69,6 +83,7 @@ const fabricMock = {
   Triangle,
   Line,
   IText,
+  Textbox,
   FabricImage,
   Path,
   Polygon,
@@ -170,7 +185,6 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     expect(it_.opts.fontWeight).toBe("normal");
     expect(it_.opts.fontStyle).toBe("normal");
     expect((it_.data as Record<string, unknown>).usingEmbeddedFont).toBe(true);
-    expect((it_.data as Record<string, unknown>).cosmeticScaleX).toBe(false);
   });
 
   it("KEEPS the parsed weight/style for the generic fallback font", async () => {
@@ -199,10 +213,10 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     expect((it_.data as Record<string, unknown>).usingEmbeddedFont).toBe(false);
   });
 
-  it("applies a cosmetic scaleX fit when the fallback text overflows its bounds", async () => {
-    // With the fallback font, Fabric measures a width wider than bounds.width →
-    // a horizontal squeeze is applied AND flagged cosmetic (so the round-trip
-    // never bakes it into bounds.width).
+  it("does NOT squash text with scaleX when the fallback font overflows its bounds", async () => {
+    // User directive: never apply a cosmetic anti-overflow scaleX. Even when the
+    // fallback font measures wider than bounds.width, the run keeps its natural
+    // width (no scaleX < 1), accepting a slight overflow over a horizontal squash.
     const canvas = makeCanvas();
     // IText mock that reports a measured width far beyond the 100px bounds.
     class WideIText extends IText {
@@ -219,9 +233,9 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
       (o) => o instanceof WideIText,
     ) as WideIText;
-    expect((it_.data as Record<string, unknown>).cosmeticScaleX).toBe(true);
-    // 100 / 250 = 0.4 (above the 0.35 clamp).
-    expect(it_.opts.scaleX).toBeCloseTo(0.4, 5);
+    // No cosmetic flag is stamped anymore, and scaleX is never set to a squeeze.
+    expect((it_.data as Record<string, unknown>).cosmeticScaleX).toBeUndefined();
+    expect(it_.opts.scaleX).toBeUndefined();
   });
 
   it("renders shapes as TRANSPARENT hit-targets (raster shows the real shape)", async () => {
@@ -588,5 +602,208 @@ describe("renderElementsOverlay — editable form fields", () => {
     expect(rect).toBeDefined();
     expect((rect.data as Record<string, unknown>).fieldType).toBe("signature");
     expect((rect.data as Record<string, unknown>).formFieldElement).toBeDefined();
+  });
+});
+
+// --- Paragraph grouping (Word-like multi-line editing) -----------------------
+
+/**
+ * A groupable text run: same style by default, body-text size 12, left edge at
+ * x=40, regular line gap of 14 (≈ fontSize·lineHeight). Override bounds/content/
+ * style to model the lines of a paragraph (or a deliberate style break).
+ */
+function paraRun(
+  elementId: string,
+  y: number,
+  over: Partial<{
+    x: number;
+    width: number;
+    content: string;
+    index: number;
+    style: Record<string, unknown>;
+    linkUrl: string;
+  }> = {},
+): Element {
+  return {
+    type: "text",
+    elementId,
+    bounds: { x: over.x ?? 40, y, width: over.width ?? 300, height: 12 },
+    visible: true,
+    locked: false,
+    content: over.content ?? `line ${elementId}`,
+    ...(over.index !== undefined ? { index: over.index } : {}),
+    ...(over.linkUrl ? { linkUrl: over.linkUrl } : {}),
+    style: {
+      fontSize: 12,
+      color: "#000000",
+      fontFamily: "Helvetica",
+      lineHeight: 1.2,
+      textAlign: "left",
+      originalFont: "ABCDEF+Body",
+      ...(over.style ?? {}),
+    },
+  } as unknown as Element;
+}
+
+describe("groupTextRunsIntoParagraphs (pure)", () => {
+  it("groups consecutive same-style, regularly-spaced, left-aligned runs", () => {
+    const runs = [
+      paraRun("a", 100),
+      paraRun("b", 114),
+      paraRun("c", 128),
+    ];
+    const { paragraphs, standalone } = groupTextRunsIntoParagraphs(runs);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]!.runs.map((r) => r.elementId)).toEqual(["a", "b", "c"]);
+    expect(standalone).toHaveLength(0);
+  });
+
+  it("does NOT group a single isolated line (title/label stays standalone)", () => {
+    const { paragraphs, standalone } = groupTextRunsIntoParagraphs([
+      paraRun("title", 50),
+    ]);
+    expect(paragraphs).toHaveLength(0);
+    expect(standalone).toHaveLength(1);
+  });
+
+  it("breaks the paragraph on a font-size change (heading line)", () => {
+    const runs = [
+      paraRun("h", 100, { style: { fontSize: 20 } }), // heading
+      paraRun("b1", 120),
+      paraRun("b2", 134),
+    ];
+    const { paragraphs, standalone } = groupTextRunsIntoParagraphs(runs);
+    // The heading stays alone; the two body lines form a paragraph.
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]!.runs.map((r) => r.elementId)).toEqual(["b1", "b2"]);
+    expect(standalone.map((r) => r.elementId)).toContain("h");
+  });
+
+  it("breaks on a colour change (a differently-coloured note)", () => {
+    const runs = [
+      paraRun("a", 100),
+      paraRun("b", 114, { style: { color: "#ff0000" } }),
+    ];
+    const { paragraphs } = groupTextRunsIntoParagraphs(runs);
+    // Two single lines of different colour → no paragraph (each < 2 lines).
+    expect(paragraphs).toHaveLength(0);
+  });
+
+  it("breaks on a large vertical gap (blank line / new block)", () => {
+    const runs = [
+      paraRun("a", 100),
+      paraRun("b", 114),
+      paraRun("c", 300), // far below → new block
+    ];
+    const { paragraphs, standalone } = groupTextRunsIntoParagraphs(runs);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]!.runs.map((r) => r.elementId)).toEqual(["a", "b"]);
+    expect(standalone.map((r) => r.elementId)).toContain("c");
+  });
+
+  it("does NOT group runs in different columns (no horizontal overlap)", () => {
+    const runs = [
+      paraRun("L1", 100, { x: 40, width: 100 }),
+      paraRun("R1", 100, { x: 400, width: 100 }), // same row, other column
+      paraRun("L2", 114, { x: 40, width: 100 }),
+      paraRun("R2", 114, { x: 400, width: 100 }),
+    ];
+    const { paragraphs } = groupTextRunsIntoParagraphs(runs);
+    // Left column lines group together; right column lines group together — but
+    // never across columns.
+    expect(paragraphs).toHaveLength(2);
+    for (const p of paragraphs) {
+      const xs = p.runs.map((r) => r.bounds.x);
+      expect(new Set(xs).size).toBe(1); // each paragraph is a single column
+    }
+  });
+
+  it("does NOT fold a hyperlink run into a paragraph", () => {
+    const runs = [
+      paraRun("a", 100),
+      paraRun("link", 114, { linkUrl: "https://example.com" }),
+      paraRun("c", 128),
+    ];
+    const { paragraphs, standalone } = groupTextRunsIntoParagraphs(runs);
+    // The link stays standalone; the non-link neighbours are NOT contiguous
+    // through it (different gap), so they remain standalone too.
+    expect(standalone.map((r) => r.elementId)).toContain("link");
+    const grouped = paragraphs.flatMap((p) => p.runs.map((r) => r.elementId));
+    expect(grouped).not.toContain("link");
+  });
+
+  it("does NOT group misaligned left edges (different indentation)", () => {
+    const runs = [
+      paraRun("a", 100, { x: 40 }),
+      paraRun("b", 114, { x: 120 }), // indented far right → not the same block
+    ];
+    const { paragraphs } = groupTextRunsIntoParagraphs(runs);
+    expect(paragraphs).toHaveLength(0);
+  });
+});
+
+describe("renderElementsOverlay — paragraph rendering", () => {
+  it("renders a paragraph as ONE editable Textbox with lines joined by \\n", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [
+        paraRun("a", 100, { content: "First line", index: 5 }),
+        paraRun("b", 114, { content: "Second line", index: 6 }),
+        paraRun("c", 128, { content: "Third line", index: 7 }),
+      ],
+      fabricMock,
+    );
+    const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    const tb = objects.find((o) => o instanceof Textbox) as Textbox | undefined;
+    const itexts = objects.filter((o) => o instanceof IText);
+    expect(tb).toBeDefined();
+    // No standalone IText for the folded runs.
+    expect(itexts).toHaveLength(0);
+    expect(tb!.text).toBe("First line\nSecond line\nThird line");
+    const data = tb!.data as Record<string, unknown>;
+    expect(data.isParagraph).toBe(true);
+    expect(data.type).toBe("text");
+    // The block adopts the FIRST run's identity + carries all source runs.
+    expect(data.elementId).toBe("a");
+    const stashed = data.paragraphRuns as Array<{ elementId: string; index?: number }>;
+    expect(stashed.map((r) => r.elementId)).toEqual(["a", "b", "c"]);
+    expect(stashed.map((r) => r.index)).toEqual([5, 6, 7]);
+  });
+
+  it("keeps line-by-line IText when groupParagraphs is disabled", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [paraRun("a", 100), paraRun("b", 114), paraRun("c", 128)],
+      fabricMock,
+      { groupParagraphs: false },
+    );
+    const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    expect(objects.filter((o) => o instanceof Textbox)).toHaveLength(0);
+    expect(objects.filter((o) => o instanceof IText)).toHaveLength(3);
+  });
+
+  it("uses the embedded FontFace for a paragraph Textbox when available", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [paraRun("a", 100), paraRun("b", 114)],
+      fabricMock,
+      { getFontFaceName: () => "gigapdf-doc-para" },
+    );
+    const tb = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof Textbox,
+    ) as Textbox;
+    expect(tb.opts.fontFamily).toBe("gigapdf-doc-para");
+    expect((tb.data as Record<string, unknown>).usingEmbeddedFont).toBe(true);
+  });
+
+  it("leaves a lone line as a standalone IText (no Textbox)", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(canvas, [paraRun("only", 100)], fabricMock);
+    const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    expect(objects.filter((o) => o instanceof Textbox)).toHaveLength(0);
+    expect(objects.filter((o) => o instanceof IText)).toHaveLength(1);
   });
 });

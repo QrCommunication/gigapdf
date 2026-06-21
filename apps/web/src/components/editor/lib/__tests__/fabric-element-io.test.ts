@@ -16,7 +16,12 @@
 
 import { describe, it, expect } from "vitest";
 import type { FabricObjectWithData } from "../fabric-element-io";
-import { fabricObjectToElement, readFormFieldValue } from "../fabric-element-io";
+import {
+  fabricObjectToElement,
+  fabricObjectToElements,
+  readFormFieldValue,
+} from "../fabric-element-io";
+import type { TextElement } from "@giga-pdf/types";
 
 /** Minimal Fabric-like object stub carrying our `.data` metadata. */
 function fabricStub(
@@ -200,29 +205,11 @@ describe("fabricObjectToElement — form field round-trip", () => {
   });
 });
 
-describe("fabricObjectToElement — cosmetic scaleX neutralisation", () => {
-  it("ignores a cosmetic scaleX for the text bounds.width", () => {
-    const obj = fabricStub({
-      type: "i-text",
-      text: "Long overflowing label",
-      left: 5,
-      top: 30,
-      width: 200,
-      scaleX: 0.4, // cosmetic squeeze
-      data: {
-        elementId: "t1",
-        type: "text",
-        cosmeticScaleX: true,
-        originalFont: "Helvetica",
-      },
-    });
-    const el = fabricObjectToElement(obj);
-    expect(el!.type).toBe("text");
-    // bounds.width = width * 1 (cosmetic scaleX neutralised), NOT 200 * 0.4 = 80.
-    expect(el!.bounds.width).toBe(200);
-  });
-
-  it("still honours a REAL scaleX (user resize) for the bounds.width", () => {
+describe("fabricObjectToElement — scaleX is taken verbatim (no cosmetic fit)", () => {
+  it("bakes a user-resize scaleX into bounds.width", () => {
+    // The cosmetic anti-overflow scaleX no longer exists (render-elements stopped
+    // squashing text). scaleX is therefore always a real user resize and is baked
+    // straight into bounds.width.
     const obj = fabricStub({
       type: "i-text",
       text: "Resized",
@@ -231,12 +218,24 @@ describe("fabricObjectToElement — cosmetic scaleX neutralisation", () => {
       data: {
         elementId: "t2",
         type: "text",
-        cosmeticScaleX: false,
         originalFont: "Helvetica",
       },
     });
     const el = fabricObjectToElement(obj);
+    expect(el!.type).toBe("text");
     expect(el!.bounds.width).toBe(150);
+  });
+
+  it("uses scaleX=1 (no squeeze) verbatim when the object was not resized", () => {
+    const obj = fabricStub({
+      type: "i-text",
+      text: "Natural width",
+      width: 200,
+      scaleX: 1,
+      data: { elementId: "t1", type: "text", originalFont: "Helvetica" },
+    });
+    const el = fabricObjectToElement(obj);
+    expect(el!.bounds.width).toBe(200);
   });
 });
 
@@ -284,5 +283,151 @@ describe("readFormFieldValue", () => {
       value: "kept",
     };
     expect(readFormFieldValue(fabricStub({}), field)).toBe("kept");
+  });
+});
+
+// --- Paragraph Textbox decomposition (multi-line save) -----------------------
+
+/** Stub a coalesced paragraph Textbox carrying its source runs on data. */
+function paragraphTextbox(
+  text: string,
+  runs: Array<{
+    elementId: string;
+    index?: number;
+    x: number;
+    y: number;
+    width: number;
+    height?: number;
+    content: string;
+  }>,
+  over: Partial<FabricObjectWithData> = {},
+): FabricObjectWithData {
+  const originLeft = Math.min(...runs.map((r) => r.x));
+  const originTop = Math.min(...runs.map((r) => r.y));
+  return fabricStub({
+    type: "textbox",
+    text,
+    left: originLeft,
+    top: originTop,
+    width: Math.max(...runs.map((r) => r.x + r.width)) - originLeft,
+    fontSize: 12,
+    fontFamily: "Helvetica",
+    fill: "#000000",
+    lineHeight: 1.2,
+    textAlign: "left",
+    data: {
+      elementId: runs[0]!.elementId,
+      type: "text",
+      isParagraph: true,
+      originalFont: "ABCDEF+Body",
+      paragraphRuns: runs.map((r) => ({
+        elementId: r.elementId,
+        ...(r.index !== undefined ? { index: r.index } : {}),
+        bounds: { x: r.x, y: r.y, width: r.width, height: r.height ?? 12 },
+        content: r.content,
+      })),
+    },
+    ...over,
+  } as unknown as Partial<FabricObjectWithData> & { type?: string; text?: string });
+}
+
+describe("fabricObjectToElements — paragraph decomposition", () => {
+  it("passes a non-paragraph object straight through (1 element)", () => {
+    const obj = fabricStub({
+      type: "i-text",
+      text: "Hello",
+      data: { elementId: "t1", type: "text", originalFont: "Helvetica" },
+    });
+    const els = fabricObjectToElements(obj);
+    expect(els).toHaveLength(1);
+    expect(els[0]!.type).toBe("text");
+    expect((els[0] as TextElement).content).toBe("Hello");
+  });
+
+  it("returns [] for an unknown object type", () => {
+    const obj = fabricStub({ type: "group", data: {} });
+    expect(fabricObjectToElements(obj)).toEqual([]);
+  });
+
+  it("decomposes an UNCHANGED paragraph into its runs, preserving indices", () => {
+    const obj = paragraphTextbox("Line A\nLine B\nLine C", [
+      { elementId: "a", index: 5, x: 40, y: 100, width: 300, content: "Line A" },
+      { elementId: "b", index: 6, x: 40, y: 114, width: 300, content: "Line B" },
+      { elementId: "c", index: 7, x: 40, y: 128, width: 300, content: "Line C" },
+    ]);
+    const els = fabricObjectToElements(obj) as TextElement[];
+    expect(els).toHaveLength(3);
+    expect(els.map((e) => e.elementId)).toEqual(["a", "b", "c"]);
+    expect(els.map((e) => e.index)).toEqual([5, 6, 7]); // lossless replaceText
+    expect(els.map((e) => e.content)).toEqual(["Line A", "Line B", "Line C"]);
+    // bounds.y inherited from the source runs (block not moved).
+    expect(els.map((e) => e.bounds.y)).toEqual([100, 114, 128]);
+  });
+
+  it("maps an EDITED middle line onto its source run (index kept)", () => {
+    const obj = paragraphTextbox("Line A\nEDITED\nLine C", [
+      { elementId: "a", index: 5, x: 40, y: 100, width: 300, content: "Line A" },
+      { elementId: "b", index: 6, x: 40, y: 114, width: 300, content: "Line B" },
+      { elementId: "c", index: 7, x: 40, y: 128, width: 300, content: "Line C" },
+    ]);
+    const els = fabricObjectToElements(obj) as TextElement[];
+    expect(els[1]!.content).toBe("EDITED");
+    expect(els[1]!.elementId).toBe("b");
+    expect(els[1]!.index).toBe(6);
+  });
+
+  it("translates every run when the whole block was MOVED", () => {
+    const obj = paragraphTextbox("Line A\nLine B", [
+      { elementId: "a", index: 5, x: 40, y: 100, width: 300, content: "Line A" },
+      { elementId: "b", index: 6, x: 40, y: 114, width: 300, content: "Line B" },
+    ]);
+    // Move the block: origin was (40,100); set it to (90,160) → dx=50, dy=60.
+    (obj as { left?: number; top?: number }).left = 90;
+    (obj as { left?: number; top?: number }).top = 160;
+    const els = fabricObjectToElements(obj) as TextElement[];
+    expect(els.map((e) => e.bounds.x)).toEqual([90, 90]);
+    expect(els.map((e) => e.bounds.y)).toEqual([160, 174]);
+    // Indices preserved (a move is still an in-place edit of the same runs).
+    expect(els.map((e) => e.index)).toEqual([5, 6]);
+  });
+
+  it("ADDS a new run (no index) when a line is appended", () => {
+    const obj = paragraphTextbox("Line A\nLine B\nNEW LINE", [
+      { elementId: "a", index: 5, x: 40, y: 100, width: 300, content: "Line A" },
+      { elementId: "b", index: 6, x: 40, y: 114, width: 300, content: "Line B" },
+    ]);
+    const els = fabricObjectToElements(obj) as TextElement[];
+    expect(els).toHaveLength(3);
+    expect(els[2]!.content).toBe("NEW LINE");
+    // The appended line has NO engine index → takes the add path.
+    expect(els[2]!.index).toBeUndefined();
+    // It is stacked under the last source line (y > previous line's y).
+    expect(els[2]!.bounds.y).toBeGreaterThan(els[1]!.bounds.y);
+  });
+
+  it("ERASES a removed line (surplus run serialised with empty content)", () => {
+    const obj = paragraphTextbox("Line A", [
+      { elementId: "a", index: 5, x: 40, y: 100, width: 300, content: "Line A" },
+      { elementId: "b", index: 6, x: 40, y: 114, width: 300, content: "Line B" },
+    ]);
+    const els = fabricObjectToElements(obj) as TextElement[];
+    expect(els).toHaveLength(2);
+    expect(els[0]!.content).toBe("Line A");
+    // The deleted line's source run is kept with "" so replaceText erases it.
+    expect(els[1]!.elementId).toBe("b");
+    expect(els[1]!.index).toBe(6);
+    expect(els[1]!.content).toBe("");
+  });
+
+  it("applies the live block colour to every decomposed run", () => {
+    const obj = paragraphTextbox("Line A\nLine B", [
+      { elementId: "a", index: 5, x: 40, y: 100, width: 300, content: "Line A" },
+      { elementId: "b", index: 6, x: 40, y: 114, width: 300, content: "Line B" },
+    ]);
+    (obj as { fill?: string }).fill = "#ff0000"; // user recoloured the block
+    const els = fabricObjectToElements(obj) as TextElement[];
+    expect(els.every((e) => e.style.color === "#ff0000")).toBe(true);
+    // originalFont inherited so the bake re-uses the same subset.
+    expect(els.every((e) => e.style.originalFont === "ABCDEF+Body")).toBe(true);
   });
 });

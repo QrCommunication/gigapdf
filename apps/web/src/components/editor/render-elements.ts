@@ -108,6 +108,15 @@ export interface RenderElementsOptions {
    * Optionnel : seul le single-page le fournit aujourd'hui.
    */
   applyHideMask?: (canvas: FabricCanvas, obj: FabricObject) => Promise<void>;
+  /**
+   * Regroupe les runs de texte d'un même paragraphe en UN bloc `Textbox`
+   * multi-ligne éditable (édition « Word-like », à la Adobe) au lieu de N
+   * `IText` ligne-par-ligne. Activé par défaut. Mettre à `false` pour revenir
+   * au rendu ligne-par-ligne (utile pour le diagnostic / si un PDF se regroupe
+   * mal). Le regroupement est CONSERVATEUR : en cas de doute un run reste un
+   * `IText` séparé (cf. {@link groupTextRunsIntoParagraphs}).
+   */
+  groupParagraphs?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -225,6 +234,187 @@ function formFieldChecked(field: {
 }
 
 // ---------------------------------------------------------------------------
+// Paragraph grouping (Word-like editing) — pure helpers
+// ---------------------------------------------------------------------------
+
+type TextRun = Extract<Element, { type: "text" }>;
+
+/**
+ * Minimal snapshot of a source text run, stashed on the paragraph Textbox's
+ * `data.paragraphRuns` so the save path can DECOMPOSE the multi-line block back
+ * into the individual runs it came from (preserving each run's engine `index`,
+ * `elementId`, exact `bounds` and `style`). This is what makes a coalesced
+ * paragraph round-trip losslessly through `fabricObjectToElements`.
+ */
+export interface ParagraphRun {
+  elementId: string;
+  /** Engine text-run index (lossless `replaceText`); undefined if absent. */
+  index?: number;
+  bounds: { x: number; y: number; width: number; height: number };
+  content: string;
+}
+
+/** A detected paragraph: 2+ vertically-stacked text runs sharing a style. */
+export interface ParagraphGroup {
+  /** The source runs, ordered top→bottom. */
+  runs: TextRun[];
+}
+
+/** Normalised colour key for "same style" comparison. */
+function colourKeyOf(t: TextRun): string {
+  return (t.style.color || "#000000").trim().toLowerCase();
+}
+
+/**
+ * Two runs share the SAME visual style (so they may belong to one paragraph):
+ * same family + same embedded subset identity (`originalFont`), font sizes
+ * within ±10%, same colour, same weight/style and same horizontal alignment.
+ * A style break (e.g. a bold lead-in line, a differently-coloured note) ends
+ * the paragraph — exactly what a real editor does.
+ */
+function sameParagraphStyle(a: TextRun, b: TextRun): boolean {
+  const fsA = a.style.fontSize || 0;
+  const fsB = b.style.fontSize || 0;
+  if (fsA <= 0 || fsB <= 0) return false;
+  const ratio = fsA > fsB ? fsA / fsB : fsB / fsA;
+  if (ratio > 1.1) return false; // sizes differ by more than 10%
+  if ((a.style.fontFamily || "") !== (b.style.fontFamily || "")) return false;
+  if ((a.style.originalFont || "") !== (b.style.originalFont || "")) return false;
+  if (colourKeyOf(a) !== colourKeyOf(b)) return false;
+  if ((a.style.fontWeight || "normal") !== (b.style.fontWeight || "normal")) {
+    return false;
+  }
+  if ((a.style.fontStyle || "normal") !== (b.style.fontStyle || "normal")) {
+    return false;
+  }
+  if ((a.style.textAlign || "left") !== (b.style.textAlign || "left")) {
+    return false;
+  }
+  return true;
+}
+
+/** Horizontal intervals [x, x+width] of the two runs overlap by ≥ minOverlap px. */
+function horizontallyOverlap(a: TextRun, b: TextRun, minOverlap: number): boolean {
+  const aL = a.bounds.x;
+  const aR = a.bounds.x + a.bounds.width;
+  const bL = b.bounds.x;
+  const bR = b.bounds.x + b.bounds.width;
+  return Math.min(aR, bR) - Math.max(aL, bL) >= minOverlap;
+}
+
+/**
+ * `next` continues the paragraph started by `prev` (the previous line) iff ALL
+ * of these hold — deliberately strict so we never merge things that are not a
+ * paragraph (titles, form labels, table cells, separate columns):
+ *
+ *   - same visual style (see {@link sameParagraphStyle});
+ *   - left edges aligned within `xTol` (left-aligned / justified body text);
+ *   - a REGULAR descending line gap: `next` sits BELOW `prev` and the baseline
+ *     step is between ~0.8×fontSize (no overlap) and ~1.8×(fontSize·lineHeight)
+ *     (no large jump = new block / blank line);
+ *   - the two runs share a horizontal span (same column, not side-by-side).
+ *
+ * Hyperlinks (linkUrl/linkPage) and RTL runs are never merged (handled by the
+ * caller) — wrapping/decoration there is too easy to get wrong.
+ */
+function continuesParagraph(prev: TextRun, next: TextRun): boolean {
+  if (!sameParagraphStyle(prev, next)) return false;
+
+  const fontSize = prev.style.fontSize || 12;
+  const lineHeight = prev.style.lineHeight && prev.style.lineHeight > 0
+    ? prev.style.lineHeight
+    : 1.2;
+
+  // Left edges close (paragraph indentation is consistent line-to-line).
+  const xTol = Math.max(2, fontSize * 0.5);
+  if (Math.abs(next.bounds.x - prev.bounds.x) > xTol) return false;
+
+  // Descending, regular line gap (top-left Y, axis points downward).
+  const gap = next.bounds.y - prev.bounds.y;
+  const minGap = fontSize * 0.8;
+  const maxGap = fontSize * lineHeight * 1.8;
+  if (gap < minGap || gap > maxGap) return false;
+
+  // Same column (significant horizontal overlap), not two side-by-side runs.
+  const minOverlap = Math.min(prev.bounds.width, next.bounds.width) * 0.4;
+  if (!horizontallyOverlap(prev, next, Math.max(1, minOverlap))) return false;
+
+  return true;
+}
+
+/** A run that must NEVER be folded into a paragraph (kept as its own IText). */
+function isUngroupableRun(t: TextRun): boolean {
+  if (t.linkUrl || t.linkPage) return true; // keep links standalone (underline/click)
+  if (t.style.direction === "rtl") return true; // RTL wrapping is delicate
+  if (!t.content || t.content.includes("\n")) return true; // empty / already multi-line
+  return false; // otherwise groupable
+}
+
+/**
+ * Group consecutive same-style, regularly-spaced, left-aligned text runs into
+ * paragraphs. Returns BOTH the detected paragraph groups (2+ runs) AND the runs
+ * that stay standalone. Pure & deterministic — drives the renderer and is unit
+ * tested in isolation.
+ *
+ * Conservative by design: a single line, a style change, an irregular gap, a
+ * column change, a link or an RTL run all CLOSE the current paragraph. A false
+ * merge is worse than no merge, so when in doubt a run is left on its own.
+ */
+export function groupTextRunsIntoParagraphs(elements: Element[]): {
+  paragraphs: ParagraphGroup[];
+  standalone: TextRun[];
+} {
+  const runs = elements.filter((e): e is TextRun => e.type === "text");
+  // Top→bottom, then left→right, so paragraph lines are visited in reading order.
+  const ordered = [...runs].sort((a, b) => {
+    const dy = a.bounds.y - b.bounds.y;
+    if (Math.abs(dy) > 0.5) return dy;
+    return a.bounds.x - b.bounds.x;
+  });
+
+  const paragraphs: ParagraphGroup[] = [];
+  const standalone: TextRun[] = [];
+  const consumed = new Set<TextRun>();
+
+  for (let i = 0; i < ordered.length; i++) {
+    const start = ordered[i]!;
+    if (consumed.has(start)) continue;
+    if (isUngroupableRun(start)) {
+      standalone.push(start);
+      consumed.add(start);
+      continue;
+    }
+    // Greedily extend the paragraph downward from `start`.
+    const group: TextRun[] = [start];
+    consumed.add(start);
+    let prev = start;
+    for (let j = i + 1; j < ordered.length; j++) {
+      const cand = ordered[j]!;
+      if (consumed.has(cand)) continue;
+      if (isUngroupableRun(cand)) continue;
+      if (continuesParagraph(prev, cand)) {
+        group.push(cand);
+        consumed.add(cand);
+        prev = cand;
+      }
+      // Do NOT break on first non-match: a later run could still be the next
+      // line if an unrelated run interleaved in the sort. But once the vertical
+      // gap to the LAST paragraph line is exceeded, stop scanning (perf + safety).
+      else if (cand.bounds.y - prev.bounds.y > (prev.style.fontSize || 12) * (prev.style.lineHeight || 1.2) * 1.8) {
+        break;
+      }
+    }
+    if (group.length >= 2) {
+      paragraphs.push({ runs: group });
+    } else {
+      standalone.push(start);
+    }
+  }
+
+  return { paragraphs, standalone };
+}
+
+// ---------------------------------------------------------------------------
 // API publique
 // ---------------------------------------------------------------------------
 
@@ -245,6 +435,7 @@ export async function renderElementsOverlay(
     getFontFaceName,
     resolveImageUrl = defaultResolveImageUrl,
     applyHideMask,
+    groupParagraphs = true,
   } = options;
   // Géométrie en points natifs : le zoom est géré par canvas.setZoom().
   void scale;
@@ -256,6 +447,7 @@ export async function renderElementsOverlay(
     Triangle,
     Line,
     IText,
+    Textbox,
     FabricImage,
     Path: FabricPath,
     Polygon,
@@ -343,6 +535,21 @@ export async function renderElementsOverlay(
     return true;
   });
 
+  // 3. GROUP TEXT RUNS INTO PARAGRAPHS (Word-like editing). Consecutive
+  //    same-style, regularly-spaced, left-aligned runs are coalesced into one
+  //    multi-line `Textbox` (like Adobe grouping an intro paragraph into one
+  //    editable block) instead of N IText. The runs folded into a paragraph are
+  //    excluded from the per-line IText loop below (tracked by elementId) and
+  //    rendered as Textboxes afterwards. Conservative — a title / label / table
+  //    cell / column / link stays its own IText (see groupTextRunsIntoParagraphs).
+  const paragraphGroups = groupParagraphs
+    ? groupTextRunsIntoParagraphs(dedupedElements).paragraphs
+    : [];
+  const runsInParagraph = new Set<string>();
+  for (const group of paragraphGroups) {
+    for (const run of group.runs) runsInParagraph.add(run.elementId);
+  }
+
   for (const element of dedupedElements) {
     // Guard: skip elements with missing or zero-size bounds
     if (
@@ -350,6 +557,12 @@ export async function renderElementsOverlay(
       element.bounds.width <= 0 ||
       element.bounds.height <= 0
     ) {
+      continue;
+    }
+
+    // A text run folded into a paragraph is rendered as part of its Textbox
+    // (below), never as a standalone IText — skip it here.
+    if (element.type === "text" && runsInParagraph.has(element.elementId)) {
       continue;
     }
 
@@ -391,9 +604,7 @@ export async function renderElementsOverlay(
         // overflows / collides with its neighbours. We therefore neutralise the
         // synthetic weight/style whenever the embedded font is used, and only
         // honour the parsed weight/style for the generic CSS fallback (where the
-        // family carries no built-in variant). `usingEmbeddedFont` also drives
-        // the anti-overflow scaleX fit below: with the real metrics the text
-        // fits naturally, so the fit is reserved for the fallback case.
+        // family carries no built-in variant).
         const _embeddedFontName = (() => {
           const orig = textElement.style.originalFont;
           if (orig && getFontFaceName) {
@@ -451,34 +662,13 @@ export async function renderElementsOverlay(
           cornerSize: 8,
           transparentCorners: false,
         });
-        // Anti-overflow fit — LAST RESORT, fallback font only. When the embedded
-        // font is used, the real metrics make the text fit its bounds naturally,
-        // so we never compress it. With the generic CSS fallback (Helvetica…) the
-        // glyph widths differ from the PDF's, so a run can render wider than
-        // bounds.width and spill onto / collide with its neighbours (the reported
-        // symptom). Fabric measures the rendered width on construction (textObj.width
-        // for the current font); if it exceeds the parsed bounds.width we apply a
-        // horizontal scaleX so the run fits exactly. This scaleX is COSMETIC: it
-        // is flagged on data so fabricObjectToElement neutralises it (never bakes
-        // it into bounds.width, which would corrupt the redaction/replaceText
-        // region). originalFont stays the parsed name so a later re-render — once
-        // the embedded FontFace has loaded — drops the fit and uses the real font.
-        let _cosmeticScaleX = false;
-        if (!_usingEmbeddedFont) {
-          const _targetWidth = textElement.bounds.width;
-          const _measuredWidth =
-            (textObj as FabricObject & { width?: number }).width ?? 0;
-          if (
-            _targetWidth > 0 &&
-            _measuredWidth > _targetWidth &&
-            (textElement.content || "").trim().length > 0
-          ) {
-            // Clamp the squeeze so text never becomes unreadable (min 35%).
-            const _fitScaleX = Math.max(0.35, _targetWidth / _measuredWidth);
-            textObj.set({ scaleX: _fitScaleX });
-            _cosmeticScaleX = true;
-          }
-        }
+        // No anti-overflow scaleX fit. Per the user directive ("use the embedded
+        // font, no scaleX that squashes the text"), the run keeps its NATURAL
+        // width. With the embedded PDF font resolved (the common case) the real
+        // metrics already make the text fit its bounds. If a font truly fails to
+        // load, the fallback may render slightly wider than bounds.width and
+        // overflow a little — that is the accepted trade-off over squashing the
+        // glyphs horizontally.
         (textObj as FabricObjectWithData).data = {
           elementId: textElement.elementId,
           type: "text",
@@ -487,12 +677,9 @@ export async function renderElementsOverlay(
           rotation0: textElement.transform?.rotation ?? 0,
           originalFont: textElement.style.originalFont,
           // True when the embedded PDF font was resolved & registered — the
-          // overlay then renders with the SAME typography as the original, and
-          // no synthetic weight/style or width fit is applied.
+          // overlay then renders with the SAME typography as the original, so no
+          // synthetic weight/style is applied.
           usingEmbeddedFont: _usingEmbeddedFont,
-          // Marks scaleX as a cosmetic anti-overflow fit (fallback font only) so
-          // the round-trip in fabricObjectToElement ignores it for bounds.width.
-          cosmeticScaleX: _cosmeticScaleX,
           originalFill: textColour,
           originalBgColor: textElement.style.backgroundColor || "",
           linkUrl: textElement.linkUrl,
@@ -932,6 +1119,110 @@ export async function renderElementsOverlay(
       };
       canvas.add(fabricObj);
     }
+  }
+
+  // 4. RENDER PARAGRAPHS as multi-line, editable Textboxes (Word-like). Each
+  //    group's runs were excluded from the IText loop above; here they become a
+  //    SINGLE Textbox positioned at the block's top-left, sized to the block
+  //    width, with the lines joined by "\n". The source runs are stashed on
+  //    `data.paragraphRuns` so `fabricObjectToElements` can decompose the block
+  //    back into the original runs on save (preserving each run's engine index/
+  //    elementId/bounds → lossless `replaceText`). Same typography rules as the
+  //    IText branch (embedded font + neutralised synthetic bold/italic).
+  for (const group of paragraphGroups) {
+    const runs = group.runs;
+    const first = runs[0]!;
+    // Block geometry from the union of the runs' bounds.
+    const blockLeft = Math.min(...runs.map((r) => r.bounds.x));
+    const blockTop = Math.min(...runs.map((r) => r.bounds.y));
+    const blockRight = Math.max(...runs.map((r) => r.bounds.x + r.bounds.width));
+    const blockWidth = Math.max(1, blockRight - blockLeft);
+
+    const fontSize = first.style.fontSize ?? 12;
+    const textColour = first.style.color || "#000000";
+    const embeddedFontName = (() => {
+      const orig = first.style.originalFont;
+      if (orig && getFontFaceName) {
+        const registered = getFontFaceName(orig);
+        if (registered) return registered;
+      }
+      return null;
+    })();
+    const usingEmbeddedFont = embeddedFontName !== null;
+    const resolvedFontFamily =
+      embeddedFontName ?? first.style.fontFamily ?? "Helvetica";
+    const content = runs.map((r) => r.content).join("\n");
+
+    const tb = new Textbox(content, {
+      left: blockLeft,
+      top: blockTop,
+      originX: "left" as const,
+      originY: "top" as const,
+      width: blockWidth,
+      angle: first.transform?.rotation || 0,
+      selectable: !readonly,
+      evented: !readonly,
+      visible: first.visible,
+      fontSize,
+      fontFamily: resolvedFontFamily,
+      fontWeight: usingEmbeddedFont
+        ? "normal"
+        : first.style.fontWeight || "normal",
+      fontStyle: usingEmbeddedFont
+        ? "normal"
+        : first.style.fontStyle || "normal",
+      fill: textColour,
+      opacity: first.style.opacity ?? 1,
+      textAlign: first.style.textAlign || "left",
+      lineHeight: first.style.lineHeight || 1.2,
+      charSpacing: (first.style.letterSpacing || 0) * 10,
+      underline: first.style.underline || false,
+      linethrough: first.style.strikethrough || false,
+      textBackgroundColor: "",
+      cursorColor: textColour,
+      cursorWidth: 1,
+      selectionColor: "rgba(0, 100, 200, 0.18)",
+      hasControls: true,
+      hasBorders: true,
+      borderColor: "rgba(0, 100, 200, 0.75)",
+      borderScaleFactor: 1,
+      cornerColor: "rgb(0, 100, 200)",
+      cornerStrokeColor: "#ffffff",
+      cornerSize: 8,
+      transparentCorners: false,
+    });
+
+    const paragraphRuns: ParagraphRun[] = runs.map((r) => ({
+      elementId: r.elementId,
+      ...(r.index !== undefined ? { index: r.index } : {}),
+      bounds: {
+        x: r.bounds.x,
+        y: r.bounds.y,
+        width: r.bounds.width,
+        height: r.bounds.height,
+      },
+      content: r.content,
+    }));
+
+    (tb as FabricObjectWithData).data = {
+      // The paragraph adopts the FIRST run's identity for selection/tracking.
+      elementId: first.elementId,
+      type: "text",
+      // Engine index of the first line — only meaningful when the paragraph is
+      // NOT decomposed; the decompose path keeps each run's own index.
+      index: first.index,
+      rotation0: first.transform?.rotation ?? 0,
+      originalFont: first.style.originalFont,
+      usingEmbeddedFont,
+      originalFill: textColour,
+      originalBgColor: first.style.backgroundColor || "",
+      // Marks this Textbox as a coalesced paragraph + carries its source runs so
+      // the save path decomposes it losslessly (see fabricObjectToElements).
+      isParagraph: true,
+      paragraphRuns,
+      locked: first.locked === true,
+    };
+    canvas.add(tb as unknown as FabricObject);
   }
 
   // Wait for all async image loads before final render
