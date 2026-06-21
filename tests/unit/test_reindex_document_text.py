@@ -22,7 +22,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.api.v1 import storage as storage_module
-from app.api.v1.storage import reindex_document_text
+from app.api.v1.storage import reindex_document_blocks, reindex_document_text
 from app.models.database import OcrBlock, StoredDocument
 
 DOC_ID = "770e8400-e29b-41d4-a716-446655440042"
@@ -99,6 +99,30 @@ async def test_indexes_text_into_fulltext_and_semantic(fake_embeddings):
     # Doc-level text → page 0, empty bbox (no per-block geometry from the client).
     assert all(b.page == 0 for b in blocks)
     assert all(b.bbox_x == 0 and b.bbox_y == 0 for b in blocks)
+
+
+async def test_reindex_blocks_preserves_geometry_and_syncs_fulltext(fake_embeddings):
+    # Positioned blocks (page + bbox) must be stored WITH their geometry (so hits
+    # can be highlighted on the page) AND their text concatenated into
+    # extracted_text (so the keyword search stays in sync).
+    doc = _make_doc()
+    session = _FakeSession(doc)
+
+    blocks = [
+        {"page": 0, "bbox": {"x": 72, "y": 760, "w": 220, "h": 18}, "text": "INVOICE 42"},
+        {"page": 1, "bbox": {"x": 36, "y": 120, "w": 150, "h": 14}, "text": "Total due 1250"},
+    ]
+    count = await reindex_document_blocks(session, DOC_ID, blocks)
+
+    stored = [o for o in session.added if isinstance(o, OcrBlock)]
+    assert count == len(stored) == 2
+    # Geometry preserved (not flattened to page 0 / empty bbox).
+    by_page = {b.page: b for b in stored}
+    assert by_page[0].bbox_x == 72 and by_page[0].bbox_w == 220
+    assert by_page[1].page == 1 and by_page[1].bbox_y == 120
+    assert all(b.embedding is not None and len(b.embedding) == 384 for b in stored)
+    # Full-text material synced from the block texts.
+    assert doc.extracted_text == "INVOICE 42 Total due 1250"
 
 
 async def test_strips_nul_bytes(fake_embeddings):
