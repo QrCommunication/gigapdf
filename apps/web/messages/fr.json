@@ -1707,7 +1707,9 @@
         "alignLeft": "Gauche",
         "alignCenter": "Centre",
         "alignRight": "Droite"
-      }
+      },
+      "layer": "Calque",
+      "layerNone": "Aucun"
     },
     "sidebar": {
       "pages": "Pages",
@@ -1735,7 +1737,17 @@
       "typeImage": "Image",
       "typeShape": "Forme",
       "typeAnnotation": "Annotation",
-      "typeFormField": "Champ de formulaire"
+      "typeFormField": "Champ de formulaire",
+      "userLayers": "Calques utilisateur",
+      "addLayer": "Ajouter un calque",
+      "noLayers": "Aucun calque utilisateur",
+      "renameLayer": "Renommer le calque",
+      "deleteLayer": "Supprimer le calque",
+      "moveUp": "Monter le calque",
+      "moveDown": "Descendre le calque",
+      "noLayerElements": "Aucun élément sur ce calque",
+      "assignToLayer": "Affecter à un calque",
+      "layerNone": "Aucun"
     },
     "attachments": {
       "title": "Pièces jointes",

@@ -134,8 +134,29 @@ export interface UseDocumentReturn {
   setName: (name: string) => void;
   /** Table des matières (signets) */
   outlines: BookmarkObject[];
-  /** Calques du document */
+  /** Calques OCG du document (lecture seule) */
   layers: LayerObject[];
+  /**
+   * Calques utilisateur (Phase 2 "Layer Groups") — construction d'édition
+   * uniquement (PAS des OCG PDF). Vivent dans l'état de l'éditeur ; la
+   * persistance cross-session du membership nécessiterait des métadonnées
+   * backend (non implémenté).
+   */
+  userLayers: LayerObject[];
+  /** Créer un calque utilisateur (ajouté en haut de pile : order = max+1). */
+  createLayer: (name: string) => LayerObject;
+  /** Supprimer un calque + détacher (layerId=null) tous ses éléments. */
+  deleteLayer: (layerId: string) => void;
+  /** Renommer un calque utilisateur. */
+  renameLayer: (layerId: string, name: string) => void;
+  /** Changer l'ordre d'empilement d'un calque utilisateur. */
+  reorderLayer: (layerId: string, newOrder: number) => void;
+  /** Masquer/afficher un calque — cascade sur element.visible des membres. */
+  setLayerVisible: (layerId: string, visible: boolean) => void;
+  /** Verrouiller/déverrouiller un calque — cascade sur element.locked. */
+  setLayerLocked: (layerId: string, locked: boolean) => void;
+  /** Affecter un élément à un calque utilisateur (ou null pour le détacher). */
+  assignElementToLayer: (elementId: string, layerId: string | null) => void;
   /** Fichiers embarqués */
   embeddedFiles: EmbeddedFileObject[];
   /**
@@ -151,6 +172,14 @@ export interface UseDocumentReturn {
 // Génère un ID unique pour les nouvelles pages
 function generatePageId(): string {
   return `page_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Génère un ID unique pour les calques utilisateur (crypto si dispo).
+function generateLayerId(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `layer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
 /**
@@ -182,12 +211,16 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
   // Flattened PDF bytes (Form XObjects inlined) when `flatten` is active and at
   // least one form was inlined. Decoded once at load; consumed by the editor.
   const [flattenedPdfFile, setFlattenedPdfFile] = useState<File | null>(null);
+  // Editor-only user layers (Phase 2 "Layer Groups"). Kept separate from the
+  // document's OCG `layers` (read-only). Reset on document (re)load.
+  const [userLayers, setUserLayers] = useState<LayerObject[]>([]);
 
   // Charger le document
   const loadDocument = useCallback(async () => {
     setLoading(true);
     setError(null);
     setFlattenedPdfFile(null);
+    setUserLayers([]);
 
     try {
       let docId = sessionDocumentId;
@@ -593,6 +626,126 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     });
   }, []);
 
+  // ---- Calques utilisateur (Phase 2 "Layer Groups") ----
+
+  // Créer un calque : ajouté en haut de la pile (order = max+1).
+  const createLayer = useCallback((name: string): LayerObject => {
+    const layer: LayerObject = {
+      layerId: generateLayerId(),
+      name,
+      visible: true,
+      locked: false,
+      opacity: 1,
+      print: true,
+      order: 0, // recalculé ci-dessous (max+1) dans le setter
+    };
+    setUserLayers((prev) => {
+      const maxOrder = prev.reduce((max, l) => (l.order > max ? l.order : max), -1);
+      return [...prev, { ...layer, order: maxOrder + 1 }];
+    });
+    setDirty(true);
+    return layer;
+  }, []);
+
+  // Supprimer un calque + détacher (layerId=null) tous ses éléments membres.
+  const deleteLayer = useCallback((layerId: string) => {
+    setUserLayers((prev) => prev.filter((l) => l.layerId !== layerId));
+    setDocument((prev) => {
+      if (!prev) return prev;
+      let touched = false;
+      const pages = prev.pages.map((p) => {
+        let pageTouched = false;
+        const elements = p.elements.map((el) => {
+          if (el.layerId === layerId) {
+            pageTouched = true;
+            return { ...el, layerId: null };
+          }
+          return el;
+        });
+        if (!pageTouched) return p;
+        touched = true;
+        return { ...p, elements };
+      });
+      return touched ? { ...prev, pages } : prev;
+    });
+    setDirty(true);
+  }, []);
+
+  const renameLayer = useCallback((layerId: string, name: string) => {
+    setUserLayers((prev) =>
+      prev.map((l) => (l.layerId === layerId ? { ...l, name } : l)),
+    );
+    setDirty(true);
+  }, []);
+
+  const reorderLayer = useCallback((layerId: string, newOrder: number) => {
+    setUserLayers((prev) =>
+      prev.map((l) => (l.layerId === layerId ? { ...l, order: newOrder } : l)),
+    );
+    setDirty(true);
+  }, []);
+
+  // Masquer/afficher un calque — cascade sur element.visible des membres
+  // (un seul passage de re-render sur les pages, pas N appels).
+  const setLayerVisible = useCallback((layerId: string, visible: boolean) => {
+    setUserLayers((prev) =>
+      prev.map((l) => (l.layerId === layerId ? { ...l, visible } : l)),
+    );
+    setDocument((prev) => {
+      if (!prev) return prev;
+      let touched = false;
+      const pages = prev.pages.map((p) => {
+        let pageTouched = false;
+        const elements = p.elements.map((el) => {
+          if (el.layerId === layerId) {
+            pageTouched = true;
+            return { ...el, visible };
+          }
+          return el;
+        });
+        if (!pageTouched) return p;
+        touched = true;
+        return { ...p, elements };
+      });
+      return touched ? { ...prev, pages } : prev;
+    });
+    setDirty(true);
+  }, []);
+
+  const setLayerLocked = useCallback((layerId: string, locked: boolean) => {
+    setUserLayers((prev) =>
+      prev.map((l) => (l.layerId === layerId ? { ...l, locked } : l)),
+    );
+    setDocument((prev) => {
+      if (!prev) return prev;
+      let touched = false;
+      const pages = prev.pages.map((p) => {
+        let pageTouched = false;
+        const elements = p.elements.map((el) => {
+          if (el.layerId === layerId) {
+            pageTouched = true;
+            return { ...el, locked };
+          }
+          return el;
+        });
+        if (!pageTouched) return p;
+        touched = true;
+        return { ...p, elements };
+      });
+      return touched ? { ...prev, pages } : prev;
+    });
+    setDirty(true);
+  }, []);
+
+  // Affecter un élément à un calque (ou le détacher avec null).
+  const assignElementToLayer = useCallback(
+    (elementId: string, layerId: string | null) => {
+      updateElementInPage(elementId, { layerId } as Partial<Element>);
+      setDirty(true);
+    },
+    [updateElementInPage],
+  );
+
   // Remplace les pages du scene graph. Utilisé après un re-parse du PDF
   // (rotate/add/delete/reorder modifient le layout, donc les coords des
   // text items changent — il faut refeed le canvas avec les nouveaux
@@ -645,6 +798,14 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     setName,
     outlines,
     layers,
+    userLayers,
+    createLayer,
+    deleteLayer,
+    renameLayer,
+    reorderLayer,
+    setLayerVisible,
+    setLayerLocked,
+    assignElementToLayer,
     embeddedFiles,
     flattenedPdfFile,
   };

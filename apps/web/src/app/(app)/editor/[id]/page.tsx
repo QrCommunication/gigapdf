@@ -479,6 +479,14 @@ export default function EditorPage() {
     setName,
     outlines,
     layers,
+    userLayers,
+    createLayer,
+    deleteLayer,
+    renameLayer,
+    reorderLayer,
+    setLayerVisible,
+    setLayerLocked,
+    assignElementToLayer,
     embeddedFiles,
     flattenedPdfFile,
   } = useDocument({ storedDocumentId, flatten: true });
@@ -2631,6 +2639,105 @@ export default function EditorPage() {
     [canvasHandle],
   );
 
+  // ── User layers (Phase 2 "Layer Groups") ─────────────────────────────────
+  // Editor-only construct: layer membership + visibility/lock live in the
+  // scene graph (useDocument), NOT in the PDF (no OCG, no pdf-engine op). The
+  // visibility/lock cascade is applied to member elements inside useDocument
+  // in a single state pass; here we additionally mirror the visual effect onto
+  // the Fabric canvas + collaboration for each currently-loaded member element.
+  const handleLayerCreate = useCallback(() => {
+    // Default name is a simple ordinal; the panel immediately enters rename
+    // mode after creation (double-click is also available afterwards).
+    createLayer(`Layer ${userLayers.length + 1}`);
+    setDirty(true);
+    saveWithPriority("debounced");
+  }, [createLayer, userLayers.length, setDirty, saveWithPriority]);
+
+  const handleLayerDelete = useCallback(
+    (layerId: string) => {
+      deleteLayer(layerId);
+      setDirty(true);
+      saveWithPriority("debounced");
+    },
+    [deleteLayer, setDirty, saveWithPriority],
+  );
+
+  const handleLayerRename = useCallback(
+    (layerId: string, name: string) => {
+      renameLayer(layerId, name);
+      setDirty(true);
+      saveWithPriority("debounced");
+    },
+    [renameLayer, setDirty, saveWithPriority],
+  );
+
+  const handleLayerReorder = useCallback(
+    (layerId: string, newOrder: number) => {
+      reorderLayer(layerId, newOrder);
+      setDirty(true);
+      saveWithPriority("debounced");
+    },
+    [reorderLayer, setDirty, saveWithPriority],
+  );
+
+  const handleLayerVisibilityChange = useCallback(
+    (layerId: string, visible: boolean) => {
+      // Cascade member element flags in the scene graph (single pass).
+      setLayerVisible(layerId, visible);
+      // Mirror onto canvas + collaboration for each loaded member element.
+      const members = (effectivePage?.elements ?? []).filter(
+        (el) => el.layerId === layerId,
+      );
+      for (const el of members) {
+        canvasHandle?.setElementVisibility(el.elementId, visible);
+        emitElementUpdate(el.elementId, { visible });
+      }
+      setDirty(true);
+      saveWithPriority("debounced");
+    },
+    [
+      setLayerVisible,
+      effectivePage,
+      canvasHandle,
+      emitElementUpdate,
+      setDirty,
+      saveWithPriority,
+    ],
+  );
+
+  const handleLayerLockChange = useCallback(
+    (layerId: string, locked: boolean) => {
+      setLayerLocked(layerId, locked);
+      const members = (effectivePage?.elements ?? []).filter(
+        (el) => el.layerId === layerId,
+      );
+      for (const el of members) {
+        canvasHandle?.setElementLocked(el.elementId, locked);
+        emitElementUpdate(el.elementId, { locked });
+      }
+      setDirty(true);
+      saveWithPriority("debounced");
+    },
+    [
+      setLayerLocked,
+      effectivePage,
+      canvasHandle,
+      emitElementUpdate,
+      setDirty,
+      saveWithPriority,
+    ],
+  );
+
+  const handleAssignElementToLayer = useCallback(
+    (elementId: string, layerId: string | null) => {
+      assignElementToLayer(elementId, layerId);
+      emitElementUpdate(elementId, { layerId });
+      setDirty(true);
+      saveWithPriority("debounced");
+    },
+    [assignElementToLayer, emitElementUpdate, setDirty, saveWithPriority],
+  );
+
   // Handler pour le téléchargement de fichiers embarqués
   const handleDownloadFile = useCallback((file: { dataUrl: string; name: string }) => {
     const link = document.createElement("a");
@@ -3449,6 +3556,8 @@ export default function EditorPage() {
           pageInfo={pageInfo}
           zoom={zoom}
           allFieldNames={allFieldNames}
+          userLayers={userLayers}
+          onAssignElementToLayer={handleAssignElementToLayer}
         />
 
         {/* Document info sidebar (TOC, Layers, Embedded Files). Layers reflect
@@ -3456,6 +3565,7 @@ export default function EditorPage() {
         <DocumentInfoSidebar
           outlines={outlines}
           layers={layers}
+          userLayers={userLayers}
           elements={effectivePage?.elements ?? []}
           selectedElementIds={selectedElementIds}
           embeddedFiles={embeddedFiles}
@@ -3463,6 +3573,13 @@ export default function EditorPage() {
           onElementVisibilityChange={handleElementVisibilityChange}
           onElementLockChange={handleElementLockChange}
           onElementSelect={handleSelectElementFromLayer}
+          onLayerCreate={handleLayerCreate}
+          onLayerDelete={handleLayerDelete}
+          onLayerRename={handleLayerRename}
+          onLayerReorder={handleLayerReorder}
+          onLayerVisibilityChange={handleLayerVisibilityChange}
+          onLayerLockChange={handleLayerLockChange}
+          onAssignElementToLayer={handleAssignElementToLayer}
           onDownloadFile={handleDownloadFile}
           currentPageIndex={effectivePageIndex}
         />
