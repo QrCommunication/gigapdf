@@ -2379,18 +2379,98 @@
       },
       "features": {
         "title": "Fonctionnalités (v1.3.0)",
-        "editing": "Édition in-place du texte, des images et des formes (vraie redaction, pas de masque)",
-        "forms": "Concepteur de formulaires AcroForm : champs texte, dates, cases, listes — création, remplissage, aplatissement",
-        "signature": "Signatures électroniques PKCS#7 / CAdES avec votre propre certificat P12/PFX",
-        "ocr": "OCR multi-langues intégré : couche de texte cherchable sur les PDF scannés",
-        "office": "Conversions Office natives : import/export de 9 formats (DOCX/XLSX/PPTX, OpenDocument, OLE2 legacy)",
-        "ged": "GED : dossiers, corbeille, recherche plein-texte, tags, déduplication",
-        "realtime": "Collaboration multi-utilisateur en temps réel via WebSocket",
-        "api": "API REST complète, clés API scopées et widget embed pour intégrer l'éditeur",
-        "search": "Recherche sémantique : retrouvez un passage dans vos documents par le sens, pas seulement par mot-clé (embeddings + pgvector).",
-        "palette": "Palette de commandes globale (Ctrl/Cmd+K) : ouvrez n’importe quel outil ou page et lancez une recherche depuis partout.",
-        "merge": "Fusion universelle : combinez n’importe quels fichiers (PDF, Word, Excel, PowerPoint, OpenDocument, images, HTML, texte, RTF) en un seul PDF, chacun converti automatiquement.",
-        "tools": "29 outils PDF dédiés, classés par catégorie et accessibles via le méga-menu : éditer, convertir, sécuriser, OCR, organiser…"
+        "categories": {
+          "editing": {
+            "title": "Édition & contenu",
+            "items": {
+              "editText": "Modifier le texte directement dans le PDF en conservant la police d'origine",
+              "addText": "Ajouter du texte avec les polices Google ou standard (gras, italique, couleur, rotation)",
+              "images": "Insérer et extraire des images (PNG, JPEG)",
+              "shapes": "Dessiner des formes vectorielles : rectangle, ellipse, polygone, trait, chemin SVG",
+              "annotate": "Annoter : surligner, souligner, barrer, texte libre, tampon",
+              "forms": "Créer et remplir des formulaires (texte, cases, boutons radio, listes, signature), puis les aplatir",
+              "watermark": "Apposer un filigrane texte (7 positions, opacité, rotation)",
+              "redact": "Caviarder de façon permanente et irréversible (texte et pixels)",
+              "compress": "Compresser et optimiser le fichier",
+              "organizePages": "Organiser les pages : pivoter, réordonner, supprimer, dupliquer, extraire, diviser, fusionner, redimensionner",
+              "headerFooter": "Ajouter des en-têtes et pieds de page courants avec numérotation",
+              "metadata": "Lire et modifier les métadonnées (titre, auteur, mots-clés…)"
+            }
+          },
+          "convert": {
+            "title": "Conversion",
+            "items": {
+              "toPdf": "Convertir vers PDF : Word, Excel, PowerPoint, OpenDocument, images (JPG/PNG/GIF/WebP/AVIF), HTML, page web, RTF, texte",
+              "fromPdf": "Convertir depuis PDF : Word, PowerPoint, ODT, ODP, Excel, images PNG, PDF/A",
+              "universalMerge": "Fusion universelle : n'importe quels fichiers convertis puis fusionnés en un seul PDF",
+              "htmlToPdf": "Rendu HTML/CSS en PDF, nativement, sans navigateur"
+            }
+          },
+          "security": {
+            "title": "Sécurité",
+            "items": {
+              "encrypt": "Chiffrer en AES-128 ou AES-256 (mots de passe utilisateur et propriétaire)",
+              "permissions": "8 permissions granulaires : impression, modification, copie, annotation, formulaires, extraction, assemblage, impression haute qualité",
+              "sign": "Signer numériquement (PKCS#7) avec votre certificat P12/PFX — vérifiable dans Adobe Reader",
+              "unlock": "Déverrouiller un PDF protégé par mot de passe"
+            }
+          },
+          "recognition": {
+            "title": "OCR & recherche",
+            "items": {
+              "ocr": "OCR multilingue (latin, cyrillique, grec, arabe, hébreu, devanagari, bengali, tamoul, chinois) — moteur maison, sans Tesseract",
+              "searchablePdf": "Rendre un scan cherchable grâce à une couche de texte invisible",
+              "semanticSearch": "Recherche sémantique dans vos documents, par le sens (embeddings + pgvector)",
+              "fullTextSearch": "Recherche plein-texte sur le nom et le contenu des documents"
+            }
+          },
+          "documents": {
+            "title": "Gestion documentaire",
+            "items": {
+              "library": "Bibliothèque de documents, format d'origine préservé",
+              "folders": "Dossiers et navigation",
+              "tags": "Étiquettes avec filtrage et autocomplétion",
+              "thumbnails": "Miniatures des documents",
+              "trash": "Corbeille avec restauration sous 30 jours",
+              "duplicate": "Duplication de documents",
+              "share": "Partage par e-mail (lecture/écriture) et liens publics avec expiration",
+              "history": "Historique d'édition avec annuler/rétablir"
+            }
+          },
+          "collaboration": {
+            "title": "Collaboration",
+            "items": {
+              "realtime": "Édition collaborative en temps réel : curseurs partagés, verrouillage d'éléments, synchronisation de la scène"
+            }
+          },
+          "productivity": {
+            "title": "Productivité",
+            "items": {
+              "palette": "Palette de commandes globale (Ctrl/Cmd+K)",
+              "megaMenu": "Méga-menu reprenant les 29 outils par catégorie",
+              "tools": "29 outils PDF dédiés avec pages d'aide",
+              "editor": "Éditeur visuel : zoom, déplacement, vue continue des pages"
+            }
+          },
+          "developers": {
+            "title": "Développeurs & API",
+            "items": {
+              "restApi": "API REST complète (/api/v1)",
+              "openapi": "Documentation interactive : Swagger (/api/docs) et Redoc (/api/redoc)",
+              "apiKeys": "Clés API avec scopes et limites de débit",
+              "processingRoutes": "Routes de traitement PDF côté serveur (/api/pdf)"
+            }
+          },
+          "engine": {
+            "title": "Moteur",
+            "items": {
+              "wasm": "Moteur PDF maison en Rust → WebAssembly",
+              "zeroDep": "Zéro dépendance tierce : ni LibreOffice, ni Tesseract, ni Chromium, ni poppler",
+              "nativeFormats": "Images (PNG/JPEG/GIF/WebP/AVIF) et rendu HTML/CSS gérés nativement",
+              "license": "Code source disponible sous licence PolyForm Noncommercial"
+            }
+          }
+        }
       },
       "selfhost": {
         "title": "Auto-hébergement",

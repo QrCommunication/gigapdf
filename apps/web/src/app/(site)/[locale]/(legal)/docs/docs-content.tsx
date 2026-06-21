@@ -19,26 +19,95 @@ import {
   KeyRound,
   Terminal,
   CheckCircle2,
+  PenLine,
+  Repeat,
+  ShieldCheck,
+  ScanText,
+  FolderOpen,
+  Users,
+  Command,
+  Code,
+  Cpu,
 } from "lucide-react";
 import { Button } from "@giga-pdf/ui";
 
 const REPO_URL = "https://github.com/QrCommunication/gigapdf";
 const LICENSE_URL = "https://github.com/QrCommunication/gigapdf/blob/main/LICENSE";
 
-/** Static lucide icon per feature key (no dynamic class names — purge-safe). */
-const FEATURE_KEYS = [
-  "editing",
-  "merge",
-  "tools",
-  "search",
-  "palette",
-  "forms",
-  "signature",
-  "ocr",
-  "office",
-  "ged",
-  "realtime",
-  "api",
+/**
+ * Features grouped by category. Each category renders its title (icon +
+ * `features.categories.${key}.title`) followed by its items
+ * (`features.categories.${key}.items.${item}`). Icons are static lucide
+ * references (no dynamic class names — purge-safe).
+ */
+const FEATURE_CATEGORIES = [
+  {
+    key: "editing",
+    icon: PenLine,
+    items: [
+      "editText",
+      "addText",
+      "images",
+      "shapes",
+      "annotate",
+      "forms",
+      "watermark",
+      "redact",
+      "compress",
+      "organizePages",
+      "headerFooter",
+      "metadata",
+    ],
+  },
+  {
+    key: "convert",
+    icon: Repeat,
+    items: ["toPdf", "fromPdf", "universalMerge", "htmlToPdf"],
+  },
+  {
+    key: "security",
+    icon: ShieldCheck,
+    items: ["encrypt", "permissions", "sign", "unlock"],
+  },
+  {
+    key: "recognition",
+    icon: ScanText,
+    items: ["ocr", "searchablePdf", "semanticSearch", "fullTextSearch"],
+  },
+  {
+    key: "documents",
+    icon: FolderOpen,
+    items: [
+      "library",
+      "folders",
+      "tags",
+      "thumbnails",
+      "trash",
+      "duplicate",
+      "share",
+      "history",
+    ],
+  },
+  {
+    key: "collaboration",
+    icon: Users,
+    items: ["realtime"],
+  },
+  {
+    key: "productivity",
+    icon: Command,
+    items: ["palette", "megaMenu", "tools", "editor"],
+  },
+  {
+    key: "developers",
+    icon: Code,
+    items: ["restApi", "openapi", "apiKeys", "processingRoutes"],
+  },
+  {
+    key: "engine",
+    icon: Cpu,
+    items: ["wasm", "zeroDep", "nativeFormats", "license"],
+  },
 ] as const;
 
 export default function DocsContent() {
@@ -86,17 +155,33 @@ export default function DocsContent() {
 
       {/* Features */}
       <section className="mb-14">
-        <h2 className="text-2xl font-bold mb-6">{t("features.title")}</h2>
-        <div className="grid gap-4 md:grid-cols-2 not-prose">
-          {FEATURE_KEYS.map((key, index) => (
-            <div
-              key={key}
-              className="flex items-start gap-3 rounded-lg border border-border bg-card/50 p-4"
-            >
-              <span className="text-terminal-cyan font-mono text-sm pt-0.5 shrink-0">
-                {String(index + 1).padStart(2, "0")}
-              </span>
-              <span className="text-sm">{t(`features.${key}`)}</span>
+        <h2 className="text-2xl font-bold mb-8">{t("features.title")}</h2>
+        <div className="space-y-10 not-prose">
+          {FEATURE_CATEGORIES.map(({ key, icon: Icon, items }) => (
+            <div key={key}>
+              <div className="flex items-center gap-3 mb-4">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-terminal-cyan/30 bg-terminal-cyan/5 shrink-0">
+                  <Icon className="h-4 w-4 text-terminal-cyan" />
+                </span>
+                <h3 className="text-lg font-bold">
+                  {t(`features.categories.${key}.title`)}
+                </h3>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {items.map((item) => (
+                  <div
+                    key={item}
+                    className="flex items-start gap-2.5 rounded-lg border border-border bg-card/50 p-4"
+                  >
+                    <span className="text-terminal-cyan font-mono text-xs pt-1 shrink-0">
+                      &rsaquo;
+                    </span>
+                    <span className="text-sm">
+                      {t(`features.categories.${key}.items.${item}`)}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
