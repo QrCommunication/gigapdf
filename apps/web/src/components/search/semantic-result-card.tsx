@@ -8,17 +8,49 @@ import { FileText } from "lucide-react";
 import { getAuthToken, type SemanticSearchResult } from "@/lib/api";
 import { clientLogger } from "@/lib/client-logger";
 
+/**
+ * One card = one document PAGE, carrying every hit on it. The search page
+ * collapses the per-line results into this shape so the same page is never
+ * shown twice; the card then highlights ALL of the page's matched boxes.
+ */
+export interface GroupedSemanticResult {
+  document_id: string;
+  document_name: string;
+  page: number;
+  /** Best (max) similarity among the page's hits. */
+  score: number;
+  /** Every matched box on the page (PDF user-space points). */
+  bboxes: SemanticSearchResult["bbox"][];
+  /** A few matched snippets, for the text preview. */
+  snippets: string[];
+}
+
 interface SemanticResultCardProps {
-  result: SemanticSearchResult;
+  result: GroupedSemanticResult;
   /** The searched query, used to highlight matching terms in the snippet. */
   query?: string;
+}
+
+/** A highlight rectangle in rendered-image pixels. */
+interface Rect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface PreviewState {
+  url: string;
+  imageWidth: number;
+  imageHeight: number;
+  /** All highlight rects the backend mapped from the page's bboxes. */
+  highlights: Rect[];
 }
 
 /**
  * Wrap occurrences of the query terms in the snippet with <mark>. Semantic
  * search matches by meaning, so the exact words may not appear — we highlight
- * what is present (case-insensitive, terms of ≥ 2 chars). Returns the snippet
- * unchanged when there is nothing to highlight.
+ * what is present (case-insensitive, terms of ≥ 2 chars).
  */
 function highlightTerms(text: string, query: string | undefined): ReactNode {
   const terms = Array.from(
@@ -33,7 +65,6 @@ function highlightTerms(text: string, query: string | undefined): ReactNode {
   if (terms.length === 0) return text;
 
   const escaped = terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  // One capturing group → String.split keeps the matches at odd indices.
   const parts = text.split(new RegExp(`(${escaped.join("|")})`, "gi"));
   return parts.map((part, index) =>
     index % 2 === 1 ? (
@@ -49,29 +80,20 @@ function highlightTerms(text: string, query: string | undefined): ReactNode {
   );
 }
 
-interface PreviewState {
-  url: string;
-  imageWidth: number;
-  imageHeight: number;
-  /** Highlight rect in image pixels, if the backend mapped the bbox. */
-  highlight: { left: number; top: number; width: number; height: number } | null;
-}
-
 /**
- * One semantic-search hit: renders the matching page as a large thumbnail with
- * the matched bbox highlighted, plus the snippet, score and a click-through to
- * the editor at that page.
+ * One grouped semantic-search hit: renders the matching page as a large
+ * thumbnail with EVERY matched box highlighted, plus the snippet, score and a
+ * click-through to the editor at that page.
  *
  * The page image + the bbox→pixel mapping are produced server-side by
- * POST /api/pdf/document-page-image (rotation-aware), so this component only
- * scales the returned rect into the rendered <img> via percentages.
+ * POST /api/pdf/document-page-image (rotation-aware); this component only scales
+ * the returned rects into the rendered <img> via percentages.
  */
 export function SemanticResultCard({ result, query }: SemanticResultCardProps) {
   const t = useTranslations("semanticSearch");
   const router = useRouter();
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [failed, setFailed] = useState(false);
-  // Track the created object URL so we revoke it on unmount / result change.
   const objectUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -98,7 +120,7 @@ export function SemanticResultCard({ result, query }: SemanticResultCardProps) {
             storedDocumentId: result.document_id,
             page: result.page,
             scale: 1.5,
-            bbox: result.bbox,
+            bboxes: result.bboxes,
           }),
         });
         if (!res.ok) throw new Error(`preview returned ${res.status}`);
@@ -111,18 +133,18 @@ export function SemanticResultCard({ result, query }: SemanticResultCardProps) {
 
         const imageWidth = Number(res.headers.get("X-Image-Width")) || 0;
         const imageHeight = Number(res.headers.get("X-Image-Height")) || 0;
-        const bw = Number(res.headers.get("X-Bbox-Width"));
-        const highlight =
-          Number.isFinite(bw) && bw > 0
-            ? {
-                left: Number(res.headers.get("X-Bbox-Left")) || 0,
-                top: Number(res.headers.get("X-Bbox-Top")) || 0,
-                width: bw,
-                height: Number(res.headers.get("X-Bbox-Height")) || 0,
-              }
-            : null;
+        let highlights: Rect[] = [];
+        const rectsHeader = res.headers.get("X-Bbox-Rects");
+        if (rectsHeader) {
+          try {
+            const parsed = JSON.parse(rectsHeader) as Rect[];
+            if (Array.isArray(parsed)) highlights = parsed;
+          } catch {
+            /* ignore malformed header — just render the page without rects */
+          }
+        }
 
-        setPreview({ url, imageWidth, imageHeight, highlight });
+        setPreview({ url, imageWidth, imageHeight, highlights });
       } catch (err) {
         if (cancelled) return;
         clientLogger.warn("[search] page preview failed:", err);
@@ -134,7 +156,8 @@ export function SemanticResultCard({ result, query }: SemanticResultCardProps) {
       cancelled = true;
       revoke();
     };
-  }, [result.document_id, result.page, result.bbox]);
+    // The bbox set is stable per (document, page); re-fetch when either changes.
+  }, [result.document_id, result.page, result.bboxes.length]);
 
   const openInEditor = () => {
     router.push(`/editor/${result.document_id}?page=${result.page}`);
@@ -142,17 +165,19 @@ export function SemanticResultCard({ result, query }: SemanticResultCardProps) {
 
   const percent = Math.round(Math.min(Math.max(result.score, 0), 1) * 100);
 
-  // Highlight rect as percentages of the rendered image so it scales with the
+  // Rects as percentages of the rendered image so they scale with the
   // responsive <img> (object-contain keeps the aspect ratio intact).
-  const highlightStyle =
-    preview?.highlight && preview.imageWidth > 0 && preview.imageHeight > 0
-      ? {
-          left: `${(preview.highlight.left / preview.imageWidth) * 100}%`,
-          top: `${(preview.highlight.top / preview.imageHeight) * 100}%`,
-          width: `${(preview.highlight.width / preview.imageWidth) * 100}%`,
-          height: `${(preview.highlight.height / preview.imageHeight) * 100}%`,
-        }
-      : null;
+  const highlightStyles =
+    preview && preview.imageWidth > 0 && preview.imageHeight > 0
+      ? preview.highlights.map((rect) => ({
+          left: `${(rect.left / preview.imageWidth) * 100}%`,
+          top: `${(rect.top / preview.imageHeight) * 100}%`,
+          width: `${(rect.width / preview.imageWidth) * 100}%`,
+          height: `${(rect.height / preview.imageHeight) * 100}%`,
+        }))
+      : [];
+
+  const snippet = result.snippets.join("  …  ");
 
   return (
     <button
@@ -164,9 +189,6 @@ export function SemanticResultCard({ result, query }: SemanticResultCardProps) {
       <div
         className="relative w-full overflow-hidden bg-muted/40"
         style={{
-          // Match the container to the real page aspect ratio so the
-          // object-contain image fills it edge-to-edge (no letterbox); this
-          // keeps the percentage-based highlight pixel-aligned with the content.
           aspectRatio:
             preview && preview.imageWidth > 0 && preview.imageHeight > 0
               ? `${preview.imageWidth} / ${preview.imageHeight}`
@@ -182,13 +204,14 @@ export function SemanticResultCard({ result, query }: SemanticResultCardProps) {
               loading="lazy"
               className="h-full w-full object-contain object-top"
             />
-            {highlightStyle && (
+            {highlightStyles.map((style, index) => (
               <div
+                key={index}
                 aria-hidden
                 className="pointer-events-none absolute rounded-sm bg-yellow-300/30 ring-2 ring-yellow-400"
-                style={highlightStyle}
+                style={style}
               />
-            )}
+            ))}
           </>
         ) : failed ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -204,6 +227,14 @@ export function SemanticResultCard({ result, query }: SemanticResultCardProps) {
         >
           {t("scoreLabel", { percent })}
         </Badge>
+        {result.bboxes.length > 1 && (
+          <Badge
+            variant="secondary"
+            className="absolute left-2 top-2 bg-background/90"
+          >
+            {t("matchCount", { count: result.bboxes.length })}
+          </Badge>
+        )}
       </div>
 
       <div className="flex flex-col gap-1 p-3">
@@ -214,7 +245,7 @@ export function SemanticResultCard({ result, query }: SemanticResultCardProps) {
           {t("page", { page: result.page })}
         </p>
         <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">
-          {highlightTerms(result.snippet, query)}
+          {highlightTerms(snippet, query)}
         </p>
       </div>
     </button>

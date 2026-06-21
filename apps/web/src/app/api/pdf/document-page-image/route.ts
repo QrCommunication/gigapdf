@@ -44,18 +44,21 @@ const PYTHON_BACKEND_URL =
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
+const BBoxSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  w: z.number(),
+  h: z.number(),
+});
+
 const RequestBodySchema = z.object({
   storedDocumentId: z.string().min(1, 'storedDocumentId cannot be empty'),
   page: z.number().int().min(1, 'page must be >= 1'),
   scale: z.number().positive().max(4).optional().default(1.5),
-  bbox: z
-    .object({
-      x: z.number(),
-      y: z.number(),
-      w: z.number(),
-      h: z.number(),
-    })
-    .optional(),
+  /** Single highlight (legacy). Prefer `bboxes` for grouped page hits. */
+  bbox: BBoxSchema.optional(),
+  /** All highlight boxes on the page (one search result = one page, many hits). */
+  bboxes: z.array(BBoxSchema).max(200).optional(),
 });
 
 export async function POST(request: NextRequest): Promise<Response> {
@@ -123,19 +126,39 @@ export async function POST(request: NextRequest): Promise<Response> {
       'X-Image-Height': String(rendered.imageHeight),
     };
 
-    // ── 6. Map the bbox to image pixels (rotation-aware) ──────────────────────
-    if (bbox) {
-      const rect = pdfBoxToImageRect(bbox, {
+    // ── 6. Map every bbox to image pixels (rotation-aware) ────────────────────
+    // A search result groups all hits of one page, so we map a LIST of boxes and
+    // return them as JSON in `X-Bbox-Rects`. The legacy single `X-Bbox-*` headers
+    // are kept (first rect) for older clients.
+    const boxes = parsed.data.bboxes ?? (bbox ? [bbox] : []);
+    if (boxes.length > 0) {
+      const mapDims = {
         imageWidth: rendered.imageWidth,
         imageHeight: rendered.imageHeight,
         pageWidth: rendered.pageWidth,
         pageHeight: rendered.pageHeight,
         rotation: rendered.rotation,
-      });
-      headers['X-Bbox-Left'] = String(Math.round(rect.left));
-      headers['X-Bbox-Top'] = String(Math.round(rect.top));
-      headers['X-Bbox-Width'] = String(Math.round(rect.width));
-      headers['X-Bbox-Height'] = String(Math.round(rect.height));
+      };
+      const rects = boxes
+        .map((b) => {
+          const r = pdfBoxToImageRect(b, mapDims);
+          return {
+            left: Math.round(r.left),
+            top: Math.round(r.top),
+            width: Math.round(r.width),
+            height: Math.round(r.height),
+          };
+        })
+        .filter((r) => r.width > 0 && r.height > 0);
+
+      const first = rects[0];
+      if (first) {
+        headers['X-Bbox-Rects'] = JSON.stringify(rects);
+        headers['X-Bbox-Left'] = String(first.left);
+        headers['X-Bbox-Top'] = String(first.top);
+        headers['X-Bbox-Width'] = String(first.width);
+        headers['X-Bbox-Height'] = String(first.height);
+      }
     }
 
     return new Response(Buffer.from(rendered.bytes), { status: 200, headers });
