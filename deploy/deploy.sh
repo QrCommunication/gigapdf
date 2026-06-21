@@ -341,12 +341,16 @@ wait_healthy() {
     exit 1
 }
 
-log_info "--- Step 9a: Reload FastAPI (graceful, zero dropped connections) ---"
+log_info "--- Step 9a: Restart FastAPI (load new code) ---"
 if sudo systemctl is-active --quiet gigapdf-api; then
-    # uvicorn multi-worker: SIGHUP triggers graceful worker reload
-    # (workers finish in-flight requests, then exec new code)
-    sudo systemctl reload gigapdf-api
-    log_info "SIGHUP sent to gigapdf-api (graceful reload)."
+    # IMPORTANT: gigapdf-api runs `uvicorn --workers N` (multiprocessing). That
+    # process manager does NOT hot-reload Python code on SIGHUP, so a plain
+    # `systemctl reload` (ExecReload=kill -HUP) leaves the OLD code running while
+    # still answering /health — the deploy reports success but ships nothing.
+    # A real restart is required (~2-3s; nginx retries the upstream).
+    # Regression: 2026-06-21 rate-limiter fix never took effect until restarted.
+    sudo systemctl restart gigapdf-api
+    log_info "gigapdf-api restarted (new code loaded)."
 else
     log_warn "gigapdf-api was stopped — performing cold start."
     sudo systemctl start gigapdf-api
