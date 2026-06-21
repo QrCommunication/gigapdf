@@ -81,6 +81,16 @@ export interface PDFRenderOptions {
    * faithfully by the engine. Implemented via the engine's `renderPageNoText`.
    */
   skipText?: boolean;
+  /**
+   * Engine UNIFIED element indices (from the parse) to OMIT from the raster, so
+   * the editor can paint live, editable versions of those elements as visible
+   * Fabric overlays on top — the same direct-edit model used for text, extended
+   * to vector SHAPES. Implemented via the engine's `renderPageExcluding`. When
+   * combined with `skipText`, ALL the page's text runs are excluded too (so the
+   * text overlay never doubles the raster), making this a strict superset of the
+   * `renderPageNoText` behaviour.
+   */
+  excludeIndices?: number[];
 }
 
 // ─── PDFRenderer ─────────────────────────────────────────────────────────────
@@ -121,12 +131,31 @@ export class PDFRenderer {
     options: PDFRenderOptions = {},
   ): Promise<string> {
     if (!this.doc) throw new Error("PDF document not loaded");
-    const { scale = 1 } = options;
-    const skipText = options.skipText ?? options.maskText ?? false;
-    const png = skipText
-      ? this.doc.renderPageNoText(pageNumber, scale)
-      : this.doc.renderPage(pageNumber, scale);
+    const { scale = 1, excludeIndices } = options;
+    const skipText = options.skipText ?? false;
+
+    let png: Uint8Array;
+    if (excludeIndices && excludeIndices.length > 0) {
+      // Exclude the given elements (e.g. shapes rendered as overlays). When
+      // skipText is also set, union in EVERY text-run index so the text-free
+      // guarantee of renderPageNoText is preserved (renderPageExcluding renders
+      // non-excluded text normally, which would double the text overlay).
+      const indices = skipText
+        ? [...this.textRunIndices(pageNumber), ...excludeIndices]
+        : excludeIndices;
+      png = this.doc.renderPageExcluding(pageNumber, indices, scale);
+    } else if (skipText) {
+      png = this.doc.renderPageNoText(pageNumber, scale);
+    } else {
+      png = this.doc.renderPage(pageNumber, scale);
+    }
     return pngToDataUrl(png);
+  }
+
+  /** Every text run's unified element index on `pageNumber` (1-indexed). */
+  private textRunIndices(pageNumber: number): number[] {
+    if (!this.doc) return [];
+    return this.doc.textElements(pageNumber).map((t) => t.index);
   }
 
   /** Close the document and free its engine memory. */

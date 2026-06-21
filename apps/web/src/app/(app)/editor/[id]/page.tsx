@@ -776,6 +776,7 @@ export default function EditorPage() {
         pageNumber: op.pageNumber,
         element: op.element as Record<string, unknown>,
         ...(op.oldBounds ? { oldBounds: op.oldBounds } : {}),
+        ...(op.reorder ? { reorder: op.reorder } : {}),
       })),
       ...contentMods.map((mod) => ({
         ...mod,
@@ -1314,11 +1315,12 @@ export default function EditorPage() {
   // save flow can apply them to the PDF binary before uploading. Without
   // this, edits only exist in the scene_graph (Redis) and vanish from the
   // PDF on reload.
-  const { queueAdd, queueUpdate, queueDelete } = useOperationsStore(
+  const { queueAdd, queueUpdate, queueDelete, queueReorder } = useOperationsStore(
     useShallow((s) => ({
       queueAdd: s.queueAdd,
       queueUpdate: s.queueUpdate,
       queueDelete: s.queueDelete,
+      queueReorder: s.queueReorder,
     }))
   );
 
@@ -1457,6 +1459,22 @@ export default function EditorPage() {
       saveWithPriority("debounced");
     },
     [setDirty, emitElementUpdate, saveWithPriority, documentId, currentPageIndex, queueUpdate, updateElementInPage]
+  );
+
+  // Z-order change (bringToFront / sendToBack): queue a `reorder` op so the new
+  // stacking is baked into the PDF binary (engine `reorderElement`) on save, in
+  // addition to the scene-graph order reflected by handleElementModified. The
+  // editor-canvas calls BOTH callbacks, so the live scene graph + the persisted
+  // PDF stay consistent.
+  const handleElementReordered = useCallback(
+    (element: Element, toFront: boolean) => {
+      clientLogger.debug("[editor] Element reordered:", element.elementId, { toFront });
+      setDirty(true);
+      const pageNumber = currentPageIndex + 1;
+      queueReorder(pageNumber, element, toFront);
+      saveWithPriority("debounced");
+    },
+    [setDirty, currentPageIndex, queueReorder, saveWithPriority]
   );
 
   const handleElementRemoved = useCallback(
@@ -3590,6 +3608,7 @@ export default function EditorPage() {
               getFontFaceName={getFontFaceName}
               onElementAdded={handleElementAdded}
               onElementModified={handleElementModified}
+              onElementReordered={handleElementReordered}
               onElementRemoved={handleElementRemoved}
               onSelectionChanged={handleSelectionChanged}
               onCanvasReady={setCanvasHandle}
@@ -3612,6 +3631,7 @@ export default function EditorPage() {
                 strokeWidth={strokeWidth}
                 onElementAdded={handleElementAdded}
                 onElementModified={handleElementModified}
+                onElementReordered={handleElementReordered}
                 onElementRemoved={handleElementRemoved}
                 onSelectionChanged={handleSelectionChanged}
                 onZoomChanged={handleManualZoomChange}

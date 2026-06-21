@@ -653,10 +653,11 @@ export const pdfService = {
   applyElements: async (
     file: File | Blob,
     operations: Array<{
-      action: 'add' | 'update' | 'delete';
+      action: 'add' | 'update' | 'delete' | 'reorder';
       pageNumber: number;
       element: Record<string, unknown>;
       oldBounds?: { x: number; y: number; width: number; height: number };
+      reorder?: { toFront: boolean };
     }>,
   ): Promise<Blob> => {
     const form = new FormData();
@@ -984,10 +985,12 @@ export interface SearchablePdfResult {
  * A single element operation passed to applyElements
  */
 export interface ApplyElementsOperation {
-  action: 'add' | 'update' | 'delete';
+  action: 'add' | 'update' | 'delete' | 'reorder';
   pageNumber: number;
   element: Record<string, unknown>;
   oldBounds?: { x: number; y: number; width: number; height: number };
+  /** For `reorder`: bring the element to front (`true`) or send to back (`false`). */
+  reorder?: { toFront: boolean };
 }
 
 // Re-export types for consumers

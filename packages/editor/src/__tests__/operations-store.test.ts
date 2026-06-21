@@ -153,6 +153,36 @@ describe("useOperationsStore", () => {
     );
   });
 
+  it("queueReorder carries the element + toFront flag in the op payload", () => {
+    const store = useOperationsStore.getState();
+    store.queueReorder(4, makeTextElement("z"), true);
+
+    const [op] = useOperationsStore.getState().peek();
+    expect(op?.action).toBe("reorder");
+    expect(op?.pageNumber).toBe(4);
+    expect((op?.element as Element).elementId).toBe("z");
+    expect(op?.reorder).toEqual({ toFront: true });
+  });
+
+  it("coalesces repeated reorders of the same element (last action wins)", () => {
+    const store = useOperationsStore.getState();
+    store.queueReorder(1, makeTextElement("same"), true);
+    store.queueReorder(1, makeTextElement("same"), false);
+
+    const ops = useOperationsStore.getState().peek();
+    expect(ops).toHaveLength(1);
+    expect(ops[0]?.action).toBe("reorder");
+    expect(ops[0]?.reorder).toEqual({ toFront: false });
+  });
+
+  it("does not coalesce reorders of different elements or pages", () => {
+    const store = useOperationsStore.getState();
+    store.queueReorder(1, makeTextElement("a"), true);
+    store.queueReorder(1, makeTextElement("b"), true); // different element
+    store.queueReorder(2, makeTextElement("a"), true); // same element, other page
+    expect(useOperationsStore.getState().peek()).toHaveLength(3);
+  });
+
   it("handles rapid enqueue/drain cycles without losing ops", () => {
     const store = useOperationsStore.getState();
     for (let i = 0; i < 100; i++) {

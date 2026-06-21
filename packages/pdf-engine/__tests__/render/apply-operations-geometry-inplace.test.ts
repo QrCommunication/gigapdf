@@ -207,3 +207,79 @@ describe('applyOperations — in-place shape delete (removeElement)', () => {
     void targetIndex;
   });
 });
+
+// ---------------------------------------------------------------------------
+// In-place IMAGE opacity (setElementOpacity)
+// ---------------------------------------------------------------------------
+
+describe('applyOperations — in-place image opacity (setElementOpacity)', () => {
+  it('sets the image opacity in place at the SAME index, with NO redaction', async () => {
+    const input = await pdfWithImage();
+    const [img] = await page1Images(input);
+    expect(img).toBeDefined();
+    // Fixture image is fully opaque.
+    expect(img!.style.opacity).toBeCloseTo(1, 1);
+
+    // Opacity-only change (geometry unchanged): one setElementOpacity, no
+    // transform, no redaction, no add.
+    const dimmed: ImageElement = {
+      ...img!,
+      style: { ...img!.style, opacity: 0.4 },
+    };
+    const ops: ElementOperation[] = [
+      {
+        action: 'update',
+        pageNumber: 1,
+        element: dimmed as unknown as Record<string, unknown>,
+        oldBounds: { ...img!.bounds },
+      },
+    ];
+
+    const result = await applyOperations(input, ops);
+
+    expect(result.inPlaceOpacitySet).toBe(1);
+    expect(result.inPlaceTransformed).toBe(0);
+    expect(result.redactionTargetsCount).toBe(0);
+    expect(result.addsApplied).toBe(0);
+
+    // The re-parsed image now carries the NEW opacity (in place).
+    const after = await page1Images(result.bytes);
+    expect(after.length).toBe(1);
+    expect(after[0]!.style.opacity).toBeCloseTo(0.4, 1);
+  });
+
+  it('bakes geometry + opacity together in place (transform AND setElementOpacity)', async () => {
+    const input = await pdfWithImage();
+    const [img] = await page1Images(input);
+    expect(img).toBeDefined();
+
+    const oldBounds = { ...img!.bounds };
+    const newBounds = { ...oldBounds, x: oldBounds.x + 60, y: oldBounds.y + 40 };
+    const movedDimmed: ImageElement = {
+      ...img!,
+      bounds: newBounds,
+      style: { ...img!.style, opacity: 0.6 },
+    };
+    const ops: ElementOperation[] = [
+      {
+        action: 'update',
+        pageNumber: 1,
+        element: movedDimmed as unknown as Record<string, unknown>,
+        oldBounds,
+      },
+    ];
+
+    const result = await applyOperations(input, ops);
+
+    expect(result.inPlaceTransformed).toBe(1);
+    expect(result.inPlaceOpacitySet).toBe(1);
+    expect(result.redactionTargetsCount).toBe(0);
+    expect(result.addsApplied).toBe(0);
+
+    const after = await page1Images(result.bytes);
+    expect(after.length).toBe(1);
+    expect(after[0]!.bounds.x).toBeCloseTo(newBounds.x, 0);
+    expect(after[0]!.bounds.y).toBeCloseTo(newBounds.y, 0);
+    expect(after[0]!.style.opacity).toBeCloseTo(0.6, 1);
+  });
+});
