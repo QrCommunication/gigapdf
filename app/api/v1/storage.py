@@ -322,7 +322,9 @@ async def store_ocr_blocks(
     # 2. Normalize incoming blocks: keep only those with non-empty text.
     normalized: list[dict] = []
     for block in blocks:
-        text = (block.get("text") or "").strip()
+        # Strip NUL (0x00): PostgreSQL text columns reject it (PDF/OCR layers
+        # occasionally emit it). Applies to every caller, incl. /ocr-blocks.
+        text = (block.get("text") or "").replace("\x00", "").strip()
         if not text:
             continue
         bbox = block.get("bbox") or {}
@@ -448,7 +450,9 @@ async def reindex_document_text(
     failure or empty text).
     """
     try:
-        normalized = (text or "").strip()[:_MAX_EXTRACTED_TEXT_CHARS]
+        # PostgreSQL text columns reject NUL (0x00); PDF text layers sometimes
+        # carry them. Strip before storing extracted_text / chunks.
+        normalized = (text or "").replace("\x00", "").strip()[:_MAX_EXTRACTED_TEXT_CHARS]
 
         # Persist the full-text material on the document row (loaded in this
         # session so the attribute change is part of the caller's transaction).
