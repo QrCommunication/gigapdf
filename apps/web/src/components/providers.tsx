@@ -13,9 +13,16 @@ const DynamicThemeProvider = dynamic(
 // Configure API client with Next.js environment variables
 function ApiConfigProvider({ children }: { children?: React.ReactNode }) {
   useEffect(() => {
-    // Set API configuration from Next.js environment variables
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
+    // Set API configuration from Next.js environment variables. This runs in the
+    // browser, so fall back to the CURRENT ORIGIN (prod: https://giga-pdf.com)
+    // instead of the internal dev URL — NEXT_PUBLIC_API_URL is inlined at build
+    // time and, when unset, the old localhost:8000 fallback leaked into the
+    // bundle and got blocked by CSP (editor layers + fonts). Dev sets the var
+    // explicitly, so this fallback is prod/same-origin only.
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
+    const wsUrl =
+      process.env.NEXT_PUBLIC_WS_URL ||
+      `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
 
     setApiConfig({
       baseURL: `${apiUrl}/api/v1`,
