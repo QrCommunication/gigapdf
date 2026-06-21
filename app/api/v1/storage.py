@@ -29,7 +29,13 @@ from app.middleware.error_handler import (
 )
 from app.middleware.rate_limiter import RateLimitDep
 from app.middleware.request_id import get_request_id
-from app.models.database import DocumentVersion, Folder, OcrBlock, StoredDocument
+from app.models.database import (
+    DocumentLayers,
+    DocumentVersion,
+    Folder,
+    OcrBlock,
+    StoredDocument,
+)
 from app.schemas.responses.common import APIResponse, MetaInfo, PaginationInfo
 from app.services import content_extraction_service
 from app.services.activity_service import ActivityAction, activity_service
@@ -4906,6 +4912,316 @@ async def get_folder_stats(
             "document_count": document_count,
             "folder_count": subfolder_count,
         },
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
+
+
+# ── Editor layers (cross-session persistence) ───────────────────────────
+# Persist an OPAQUE editor-layers blob per stored document so the web editor
+# can restore user layers + element→layer membership on reload. The blob shape
+# is `{"layers": [...], "membership": {"<elementId>": "<layerId>"}}`; the API
+# stores it as opaque JSONB and does NOT enforce its internal schema.
+
+_DEFAULT_LAYERS_DATA: dict = {"layers": [], "membership": {}}
+
+
+class DocumentLayersData(BaseModel):
+    """Opaque-ish editor-layers blob.
+
+    Permissive on purpose: ``layers`` is a list of arbitrary layer objects and
+    ``membership`` maps element IDs to layer IDs. The server persists this
+    verbatim; the editor owns the internal schema.
+    """
+
+    layers: list[dict] = Field(
+        default_factory=list,
+        description="Editor layer objects (opaque to the server)",
+    )
+    membership: dict[str, str] = Field(
+        default_factory=dict,
+        description="Map of elementId → layerId (opaque to the server)",
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "layers": [
+                    {"id": "layer-1", "name": "Background", "visible": True},
+                    {"id": "layer-2", "name": "Annotations", "visible": True},
+                ],
+                "membership": {
+                    "elem-aaaa": "layer-1",
+                    "elem-bbbb": "layer-2",
+                },
+            }
+        }
+
+
+async def _load_document_for_layers(
+    db: AsyncSession,
+    stored_document_id: str,
+    user_id: str,
+    *,
+    require_edit: bool,
+) -> StoredDocument:
+    """Load a non-trashed document and authorize layer access (owner-or-shared).
+
+    Mirrors the storage read endpoints: the document is loaded by id and the
+    owner-or-shared guard closes the IDOR gap — a non-owner without a grant
+    gets **403**, a missing/trashed document gets **404**. When *require_edit*
+    is set (write path), a view-only grantee is rejected with **403**.
+    """
+    result = await db.execute(
+        select(StoredDocument).where(
+            StoredDocument.id == stored_document_id,
+            ~StoredDocument.is_deleted,
+        )
+    )
+    stored_doc = result.scalar_one_or_none()
+    if not stored_doc:
+        raise NotFoundError(f"Document not found: {stored_document_id}")
+
+    decision = await authorize_document_access(db, stored_doc, user_id)
+    if require_edit and not decision.can_edit:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have edit access to this document",
+        )
+    return stored_doc
+
+
+@router.get(
+    "/documents/{stored_document_id}/layers",
+    response_model=APIResponse[DocumentLayersData],
+    summary="Get editor layers for a document",
+    description="""
+Return the persisted editor-layers blob for a stored document.
+
+The blob restores the editor's user layers and the element→layer membership
+on reload. When a document has no saved layers yet, an empty default
+(`{"layers": [], "membership": {}}`) is returned.
+
+## Permissions
+- **Owner**: always allowed.
+- **Shared user**: allowed (active share grant on the document).
+- **Anyone else**: **403 Forbidden**.
+
+## Errors
+- 403: you do not have access to this document
+- 404: document not found (or trashed)
+""",
+    responses={
+        200: {
+            "description": "Editor layers retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "layers": [
+                                {"id": "layer-1", "name": "Background", "visible": True}
+                            ],
+                            "membership": {"elem-aaaa": "layer-1"},
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2026-06-21T10:30:00Z"},
+                    }
+                }
+            },
+        },
+        403: {"description": "You do not have access to this document"},
+        404: {"description": "Document not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X GET "https://api.giga-pdf.com/api/v1/storage/documents/770e8400-e29b-41d4-a716-446655440002/layers" \\
+  -H "Authorization: Bearer $TOKEN"'''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const storedDocId = "770e8400-e29b-41d4-a716-446655440002";
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/documents/${storedDocId}/layers`,
+  { headers: { "Authorization": `Bearer ${token}` } }
+);
+
+const { data } = await response.json();
+console.log(`${data.layers.length} layers restored`);'''
+            },
+        ]
+    },
+)
+async def get_document_layers(
+    stored_document_id: str,
+    user: AuthenticatedUser,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[DocumentLayersData]:
+    """Return the editor-layers blob for a document (owner-or-shared).
+
+    Falls back to an empty default when no layers row exists yet.
+    """
+    start_time = time.time()
+
+    # Authorize (owner-or-shared) — 403 for others, 404 if missing/trashed.
+    await _load_document_for_layers(
+        db, stored_document_id, user.user_id, require_edit=False
+    )
+
+    result = await db.execute(
+        select(DocumentLayers).where(
+            DocumentLayers.stored_document_id == stored_document_id
+        )
+    )
+    row = result.scalar_one_or_none()
+    blob = row.data if row and row.data else dict(_DEFAULT_LAYERS_DATA)
+
+    processing_time = int((time.time() - start_time) * 1000)
+    return APIResponse(
+        success=True,
+        data=DocumentLayersData(
+            layers=blob.get("layers", []),
+            membership=blob.get("membership", {}),
+        ),
+        meta=MetaInfo(
+            request_id=get_request_id(),
+            timestamp=now_utc(),
+            processing_time_ms=processing_time,
+        ),
+    )
+
+
+@router.put(
+    "/documents/{stored_document_id}/layers",
+    response_model=APIResponse[DocumentLayersData],
+    summary="Save editor layers for a document",
+    description="""
+Upsert the editor-layers blob for a stored document.
+
+Creates the layers row on first save, otherwise overwrites it and bumps
+``updated_at``. The body is stored **verbatim** (opaque blob); the server does
+not enforce its internal schema beyond the permissive
+`{layers: [...], membership: {elementId: layerId}}` envelope.
+
+## Permissions
+- **Owner**: always allowed.
+- **Shared user with edit grant**: allowed.
+- **View-only grant / anyone else**: **403 Forbidden**.
+
+## Errors
+- 403: you do not have edit access to this document
+- 404: document not found (or trashed)
+""",
+    responses={
+        200: {
+            "description": "Editor layers saved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "layers": [
+                                {"id": "layer-1", "name": "Background", "visible": True}
+                            ],
+                            "membership": {"elem-aaaa": "layer-1"},
+                        },
+                        "meta": {"request_id": "uuid", "timestamp": "2026-06-21T10:30:00Z"},
+                    }
+                }
+            },
+        },
+        403: {"description": "You do not have edit access to this document"},
+        404: {"description": "Document not found"},
+    },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "curl",
+                "label": "cURL",
+                "source": '''curl -X PUT "https://api.giga-pdf.com/api/v1/storage/documents/770e8400-e29b-41d4-a716-446655440002/layers" \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"layers":[{"id":"layer-1","name":"Background","visible":true}],"membership":{"elem-aaaa":"layer-1"}}' '''
+            },
+            {
+                "lang": "javascript",
+                "label": "JavaScript",
+                "source": '''const storedDocId = "770e8400-e29b-41d4-a716-446655440002";
+const response = await fetch(
+  `https://api.giga-pdf.com/api/v1/storage/documents/${storedDocId}/layers`,
+  {
+    method: "PUT",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      layers: [{ id: "layer-1", name: "Background", visible: true }],
+      membership: { "elem-aaaa": "layer-1" },
+    }),
+  }
+);
+
+const { data } = await response.json();
+console.log(`${data.layers.length} layers saved`);'''
+            },
+        ]
+    },
+)
+async def save_document_layers(
+    stored_document_id: str,
+    payload: DocumentLayersData,
+    user: AuthenticatedUser,
+    _rl: RateLimitDep,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[DocumentLayersData]:
+    """Upsert the editor-layers blob for a document (owner or edit-grantee).
+
+    Inserts the row when absent, otherwise overwrites ``data`` and bumps
+    ``updated_at``. The blob is validated only against the permissive envelope
+    and stored verbatim.
+    """
+    start_time = time.time()
+
+    # Authorize edit (owner OR edit grant) — 403 otherwise, 404 if missing.
+    await _load_document_for_layers(
+        db, stored_document_id, user.user_id, require_edit=True
+    )
+
+    blob = {"layers": payload.layers, "membership": payload.membership}
+
+    result = await db.execute(
+        select(DocumentLayers).where(
+            DocumentLayers.stored_document_id == stored_document_id
+        )
+    )
+    row = result.scalar_one_or_none()
+
+    if row is None:
+        row = DocumentLayers(
+            stored_document_id=stored_document_id,
+            data=blob,
+        )
+        db.add(row)
+    else:
+        row.data = blob
+        row.updated_at = now_utc()
+
+    await db.commit()
+
+    processing_time = int((time.time() - start_time) * 1000)
+    return APIResponse(
+        success=True,
+        data=DocumentLayersData(
+            layers=blob["layers"],
+            membership=blob["membership"],
+        ),
         meta=MetaInfo(
             request_id=get_request_id(),
             timestamp=now_utc(),

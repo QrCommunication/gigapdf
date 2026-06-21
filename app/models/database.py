@@ -24,7 +24,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # pgvector SQLAlchemy column type (provided by the `vector` extension,
@@ -804,6 +804,56 @@ class OcrBlock(Base):
         # HNSW index for cosine ANN search. Declared here for ORM/metadata
         # parity; the actual index is created in migration 019 with the
         # vector_cosine_ops operator class (not expressible via Index args).
+    )
+
+
+class DocumentLayers(Base):
+    """Per-document editor layer metadata (cross-session persistence).
+
+    Stores an **opaque** blob describing the editor's user layers and the
+    element→layer membership map for a single stored document, so the web
+    editor can restore them on reload. The API treats ``data`` as opaque
+    JSONB (shape ``{"layers": [...], "membership": {"<elementId>":
+    "<layerId>"}}``) — it persists/returns it verbatim and does not enforce
+    its internal schema.
+
+    1:1 with :class:`StoredDocument` (``stored_document_id`` UNIQUE, FK
+    ON DELETE CASCADE so the blob is dropped when the document is). Like
+    ``stored_documents`` this table is **owner-scoped via the endpoints**
+    (no RLS/tenant column); IDOR is closed by the storage router's
+    ownership/access guard.
+    """
+
+    __tablename__ = "document_layers"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    stored_document_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("stored_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    # Opaque editor-layers blob. JSONB so the column matches the migration and
+    # supports future server-side querying without a schema change.
+    data: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    # Relationship to the owning document (1:1).
+    document: Mapped["StoredDocument"] = relationship(
+        "StoredDocument", backref="layers"
+    )
+
+    __table_args__ = (
+        Index("idx_document_layers_stored_document", "stored_document_id"),
     )
 
 
