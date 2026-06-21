@@ -5,6 +5,26 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-06-21
+
+### Added
+- **Edit every element of a PDF — not just text.** Images and vector shapes
+  imported from the original PDF can now be selected, moved, resized, deleted
+  and duplicated directly on the page. Edits are applied **in place** (lossless)
+  — no re-compression of images, no re-drawing of shapes.
+- **Change vector shape styles** — fill colour, stroke colour, stroke width and
+  dash pattern of a shape can be edited from the properties panel and are baked
+  back into the PDF.
+- **Layers** — organise page elements into named layers: create, rename,
+  reorder, assign elements, and lock or hide a whole layer. Layers and their
+  membership now **persist across sessions** (saved per document).
+- **Stacking order** — bring an element to front / send to back (toolbar +
+  Ctrl/Cmd+] and Ctrl/Cmd+[).
+
+### Changed
+- Powered by gigapdf-lib 0.57.0 (in-place affine transform + vector restyle,
+  unified element index).
+
 ## [1.8.0] - 2026-06-21
 
 ### Changed
