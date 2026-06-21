@@ -16,13 +16,16 @@ import { clientLogger } from "@/lib/client-logger";
 export interface GroupedSemanticResult {
   document_id: string;
   document_name: string;
+  /** Best-matching page (the one shown as preview). */
   page: number;
-  /** Best (max) similarity among the page's hits. */
+  /** Best (max) similarity among the document's hits. */
   score: number;
-  /** Every matched box on the page (PDF user-space points). */
+  /** Matched boxes on the displayed (best) page — PDF user-space points. */
   bboxes: SemanticSearchResult["bbox"][];
   /** A few matched snippets, for the text preview. */
   snippets: string[];
+  /** Total matched passages across the whole document (badge). */
+  matchTotal: number;
 }
 
 interface SemanticResultCardProps {
@@ -227,12 +230,12 @@ export function SemanticResultCard({ result, query }: SemanticResultCardProps) {
         >
           {t("scoreLabel", { percent })}
         </Badge>
-        {result.bboxes.length > 1 && (
+        {result.matchTotal > 1 && (
           <Badge
             variant="secondary"
             className="absolute left-2 top-2 bg-background/90"
           >
-            {t("matchCount", { count: result.bboxes.length })}
+            {t("matchCount", { count: result.matchTotal })}
           </Badge>
         )}
       </div>
