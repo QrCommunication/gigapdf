@@ -58,19 +58,21 @@ try {
   const blocks = [];
   try {
     const pages = doc.pageCount();
-    for (let p = 0; p < pages && blocks.length < MAX_BLOCKS; p++) {
-      let lines = doc.structuredText(p) || []; // TextLine[]: { x, y, w, h, text }
+    // Pages are 1-based across the engine (structuredText/ocr/pageInfo) and the
+    // index/preview pipeline (store_ocr_blocks, /document-page-image).
+    for (let page = 1; page <= pages && blocks.length < MAX_BLOCKS; page++) {
+      let lines = doc.structuredText(page) || []; // TextLine[]: { x, y, w, h, text }
       if (lines.length === 0 && wantOcr) {
         if (!ocrLoaded) {
           await giga.loadBundledOcrModel("alpha"); // Latin (FR/EN)
           ocrLoaded = true;
         }
-        lines = wordsToLines(doc.ocr(p, 2)); // OcrWord[] (scale 2 for small text)
+        lines = wordsToLines(doc.ocr(page, 2)); // OcrWord[] (scale 2 for small text)
       }
       for (const ln of lines) {
         const text = (ln.text || "").trim();
         if (!text) continue;
-        blocks.push({ page: p, bbox: { x: ln.x, y: ln.y, w: ln.w, h: ln.h }, text });
+        blocks.push({ page, bbox: { x: ln.x, y: ln.y, w: ln.w, h: ln.h }, text });
         if (blocks.length >= MAX_BLOCKS) break;
       }
     }
