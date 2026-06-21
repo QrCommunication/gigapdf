@@ -161,6 +161,70 @@ function colorWithAlpha(color: string, alpha: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Form-field overlay helpers (purs)
+// ---------------------------------------------------------------------------
+
+const FIELD_FILL_BY_TYPE: Record<string, string> = {
+  text: "rgba(0, 100, 255, 0.08)",
+  checkbox: "rgba(0, 180, 0, 0.10)",
+  radio: "rgba(0, 180, 0, 0.10)",
+  dropdown: "rgba(100, 0, 255, 0.08)",
+  listbox: "rgba(100, 0, 255, 0.08)",
+  signature: "rgba(255, 100, 0, 0.10)",
+  button: "rgba(50, 50, 50, 0.10)",
+};
+
+const FIELD_STROKE_BY_TYPE: Record<string, string> = {
+  text: "#0066cc",
+  checkbox: "#00aa00",
+  radio: "#00aa00",
+  dropdown: "#6600cc",
+  listbox: "#6600cc",
+  signature: "#ff6600",
+  button: "#333333",
+};
+
+/** Light translucent background tint for a form-field overlay, by field type. */
+function fieldOverlayFill(fieldType: string): string {
+  return FIELD_FILL_BY_TYPE[fieldType] ?? "rgba(0, 100, 255, 0.08)";
+}
+
+/** Border colour for a form-field overlay, by field type. */
+function fieldOverlayStroke(fieldType: string): string {
+  return FIELD_STROKE_BY_TYPE[fieldType] ?? "#0066cc";
+}
+
+/**
+ * The display string for a text/dropdown field value. FormFieldElement.value is
+ * `string | boolean | string[]`; coerce to a single line for the IText overlay.
+ */
+function formFieldTextValue(value: string | boolean | string[]): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ? "true" : "";
+}
+
+/**
+ * Whether a checkbox/radio field is currently checked, from its value. Checkbox
+ * uses a boolean (or the strings "on"/"off"/"yes"); radio is checked when its
+ * value matches one of its option export values (non-empty).
+ */
+function formFieldChecked(field: {
+  fieldType: string;
+  value: string | boolean | string[];
+  options: string[] | null;
+}): boolean {
+  const { value } = field;
+  if (typeof value === "boolean") return value;
+  if (field.fieldType === "checkbox") {
+    const v = formFieldTextValue(value).toLowerCase();
+    return v === "true" || v === "on" || v === "yes" || v === "1";
+  }
+  // radio: checked when a non-empty option is selected.
+  return formFieldTextValue(value).length > 0;
+}
+
+// ---------------------------------------------------------------------------
 // API publique
 // ---------------------------------------------------------------------------
 
@@ -229,24 +293,32 @@ export async function renderElementsOverlay(
   //    The signature deliberately ignores fontFamily because the duplicate
   //    typically uses a different family (embedded outline vs Helvetica
   //    fallback). Matching on content + rounded fontSize + tight position
-  //    (≤2px) is enough — wider tolerance kills legitimate repeats like
-  //    "RONY LICHA" appearing twice on a billing page (sender + recipient).
-  //    A real shadow/outline duplicate sits within sub-pixel of its twin;
-  //    if x or y differs by >2 px the layout intentionally placed two
-  //    runs and we must keep both.
-  // Two-tier dedupe heuristic:
-  //   1. Same content + same colour + within 2px both axes  → shadow/outline
-  //      (drop the second occurrence)
-  //   2. Same content + same colour + same X (≤3px) + ANY Y → save-loop
-  //      duplicate (form re-renders that bake the overlay back into the
-  //      PDF and re-parse it). Drop the second occurrence too.
-  //   Otherwise (same content, different X) it is a legitimate cross-line
-  //   repeat such as "RONY LICHA" appearing on two address lines, both
-  //   on the same y but offset horizontally — keep both.
+  //    (≤2px on BOTH axes) is enough — wider tolerance kills legitimate
+  //    repeats.
   //
-  //   Colour is part of the signature so a white "6,99€" on a red banner
-  //   does not get killed by a black drop-shadow twin that appeared first
-  //   in the parser stream.
+  //    DEDUPE RULE (single, conservative): drop the second occurrence ONLY
+  //    when it is a true shadow/outline twin — same content + same colour +
+  //    within 2px on BOTH the X AND Y axes. A real shadow/relief or
+  //    vector-outline-over-trace duplicate sits within sub-pixel of its
+  //    twin, so 2px covers it.
+  //
+  //    Anything farther apart on EITHER axis is a legitimate distinct run
+  //    and MUST be kept. This includes:
+  //      - cross-line repeats ("RONY LICHA" on sender + recipient lines:
+  //        same y, offset x),
+  //      - same-column repeats at different rows (form field labels, table
+  //        cells, repeated values like "Les Lilas" down a column: same x,
+  //        different y).
+  //    A previous heuristic also dropped "same X (≤3px) + ANY Y" to catch a
+  //    form save-loop re-render; that over-suppressed legitimate column
+  //    repeats on real forms (whole runs vanished from the editor), so it is
+  //    removed — the save-loop case is now handled upstream (the overlay is
+  //    no longer baked back as a second text run) and never warrants killing
+  //    a run that differs in Y.
+  //
+  //    Colour is part of the signature so a white "6,99€" on a red banner
+  //    does not get killed by a black drop-shadow twin that appeared first
+  //    in the parser stream.
   const seenTextSignatures = new Map<string, Array<{ x: number; y: number }>>();
   const dedupedElements = sortedElements.filter((el) => {
     if (el.type !== "text") return true;
@@ -259,14 +331,14 @@ export async function renderElementsOverlay(
       seenTextSignatures.set(sig, [here]);
       return true;
     }
-    const isDuplicate = positions.some((p) => {
+    // True shadow/outline twin ONLY: same content + colour, within 2px on
+    // BOTH axes. Different X or different Y → legitimate distinct run, keep.
+    const isShadowTwin = positions.some((p) => {
       const dx = Math.abs(p.x - here.x);
       const dy = Math.abs(p.y - here.y);
-      const shadowOverlap = dx <= 2 && dy <= 2;
-      const verticalStack = dx <= 3; // same column, ANY Y → save-loop dupe
-      return shadowOverlap || verticalStack;
+      return dx <= 2 && dy <= 2;
     });
-    if (isDuplicate) return false;
+    if (isShadowTwin) return false;
     positions.push(here);
     return true;
   });
@@ -313,22 +385,40 @@ export async function renderElementsOverlay(
         const _fontSize = textElement.style.fontSize ?? 12;
         const _descenderOffset = _fontSize * 0.22;
         const _baselineY = textElement.bounds.y + _fontSize;
+        // Resolve the embedded PDF font first. When it resolves, the registered
+        // FontFace already IS the correct weight/style variant of the subset, so
+        // applying a synthetic bold/italic ON TOP widens the glyphs and the text
+        // overflows / collides with its neighbours. We therefore neutralise the
+        // synthetic weight/style whenever the embedded font is used, and only
+        // honour the parsed weight/style for the generic CSS fallback (where the
+        // family carries no built-in variant). `usingEmbeddedFont` also drives
+        // the anti-overflow scaleX fit below: with the real metrics the text
+        // fits naturally, so the fit is reserved for the fallback case.
+        const _embeddedFontName = (() => {
+          const orig = textElement.style.originalFont;
+          if (orig && getFontFaceName) {
+            const registered = getFontFaceName(orig);
+            if (registered) return registered;
+          }
+          return null;
+        })();
+        const _usingEmbeddedFont = _embeddedFontName !== null;
+        const _resolvedFontFamily =
+          _embeddedFontName ?? textElement.style.fontFamily ?? "Helvetica";
         const textObj = new IText(textElement.content || "", {
           ...baseOptions,
           top: _baselineY + _descenderOffset,
           originY: "bottom" as const,
           width: textElement.bounds.width,
           fontSize: _fontSize,
-          fontFamily: (() => {
-            const orig = textElement.style.originalFont;
-            if (orig && getFontFaceName) {
-              const registered = getFontFaceName(orig);
-              if (registered) return registered;
-            }
-            return textElement.style.fontFamily || "Helvetica";
-          })(),
-          fontWeight: textElement.style.fontWeight || "normal",
-          fontStyle: textElement.style.fontStyle || "normal",
+          fontFamily: _resolvedFontFamily,
+          // Embedded subset = already the right variant → no synthetic bold/italic.
+          fontWeight: _usingEmbeddedFont
+            ? "normal"
+            : textElement.style.fontWeight || "normal",
+          fontStyle: _usingEmbeddedFont
+            ? "normal"
+            : textElement.style.fontStyle || "normal",
           // DIRECT-TEXT model: the page background is rasterised WITHOUT text
           // (engine `renderPageNoText`), so this overlay IS the visible text —
           // rendered in its REAL colour and embedded font. No colour mask is
@@ -361,6 +451,34 @@ export async function renderElementsOverlay(
           cornerSize: 8,
           transparentCorners: false,
         });
+        // Anti-overflow fit — LAST RESORT, fallback font only. When the embedded
+        // font is used, the real metrics make the text fit its bounds naturally,
+        // so we never compress it. With the generic CSS fallback (Helvetica…) the
+        // glyph widths differ from the PDF's, so a run can render wider than
+        // bounds.width and spill onto / collide with its neighbours (the reported
+        // symptom). Fabric measures the rendered width on construction (textObj.width
+        // for the current font); if it exceeds the parsed bounds.width we apply a
+        // horizontal scaleX so the run fits exactly. This scaleX is COSMETIC: it
+        // is flagged on data so fabricObjectToElement neutralises it (never bakes
+        // it into bounds.width, which would corrupt the redaction/replaceText
+        // region). originalFont stays the parsed name so a later re-render — once
+        // the embedded FontFace has loaded — drops the fit and uses the real font.
+        let _cosmeticScaleX = false;
+        if (!_usingEmbeddedFont) {
+          const _targetWidth = textElement.bounds.width;
+          const _measuredWidth =
+            (textObj as FabricObject & { width?: number }).width ?? 0;
+          if (
+            _targetWidth > 0 &&
+            _measuredWidth > _targetWidth &&
+            (textElement.content || "").trim().length > 0
+          ) {
+            // Clamp the squeeze so text never becomes unreadable (min 35%).
+            const _fitScaleX = Math.max(0.35, _targetWidth / _measuredWidth);
+            textObj.set({ scaleX: _fitScaleX });
+            _cosmeticScaleX = true;
+          }
+        }
         (textObj as FabricObjectWithData).data = {
           elementId: textElement.elementId,
           type: "text",
@@ -368,6 +486,13 @@ export async function renderElementsOverlay(
           index: textElement.index,
           rotation0: textElement.transform?.rotation ?? 0,
           originalFont: textElement.style.originalFont,
+          // True when the embedded PDF font was resolved & registered — the
+          // overlay then renders with the SAME typography as the original, and
+          // no synthetic weight/style or width fit is applied.
+          usingEmbeddedFont: _usingEmbeddedFont,
+          // Marks scaleX as a cosmetic anti-overflow fit (fallback font only) so
+          // the round-trip in fabricObjectToElement ignores it for bounds.width.
+          cosmeticScaleX: _cosmeticScaleX,
           originalFill: textColour,
           originalBgColor: textElement.style.backgroundColor || "",
           linkUrl: textElement.linkUrl,
@@ -657,46 +782,142 @@ export async function renderElementsOverlay(
 
       case "form_field": {
         const formElement = element;
-        const fieldColorMap: Record<string, string> = {
-          text: "rgba(0, 100, 255, 0.08)",
-          checkbox: "rgba(0, 180, 0, 0.1)",
-          radio: "rgba(0, 180, 0, 0.1)",
-          dropdown: "rgba(100, 0, 255, 0.08)",
-          listbox: "rgba(100, 0, 255, 0.08)",
-          signature: "rgba(255, 100, 0, 0.1)",
-          button: "rgba(50, 50, 50, 0.1)",
-        };
-        const fieldBorderMap: Record<string, string> = {
-          text: "#0066cc",
-          checkbox: "#00aa00",
-          radio: "#00aa00",
-          dropdown: "#6600cc",
-          listbox: "#6600cc",
-          signature: "#ff6600",
-          button: "#333333",
-        };
-        const fieldFill =
-          fieldColorMap[formElement.fieldType] ?? "rgba(0, 100, 255, 0.08)";
-        const fieldStroke = fieldBorderMap[formElement.fieldType] ?? "#0066cc";
+        // EDITABLE form fields (user directive: "fields should be editable, not
+        // rendered as an image"). The page raster (`renderPageNoText`) keeps the
+        // PDF's own field frames/borders as the visual ground truth, but the
+        // VALUE lives here in an interactive overlay so the user can fill it in:
+        //   - text / dropdown → an editable IText bound to the field value
+        //     (placeholder shown when empty). Typing persists via the normal
+        //     text-edit flow (text:editing:exited → fabricObjectToElement, which
+        //     re-reads the value from this object).
+        //   - checkbox / radio → an IText carrying a check/dot mark, toggled on
+        //     click by `attachFormFieldToggle`; the checked state is stashed on
+        //     data.fieldChecked and round-tripped into the field value.
+        //   - listbox / signature / button → a hit-target Rect (filled/selected
+        //     elsewhere, not via keyboard on the canvas).
+        // In every case data.formFieldElement is the canonical full element so
+        // the round-trip never loses the field identity (fieldType/options/…).
+        const fieldFill = fieldOverlayFill(formElement.fieldType);
+        const fieldStroke = fieldOverlayStroke(formElement.fieldType);
+        const isTextEntry =
+          formElement.fieldType === "text" ||
+          formElement.fieldType === "dropdown";
+        const isCheckable =
+          formElement.fieldType === "checkbox" ||
+          formElement.fieldType === "radio";
 
-        fabricObj = new Rect({
-          ...baseOptions,
-          width: formElement.bounds.width,
-          height: formElement.bounds.height,
-          fill: fieldFill,
-          stroke: fieldStroke,
-          strokeDashArray: [4, 4],
-          strokeWidth: 1,
-        });
-        (fabricObj as FabricObjectWithData).data = {
-          elementId: formElement.elementId,
-          type: "form_field",
-          fieldName: formElement.fieldName,
-          fieldType: formElement.fieldType,
-          // Élément complet : fabricObjectToElement le re-fusionne avec
-          // les bounds réels → aucune propriété métier perdue au move.
-          formFieldElement: formElement,
-        };
+        if (isTextEntry) {
+          const placeholder =
+            formElement.placeholder ?? formElement.fieldName ?? "";
+          const currentValue = formFieldTextValue(formElement.value);
+          const showPlaceholder = currentValue.length === 0;
+          // Field font size: honour the AcroForm style, fall back to a size that
+          // fits the field height (auto-size fields use 0 in PDF).
+          const styleFontSize = formElement.style?.fontSize ?? 0;
+          const fieldFontSize =
+            styleFontSize > 0
+              ? styleFontSize
+              : Math.max(8, Math.min(formElement.bounds.height * 0.7, 16));
+          const textColour = formElement.style?.textColor || "#0a3a8a";
+          const fieldText = new IText(
+            showPlaceholder ? placeholder : currentValue,
+            {
+              ...baseOptions,
+              width: formElement.bounds.width,
+              // Slight inset + vertical centring inside the field box.
+              left: formElement.bounds.x + 2,
+              top:
+                formElement.bounds.y +
+                Math.max(0, (formElement.bounds.height - fieldFontSize) / 2),
+              fontSize: fieldFontSize,
+              fontFamily: formElement.style?.fontFamily || "Helvetica",
+              fill: showPlaceholder ? "rgba(0,0,0,0.4)" : textColour,
+              backgroundColor: fieldFill,
+              textAlign: formElement.style?.textAlign || "left",
+              hasControls: false,
+              hasBorders: true,
+              borderColor: fieldStroke,
+              borderScaleFactor: 1,
+              editable: true,
+            },
+          );
+          (fieldText as FabricObjectWithData).data = {
+            elementId: formElement.elementId,
+            type: "form_field",
+            fieldName: formElement.fieldName,
+            fieldType: formElement.fieldType,
+            fieldPlaceholder: placeholder,
+            fieldShowingPlaceholder: showPlaceholder,
+            // Canonical full element → fabricObjectToElement re-merges live
+            // bounds + the typed value without losing any business prop.
+            formFieldElement: formElement,
+          };
+          fabricObj = fieldText as unknown as FabricObject;
+        } else if (isCheckable) {
+          const checked = formFieldChecked(formElement);
+          const mark =
+            formElement.fieldType === "checkbox"
+              ? checked
+                ? "☑" // ☑
+                : "☐" // ☐
+              : checked
+                ? "◉" // ◉
+                : "○"; // ○
+          const markSize = Math.max(
+            8,
+            Math.min(formElement.bounds.width, formElement.bounds.height) * 0.9,
+          );
+          const markText = new IText(mark, {
+            ...baseOptions,
+            left: formElement.bounds.x,
+            top: formElement.bounds.y,
+            fontSize: markSize,
+            fontFamily: "Helvetica",
+            fill: checked ? "#0a7a0a" : "#444444",
+            backgroundColor: fieldFill,
+            // The mark is toggled by click, never edited as text.
+            editable: false,
+            hasControls: false,
+            hasBorders: true,
+            borderColor: fieldStroke,
+          });
+          const exportValue =
+            formElement.fieldType === "radio"
+              ? formFieldTextValue(
+                  formElement.value || formElement.options?.[0] || "",
+                )
+              : "";
+          (markText as FabricObjectWithData).data = {
+            elementId: formElement.elementId,
+            type: "form_field",
+            fieldName: formElement.fieldName,
+            fieldType: formElement.fieldType,
+            fieldChecked: checked,
+            fieldExportValue: exportValue,
+            formFieldElement: formElement,
+          };
+          fabricObj = markText as unknown as FabricObject;
+        } else {
+          // listbox / signature / button — selectable hit-target only.
+          fabricObj = new Rect({
+            ...baseOptions,
+            width: formElement.bounds.width,
+            height: formElement.bounds.height,
+            fill: fieldFill,
+            stroke: fieldStroke,
+            strokeDashArray: [4, 4],
+            strokeWidth: 1,
+          });
+          (fabricObj as FabricObjectWithData).data = {
+            elementId: formElement.elementId,
+            type: "form_field",
+            fieldName: formElement.fieldName,
+            fieldType: formElement.fieldType,
+            // Élément complet : fabricObjectToElement le re-fusionne avec
+            // les bounds réels → aucune propriété métier perdue au move.
+            formFieldElement: formElement,
+          };
+        }
         break;
       }
     }
@@ -758,6 +979,8 @@ export async function renderElementsOverlay(
   // edits is visible. Idempotent per canvas; skipped in read-only surfaces.
   if (!readonly) {
     attachShapeStyleReveal(canvas);
+    // Toggle checkbox/radio fields on click (fill them in directly on the page).
+    attachFormFieldToggle(canvas, onElementSelected);
   }
 }
 
@@ -878,4 +1101,92 @@ function attachShapeStyleReveal(canvas: FabricCanvas): void {
     clearRevealed();
     canvas.requestRenderAll();
   });
+}
+
+/**
+ * Toggle a checkbox/radio form field when its overlay mark is clicked, so the
+ * user fills the form directly on the page. Flips `data.fieldChecked`, swaps the
+ * glyph (☑/☐, ◉/○) and its colour, then fires `object:modified` so the change is
+ * persisted through the SAME pipeline as every other edit
+ * (fabricObjectToElement → operations-store → apply-elements). For a radio, the
+ * sibling radios of the same group (same fieldName) are unchecked — a radio
+ * group has at most one selected option. Idempotent per canvas.
+ */
+function attachFormFieldToggle(
+  canvas: FabricCanvas,
+  onElementSelected?: (id: string) => void,
+): void {
+  const canvasWithMeta = canvas as unknown as {
+    _formFieldToggleAttached?: boolean;
+  };
+  if (canvasWithMeta._formFieldToggleAttached) return;
+  canvasWithMeta._formFieldToggleAttached = true;
+
+  const setMark = (obj: FabricObjectWithData, checked: boolean): void => {
+    const fieldType = obj.data?.fieldType;
+    const mark =
+      fieldType === "checkbox"
+        ? checked
+          ? "☑"
+          : "☐"
+        : checked
+          ? "◉"
+          : "○";
+    (
+      obj as FabricObject & {
+        set: (o: Record<string, unknown>) => void;
+        text?: string;
+      }
+    ).set({ text: mark, fill: checked ? "#0a7a0a" : "#444444" });
+  };
+
+  const fireModified = (obj: FabricObject): void => {
+    (canvas as unknown as { fire: (e: string, o: unknown) => void }).fire(
+      "object:modified",
+      { target: obj },
+    );
+  };
+
+  canvas.on(
+    "mouse:down",
+    (e: { target?: FabricObject | null }) => {
+      const target = e.target as FabricObjectWithData | null;
+      if (!target) return;
+      const data = target.data;
+      if (
+        !data ||
+        data.type !== "form_field" ||
+        (data.fieldType !== "checkbox" && data.fieldType !== "radio")
+      ) {
+        return;
+      }
+
+      const nextChecked = data.fieldChecked !== true;
+
+      if (data.fieldType === "radio" && nextChecked) {
+        // Uncheck the other radios of the same group before checking this one.
+        const groupName = data.fieldName;
+        for (const other of canvas.getObjects() as FabricObjectWithData[]) {
+          if (other === target) continue;
+          const od = other.data;
+          if (
+            od?.type === "form_field" &&
+            od.fieldType === "radio" &&
+            od.fieldName === groupName &&
+            od.fieldChecked === true
+          ) {
+            od.fieldChecked = false;
+            setMark(other, false);
+            fireModified(other);
+          }
+        }
+      }
+
+      data.fieldChecked = nextChecked;
+      setMark(target, nextChecked);
+      if (data.elementId && onElementSelected) onElementSelected(data.elementId);
+      fireModified(target);
+      canvas.requestRenderAll();
+    },
+  );
 }

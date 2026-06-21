@@ -954,9 +954,30 @@ export function EditorCanvas({
     if (elementId) {
       originalContentRef.current.set(elementId, currentText);
     }
-    (obj as FabricObject & { set: (...args: unknown[]) => void }).set({
-      borderColor: "rgba(0, 100, 200, 0.6)",
-    });
+    const setObj = (obj as FabricObject & { set: (...args: unknown[]) => void })
+      .set;
+    setObj.call(obj, { borderColor: "rgba(0, 100, 200, 0.6)" });
+    // Editable text form fields show a grey placeholder when empty. On entering
+    // edit, clear it so the user types into an empty field (and restore the real
+    // text colour), and remember (via originalContent="") that the baseline is
+    // empty so an unchanged field is not treated as edited.
+    if (
+      obj.data?.type === "form_field" &&
+      obj.data?.fieldShowingPlaceholder === true
+    ) {
+      const placeholder = obj.data?.fieldPlaceholder;
+      if (typeof placeholder === "string" && currentText === placeholder) {
+        const field = obj.data?.formFieldElement as
+          | { style?: { textColor?: string } }
+          | undefined;
+        setObj.call(obj, {
+          text: "",
+          fill: field?.style?.textColor || "#0a3a8a",
+        });
+        obj.data.fieldShowingPlaceholder = false;
+        if (elementId) originalContentRef.current.set(elementId, "");
+      }
+    }
     const canvas = (
       obj as FabricObject & { canvas?: { requestRenderAll?: () => void } }
     ).canvas;
@@ -997,6 +1018,20 @@ export function EditorCanvas({
     // text). Only reset the edit border.
     const set = (obj as FabricObject & { set: (...args: unknown[]) => void }).set;
     set.call(obj, { borderColor: "rgba(0, 100, 200, 0.75)" });
+    // Editable text form field left empty → restore the grey placeholder. The
+    // serialised value stays "" (readFormFieldValue treats text===placeholder as
+    // empty), so the placeholder is never persisted as a real value.
+    if (
+      obj.data?.type === "form_field" &&
+      typeof obj.data?.fieldPlaceholder === "string" &&
+      currentText.length === 0
+    ) {
+      set.call(obj, {
+        text: obj.data.fieldPlaceholder,
+        fill: "rgba(0,0,0,0.4)",
+      });
+      obj.data.fieldShowingPlaceholder = true;
+    }
     const canvas = (obj as FabricObject & { canvas?: { requestRenderAll?: () => void } }).canvas;
     canvas?.requestRenderAll?.();
 

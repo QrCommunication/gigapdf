@@ -48,6 +48,60 @@ export function isBoldFontWeight(weight: string | number | undefined): boolean {
 }
 
 /**
+ * Lit la VALEUR courante d'un champ de formulaire éditable depuis l'objet
+ * Fabric qui le matérialise, pour que la saisie utilisateur soit persistée :
+ *
+ *   - text / dropdown (saisie libre) : le texte tapé dans l'IText (`obj.text`),
+ *     en ignorant le placeholder affiché quand le champ est vide.
+ *   - checkbox / radio : l'état coché stocké sur `data.fieldChecked` (togglé au
+ *     clic), normalisé selon le type (`boolean` pour checkbox, valeur d'option
+ *     ou "" pour radio).
+ *   - listbox / signature / button : valeur d'origine inchangée (édités
+ *     ailleurs, pas au clavier sur le canvas).
+ *
+ * Le `value` du FormFieldElement est typé `string | boolean | string[]`.
+ */
+export function readFormFieldValue(
+  obj: FabricObjectWithData,
+  field: FormFieldElement,
+): FormFieldElement["value"] {
+  const fieldType = field.fieldType;
+
+  if (fieldType === "checkbox") {
+    return obj.data?.fieldChecked === true;
+  }
+
+  if (fieldType === "radio") {
+    // A checked radio carries its export value (the selected option); unchecked
+    // radios serialise back to "" so the group has at most one value.
+    if (obj.data?.fieldChecked === true) {
+      const exportValue = obj.data?.fieldExportValue;
+      if (typeof exportValue === "string" && exportValue.length > 0) {
+        return exportValue;
+      }
+      const firstOption = field.options?.[0];
+      return typeof firstOption === "string" ? firstOption : "";
+    }
+    return "";
+  }
+
+  if (fieldType === "text" || fieldType === "dropdown") {
+    const textObj = obj as FabricObjectWithData & { text?: string };
+    const typed = textObj.text ?? "";
+    // The IText shows the placeholder text when the field is empty; never
+    // persist the placeholder as a real value.
+    const placeholder = obj.data?.fieldPlaceholder;
+    if (typeof placeholder === "string" && typed === placeholder) {
+      return "";
+    }
+    return typed;
+  }
+
+  // listbox / signature / button — keep the stored value untouched.
+  return field.value;
+}
+
+/**
  * Convertit un objet Fabric en Element pour la persistance. Inverse exact du
  * renderer d'overlay (`render-elements.ts`). Retourne null pour un type inconnu.
  */
@@ -55,8 +109,13 @@ export function fabricObjectToElement(
   obj: FabricObjectWithData,
 ): Element | null {
   const elementId = obj.data?.elementId || generateId();
-  const scaleX = obj.scaleX ?? 1;
   const scaleY = obj.scaleY ?? 1;
+  // `data.cosmeticScaleX` flags a scaleX applied PURELY to shrink a text
+  // overlay so it fits its bounds.width when the embedded font is unavailable
+  // (the renderer's anti-overflow fallback). That scaleX is a visual fit only —
+  // baking it into `bounds.width` here would corrupt the redaction/replaceText
+  // region on save, so we neutralise it to 1 for the bounds computation.
+  const scaleX = obj.data?.cosmeticScaleX === true ? 1 : obj.scaleX ?? 1;
 
   // Base element properties matching ElementBase interface
   const baseElement = {
@@ -87,6 +146,31 @@ export function fabricObjectToElement(
   // dev and prod ("i-text", "rect", "image", …) and is the canonical
   // way to discriminate Fabric object types.
   const typeName = (obj as FabricObject & { type?: string }).type ?? "";
+
+  // Form fields FIRST — before the i-text/text branch. An editable form field
+  // is rendered as an IText (text fields) or a marked Rect (checkbox/radio), so
+  // `typeName` may be "i-text". Without this early guard, a text-field IText
+  // would fall into the text branch below and be serialised as free `type:"text"`
+  // — destroying its field identity (fieldType/fieldName/options) and breaking
+  // the AcroForm reconstruction at bake time. `data.formFieldElement` is the
+  // canonical full element (stashed at creation AND by renderElementsOverlay),
+  // re-merged with the object's live bounds/transform so move/resize is honoured
+  // without losing business props. The current VALUE is re-read from the live
+  // Fabric object (typed text for text fields, checked state for check/radio)
+  // so user input is actually persisted.
+  const storedFormFieldEarly = obj.data?.formFieldElement as
+    | FormFieldElement
+    | undefined;
+  if (storedFormFieldEarly && storedFormFieldEarly.type === "form_field") {
+    const liveValue = readFormFieldValue(obj, storedFormFieldEarly);
+    return {
+      ...storedFormFieldEarly,
+      ...baseElement,
+      type: "form_field" as const,
+      fieldType: storedFormFieldEarly.fieldType,
+      value: liveValue,
+    };
+  }
 
   if (typeName === "i-text" || typeName === "text" || typeName === "textbox") {
     const textObj = obj as FabricObjectWithData & {
@@ -272,25 +356,9 @@ export function fabricObjectToElement(
     } as AnnotationElement;
   }
 
-  // Form fields — testés AVANT la branche shapes : un champ re-rendu par
-  // renderElementsOverlay est un Rect Fabric, qui matcherait sinon la
-  // branche shape et perdrait son identité de champ.
-  // Source de vérité : data.formFieldElement (élément complet stocké à
-  // la création ET par renderElementsOverlay), re-fusionné avec les
-  // bounds/transform réels de l'objet Fabric — déplacement/resize pris
-  // en compte SANS perdre les propriétés métier (options, required,
-  // multiline, format…).
-  const storedFormField = obj.data?.formFieldElement as
-    | FormFieldElement
-    | undefined;
-  if (storedFormField && storedFormField.type === "form_field") {
-    return {
-      ...storedFormField,
-      ...baseElement,
-      type: "form_field" as const,
-      fieldType: storedFormField.fieldType,
-    };
-  }
+  // Form fields carrying `data.formFieldElement` are already handled by the
+  // early guard at the top of this function (before the i-text branch), so an
+  // editable text-field IText is serialised as a field, never as free text.
 
   if (["rect", "circle", "triangle", "ellipse", "line"].includes(typeName)) {
     let shapeTypeResult: ShapeType = "rectangle";
