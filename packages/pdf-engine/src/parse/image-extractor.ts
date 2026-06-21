@@ -36,20 +36,16 @@ const MIN_IMAGE_DIMENSION = 2;
 // ---------------------------------------------------------------------------
 
 /**
- * Derive a stable UUID from (page, x, y, resourceName).
- * Same image at the same position always gets the same elementId — useful for
- * diff / incremental updates in the Fabric.js editor.
+ * Derive a stable, deterministic UUID-shaped id from a seed string.
+ *
+ * Determinism matters for cross-session layer persistence and diff/incremental
+ * updates: parsing the SAME PDF twice must produce the SAME elementId for the
+ * same element. The seed is built from `(page, type, unified-index)` so it is
+ * stable even when the element moves (the engine's unified index is the durable
+ * identity), with the bounds folded in only as a tie-break.
  */
-function deriveStableId(
-  pageNumber: number,
-  x: number,
-  y: number,
-  resourceName: string,
-): string {
-  const hash = createHash('sha256')
-    .update(`${pageNumber}:${x.toFixed(2)}:${y.toFixed(2)}:${resourceName}`)
-    .digest('hex')
-    .slice(0, 32);
+function deriveStableId(seed: string): string {
+  const hash = createHash('sha256').update(seed).digest('hex').slice(0, 32);
 
   // Format as UUID v4-like (RFC 4122 variant bits in position 16)
   return [
@@ -129,21 +125,27 @@ export async function extractImageElementsByPage(
       for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
         const pageHeight = doc.pageInfo(pageNumber).height;
         const elements: ImageElement[] = [];
-        let index = 0;
+        // `seq` is the IMAGE-LOCAL ordinal (only for the image-resource URL
+        // fallback `img_{seq}`). `info.index` is the engine's UNIFIED element
+        // index — the value `removeElement`/`transformElement` accept directly,
+        // and what enables lossless in-place edits.
+        let seq = 0;
         for (const info of doc.imageElements(pageNumber)) {
           const bounds = webBounds(info, pageHeight);
           if (bounds.width < MIN_IMAGE_DIMENSION || bounds.height < MIN_IMAGE_DIMENSION) {
-            index++;
+            seq++;
             continue;
           }
-          const resourceName = `img_${index}`;
           let dataUrl = dataUrlFromInfo(info) ?? '';
           if (!dataUrl && baseUrl && documentId) {
-            dataUrl = `${baseUrl}/api/pdf/${documentId}/pages/${pageNumber}/images/${index}`;
+            dataUrl = `${baseUrl}/api/pdf/${documentId}/pages/${pageNumber}/images/${seq}`;
           }
           elements.push({
-            elementId: deriveStableId(pageNumber, bounds.x, bounds.y, resourceName),
+            elementId: deriveStableId(`${pageNumber}:image:${info.index}`),
             type: 'image',
+            // Engine unified element index → lossless in-place move/resize/delete
+            // (`transformElement`/`removeElement`) instead of lossy redact+add.
+            index: info.index,
             bounds,
             transform: {
               rotation: Math.round(info.rotation),
@@ -164,7 +166,7 @@ export async function extractImageElementsByPage(
             style: { opacity: info.opacity, blendMode: 'normal' },
             crop: null,
           });
-          index++;
+          seq++;
         }
         if (elements.length > 0) byPage.set(pageNumber, elements);
       }
@@ -269,16 +271,16 @@ export async function extractImages(
 
       for (const pgNum of pages) {
         const pageHeight = doc.pageInfo(pgNum).height;
-        let index = 0;
+        let seq = 0;
         for (const info of doc.imageElements(pgNum)) {
           const bounds = webBounds(info, pageHeight);
           if (bounds.width < MIN_IMAGE_DIMENSION || bounds.height < MIN_IMAGE_DIMENSION) {
-            index++;
+            seq++;
             continue;
           }
-          const resourceName = `img_${index}`;
+          const resourceName = `img_${seq}`;
           allImages.push({
-            elementId: deriveStableId(pgNum, bounds.x, bounds.y, resourceName),
+            elementId: deriveStableId(`${pgNum}:image:${info.index}`),
             pageNumber: pgNum,
             bounds,
             source: {
@@ -291,7 +293,7 @@ export async function extractImages(
             rotation: Math.round(info.rotation),
             opacity: info.opacity,
           });
-          index++;
+          seq++;
         }
       }
     } finally {

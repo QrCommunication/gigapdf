@@ -1583,6 +1583,8 @@
       "fillColor": "Fill color",
       "strokeWidth": "Stroke width",
       "duplicate": "Duplicate",
+      "bringToFront": "Bring to front",
+      "sendToBack": "Send to back",
       "delete": "Delete",
       "transparent": "Transparent",
       "contentEdit": "Edit content",

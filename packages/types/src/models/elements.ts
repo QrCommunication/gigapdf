@@ -104,14 +104,11 @@ export interface ImageElement extends ElementBase {
   style: ImageStyle;
   crop: ImageCrop | null;
   /**
-   * Engine element index (from `GigaPdfDoc.imageElements().index`) for future
-   * in-place `moveElement` / `removeElement` support.
-   *
-   * NOTE: the image extractor does not populate this yet — it derives a
-   * synthetic positional `img_{n}` resource name instead, so this field is
-   * currently always absent and the apply pipeline always uses the redact + add
-   * fallback for images. Reserved so the contract is ready once the extractor
-   * plumbs the real `ImageElementInfo.index`.
+   * Engine UNIFIED element index (from `GigaPdfDoc.imageElements().index`),
+   * populated by the image extractor. Enables lossless in-place
+   * `transformElement` (move/resize) and `removeElement` (delete) in the apply
+   * pipeline instead of redact + add. Absent on newly-added images (no original
+   * engine element) → those still take the add path.
    */
   index?: number;
 }
@@ -141,13 +138,11 @@ export interface ShapeElement extends ElementBase {
   geometry: ShapeGeometry;
   style: ShapeStyle;
   /**
-   * Engine element index (from `GigaPdfDoc.vectorPaths().index`) for future
-   * in-place `moveElement` / `removeElement` support.
-   *
-   * NOTE: the drawing extractor does not populate this yet — it assigns a random
-   * `elementId` instead, so this field is currently always absent and the apply
-   * pipeline always uses the redact + add fallback for shapes. Reserved so the
-   * contract is ready once the extractor plumbs the real `VectorPathInfo.index`.
+   * Engine UNIFIED element index (from `GigaPdfDoc.vectorPaths().index`),
+   * populated by the drawing extractor. Enables lossless in-place
+   * `transformElement` (move/resize) and `removeElement` (delete) in the apply
+   * pipeline instead of redact + add. Absent on newly-added shapes (no original
+   * engine element) → those still take the add path.
    */
   index?: number;
 }
