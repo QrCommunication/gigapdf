@@ -4,9 +4,16 @@ Rate limiting middleware.
 Implements sliding window rate limiting using Redis
 to protect API endpoints from abuse.
 
-Rate limit key strategy:
-  - Authenticated requests  → keyed by (user_id + endpoint_category)
-  - Anonymous requests      → keyed by (authoritative_ip + endpoint_category)
+Scope (who is rate limited):
+  Only API-key consumers (programmatic usage) and anonymous traffic (e.g.
+  login brute-force) are throttled.  Interactive app-session users (JWT /
+  cookie, no API key) are EXEMPT — a logged-in user fires many legitimate
+  requests (dashboard widgets, navigation, polling, editor) and must never
+  receive a 429.  See ``_is_app_session``.
+
+Rate limit key strategy (for the requests that ARE limited):
+  - API-key / authenticated requests → keyed by (user_id + endpoint_category)
+  - Anonymous requests               → keyed by (authoritative_ip + endpoint_category)
 
 IP resolution strategy:
   X-Forwarded-For is only trusted when the direct peer is a declared trusted
@@ -158,6 +165,30 @@ def get_rate_limit_key(request: Request, user_id: str | None = None) -> str:
 
     client_ip = _resolve_client_ip(request)
     return f"ip:{client_ip}"
+
+
+def _is_app_session(request: Request) -> bool:
+    """
+    Return True when the request is an interactive app session (JWT / cookie)
+    rather than a programmatic API-key call — such requests are EXEMPT from
+    rate limiting.
+
+    Rate limiting only targets API-key usage and anonymous abuse: a logged-in
+    user browsing the app legitimately fires many requests (dashboard widgets,
+    navigation, polling, editor operations) and must never receive a 429.
+
+    Detection is unambiguous and the two auth methods are mutually exclusive:
+      * ``ApiKeyAuthMiddleware`` sets ``request.state.api_key_id`` ONLY when an
+        ``X-API-Key`` header is present.
+      * ``JWTAuthMiddleware`` sets ``request.state.user_id`` for Bearer/cookie
+        app sessions.
+    Both auth middlewares run BEFORE the rate limiter (LIFO chain), so these
+    flags are already populated.  When an API key is present we never treat the
+    request as an app session, so the API-key path stays rate limited.
+    """
+    user_id = getattr(request.state, "user_id", None)
+    api_key_id = getattr(request.state, "api_key_id", None)
+    return user_id is not None and api_key_id is None
 
 
 def get_endpoint_category(path: str, method: str) -> str:
@@ -327,6 +358,14 @@ class RateLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # Interactive app-session users (JWT/cookie, no API key) are never
+        # throttled — rate limiting targets API-key usage and anonymous abuse
+        # only. This runs after the auth middlewares (LIFO chain), so
+        # request.state is already populated. See _is_app_session().
+        if _is_app_session(request):
+            await self.app(scope, receive, send)
+            return
+
         # Extract user_id populated by the auth middleware (BACK-01).
         # getattr with None default makes this safe even when the auth
         # middleware hasn't run yet (e.g., public endpoints).
@@ -372,6 +411,11 @@ async def rate_limit_dependency(
 
     Raises 429 if rate limit exceeded.
     """
+    # App-session users (JWT/cookie, no API key) are exempt — only API-key and
+    # anonymous traffic is rate limited. See _is_app_session().
+    if _is_app_session(request):
+        return
+
     user_id: str | None = getattr(request.state, "user_id", None)
     is_allowed, info = await check_rate_limit(request, user_id=user_id)
 
