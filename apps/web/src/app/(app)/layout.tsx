@@ -3,6 +3,7 @@ import { Bricolage_Grotesque, Geist, Geist_Mono } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import { Toaster } from "@giga-pdf/ui";
+import { CommandPalette } from "@/components/command/command-palette";
 import { Providers } from "@/components/providers";
 import "@/styles/globals.css";
 
@@ -58,7 +59,11 @@ export default async function AppLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} font-sans antialiased`}
       >
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <Providers>{children}</Providers>
+          <Providers>
+            {children}
+            {/* Palette Ctrl/Cmd+K globale — couvre dashboard + éditeur. */}
+            <CommandPalette />
+          </Providers>
           <Toaster />
         </NextIntlClientProvider>
       </body>

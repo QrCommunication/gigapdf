@@ -5,6 +5,31 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-06-21
+
+### Added
+- **Universal merge** — combine any files (PDF, Word, Excel, PowerPoint,
+  OpenDocument, images JPG/PNG/GIF/WebP/AVIF, HTML, text, RTF) into a single
+  PDF; every file is converted automatically before merging
+  (`POST /api/pdf/merge-universal`)
+- **Global command palette** (Ctrl/Cmd+K) — jump to any tool or page, or run a
+  semantic search across your documents from anywhere in the app
+- **Semantic document search** — new `/search` page backed by
+  `GET /api/v1/search/semantic`
+- **Nine new tools, now 29 in total** — universal merge, image to PDF, PDF to
+  image, PDF to PowerPoint, PDF to Excel, RTF to PDF, text to PDF, redact PDF
+  and unlock PDF
+- **"Features" mega-menu** — lists every tool by category, available on every
+  page of the marketing site
+- New processing routes `POST /api/pdf/image-to-pdf` and
+  `POST /api/pdf/to-image` (returns a ZIP of PNG pages)
+
+### Changed
+- Unified header and footer across the whole marketing site
+
+### Fixed
+- The semantic search page (`/search`) no longer returns a 404
+
 ## [1.6.0] - 2026-06-18
 
 ### Added

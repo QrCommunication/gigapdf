@@ -17,9 +17,9 @@ import { routing } from "./i18n/routing";
  *    Next.js ne charge le proxy que depuis src/proxy.ts).
  *
  * Le matcher EXCLUT volontairement : /api, /backend-api, /embed, toutes les
- * routes app (/dashboard, /documents, /editor, /settings, /billing,
- * /organization, /developers, /shared, /trash, /monitoring), /_next et les
- * fichiers statiques. Ces routes conservent la résolution de locale par
+ * routes app (/dashboard, /documents, /search, /merge, /editor, /settings,
+ * /billing, /organization, /developers, /shared, /trash, /monitoring), /_next
+ * et les fichiers statiques. Ces routes conservent la résolution de locale par
  * cookie (request.ts) et la protection client AuthGuard.
  */
 
@@ -88,6 +88,6 @@ export const config = {
   // sans collision avec la page d'accès refusé MARKETING servie à /fr/403 et
   // /en/403 (le bare /403 reste, lui, géré par next-intl → marketing fr).
   matcher: [
-    "/((?!api|backend-api|dashboard|documents|editor|settings|billing|organization|developers|shared|trash|monitoring|embed|forbidden|_next|_vercel|.*\\..*).*)",
+    "/((?!api|backend-api|dashboard|documents|search|merge|editor|settings|billing|organization|developers|shared|trash|monitoring|embed|forbidden|_next|_vercel|.*\\..*).*)",
   ],
 };

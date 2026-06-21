@@ -67,7 +67,7 @@ const STRINGS: Record<
     faq: "Questions fréquentes",
     relatedTools: "Les outils utilisés dans ces workflows",
     seeAlso: "Voir aussi",
-    allToolsLink: "les 20 outils PDF de GigaPDF",
+    allToolsLink: "les 29 outils PDF de GigaPDF",
     and: "et",
     otherSolutionsLink: "les autres solutions métiers",
     cta: (solutionName) =>
@@ -81,7 +81,7 @@ const STRINGS: Record<
     faq: "Frequently asked questions",
     relatedTools: "The tools used in these workflows",
     seeAlso: "See also",
-    allToolsLink: "the 20 GigaPDF PDF tools",
+    allToolsLink: "the 29 GigaPDF PDF tools",
     and: "and",
     otherSolutionsLink: "the other business solutions",
     cta: (solutionName) =>

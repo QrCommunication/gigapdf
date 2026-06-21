@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import NextLink from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, Check } from "lucide-react";
+import { Button } from "@giga-pdf/ui";
 import { JsonLd } from "@/components/seo/json-ld";
 import { CtaSection } from "@/components/seo/cta-section";
 import {
@@ -53,6 +55,7 @@ const STRINGS: Record<
     faq: string;
     relatedTools: string;
     relatedSolutions: string;
+    openTool: string;
     cta: (toolName: string) => string;
   }
 > = {
@@ -65,6 +68,7 @@ const STRINGS: Record<
     faq: "Questions fréquentes",
     relatedTools: "Outils associés",
     relatedSolutions: "Pour votre métier",
+    openTool: "Utiliser l'outil",
     cta: (toolName) => `${toolName} : essayez gratuitement`,
   },
   en: {
@@ -76,6 +80,7 @@ const STRINGS: Record<
     faq: "Frequently asked questions",
     relatedTools: "Related tools",
     relatedSolutions: "For your profession",
+    openTool: "Open the tool",
     cta: (toolName) => `${toolName}: try it for free`,
   },
 };
@@ -197,6 +202,17 @@ export default async function ToolPage({ params }: ToolPageProps) {
             </p>
           ))}
         </div>
+
+        {tool.appHref ? (
+          <div className="mt-6">
+            <Button asChild size="lg">
+              <NextLink href={tool.appHref}>
+                {strings.openTool}
+                <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+              </NextLink>
+            </Button>
+          </div>
+        ) : null}
 
         <section className="mt-10">
           <h2 className="text-2xl font-bold tracking-tight text-foreground">

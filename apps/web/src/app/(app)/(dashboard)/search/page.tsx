@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Input } from "@giga-pdf/ui";
 import { Search, ScanSearch, Loader2 } from "lucide-react";
@@ -12,15 +13,32 @@ type SearchStatus = "idle" | "loading" | "done" | "error" | "unavailable";
 
 const RESULT_LIMIT = 24;
 
+// useSearchParams() exige une frontière <Suspense> côté Next 16 (la page se
+// suspend tant que les search params client ne sont pas résolus).
 export default function SemanticSearchPage() {
+  return (
+    <Suspense fallback={null}>
+      <SemanticSearchView />
+    </Suspense>
+  );
+}
+
+function SemanticSearchView() {
   const t = useTranslations("semanticSearch");
-  const [query, setQuery] = useState("");
+  const searchParams = useSearchParams();
+  // Query d'amorçage depuis l'URL (?q=…), p.ex. depuis la Command Palette.
+  const initialQuery = searchParams?.get("q") ?? "";
+
+  // Initialisation paresseuse : pré-remplit l'input avec la query de l'URL.
+  const [query, setQuery] = useState(() => initialQuery);
   const [status, setStatus] = useState<SearchStatus>("idle");
   const [results, setResults] = useState<SemanticSearchResult[]>([]);
 
-  const runSearch = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmed = query.trim();
+  // Appel async pur : seule source de l'effet de bord réseau, partagée par le
+  // submit manuel ET l'amorçage par ?q=. Ne dérive aucun state — il ne fait que
+  // DÉCLENCHER la requête.
+  const executeSearch = useCallback(async (rawQuery: string) => {
+    const trimmed = rawQuery.trim();
     if (trimmed.length === 0) return;
 
     setStatus("loading");
@@ -38,6 +56,19 @@ export default function SemanticSearchPage() {
       setResults([]);
       setStatus("error");
     }
+  }, []);
+
+  // Déclenche la recherche UNE fois par valeur de ?q= (dépendance = q seul).
+  // Pas de boucle : l'effet n'écrit pas dans `query`/searchParams, il ne fait
+  // qu'appeler l'async. Modifier l'input ensuite n'altère pas `q`.
+  useEffect(() => {
+    if (initialQuery.trim().length === 0) return;
+    void executeSearch(initialQuery);
+  }, [initialQuery, executeSearch]);
+
+  const runSearch = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await executeSearch(query);
   };
 
   return (
