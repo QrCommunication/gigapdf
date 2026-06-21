@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Layers,
@@ -125,6 +125,19 @@ export function LayersPanel({
   // Calque en cours de renommage inline (double-clic) + valeur du champ.
   const [renamingLayerId, setRenamingLayerId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+
+  // Ref vers la ligne de l'élément sélectionné, pour la faire défiler dans la
+  // vue. Sans ça, sélectionner un élément sur le canvas surligne bien sa ligne
+  // mais — dans une liste de 200+ calques — la ligne reste hors écran et
+  // l'utilisateur a l'impression que « le calque ne se sélectionne pas ».
+  const selectedRowRef = useRef<HTMLDivElement | null>(null);
+  // Premier id sélectionné : pilote le scroll-into-view (clé d'effet stable).
+  const firstSelectedId = selectedElementIds[0] ?? null;
+  useEffect(() => {
+    if (!firstSelectedId) return;
+    // `nearest` n'arrache pas la position si la ligne est déjà visible.
+    selectedRowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [firstSelectedId]);
 
   // La section "User Layers" est disponible dès qu'une action d'édition de
   // calque est fournie (le bouton "+" reste utile même sans calque existant).
@@ -406,13 +419,18 @@ export function LayersPanel({
             const visible = element.visible !== false;
             const locked = element.locked === true;
             const selected = selectedElementIds.includes(element.elementId);
+            // Seule la PREMIÈRE ligne sélectionnée porte le ref de scroll —
+            // sinon plusieurs nœuds se disputeraient `selectedRowRef`.
+            const isScrollAnchor = element.elementId === firstSelectedId;
             const TypeIcon = TYPE_ICONS[element.type] ?? Square;
             const label = elementLabel(element, typeLabels[element.type]);
             return (
               <div
                 key={element.elementId}
+                ref={isScrollAnchor ? selectedRowRef : undefined}
                 role={onElementSelect ? "button" : undefined}
                 tabIndex={onElementSelect ? 0 : undefined}
+                aria-selected={onElementSelect ? selected : undefined}
                 onClick={() => onElementSelect?.(element.elementId)}
                 onKeyDown={(e) => {
                   if (onElementSelect && (e.key === "Enter" || e.key === " ")) {
@@ -421,10 +439,16 @@ export function LayersPanel({
                   }
                 }}
                 className={cn(
-                  "flex items-center gap-1 px-1 py-1 rounded-md text-sm",
-                  "hover:bg-accent transition-colors",
+                  "flex items-center gap-1 px-1 py-1 rounded-md text-sm transition-colors",
                   onElementSelect && "cursor-pointer",
-                  selected && "bg-accent",
+                  // Selected state must read as SELECTED — and be distinct from
+                  // the hover style (which is also `bg-accent`). A primary-tinted
+                  // background + ring makes the active layer obvious, so the user
+                  // sees the canvas selection reflected here. Unselected rows keep
+                  // the subtle hover affordance.
+                  selected
+                    ? "bg-primary/15 ring-1 ring-inset ring-primary font-medium"
+                    : "hover:bg-accent",
                   !visible && "opacity-50",
                 )}
               >
