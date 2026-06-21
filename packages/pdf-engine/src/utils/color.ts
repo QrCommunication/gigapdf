@@ -41,3 +41,25 @@ export function rgbToHex(r: number, g: number, b: number): string {
   const toHex = (n: number) => clamp255(n * 255).toString(16).padStart(2, '0');
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
+
+/**
+ * Convert a hex colour (`#RRGGBB` or `#RGB`) to an `[r, g, b]` triple with each
+ * channel in `0..1`, the form the engine's `setPathStyle` expects. Malformed
+ * channels clamp to 0 (same forgiving policy as {@link hexToPackedRgb}).
+ */
+export function hexToRgb01(hex: string): [number, number, number] {
+  const clean = hex.replace('#', '');
+  const full =
+    clean.length === 3
+      ? clean
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : clean;
+
+  const r = clamp255(parseInt(full.substring(0, 2), 16));
+  const g = clamp255(parseInt(full.substring(2, 4), 16));
+  const b = clamp255(parseInt(full.substring(4, 6), 16));
+
+  return [r / 255, g / 255, b / 255];
+}

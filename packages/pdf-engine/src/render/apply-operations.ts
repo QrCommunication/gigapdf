@@ -11,6 +11,16 @@
  *   directly:
  *     - text-content and/or position only  → `replaceText` (+ `moveElement`)
  *     - delete                             → `removeElement`
+ *   Images and shapes carrying a valid unified `index` likewise edit in place:
+ *     - move/resize (rotation unchanged)   → `transformElement`
+ *     - shape fill/stroke/width/dash       → `setPathStyle` (P3 "vector restyle")
+ *     - delete                             → `removeElement`
+ *   A pure shape STYLE change (geometry unchanged) is one `setPathStyle`; a
+ *   combined geometry + style change is `transformElement` THEN `setPathStyle`
+ *   on the SAME index (neither changes the element count, so indices stay
+ *   valid). Opacity changes are NOT expressible in place — `setPathStyle`
+ *   cannot emit `/ca`/`/CA` (needs an `/ExtGState`) — so they take the fallback
+ *   (which re-adds the shape with opacity).
  *   This rewrites the original content stream (font, size, colour and position
  *   preserved), so there is NO duplicate left behind and NO redaction needed —
  *   copy/paste in the result reveals exactly one run.
@@ -62,7 +72,7 @@ import { addAnnotation } from './annotation-renderer';
 import { addFormField } from './form-renderer';
 import { applyRedactions } from './engine-redact';
 import type { RedactionTarget } from './engine-redact';
-import { rgbToHex } from '../utils';
+import { rgbToHex, hexToRgb01 } from '../utils';
 import { webToPdf } from '../utils/coordinates';
 import { engineLogger } from '../utils/logger';
 import type {
@@ -107,6 +117,8 @@ export interface ApplyOperationsResult {
   inPlaceMoved: number;
   /** Number of `transformElement` in-place affine edits applied (image/shape move/resize). */
   inPlaceTransformed: number;
+  /** Number of `setPathStyle` in-place shape restyles applied (fill/stroke/width/dash). */
+  inPlaceRestyled: number;
   /** Number of `removeElement` in-place deletes applied. */
   inPlaceRemoved: number;
 }
@@ -204,6 +216,14 @@ function styleMatchesRun(
   return true;
 }
 
+/** The `style` payload `setPathStyle` accepts (only the changed fields are set). */
+type PathStyleOverride = {
+  fill?: [number, number, number];
+  stroke?: [number, number, number];
+  strokeWidth?: number;
+  dash?: number[];
+};
+
 /** One classified in-place op, resolved against the element currently at `index`. */
 interface InPlaceOp {
   pageNumber: number;
@@ -211,17 +231,131 @@ interface InPlaceOp {
   /**
    * `replace`: set new text (+ optional move) on a TEXT run.
    * `transform`: apply an affine `matrix` to an IMAGE/SHAPE element in place.
+   * `restyle`: re-style a SHAPE path via `setPathStyle` (optionally preceded by
+   *   an affine `matrix` when geometry ALSO changed — both on the same index).
    * `remove`: delete the element (text/image/shape).
    */
-  kind: 'replace' | 'transform' | 'remove';
+  kind: 'replace' | 'transform' | 'restyle' | 'remove';
   /** New text content (for `replace`). */
   newText?: string;
   /** PDF-space deltas for an accompanying `moveElement` (for `replace`). */
   move?: { dx: number; dy: number };
-  /** Affine matrix `[a,b,c,d,e,f]` for `transformElement` (for `transform`). */
+  /** Affine matrix `[a,b,c,d,e,f]` for `transformElement` (for `transform`/`restyle`). */
   matrix?: [number, number, number, number, number, number];
+  /** Style override for `setPathStyle` (for `restyle`) — only changed fields. */
+  style?: PathStyleOverride;
   /** Diagnostics. */
   originalIndex: number;
+}
+
+/** A shape's current paint as reported by the engine's `vectorPaths()`. */
+interface OriginalPathStyle {
+  fill: [number, number, number] | null;
+  stroke: [number, number, number] | null;
+  strokeWidth: number;
+  dash: number[];
+}
+
+/** A short tolerance (in PDF points) for the stroke-width "unchanged" test. */
+const STROKE_WIDTH_TOLERANCE = 0.01;
+
+/** Whether two dash arrays are equal element-by-element. */
+function dashArraysEqual(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (Math.abs(a[i]! - b[i]!) > 1e-6) return false;
+  }
+  return true;
+}
+
+/**
+ * Classify a shape `update`'s STYLE delta against the path's current paint.
+ *
+ * Returns:
+ *  - `null` when nothing restylable changed (fill/stroke/width/dash all equal);
+ *  - `{ expressible: false }` when a change exists but `setPathStyle` cannot
+ *    express it (turning a fill/stroke on or off — `setPathStyle` only OVERRIDES
+ *    an existing paint, it can't add/remove one) → caller must fall back;
+ *  - `{ expressible: true, style }` with ONLY the changed, expressible fields.
+ *
+ * Colours compare via `#rrggbb` (reusing the extractor's conversion) so the test
+ * is exact; the engine RGB triples are 0..1 per channel. NOTE: opacity is NOT
+ * considered here — it's classified separately and always forces a fallback.
+ */
+function computeShapeStyleChange(
+  element: ShapeElement,
+  original: OriginalPathStyle,
+): null | { expressible: false } | { expressible: true; style: PathStyleOverride } {
+  const style = element.style;
+  if (!style) return null;
+
+  const oldFillHex = original.fill
+    ? rgbToHex(original.fill[0], original.fill[1], original.fill[2]).toLowerCase()
+    : null;
+  const oldStrokeHex = original.stroke
+    ? rgbToHex(original.stroke[0], original.stroke[1], original.stroke[2]).toLowerCase()
+    : null;
+  const newFillHex = style.fillColor ? style.fillColor.toLowerCase() : null;
+  const newStrokeHex = style.strokeColor ? style.strokeColor.toLowerCase() : null;
+
+  const out: PathStyleOverride = {};
+  let changed = false;
+
+  // Fill — a null↔non-null transition can't be expressed (add/remove paint).
+  if (newFillHex !== oldFillHex) {
+    if (newFillHex === null || oldFillHex === null) return { expressible: false };
+    out.fill = hexToRgb01(newFillHex);
+    changed = true;
+  }
+
+  // Stroke colour — same null↔non-null guard.
+  if (newStrokeHex !== oldStrokeHex) {
+    if (newStrokeHex === null || oldStrokeHex === null) return { expressible: false };
+    out.stroke = hexToRgb01(newStrokeHex);
+    changed = true;
+  }
+
+  // Stroke width — only meaningful (and only emittable) when the path is stroked.
+  const newWidth = style.strokeWidth ?? 0;
+  if (oldStrokeHex !== null && Math.abs(newWidth - original.strokeWidth) > STROKE_WIDTH_TOLERANCE) {
+    out.strokeWidth = newWidth;
+    changed = true;
+  }
+
+  // Dash pattern.
+  const newDash = style.strokeDashArray ?? [];
+  if (!dashArraysEqual(newDash, original.dash)) {
+    out.dash = [...newDash];
+    changed = true;
+  }
+
+  if (!changed) return null;
+  return { expressible: true, style: out };
+}
+
+/**
+ * Whether the shape's OPACITY (fill/stroke alpha) changed vs the path's current
+ * alpha. Opacity is NOT expressible by `setPathStyle` (it would need an
+ * `/ExtGState`), so any opacity change forces the redact + add fallback — which
+ * re-adds the shape WITH the new opacity. Compared within a small tolerance.
+ */
+function shapeOpacityChanged(
+  element: ShapeElement,
+  original: { fillAlpha: number; strokeAlpha: number; hasFill: boolean; hasStroke: boolean },
+): boolean {
+  const OPACITY_TOLERANCE = 1e-3;
+  const style = element.style;
+  if (!style) return false;
+  if (original.hasFill && Math.abs((style.fillOpacity ?? 1) - original.fillAlpha) > OPACITY_TOLERANCE) {
+    return true;
+  }
+  if (
+    original.hasStroke &&
+    Math.abs((style.strokeOpacity ?? 1) - original.strokeAlpha) > OPACITY_TOLERANCE
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /** Element types eligible for index-based in-place edits beyond text. */
@@ -406,8 +540,7 @@ export async function applyOperations(
 
       // action === 'update' — only a geometry (move/resize) change with the
       // rotation UNCHANGED is expressible by an affine `transformElement`.
-      // A rotation change (or anything we can't express, e.g. a shape style
-      // change) falls back to redact + add — left for a later phase.
+      // A rotation change falls back to redact + add.
       const geomElement = element as unknown as { transform?: { rotation?: number }; bounds?: Bounds };
       // Shapes only have `rotation` on stored vector paths via the placement
       // CTM; the engine reports the path's effective rotation as 0 for the
@@ -419,21 +552,81 @@ export async function applyOperations(
         fallbackOps.push(op);
         continue;
       }
+
+      // ── Shape STYLE classification (P3 "vector restyle") ──────────────────
+      // For a shape we ALSO consider a fill/stroke/width/dash change, baked in
+      // place via `setPathStyle`. Opacity is NOT expressible in place, so an
+      // opacity change forces the whole op to the redact + add fallback (which
+      // re-adds the shape with the new opacity, geometry and style together).
+      let restyle: PathStyleOverride | undefined;
+      if (geometryType === 'shape') {
+        const path = original as ReturnType<typeof pathsFor>[number];
+        const shapeEl = element as unknown as ShapeElement;
+        const originalStyle: OriginalPathStyle = {
+          fill: path.fill,
+          stroke: path.stroke,
+          strokeWidth: path.strokeWidth,
+          dash: path.dash,
+        };
+        if (
+          shapeOpacityChanged(shapeEl, {
+            fillAlpha: path.fillAlpha,
+            strokeAlpha: path.strokeAlpha,
+            hasFill: path.fill !== null,
+            hasStroke: path.stroke !== null,
+          })
+        ) {
+          fallbackOps.push(op);
+          continue;
+        }
+        const styleChange = computeShapeStyleChange(shapeEl, originalStyle);
+        if (styleChange && !styleChange.expressible) {
+          // A style change we can't bake in place (fill/stroke added or removed)
+          // → fall back so the shape is re-materialised with the new paint.
+          fallbackOps.push(op);
+          continue;
+        }
+        if (styleChange) restyle = styleChange.style;
+      }
+
+      // Geometry (move/resize) component — `null` when unchanged (or degenerate).
+      const matrix =
+        op.oldBounds && geomElement.bounds
+          ? computeAffineMatrix(
+              geometryType,
+              toPdfBounds(inPlaceHandle, pageNumber, op.oldBounds),
+              toPdfBounds(inPlaceHandle, pageNumber, geomElement.bounds),
+            )
+          : null;
+
+      // Route on what actually changed:
+      //  - style changed (restyle present): one `restyle` op, carrying the
+      //    geometry matrix too when geometry ALSO changed (transform THEN
+      //    setPathStyle on the same index — count is stable, indices valid).
+      //  - geometry only: a plain `transform`.
+      //  - neither: nothing expressible changed.
+      if (restyle) {
+        inPlaceOps.push({
+          pageNumber,
+          index,
+          kind: 'restyle',
+          style: restyle,
+          matrix: matrix ?? undefined,
+          originalIndex: opIndex,
+        });
+        continue;
+      }
+      if (matrix !== null) {
+        inPlaceOps.push({ pageNumber, index, kind: 'transform', matrix, originalIndex: opIndex });
+        continue;
+      }
+      // Nothing in-place-expressible changed.
       if (!op.oldBounds || !geomElement.bounds) {
-        // No old box to map FROM → cannot compute the affine; fall back.
+        // No old box AND no style change → cannot edit in place; fall back so a
+        // genuine non-geometry/non-style update isn't silently dropped.
         fallbackOps.push(op);
-        continue;
       }
-      const matrix = computeAffineMatrix(
-        geometryType,
-        toPdfBounds(inPlaceHandle, pageNumber, op.oldBounds),
-        toPdfBounds(inPlaceHandle, pageNumber, geomElement.bounds),
-      );
-      if (matrix === null) {
-        // No-op (within tolerance) or degenerate old box — skip silently.
-        continue;
-      }
-      inPlaceOps.push({ pageNumber, index, kind: 'transform', matrix, originalIndex: opIndex });
+      // else: a within-tolerance no-op move with no style change → skip silently.
       continue;
     }
 
@@ -495,6 +688,7 @@ export async function applyOperations(
   let inPlaceReplaced = 0;
   let inPlaceMoved = 0;
   let inPlaceTransformed = 0;
+  let inPlaceRestyled = 0;
   let inPlaceRemoved = 0;
 
   if (inPlaceOps.length > 0) {
@@ -527,6 +721,16 @@ export async function applyOperations(
           } else if (ip.kind === 'transform') {
             if (ip.matrix && inPlaceHandle._doc.transformElement(page, ip.index, ip.matrix)) {
               inPlaceTransformed++;
+            }
+          } else if (ip.kind === 'restyle') {
+            // Geometry first (if any) so the path's box is at its NEW position,
+            // then the style override. Both target the same index; neither
+            // changes the element count, so the index stays valid between calls.
+            if (ip.matrix && inPlaceHandle._doc.transformElement(page, ip.index, ip.matrix)) {
+              inPlaceTransformed++;
+            }
+            if (ip.style && inPlaceHandle._doc.setPathStyle(page, ip.index, ip.style)) {
+              inPlaceRestyled++;
             }
           } else {
             if (inPlaceHandle._doc.replaceText(page, ip.index, ip.newText ?? '')) {
@@ -689,6 +893,7 @@ export async function applyOperations(
     inPlaceReplaced,
     inPlaceMoved,
     inPlaceTransformed,
+    inPlaceRestyled,
     inPlaceRemoved,
   };
 }

@@ -1677,7 +1677,14 @@
         "type": "Type de forme",
         "fill": "Remplissage",
         "stroke": "Contour",
-        "strokeWidth": "Épaisseur du contour"
+        "strokeWidth": "Épaisseur du contour",
+        "dash": "Style de trait",
+        "dashSolid": "Plein",
+        "dashDashed": "Tirets",
+        "dashDotted": "Pointillés",
+        "dashLong": "Tirets longs",
+        "fillOpacity": "Opacité du remplissage",
+        "strokeOpacity": "Opacité du contour"
       },
       "image": {
         "dimensions": "Dimensions",

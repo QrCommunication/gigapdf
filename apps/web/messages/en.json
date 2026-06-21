@@ -1677,7 +1677,14 @@
         "type": "Shape type",
         "fill": "Fill",
         "stroke": "Stroke",
-        "strokeWidth": "Stroke width"
+        "strokeWidth": "Stroke width",
+        "dash": "Dash style",
+        "dashSolid": "Solid",
+        "dashDashed": "Dashed",
+        "dashDotted": "Dotted",
+        "dashLong": "Long dash",
+        "fillOpacity": "Fill opacity",
+        "strokeOpacity": "Stroke opacity"
       },
       "image": {
         "dimensions": "Dimensions",
