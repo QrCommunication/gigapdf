@@ -15,6 +15,39 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.10.0",
+    date: "2026-06-21",
+    type: "minor",
+    changes: [
+      { type: "improvement", description: "Live shape styling: change a vector shape's fill, stroke color, width or dash pattern and see it update instantly on the page — shapes are now real editable objects, never a stale picture" },
+      { type: "feature", description: "Element transparency: set the opacity of any shape or image, baked into the PDF with no quality loss" },
+      { type: "feature", description: "Stacking order is now written into the PDF itself, so the bring-to-front / send-to-back order is preserved when the file is reopened anywhere" },
+    ],
+  },
+  {
+    version: "1.9.0",
+    date: "2026-06-21",
+    type: "minor",
+    changes: [
+      { type: "feature", description: "Edit every element of a PDF, not just text: images and vector shapes from the original file can now be selected, moved, resized, deleted and duplicated directly on the page — applied in place, with no re-compression of images or re-drawing of shapes" },
+      { type: "feature", description: "Change vector shape styles — fill color, stroke color, stroke width and dash pattern — from the properties panel, baked back into the PDF" },
+      { type: "feature", description: "Layers: organize page elements into named layers — create, rename, reorder, assign elements, and lock or hide a whole layer; layers and their membership now persist across sessions" },
+      { type: "feature", description: "Stacking order: bring an element to front or send it to back from the toolbar or with Ctrl/Cmd+] and Ctrl/Cmd+[" },
+    ],
+  },
+  {
+    version: "1.8.0",
+    date: "2026-06-21",
+    type: "minor",
+    changes: [
+      { type: "improvement", description: "Direct text editing: the editor now renders real, editable text instead of a flat image — each page is rasterized without its text and the real text is drawn on top in its embedded font and true color, so editing works over any background, gradients and patterns included" },
+      { type: "improvement", description: "1:1 text fidelity even with broken embedded fonts: subset fonts with a missing or corrupt character map are repaired server-side, so the browser always renders the original glyphs" },
+      { type: "improvement", description: "Full editing on every page of the continuous, Word-like view: the focused page is now a complete editor — create text and shapes, move, resize, retype, delete, undo/redo — while other pages stay fast read-only previews" },
+      { type: "fix", description: "Text and form fields no longer appear duplicated when opening a document in the continuous editor" },
+      { type: "fix", description: "Embedded-font loading no longer floods the server, fixing failed font loads on font-heavy documents" },
+    ],
+  },
+  {
     version: "1.7.0",
     date: "2026-06-21",
     type: "minor",

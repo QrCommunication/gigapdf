@@ -20,7 +20,7 @@ export const TOOLS: ToolData[] = [
     metaTitle: "Edit PDF Online: Change Text & Images Free | GigaPDF",
     metaDescription:
       "Edit text, images, and shapes inside your PDF with the original fonts. Free WYSIWYG editor — open source, self-hostable, no watermark.",
-    h1: "Online PDF editor: change the text inside the file itself",
+    h1: "Online PDF editor: change the text, images and shapes inside the file itself",
     intro: [
       "Fixing a typo in a contract that only exists as a PDF, updating a price on a brochure, swapping out an old logo: most online tools handle this by painting a white box over the old content and hoping nobody notices. GigaPDF works differently. Its WYSIWYG editor opens the page exactly as it will print and lets you click any text block, image, or shape to change it, move it, or genuinely remove it.",
       "Font fidelity is what makes the result look right. GigaPDF identifies the fonts used in the document, fetches them automatically from Google Fonts when they are available there, and embeds them in the file when you save. Your correction picks up the same typeface as the surrounding paragraph instead of an ugly Arial substitute. Deletions go through GigaPDF's in-house engine, which strips the text operators out of the content stream rather than hiding them — nothing resurfaces when someone copies and pastes.",
@@ -39,7 +39,12 @@ export const TOOLS: ToolData[] = [
     },
     capabilities: [
       "WYSIWYG editing of existing text, images, and shapes",
+      "Move, resize, delete, and duplicate any element in place — losslessly",
       "Original fonts detected, fetched from Google Fonts, and embedded on save",
+      "Restyle vector shapes: fill, stroke color, stroke width, and dash pattern",
+      "Element opacity and transparency, baked into the PDF",
+      "Stacking order — bring to front or send to back, saved in the PDF itself",
+      "Persistent layers: create, rename, lock, and hide, kept across sessions",
       "True content removal through the in-house engine — no white-box masking",
       "Native annotations, watermarks, and form filling from the same editor",
       "Version history and page thumbnails in the built-in document manager",

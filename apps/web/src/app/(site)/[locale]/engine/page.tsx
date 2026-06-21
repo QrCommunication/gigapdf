@@ -75,8 +75,8 @@ const SECTIONS: ReadonlyArray<{
   points: readonly string[];
 }> = [
   { key: "core", icon: Binary, points: ["lowLevel", "flate", "wasm", "souverain"] },
-  { key: "edit", icon: PenLine, points: ["realEdit", "trueDelete", "redaction", "fidelity"] },
-  { key: "render", icon: ImageIcon, points: ["vector", "glyphs", "previews", "images"] },
+  { key: "edit", icon: PenLine, points: ["realEdit", "inPlace", "restyle", "opacity", "stacking", "trueDelete", "redaction", "fidelity"] },
+  { key: "render", icon: ImageIcon, points: ["vector", "glyphs", "selective", "previews", "images"] },
   { key: "forms", icon: FormInput, points: ["types", "fill", "flatten", "fidelity"] },
   { key: "annotations", icon: Highlighter, points: ["markup", "notes", "stamps", "standard"] },
   { key: "fonts", icon: Type, points: ["identify", "download", "embed", "cmap"] },
