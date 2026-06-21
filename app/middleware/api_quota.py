@@ -27,6 +27,25 @@ EXEMPT_PATHS = {
 }
 
 
+def _metered_user_id(request: Request) -> str | None:
+    """
+    Return the user id whose API-call quota must be metered, or ``None`` when the
+    request must NOT be metered.
+
+    The API-call quota meters PROGRAMMATIC usage only: it applies solely to
+    requests authenticated with an API key (``X-API-Key`` → ``api_key_user_id``
+    set by ``ApiKeyAuthMiddleware``).
+
+    Interactive app sessions (JWT/cookie → ``request.state.user_id``) and
+    anonymous traffic are deliberately NOT metered: a user browsing the app is
+    not making "API calls" in the billed sense, and counting their requests
+    exhausts the monthly quota in days and then 429s the entire app — the
+    2026-06-21 incident where ``/storage/documents`` and ``/quota/me`` returned
+    ``API_QUOTA_EXCEEDED``.
+    """
+    return getattr(request.state, "api_key_user_id", None)
+
+
 class APIQuotaMiddleware:
     """
     Middleware to track and enforce API call quotas.
@@ -48,24 +67,11 @@ class APIQuotaMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Get user ID from request state.
-        # Populated by JWTAuthMiddleware (JWT flow) or ApiKeyAuthMiddleware
-        # (API key flow, stored as api_key_user_id).
-        user_id: str | None = getattr(request.state, "user_id", None)
-
-        # Fallback: API key auth sets a separate attribute; unify here so quota
-        # tracking works regardless of the authentication method used.
-        if not user_id:
-            user_id = getattr(request.state, "api_key_user_id", None)
-
-        if not user_id:
-            # No authenticated user found at quota-check time.  This is expected
-            # for truly public routes (already exempted above) and unexpected for
-            # authenticated routes — log a warning to surface future bugs.
-            logger.warning(
-                "APIQuotaMiddleware: user_id absent on non-exempt path — quota not enforced",
-                extra={"path": path, "method": scope.get("method", "?")},
-            )
+        # Meter the API-call quota for API-key requests ONLY. Interactive app
+        # sessions (JWT/cookie) and anonymous traffic are not metered — see
+        # _metered_user_id(). This prevents normal app browsing from exhausting
+        # the monthly API-call quota and then 429-ing the whole app.
+        user_id: str | None = _metered_user_id(request)
 
         if user_id:
             # Check API quota
