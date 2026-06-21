@@ -1,316 +1,223 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import { serverLogger } from "@/lib/server-logger";
+import { renderEmail, BRAND } from "./layout";
 
-// Configuration from environment variables
-const mailConfig = {
-  host: process.env.MAIL_SERVER || "smtp.example.com",
-  port: parseInt(process.env.MAIL_PORT || "587"),
-  secure: process.env.MAIL_USE_SSL === "true", // true for 465, false for other ports
-  auth: {
-    user: process.env.MAIL_USERNAME || "",
-    pass: process.env.MAIL_PASSWORD || "",
-  },
-};
+// Resend client. The API key lives in RESEND_API_KEY (server-only, never
+// NEXT_PUBLIC_*). Instantiated lazily so the module can be imported on paths
+// where it is never used without crashing at import time.
+let client: Resend | undefined;
 
-const fromEmail = process.env.MAIL_FROM_EMAIL || "noreply@giga-pdf.com";
-const fromName = process.env.MAIL_FROM_NAME || "GigaPDF";
-const frontendUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+function getResend(): Resend {
+  if (client) return client;
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY environment variable is not set");
+  }
+  client = new Resend(apiKey);
+  return client;
+}
 
-// Create transporter
-const transporter = nodemailer.createTransport(mailConfig);
+// From / reply-to identity. EMAIL_FROM is the verified Resend sender
+// (e.g. noreply@giga-pdf.com — its domain MUST be verified in Resend).
+const fromEmail = process.env.EMAIL_FROM || "noreply@giga-pdf.com";
+const fromName = process.env.MAIL_FROM_NAME || BRAND.name;
+const replyToEmail = process.env.EMAIL_REPLY_TO || BRAND.supportEmail;
+
+// Production app URL used for in-email links that are NOT provided by the
+// auth flow (e.g. the "Go to dashboard" CTA). Falls back to the brand domain
+// rather than NEXT_PUBLIC_APP_URL, which is inlined as localhost in bundles.
+const appUrl = (process.env.EMAIL_APP_URL || BRAND.baseUrl).replace(/\/$/, "");
 
 export interface SendEmailOptions {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  /** Prevents duplicate sends on retry. Format: `<event>/<entity-id>`. */
+  idempotencyKey?: string;
 }
 
-export async function sendEmail({ to, subject, html, text }: SendEmailOptions): Promise<boolean> {
+/**
+ * Sends a transactional email through Resend.
+ *
+ * The Resend SDK does NOT throw on API errors — it returns `{ data, error }`.
+ * We surface that error in the logs (the previous SMTP impl swallowed failures
+ * silently, which is exactly why "emails weren't sending" went unnoticed).
+ *
+ * @returns true when Resend accepted the email, false otherwise.
+ */
+export async function sendEmail({
+  to,
+  subject,
+  html,
+  text,
+  idempotencyKey,
+}: SendEmailOptions): Promise<boolean> {
   try {
-    const info = await transporter.sendMail({
-      from: `"${fromName}" <${fromEmail}>`,
-      to,
-      subject,
-      text: text || html.replace(/<[^>]*>/g, ""),
-      html,
-    });
+    const { data, error } = await getResend().emails.send(
+      {
+        from: `${fromName} <${fromEmail}>`,
+        to: [to],
+        replyTo: replyToEmail,
+        subject,
+        html,
+        text: text || html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim(),
+      },
+      idempotencyKey ? { idempotencyKey } : undefined,
+    );
 
-    serverLogger.info("email.sent", { messageId: info.messageId });
+    if (error) {
+      serverLogger.error("email.send-failed", { name: error.name, message: error.message });
+      return false;
+    }
+
+    serverLogger.info("email.sent", { id: data?.id });
     return true;
   } catch (error) {
-    serverLogger.error("email.send-failed", { error });
+    // Reaches here on missing API key or network failure (not API errors).
+    serverLogger.error("email.send-exception", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return false;
   }
 }
 
-// Email templates
-export function getWelcomeEmailTemplate(userName: string, locale: string = "fr"): { subject: string; html: string } {
+// ──────────────────────────────────────────────────────────────────────────
+// Templates — each returns { subject, html } built on the shared brand layout.
+// ──────────────────────────────────────────────────────────────────────────
+
+export function getWelcomeEmailTemplate(
+  userName: string,
+  locale: string = "fr",
+): { subject: string; html: string } {
   const isEnglish = locale === "en";
 
   const subject = isEnglish
     ? `Welcome to GigaPDF, ${userName}!`
     : `Bienvenue sur GigaPDF, ${userName} !`;
 
-  const html = `
-<!DOCTYPE html>
-<html lang="${locale}">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${subject}</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background-color: #f4f4f5;">
-  <table role="presentation" style="width: 100%; border-collapse: collapse;">
-    <tr>
-      <td style="padding: 40px 20px;">
-        <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-          <!-- Header -->
-          <tr>
-            <td style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 40px 30px; text-align: center;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">GigaPDF</h1>
-              <p style="margin: 10px 0 0; color: rgba(255, 255, 255, 0.9); font-size: 14px;">
-                ${isEnglish ? "Professional PDF Editor" : "Éditeur PDF Professionnel"}
-              </p>
-            </td>
-          </tr>
+  const features = isEnglish
+    ? [
+        "Create, edit and annotate PDF documents",
+        "Collaborate in real time",
+        "Add signatures, forms and stamps",
+        "Convert documents to and from many formats",
+      ]
+    : [
+        "Créer, modifier et annoter des documents PDF",
+        "Collaborer en temps réel",
+        "Ajouter signatures, formulaires et tampons",
+        "Convertir des documents depuis et vers de nombreux formats",
+      ];
 
-          <!-- Content -->
-          <tr>
-            <td style="padding: 40px 30px;">
-              <h2 style="margin: 0 0 20px; color: #18181b; font-size: 24px; font-weight: 600;">
-                ${isEnglish ? `Welcome, ${userName}!` : `Bienvenue, ${userName} !`}
-              </h2>
+  const intro = isEnglish
+    ? "Thanks for creating your GigaPDF account. You now have access to our full suite of PDF editing tools — right in your browser."
+    : "Merci d'avoir créé votre compte GigaPDF. Vous avez désormais accès à toute notre suite d'outils d'édition PDF — directement dans votre navigateur.";
 
-              <p style="margin: 0 0 20px; color: #3f3f46; font-size: 16px; line-height: 1.6;">
-                ${isEnglish
-                  ? "Thank you for creating your GigaPDF account. You now have access to our powerful PDF editing tools."
-                  : "Merci d'avoir créé votre compte GigaPDF. Vous avez maintenant accès à nos puissants outils d'édition PDF."
-                }
-              </p>
+  const bodyHtml = `
+    <p style="margin: 0 0 20px;">${isEnglish ? `Hi <strong>${userName}</strong>,` : `Bonjour <strong>${userName}</strong>,`}</p>
+    <p style="margin: 0 0 22px;">${intro}</p>
+    <p style="margin: 0 0 12px; font-weight: 600; color: #0F172A;">${isEnglish ? "Here's what you can do:" : "Voici ce que vous pouvez faire :"}</p>
+    <ul style="margin: 0 0 8px; padding-left: 20px; line-height: 1.9;">
+      ${features.map((f) => `<li>${f}</li>`).join("")}
+    </ul>`;
 
-              <p style="margin: 0 0 30px; color: #3f3f46; font-size: 16px; line-height: 1.6;">
-                ${isEnglish
-                  ? "Here's what you can do with GigaPDF:"
-                  : "Voici ce que vous pouvez faire avec GigaPDF :"
-                }
-              </p>
-
-              <ul style="margin: 0 0 30px; padding-left: 20px; color: #3f3f46; font-size: 16px; line-height: 1.8;">
-                <li>${isEnglish ? "Create and edit PDF documents" : "Créer et modifier des documents PDF"}</li>
-                <li>${isEnglish ? "Collaborate in real-time" : "Collaborer en temps réel"}</li>
-                <li>${isEnglish ? "Add signatures, annotations, and forms" : "Ajouter des signatures, annotations et formulaires"}</li>
-                <li>${isEnglish ? "Convert documents to various formats" : "Convertir des documents en différents formats"}</li>
-              </ul>
-
-              <table role="presentation" style="margin: 0 auto;">
-                <tr>
-                  <td style="border-radius: 8px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);">
-                    <a href="${frontendUrl}/dashboard" style="display: inline-block; padding: 16px 32px; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600;">
-                      ${isEnglish ? "Go to Dashboard" : "Accéder au tableau de bord"}
-                    </a>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="background-color: #f4f4f5; padding: 30px; text-align: center;">
-              <p style="margin: 0 0 10px; color: #71717a; font-size: 14px;">
-                ${isEnglish
-                  ? "Questions? Contact us at support@giga-pdf.com"
-                  : "Des questions ? Contactez-nous à support@giga-pdf.com"
-                }
-              </p>
-              <p style="margin: 0; color: #a1a1aa; font-size: 12px;">
-                © ${new Date().getFullYear()} GigaPDF. ${isEnglish ? "All rights reserved." : "Tous droits réservés."}
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-  `;
+  const html = renderEmail({
+    locale,
+    preview: isEnglish
+      ? "Your GigaPDF account is ready."
+      : "Votre compte GigaPDF est prêt.",
+    subtitle: isEnglish ? "Welcome aboard" : "Bienvenue à bord",
+    heading: isEnglish ? `Welcome, ${userName}!` : `Bienvenue, ${userName} !`,
+    bodyHtml,
+    cta: {
+      label: isEnglish ? "Go to my dashboard" : "Accéder à mon tableau de bord",
+      url: `${appUrl}/dashboard`,
+    },
+  });
 
   return { subject, html };
 }
 
-export function getPasswordResetEmailTemplate(resetUrl: string, locale: string = "fr"): { subject: string; html: string } {
+export function getPasswordResetEmailTemplate(
+  resetUrl: string,
+  locale: string = "fr",
+): { subject: string; html: string } {
   const isEnglish = locale === "en";
 
   const subject = isEnglish
     ? "Reset your GigaPDF password"
-    : "Réinitialiser votre mot de passe GigaPDF";
+    : "Réinitialisez votre mot de passe GigaPDF";
 
-  const html = `
-<!DOCTYPE html>
-<html lang="${locale}">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${subject}</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background-color: #f4f4f5;">
-  <table role="presentation" style="width: 100%; border-collapse: collapse;">
-    <tr>
-      <td style="padding: 40px 20px;">
-        <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-          <!-- Header -->
-          <tr>
-            <td style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 40px 30px; text-align: center;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">GigaPDF</h1>
-              <p style="margin: 10px 0 0; color: rgba(255, 255, 255, 0.9); font-size: 14px;">
-                ${isEnglish ? "Password Reset" : "Réinitialisation du mot de passe"}
-              </p>
-            </td>
-          </tr>
+  const bodyHtml = `
+    <p style="margin: 0 0 20px;">${
+      isEnglish
+        ? "We received a request to reset the password for your GigaPDF account. Click the button below to choose a new one."
+        : "Nous avons reçu une demande de réinitialisation du mot de passe de votre compte GigaPDF. Cliquez sur le bouton ci-dessous pour en choisir un nouveau."
+    }</p>
+    <p style="margin: 22px 0 0; color: #64748B; font-size: 13px; line-height: 1.6; word-break: break-all;">
+      ${isEnglish ? "If the button doesn't work, copy and paste this link:" : "Si le bouton ne fonctionne pas, copiez-collez ce lien :"}<br />
+      <a href="${resetUrl}" style="color: ${BRAND.colors.primary};">${resetUrl}</a>
+    </p>`;
 
-          <!-- Content -->
-          <tr>
-            <td style="padding: 40px 30px;">
-              <h2 style="margin: 0 0 20px; color: #18181b; font-size: 24px; font-weight: 600;">
-                ${isEnglish ? "Reset your password" : "Réinitialiser votre mot de passe"}
-              </h2>
-
-              <p style="margin: 0 0 20px; color: #3f3f46; font-size: 16px; line-height: 1.6;">
-                ${isEnglish
-                  ? "We received a request to reset your password. Click the button below to create a new password."
-                  : "Nous avons reçu une demande de réinitialisation de votre mot de passe. Cliquez sur le bouton ci-dessous pour créer un nouveau mot de passe."
-                }
-              </p>
-
-              <table role="presentation" style="margin: 30px auto;">
-                <tr>
-                  <td style="border-radius: 8px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);">
-                    <a href="${resetUrl}" style="display: inline-block; padding: 16px 32px; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600;">
-                      ${isEnglish ? "Reset Password" : "Réinitialiser le mot de passe"}
-                    </a>
-                  </td>
-                </tr>
-              </table>
-
-              <p style="margin: 30px 0 0; color: #71717a; font-size: 14px; line-height: 1.6;">
-                ${isEnglish
-                  ? "If you didn't request this password reset, you can safely ignore this email. The link will expire in 1 hour."
-                  : "Si vous n'avez pas demandé cette réinitialisation, vous pouvez ignorer cet email en toute sécurité. Le lien expirera dans 1 heure."
-                }
-              </p>
-
-              <p style="margin: 20px 0 0; color: #a1a1aa; font-size: 12px; word-break: break-all;">
-                ${isEnglish ? "If the button doesn't work, copy this link:" : "Si le bouton ne fonctionne pas, copiez ce lien :"}<br>
-                <a href="${resetUrl}" style="color: #3b82f6;">${resetUrl}</a>
-              </p>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="background-color: #f4f4f5; padding: 30px; text-align: center;">
-              <p style="margin: 0 0 10px; color: #71717a; font-size: 14px;">
-                ${isEnglish
-                  ? "Questions? Contact us at support@giga-pdf.com"
-                  : "Des questions ? Contactez-nous à support@giga-pdf.com"
-                }
-              </p>
-              <p style="margin: 0; color: #a1a1aa; font-size: 12px;">
-                © ${new Date().getFullYear()} GigaPDF. ${isEnglish ? "All rights reserved." : "Tous droits réservés."}
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-  `;
+  const html = renderEmail({
+    locale,
+    preview: isEnglish
+      ? "Reset your GigaPDF password — link valid for 1 hour."
+      : "Réinitialisez votre mot de passe GigaPDF — lien valable 1 heure.",
+    subtitle: isEnglish ? "Password reset" : "Réinitialisation du mot de passe",
+    heading: isEnglish ? "Reset your password" : "Réinitialiser votre mot de passe",
+    bodyHtml,
+    cta: {
+      label: isEnglish ? "Reset my password" : "Réinitialiser mon mot de passe",
+      url: resetUrl,
+    },
+    footerNote: isEnglish
+      ? "If you didn't request this, you can safely ignore this email — your password won't change. This link expires in 1 hour."
+      : "Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet email — votre mot de passe restera inchangé. Ce lien expire dans 1 heure.",
+  });
 
   return { subject, html };
 }
 
-export function getVerificationEmailTemplate(verificationUrl: string, locale: string = "fr"): { subject: string; html: string } {
+export function getVerificationEmailTemplate(
+  verificationUrl: string,
+  locale: string = "fr",
+): { subject: string; html: string } {
   const isEnglish = locale === "en";
 
   const subject = isEnglish
-    ? "Verify your GigaPDF email"
-    : "Vérifiez votre email GigaPDF";
+    ? "Verify your GigaPDF email address"
+    : "Vérifiez votre adresse email GigaPDF";
 
-  const html = `
-<!DOCTYPE html>
-<html lang="${locale}">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${subject}</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background-color: #f4f4f5;">
-  <table role="presentation" style="width: 100%; border-collapse: collapse;">
-    <tr>
-      <td style="padding: 40px 20px;">
-        <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-          <!-- Header -->
-          <tr>
-            <td style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 40px 30px; text-align: center;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">GigaPDF</h1>
-              <p style="margin: 10px 0 0; color: rgba(255, 255, 255, 0.9); font-size: 14px;">
-                ${isEnglish ? "Email Verification" : "Vérification de l'email"}
-              </p>
-            </td>
-          </tr>
+  const bodyHtml = `
+    <p style="margin: 0 0 20px;">${
+      isEnglish
+        ? "You're almost there! Confirm your email address to activate your GigaPDF account and start editing."
+        : "Vous y êtes presque ! Confirmez votre adresse email pour activer votre compte GigaPDF et commencer à éditer."
+    }</p>
+    <p style="margin: 22px 0 0; color: #64748B; font-size: 13px; line-height: 1.6; word-break: break-all;">
+      ${isEnglish ? "If the button doesn't work, copy and paste this link:" : "Si le bouton ne fonctionne pas, copiez-collez ce lien :"}<br />
+      <a href="${verificationUrl}" style="color: ${BRAND.colors.primary};">${verificationUrl}</a>
+    </p>`;
 
-          <!-- Content -->
-          <tr>
-            <td style="padding: 40px 30px;">
-              <h2 style="margin: 0 0 20px; color: #18181b; font-size: 24px; font-weight: 600;">
-                ${isEnglish ? "Verify your email address" : "Vérifiez votre adresse email"}
-              </h2>
-
-              <p style="margin: 0 0 20px; color: #3f3f46; font-size: 16px; line-height: 1.6;">
-                ${isEnglish
-                  ? "Please click the button below to verify your email address and complete your registration."
-                  : "Veuillez cliquer sur le bouton ci-dessous pour vérifier votre adresse email et compléter votre inscription."
-                }
-              </p>
-
-              <table role="presentation" style="margin: 30px auto;">
-                <tr>
-                  <td style="border-radius: 8px; background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
-                    <a href="${verificationUrl}" style="display: inline-block; padding: 16px 32px; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600;">
-                      ${isEnglish ? "Verify Email" : "Vérifier l'email"}
-                    </a>
-                  </td>
-                </tr>
-              </table>
-
-              <p style="margin: 30px 0 0; color: #71717a; font-size: 14px; line-height: 1.6;">
-                ${isEnglish
-                  ? "This link will expire in 24 hours."
-                  : "Ce lien expirera dans 24 heures."
-                }
-              </p>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="background-color: #f4f4f5; padding: 30px; text-align: center;">
-              <p style="margin: 0; color: #a1a1aa; font-size: 12px;">
-                © ${new Date().getFullYear()} GigaPDF. ${isEnglish ? "All rights reserved." : "Tous droits réservés."}
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-  `;
+  const html = renderEmail({
+    locale,
+    preview: isEnglish
+      ? "Confirm your email to activate your GigaPDF account."
+      : "Confirmez votre email pour activer votre compte GigaPDF.",
+    subtitle: isEnglish ? "Email verification" : "Vérification de l'email",
+    heading: isEnglish ? "Verify your email address" : "Vérifiez votre adresse email",
+    bodyHtml,
+    cta: {
+      label: isEnglish ? "Verify my email" : "Vérifier mon email",
+      url: verificationUrl,
+      variant: "accent",
+    },
+    footerNote: isEnglish
+      ? "This verification link expires in 24 hours. If you didn't create a GigaPDF account, you can ignore this email."
+      : "Ce lien de vérification expire dans 24 heures. Si vous n'avez pas créé de compte GigaPDF, ignorez cet email.",
+  });
 
   return { subject, html };
 }
