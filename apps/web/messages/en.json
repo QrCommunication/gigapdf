@@ -2379,18 +2379,98 @@
       },
       "features": {
         "title": "Features (v1.3.0)",
-        "editing": "In-place editing of text, images and shapes (true redaction, not a white mask)",
-        "forms": "AcroForm form designer: text, date, checkbox and dropdown fields — create, fill, flatten",
-        "signature": "PKCS#7 / CAdES digital signatures with your own P12/PFX certificate",
-        "ocr": "Built-in multi-language OCR: searchable text layer on scanned PDFs",
-        "office": "Native Office conversions: import/export of 9 formats (DOCX/XLSX/PPTX, OpenDocument, legacy OLE2)",
-        "ged": "DMS: folders, trash, full-text search, tags, deduplication",
-        "realtime": "Real-time multi-user collaboration over WebSocket",
-        "api": "Full REST API, scoped API keys, and an embed widget to integrate the editor",
-        "search": "Semantic search: find passages in your documents by meaning, not just keywords (embeddings + pgvector).",
-        "palette": "Global command palette (Ctrl/Cmd+K): open any tool or page and search from anywhere.",
-        "merge": "Universal merge: combine any files (PDF, Word, Excel, PowerPoint, OpenDocument, images, HTML, text, RTF) into a single PDF, each converted automatically.",
-        "tools": "29 dedicated PDF tools, organized by category and reachable from the mega-menu: edit, convert, secure, OCR, organize…"
+        "categories": {
+          "editing": {
+            "title": "Editing & content",
+            "items": {
+              "editText": "Edit text directly inside the PDF while keeping the original font",
+              "addText": "Add text with Google or standard fonts (bold, italic, color, rotation)",
+              "images": "Insert and extract images (PNG, JPEG)",
+              "shapes": "Draw vector shapes: rectangle, ellipse, polygon, line, SVG path",
+              "annotate": "Annotate: highlight, underline, strikethrough, free text, stamp",
+              "forms": "Create and fill forms (text, checkboxes, radio buttons, lists, signature), then flatten them",
+              "watermark": "Apply a text watermark (7 positions, opacity, rotation)",
+              "redact": "Redact permanently and irreversibly (text and pixels)",
+              "compress": "Compress and optimize the file",
+              "organizePages": "Organize pages: rotate, reorder, delete, duplicate, extract, split, merge, resize",
+              "headerFooter": "Add running headers and footers with page numbering",
+              "metadata": "Read and edit metadata (title, author, keywords…)"
+            }
+          },
+          "convert": {
+            "title": "Conversion",
+            "items": {
+              "toPdf": "Convert to PDF: Word, Excel, PowerPoint, OpenDocument, images (JPG/PNG/GIF/WebP/AVIF), HTML, web page, RTF, text",
+              "fromPdf": "Convert from PDF: Word, PowerPoint, ODT, ODP, Excel, PNG images, PDF/A",
+              "universalMerge": "Universal merge: any files converted then merged into a single PDF",
+              "htmlToPdf": "Render HTML/CSS to PDF natively, without a browser"
+            }
+          },
+          "security": {
+            "title": "Security",
+            "items": {
+              "encrypt": "Encrypt with AES-128 or AES-256 (user and owner passwords)",
+              "permissions": "8 granular permissions: printing, modification, copying, annotation, forms, extraction, assembly, high-quality printing",
+              "sign": "Sign digitally (PKCS#7) with your P12/PFX certificate — verifiable in Adobe Reader",
+              "unlock": "Unlock a password-protected PDF"
+            }
+          },
+          "recognition": {
+            "title": "OCR & search",
+            "items": {
+              "ocr": "Multilingual OCR (Latin, Cyrillic, Greek, Arabic, Hebrew, Devanagari, Bengali, Tamil, Chinese) — in-house engine, no Tesseract",
+              "searchablePdf": "Make a scan searchable with an invisible text layer",
+              "semanticSearch": "Semantic search across your documents, by meaning (embeddings + pgvector)",
+              "fullTextSearch": "Full-text search on document name and content"
+            }
+          },
+          "documents": {
+            "title": "Document management",
+            "items": {
+              "library": "Document library, original format preserved",
+              "folders": "Folders and navigation",
+              "tags": "Tags with filtering and autocompletion",
+              "thumbnails": "Document thumbnails",
+              "trash": "Trash with 30-day restore",
+              "duplicate": "Document duplication",
+              "share": "Sharing by email (read/write) and public links with expiration",
+              "history": "Edit history with undo/redo"
+            }
+          },
+          "collaboration": {
+            "title": "Collaboration",
+            "items": {
+              "realtime": "Real-time collaborative editing: shared cursors, element locking, scene synchronization"
+            }
+          },
+          "productivity": {
+            "title": "Productivity",
+            "items": {
+              "palette": "Global command palette (Ctrl/Cmd+K)",
+              "megaMenu": "Mega menu listing the 29 tools by category",
+              "tools": "29 dedicated PDF tools with help pages",
+              "editor": "Visual editor: zoom, pan, continuous page view"
+            }
+          },
+          "developers": {
+            "title": "Developers & API",
+            "items": {
+              "restApi": "Full REST API (/api/v1)",
+              "openapi": "Interactive documentation: Swagger (/api/docs) and Redoc (/api/redoc)",
+              "apiKeys": "API keys with scopes and rate limits",
+              "processingRoutes": "Server-side PDF processing routes (/api/pdf)"
+            }
+          },
+          "engine": {
+            "title": "Engine",
+            "items": {
+              "wasm": "In-house PDF engine in Rust → WebAssembly",
+              "zeroDep": "Zero third-party dependency: no LibreOffice, no Tesseract, no Chromium, no poppler",
+              "nativeFormats": "Images (PNG/JPEG/GIF/WebP/AVIF) and HTML/CSS rendering handled natively",
+              "license": "Source code available under the PolyForm Noncommercial license"
+            }
+          }
+        }
       },
       "selfhost": {
         "title": "Self-hosting",
