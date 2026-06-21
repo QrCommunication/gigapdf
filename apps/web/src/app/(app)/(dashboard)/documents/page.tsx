@@ -18,6 +18,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { api, getAuthToken, StoredDocument } from "@/lib/api";
+import { extractDocumentBlocks } from "@/components/editor/lib/extract-text";
 import { clientLogger } from "@/lib/client-logger";
 import { ImportDialog } from "@/components/dashboard/import-dialog";
 import {
@@ -72,6 +73,25 @@ async function autoIndexScannedDocument(
     clientLogger.debug("documents.auto-ocr-indexed", blocks.length);
   } catch (err) {
     clientLogger.warn("documents.auto-ocr-index-failed", err);
+  }
+}
+
+/**
+ * Index a text-layer PDF as POSITIONED blocks (text + bbox per line) so search
+ * hits can be highlighted on the page — identical to the editor save and the
+ * server backfill. Best-effort; never blocks/fails the import.
+ */
+async function autoIndexTextBlocks(
+  pdfBlob: Blob,
+  storedDocumentId: string,
+): Promise<void> {
+  try {
+    const blocks = await extractDocumentBlocks(await pdfBlob.arrayBuffer());
+    if (blocks.length === 0) return; // no text layer → handled by the OCR path
+    await api.indexOcrBlocks(storedDocumentId, blocks);
+    clientLogger.debug("documents.auto-text-indexed", blocks.length);
+  } catch (err) {
+    clientLogger.warn("documents.auto-text-index-failed", err);
   }
 }
 
@@ -438,8 +458,14 @@ export default function DocumentsPage() {
         // Auto-index image-only PDFs for semantic search (#85): a scanned PDF
         // carries no extractable text → OCR it via the engine and feed the
         // index in the background (fire-and-forget; never blocks/fails import).
-        if (pdf && (!extractedText || extractedText.trim().length === 0)) {
-          void autoIndexScannedDocument(file, saved.stored_document_id);
+        if (pdf) {
+          if (extractedText && extractedText.trim().length > 0) {
+            // Text-layer PDF → positioned blocks (highlightable on the page).
+            void autoIndexTextBlocks(file, saved.stored_document_id);
+          } else {
+            // Scanned / image-only PDF → server OCR positioned blocks.
+            void autoIndexScannedDocument(file, saved.stored_document_id);
+          }
         }
 
         return { ok: true, name: file.name };

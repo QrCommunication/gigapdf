@@ -120,6 +120,7 @@ import {
   exportFilename,
 } from "@/components/editor/lib/export-document";
 import { exportPagesAsImages } from "@/components/editor/lib/export-pages-as-images";
+import { extractDocumentBlocks } from "@/components/editor/lib/extract-text";
 import { extractDocumentText } from "@/components/editor/lib/extract-text";
 import {
   redactDocument,
@@ -887,33 +888,25 @@ export default function EditorPage() {
       }
     }
 
-    // (b) Texte de recherche : concatène le contenu de TOUS les éléments
-    // text du scene graph en mémoire, tronqué à 500k caractères.
+    // (b) Index de recherche : reconstruit l'index sémantique POSITIONNÉ
+    // (texte + bbox par ligne) depuis les octets PDF sauvegardés — exactement
+    // comme l'import/backfill — pour que les résultats de recherche surlignent
+    // la zone sur la page. Une liste vide purge un document édité jusqu'à 0
+    // texte. Gardé sur les octets sauvegardés + pages chargées pour qu'une
+    // sauvegarde prématurée ne purge pas un index valide.
     try {
-      const parts: string[] = [];
-      for (const page of pagesRef.current) {
-        for (const el of page.elements) {
-          if (el.type === "text" && el.content) parts.push(el.content);
-        }
-      }
-      const extractedText = parts.join("\n").slice(0, 500_000);
-      // Send the text even when empty so a document edited down to zero text
-      // purges its stale search index (FTS + semantic ocr_blocks) instead of
-      // keeping vectors for content that no longer exists. Guard on pages being
-      // loaded: an empty scene graph from a premature save must NOT purge a
-      // valid index (only a genuinely text-free, loaded document sends "").
-      if (pagesRef.current.length > 0) {
-        await api.updateStoredDocument(storedDocumentId, {
-          extracted_text: extractedText,
-        });
+      const pdfFile = currentPdfFileRef.current;
+      if (pdfFile && pagesRef.current.length > 0) {
+        const blocks = await extractDocumentBlocks(await pdfFile.arrayBuffer());
+        await api.indexOcrBlocks(storedDocumentId, blocks);
         clientLogger.debug(
-          "[editor] GED search text refreshed:",
-          extractedText.length,
-          "chars",
+          "[editor] GED search index refreshed:",
+          blocks.length,
+          "blocks",
         );
       }
     } catch (err) {
-      clientLogger.warn("[editor] GED search-text refresh failed:", err);
+      clientLogger.warn("[editor] GED search-index refresh failed:", err);
     }
   }, [storedDocumentId]);
 
