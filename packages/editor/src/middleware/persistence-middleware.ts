@@ -2,6 +2,7 @@
  * Persistence Middleware - Auto-save document state with debounce
  */
 
+import type { LayerObject } from "@giga-pdf/types";
 import type { PersistenceConfig } from "../types";
 import { useDocumentStore } from "../stores/document-store";
 import { useHistoryStore } from "../stores/history-store";
@@ -22,6 +23,8 @@ export type SaveCallback = (data: {
   documentId: string;
   title: string;
   pages: any[];
+  /** Editor-only user layers (Phase 2 "Layer Groups"). */
+  layers: LayerObject[];
   version: number;
 }) => Promise<void>;
 
@@ -94,6 +97,7 @@ async function performSave(
       documentId: state.documentId,
       title: state.title,
       pages: state.pages,
+      layers: state.layers,
       version: state.version,
     });
 
@@ -129,6 +133,7 @@ export function saveToLocalStorage(key?: string): void {
     documentId: state.documentId,
     title: state.title,
     pages: state.pages,
+    layers: state.layers,
     version: state.version,
     savedAt: new Date().toISOString(),
   };
@@ -169,6 +174,9 @@ export function loadFromLocalStorage(key?: string): boolean {
       parsed.title,
       parsed.pages
     );
+    if (Array.isArray(parsed.layers)) {
+      documentStore.setLayers(parsed.layers);
+    }
     documentStore.setVersion(parsed.version);
 
     console.log("Document loaded from local storage");
@@ -251,6 +259,7 @@ export function exportDocumentState(): string {
     documentId: state.documentId,
     title: state.title,
     pages: state.pages,
+    layers: state.layers,
     version: state.version,
     exportedAt: new Date().toISOString(),
   };
@@ -271,6 +280,9 @@ export function importDocumentState(json: string): boolean {
       data.title,
       data.pages
     );
+    if (Array.isArray(data.layers)) {
+      documentStore.setLayers(data.layers);
+    }
     documentStore.setVersion(data.version || 0);
 
     return true;

@@ -13,6 +13,11 @@ import { EmbeddedFilesPanel } from "./embedded-files-panel";
 interface DocumentInfoSidebarProps {
   outlines: BookmarkObject[];
   layers: LayerObject[];
+  /**
+   * Calques utilisateur (Phase 2 "Layer Groups") — éditables, forwardés au
+   * LayersPanel. Distincts des OCG `layers` (lecture seule).
+   */
+  userLayers?: LayerObject[];
   /** Éléments de la page courante — listés comme calques (œil/cadenas) */
   elements: Element[];
   /** IDs des éléments sélectionnés sur le canvas */
@@ -23,6 +28,14 @@ interface DocumentInfoSidebarProps {
   onElementLockChange?: (elementId: string, locked: boolean) => void;
   /** Sélectionner un élément en cliquant sa ligne dans le panneau calques. */
   onElementSelect?: (elementId: string) => void;
+  // User-layer actions (Phase 2) forwardés au LayersPanel.
+  onLayerCreate?: () => void;
+  onLayerDelete?: (layerId: string) => void;
+  onLayerRename?: (layerId: string, name: string) => void;
+  onLayerReorder?: (layerId: string, newOrder: number) => void;
+  onLayerVisibilityChange?: (layerId: string, visible: boolean) => void;
+  onLayerLockChange?: (layerId: string, locked: boolean) => void;
+  onAssignElementToLayer?: (elementId: string, layerId: string | null) => void;
   onDownloadFile?: (file: EmbeddedFileObject) => void;
   currentPageIndex?: number;
   className?: string;
@@ -35,6 +48,7 @@ interface DocumentInfoSidebarProps {
 export function DocumentInfoSidebar({
   outlines,
   layers,
+  userLayers,
   elements,
   selectedElementIds,
   embeddedFiles,
@@ -42,6 +56,13 @@ export function DocumentInfoSidebar({
   onElementVisibilityChange,
   onElementLockChange,
   onElementSelect,
+  onLayerCreate,
+  onLayerDelete,
+  onLayerRename,
+  onLayerReorder,
+  onLayerVisibilityChange,
+  onLayerLockChange,
+  onAssignElementToLayer,
   onDownloadFile,
   currentPageIndex,
   className,
@@ -51,11 +72,13 @@ export function DocumentInfoSidebar({
 
   // Check if there's any content to show — elements included so the layers
   // panel (visibility/lock toggles) is reachable even without TOC/OCG/files.
+  // The user-layers section ("+" button) is enough on its own when wired.
   const hasContent =
     outlines.length > 0 ||
     layers.length > 0 ||
     embeddedFiles.length > 0 ||
-    elements.length > 0;
+    elements.length > 0 ||
+    Boolean(onLayerCreate);
 
   if (!hasContent) {
     return null;
@@ -105,10 +128,18 @@ export function DocumentInfoSidebar({
           <LayersPanel
             elements={elements}
             layers={layers}
+            userLayers={userLayers}
             selectedElementIds={selectedElementIds}
             onElementVisibilityChange={onElementVisibilityChange}
             onElementLockChange={onElementLockChange}
             onElementSelect={onElementSelect}
+            onLayerCreate={onLayerCreate}
+            onLayerDelete={onLayerDelete}
+            onLayerRename={onLayerRename}
+            onLayerReorder={onLayerReorder}
+            onLayerVisibilityChange={onLayerVisibilityChange}
+            onLayerLockChange={onLayerLockChange}
+            onAssignElementToLayer={onAssignElementToLayer}
           />
 
           {/* Fichiers embarqués */}

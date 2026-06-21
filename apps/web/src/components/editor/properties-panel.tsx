@@ -21,6 +21,7 @@ import type {
   ImageElement,
   AnnotationElement,
   FormFieldElement,
+  LayerObject,
 } from "@giga-pdf/types";
 
 export interface PropertiesPanelProps {
@@ -42,6 +43,13 @@ export interface PropertiesPanelProps {
    * partagent légitimement leur nom — l'appelant exclut le groupe courant.
    */
   allFieldNames?: string[];
+  /**
+   * Calques utilisateur du document (Phase 2 "Layer Groups"), pour le menu
+   * déroulant "Layer" de la section commune. Absent / vide ⇒ menu masqué.
+   */
+  userLayers?: LayerObject[];
+  /** Affecter l'élément sélectionné à un calque (ou `null` pour le détacher). */
+  onAssignElementToLayer?: (elementId: string, layerId: string | null) => void;
 }
 
 /** Charset AcroForm sûr pour un nom de champ (lettres, chiffres, _ . -). */
@@ -760,11 +768,17 @@ export function PropertiesPanel({
   pageInfo,
   zoom,
   allFieldNames = [],
+  userLayers = [],
+  onAssignElementToLayer,
 }: PropertiesPanelProps) {
   const t = useTranslations("editor.properties");
 
   const selectedElement = selectedElements.length === 1 ? selectedElements[0] : null;
   const hasMultipleSelection = selectedElements.length > 1;
+
+  // Calques utilisateur triés par `order` décroissant (cohérent avec le panneau
+  // calques) pour le menu déroulant "Layer" de la section commune.
+  const sortedUserLayers = [...userLayers].sort((a, b) => b.order - a.order);
 
   // Render pour élément texte
   const renderTextProperties = (element: TextElement) => (
@@ -1102,6 +1116,29 @@ export function PropertiesPanel({
           />
         </div>
       </div>
+
+      {/* Calque utilisateur (Phase 2 "Layer Groups"). Affiché uniquement quand
+          l'appelant fournit l'action ET au moins un calque existe. */}
+      {onAssignElementToLayer && sortedUserLayers.length > 0 && (
+        <>
+          <h4 className="font-medium text-sm">{t("layer")}</h4>
+          <select
+            value={element.layerId ?? ""}
+            onChange={(e) =>
+              onAssignElementToLayer(element.elementId, e.target.value || null)
+            }
+            className="w-full h-8 px-2 rounded border bg-background text-sm"
+            aria-label={t("layer")}
+          >
+            <option value="">{t("layerNone")}</option>
+            {sortedUserLayers.map((layer) => (
+              <option key={layer.layerId} value={layer.layerId}>
+                {layer.name}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
     </div>
   );
 

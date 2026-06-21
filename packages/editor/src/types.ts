@@ -5,6 +5,7 @@
 import type {
   UUID,
   PageObject,
+  LayerObject,
   Element,
   Tool,
   ShapeType,
@@ -20,6 +21,14 @@ export interface DocumentState {
   title: string;
   version: number;
   pages: PageObject[];
+  /**
+   * Editor-only user layers (Phase 2 "Layer Groups"). These are NOT PDF
+   * Optional Content Groups — they are a design-tool grouping construct that
+   * lives in editor state. Elements reference a layer via `element.layerId`;
+   * hiding/locking a layer cascades to every member element's
+   * `visible`/`locked` flags (see setLayerVisible / setLayerLocked).
+   */
+  layers: LayerObject[];
   lastSaved: Date | null;
   isDirty: boolean;
   isLoading: boolean;

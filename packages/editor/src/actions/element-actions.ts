@@ -253,6 +253,25 @@ export function duplicateElement(options: DuplicateElementOptions): UUID {
 }
 
 /**
+ * Assign an element to an editor-only user layer (or detach it with `null`).
+ *
+ * Editor-only: this mutates `element.layerId` in the document store and pushes
+ * a history snapshot — there is NO pdf-engine op (user layers are not PDF
+ * Optional Content Groups, they live in editor state only).
+ */
+export function assignElementToLayer(
+  pageId: UUID,
+  elementId: UUID,
+  layerId: UUID | null,
+): void {
+  updateElement({
+    pageId,
+    elementId,
+    updates: { layerId },
+  });
+}
+
+/**
  * Bring element to front (z-index)
  */
 export function bringToFront(pageId: UUID, elementId: UUID): void {

@@ -19,8 +19,23 @@
 
 import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import type { UUID, PageObject } from "@giga-pdf/types";
+import type { UUID, PageObject, LayerObject } from "@giga-pdf/types";
 import type { DocumentState } from "../types";
+
+/**
+ * Generate a fresh layer id. Uses `crypto.randomUUID` when available
+ * (browsers + Node 19+/jsdom) and falls back to a timestamped random string.
+ */
+function newLayerId(): UUID {
+  const c =
+    typeof globalThis !== "undefined"
+      ? (globalThis.crypto as Crypto | undefined)
+      : undefined;
+  if (c && typeof c.randomUUID === "function") {
+    return c.randomUUID();
+  }
+  return `layer_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
 
 export interface DocumentStore extends DocumentState {
   // Actions
@@ -31,6 +46,14 @@ export interface DocumentStore extends DocumentState {
   removePage: (pageId: UUID) => void;
   updatePage: (pageId: UUID, updates: Partial<PageObject>) => void;
   reorderPages: (fromIndex: number, toIndex: number) => void;
+  // Layer actions (editor-only user layers — see DocumentState.layers)
+  setLayers: (layers: LayerObject[]) => void;
+  createLayer: (name: string) => LayerObject;
+  deleteLayer: (layerId: UUID) => void;
+  renameLayer: (layerId: UUID, name: string) => void;
+  reorderLayer: (layerId: UUID, newOrder: number) => void;
+  setLayerVisible: (layerId: UUID, visible: boolean) => void;
+  setLayerLocked: (layerId: UUID, locked: boolean) => void;
   setVersion: (version: number) => void;
   setDirty: (isDirty: boolean) => void;
   setLoading: (isLoading: boolean) => void;
@@ -44,6 +67,7 @@ const initialState: DocumentState = {
   title: "Untitled Document",
   version: 0,
   pages: [],
+  layers: [],
   lastSaved: null,
   isDirty: false,
   isLoading: false,
@@ -59,6 +83,7 @@ export const useDocumentStore: UseBoundStore<StoreApi<DocumentStore>> = create<D
         state.documentId = documentId;
         state.title = title;
         state.pages = pages;
+        state.layers = [];
         state.version = 0;
         state.isDirty = false;
         state.error = null;
@@ -129,6 +154,108 @@ export const useDocumentStore: UseBoundStore<StoreApi<DocumentStore>> = create<D
           p.pageNumber = idx + 1;
         });
 
+        state.isDirty = true;
+      }),
+
+    // ---- Layer actions (editor-only user layers) ----
+
+    setLayers: (layers) =>
+      set((state) => {
+        state.layers = layers;
+      }),
+
+    createLayer: (name) => {
+      const layer: LayerObject = {
+        layerId: newLayerId(),
+        name,
+        visible: true,
+        locked: false,
+        opacity: 1,
+        print: true,
+        order: 0, // overwritten below: max existing order + 1
+      };
+      set((state) => {
+        const maxOrder = state.layers.reduce(
+          (max, l) => (l.order > max ? l.order : max),
+          -1,
+        );
+        layer.order = maxOrder + 1;
+        state.layers.push(layer);
+        state.isDirty = true;
+      });
+      return layer;
+    },
+
+    deleteLayer: (layerId) =>
+      set((state) => {
+        const index = state.layers.findIndex((l) => l.layerId === layerId);
+        if (index === -1) {
+          return;
+        }
+        state.layers.splice(index, 1);
+        // Detach every element referencing the removed layer.
+        state.pages.forEach((page) => {
+          page.elements.forEach((element) => {
+            if (element.layerId === layerId) {
+              element.layerId = null;
+            }
+          });
+        });
+        state.isDirty = true;
+      }),
+
+    renameLayer: (layerId, name) =>
+      set((state) => {
+        const layer = state.layers.find((l) => l.layerId === layerId);
+        if (layer) {
+          layer.name = name;
+          state.isDirty = true;
+        }
+      }),
+
+    reorderLayer: (layerId, newOrder) =>
+      set((state) => {
+        const layer = state.layers.find((l) => l.layerId === layerId);
+        if (layer) {
+          layer.order = newOrder;
+          state.isDirty = true;
+        }
+      }),
+
+    // Hiding/locking a layer cascades to every member element in a SINGLE
+    // reducer pass (one immer draft) so the canvas honors element.visible /
+    // element.locked without render-elements needing any layer awareness.
+    setLayerVisible: (layerId, visible) =>
+      set((state) => {
+        const layer = state.layers.find((l) => l.layerId === layerId);
+        if (!layer) {
+          return;
+        }
+        layer.visible = visible;
+        state.pages.forEach((page) => {
+          page.elements.forEach((element) => {
+            if (element.layerId === layerId) {
+              element.visible = visible;
+            }
+          });
+        });
+        state.isDirty = true;
+      }),
+
+    setLayerLocked: (layerId, locked) =>
+      set((state) => {
+        const layer = state.layers.find((l) => l.layerId === layerId);
+        if (!layer) {
+          return;
+        }
+        layer.locked = locked;
+        state.pages.forEach((page) => {
+          page.elements.forEach((element) => {
+            if (element.layerId === layerId) {
+              element.locked = locked;
+            }
+          });
+        });
         state.isDirty = true;
       }),
 

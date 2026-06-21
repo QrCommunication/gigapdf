@@ -1707,7 +1707,9 @@
         "alignLeft": "Left",
         "alignCenter": "Center",
         "alignRight": "Right"
-      }
+      },
+      "layer": "Layer",
+      "layerNone": "None"
     },
     "sidebar": {
       "pages": "Pages",
@@ -1735,7 +1737,17 @@
       "typeImage": "Image",
       "typeShape": "Shape",
       "typeAnnotation": "Annotation",
-      "typeFormField": "Form field"
+      "typeFormField": "Form field",
+      "userLayers": "User layers",
+      "addLayer": "Add layer",
+      "noLayers": "No user layers yet",
+      "renameLayer": "Rename layer",
+      "deleteLayer": "Delete layer",
+      "moveUp": "Move layer up",
+      "moveDown": "Move layer down",
+      "noLayerElements": "No elements on this layer",
+      "assignToLayer": "Assign to layer",
+      "layerNone": "None"
     },
     "attachments": {
       "title": "Attachments",
