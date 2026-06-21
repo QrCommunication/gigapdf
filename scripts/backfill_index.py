@@ -52,21 +52,25 @@ _WEB_DIR = _REPO_ROOT / "apps" / "web"
 _NODE_SCRIPT = _WEB_DIR / "scripts" / "extract_pdf_text.mjs"
 
 
-def _extract_text(pdf_bytes: bytes) -> str:
-    """Run the WASM Node extractor on *pdf_bytes*; return the text layer.
+def _extract_text(pdf_bytes: bytes, ocr: bool = False) -> str:
+    """Run the WASM Node extractor on *pdf_bytes*; return the text.
 
-    Raises RuntimeError with the extractor's stderr on failure so the caller can
-    log it and skip the document (extraction must never silently yield ""+OK).
+    With *ocr*, the extractor falls back to OCR (Latin model) when the embedded
+    text layer is empty — for scanned/image-only PDFs. Raises RuntimeError with
+    the extractor's stderr on failure so the caller can log it and skip.
     """
     with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
         tmp.write(pdf_bytes)
         tmp.flush()
+        cmd = ["node", str(_NODE_SCRIPT), tmp.name]
+        if ocr:
+            cmd.append("--ocr")
         proc = subprocess.run(
-            ["node", str(_NODE_SCRIPT), tmp.name],
+            cmd,
             cwd=str(_WEB_DIR),  # so Node resolves the workspace dependency
             capture_output=True,
             text=True,
-            timeout=180,
+            timeout=600 if ocr else 180,  # OCR is CPU-heavy
         )
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or f"node exit {proc.returncode}")
@@ -152,7 +156,7 @@ async def run(args: argparse.Namespace) -> int:
                     skipped += 1
                     continue
 
-                text = _extract_text(pdf_bytes)
+                text = _extract_text(pdf_bytes, ocr=args.ocr)
                 chars = len(text.strip())
 
                 if args.dry_run:
@@ -185,6 +189,11 @@ def main() -> None:
         "--all",
         action="store_true",
         help="Reindex every active doc, not only those missing a text index.",
+    )
+    parser.add_argument(
+        "--ocr",
+        action="store_true",
+        help="OCR scanned/image-only PDFs (no text layer) via the bundled Latin model.",
     )
     parser.add_argument("--limit", type=int, default=0, help="Cap the number of documents.")
     parser.add_argument(
