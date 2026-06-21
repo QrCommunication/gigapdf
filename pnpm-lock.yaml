@@ -232,7 +232,7 @@ importers:
         version: 9.39.4(jiti@2.7.0)
       eslint-config-next:
         specifier: ^16.2.9
-        version: 16.2.9(eslint@9.39.4(jiti@2.7.0))(typescript@6.0.3)
+        version: 16.2.9(@typescript-eslint/parser@8.61.0(eslint@9.39.4(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.4(jiti@2.7.0))(typescript@6.0.3)
       postcss:
         specifier: ^8.5.15
         version: 8.5.15
@@ -498,7 +498,7 @@ importers:
         version: 9.39.4(jiti@2.7.0)
       eslint-config-next:
         specifier: ^16.2.9
-        version: 16.2.9(@typescript-eslint/parser@8.61.0(eslint@9.39.4(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.4(jiti@2.7.0))(typescript@6.0.3)
+        version: 16.2.9(eslint@9.39.4(jiti@2.7.0))(typescript@6.0.3)
       jsdom:
         specifier: ^29.1.1
         version: 29.1.1(@noble/hashes@2.2.0)(canvas@3.2.3)
@@ -604,8 +604,8 @@ importers:
         specifier: workspace:*
         version: link:../types
       '@qrcommunication/gigapdf-lib':
-        specifier: latest
-        version: 0.52.5
+        specifier: ^0.53.0
+        version: 0.53.0
       fabric:
         specifier: ^7.4.0
         version: 7.4.0
@@ -769,8 +769,8 @@ importers:
         specifier: workspace:*
         version: link:../types
       '@qrcommunication/gigapdf-lib':
-        specifier: latest
-        version: 0.52.5
+        specifier: ^0.53.0
+        version: 0.53.0
     devDependencies:
       '@giga-pdf/eslint-config':
         specifier: workspace:*
@@ -2650,8 +2650,8 @@ packages:
       react: 19.2.7
       react-dom: 19.2.7
 
-  '@qrcommunication/gigapdf-lib@0.52.5':
-    resolution: {integrity: sha512-E4a0uQnLj7hA4jP5TRNaDV35vcwuWmvB/DXW8ocj95bzFNwXT6eGPHatcIYxW5nz/bBhvbIAmLVSNqtWAxdutg==}
+  '@qrcommunication/gigapdf-lib@0.53.0':
+    resolution: {integrity: sha512-xwtLHQ6xmMblnbulLm2nMQwiWRorbkWN6bAV4GN/B0DjKUh/N4i4R0FIuJTUWuXkgSpm74gutV3BL+34aQiAgA==}
     engines: {node: '>=18.17.0'}
 
   '@radix-ui/number@1.1.2':
@@ -10981,7 +10981,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react-dom'
 
-  '@qrcommunication/gigapdf-lib@0.52.5': {}
+  '@qrcommunication/gigapdf-lib@0.53.0': {}
 
   '@radix-ui/number@1.1.2': {}
 
