@@ -1959,33 +1959,23 @@ export function EditorCanvas({
             // Rendre à une résolution plus élevée (HiDPI) pour un rendu net,
             // puis réduire l'image via scaleX/scaleY pour garder les dimensions PDF correctes.
             const renderScale = backgroundRenderScale(window.devicePixelRatio);
-            // Exclude the page's SHAPE elements (by their engine unified index)
-            // from the raster: they are painted as VISIBLE, editable Fabric
-            // overlays on top — the same direct-edit model as text — so restyle
-            // is WYSIWYG with no stale shape left in the background. Only shapes
-            // that ARE overlaid (valid index) are excluded, so nothing is both
-            // in the raster and the overlay (no double-render).
-            const shapeExcludeIndices = pageData.elements
-              ? pageData.elements
-                  .filter(
-                    (el): el is Extract<Element, { type: "shape" }> =>
-                      el.type === "shape" &&
-                      typeof (el as { index?: number }).index === "number" &&
-                      (el as { index: number }).index >= 0,
-                  )
-                  .map((el) => el.index as number)
-              : [];
             const dataUrl = await renderer.renderPageToDataURL(pageData.pageNumber, {
               scale: renderScale,
               // Text-free raster: the engine renders everything EXCEPT text
-              // (vector art, gradients/shadings, images stay 1:1). The REAL
-              // editable text is painted as a visible Fabric overlay on top, so
-              // editing is direct and works on any background — no colour mask.
+              // (vector art, gradients/shadings, IMAGES and SHAPES stay 1:1).
+              // The REAL editable text is painted as a visible Fabric overlay on
+              // top, so editing is direct and works on any background — no colour
+              // mask. SHAPES stay in this raster (= visual ground truth) and the
+              // overlay paints them as transparent, editable hit-targets revealed
+              // on selection (render-elements.ts). We deliberately do NOT pass
+              // `excludeIndices` for shapes: `renderPageExcluding` is fed by the
+              // unified element index, but the engine honours it only for SOME
+              // vector paths (e.g. it drops index 34 yet keeps 101 on real docs),
+              // and mixing in the text-run ordinals (a different index space)
+              // over-excludes unrelated content — both left whole colored
+              // section backgrounds blank. Keeping shapes in the raster makes
+              // their fidelity exact and independent of that engine quirk.
               skipText: true,
-              // Also omit the overlaid shapes (see above) — live shape restyle.
-              ...(shapeExcludeIndices.length > 0
-                ? { excludeIndices: shapeExcludeIndices }
-                : {}),
             });
             renderer.dispose();
 

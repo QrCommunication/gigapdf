@@ -18,14 +18,18 @@
  * rendered by the editor WITHOUT the elements it overlays editably:
  *   - TEXT   — the raster omits ALL text (`renderPageNoText`); this overlay
  *     paints the REAL editable text on top (real colour + embedded font).
- *   - SHAPES — the raster omits the overlaid shapes (`renderPageExcluding` on
- *     their unified index); this overlay paints them in their REAL fill/stroke/
- *     width/opacity, so restyle is WYSIWYG with no stale shape underneath.
+ *   - SHAPES — still drawn by the raster (it keeps every vector path 1:1, the
+ *     visual ground truth); this overlay is a TRANSPARENT hit-target that
+ *     reveals its real fill/stroke ONLY while selected (`attachShapeStyleReveal`)
+ *     so the element stays editable without doubling the shape. Shapes are NOT
+ *     excluded from the raster: `renderPageExcluding` honours shape exclusion
+ *     only for some vector paths (engine index quirk) and mixing in the
+ *     text-run ordinals over-excludes — both blanked whole coloured backgrounds.
  *   - IMAGES — still drawn by the raster; this overlay is an INVISIBLE
  *     (transparent) hit-target sitting exactly on top for click/move/resize.
- * Because each overlaid element is OMITTED from the raster, nothing is drawn
- * twice (no "doubled text"/"doubled shape" bug). The original colours/styles are
- * also stashed on `obj.data.*` for the properties panel and the layer-hide toggle.
+ * Text is the only element repainted here, so nothing is drawn twice (no
+ * "doubled text" bug). The original colours/styles are stashed on `obj.data.*`
+ * for the selection-reveal, the properties panel and the layer-hide toggle.
  *
  * Dependencies that differ per surface (embedded-font resolution, edit-time
  * hide-mask, image URL resolution) are INJECTED via {@link RenderElementsOptions}
@@ -430,11 +434,18 @@ export async function renderElementsOverlay(
         const hasStroke =
           shapeElement.style.strokeColor && shapeElement.style.strokeWidth > 0;
         const hasFill = !!shapeElement.style.fillColor;
-        // DIRECT-SHAPE model: the page background is rasterised WITHOUT these
-        // shapes (engine `renderPageExcluding` on their unified index), so the
-        // Fabric overlay IS the visible shape — painted in its REAL fill/stroke/
-        // width/opacity. Restyle is therefore WYSIWYG with no stale shape left
-        // underneath. data.* keeps the original values for the properties panel.
+        // RASTER-TRUTH shape model: the source PDF's shapes (section fills,
+        // coloured banners, field backgrounds…) stay BAKED in the text-free
+        // raster background (`renderPageNoText`, index 0), so what the user sees
+        // is pixel-exact — including the PDF's own z-order subtleties (e.g. a
+        // white input box inset over a coloured frame, anti-aliased borders).
+        // This Fabric overlay is therefore a TRANSPARENT, editable hit-target:
+        // it carries the real fill/stroke on `data.*`, is revealed on selection
+        // (see `attachShapeStyleReveal`) and is the object the move/resize/
+        // restyle pipeline edits. We do NOT repaint shapes here, because the
+        // engine's `renderPageExcluding` honours shape exclusion only for some
+        // vector paths, so painting a visible overlay over an inconsistently
+        // excluded raster left whole coloured backgrounds blank.
         const fillCss = hasFill
           ? colorWithAlpha(
               shapeElement.style.fillColor as string,
@@ -447,13 +458,14 @@ export async function renderElementsOverlay(
               shapeElement.style.strokeOpacity ?? 1,
             )
           : "transparent";
-        const shapeStrokeWidth = hasStroke ? shapeElement.style.strokeWidth : 0;
         const shapeOptions = {
           ...baseOptions,
-          // Real paint — the shape is no longer in the raster background.
-          fill: fillCss,
-          stroke: strokeCss,
-          strokeWidth: shapeStrokeWidth,
+          // Transparent in view (the raster shows the real shape); data.* keeps
+          // the real values so selection-reveal / the properties panel restore
+          // them, and the strokeDashArray is carried for the reveal too.
+          fill: "transparent",
+          stroke: "transparent",
+          strokeWidth: 0,
           ...(shapeElement.style.strokeDashArray &&
           shapeElement.style.strokeDashArray.length > 0
             ? { strokeDashArray: [...shapeElement.style.strokeDashArray] }
@@ -538,6 +550,12 @@ export async function renderElementsOverlay(
             originalFill: hasFill ? fillCss : null,
             originalStroke: hasStroke ? strokeCss : null,
             originalStrokeWidth: hasStroke ? shapeElement.style.strokeWidth : 0,
+            // Carried so selection-reveal restores the dash pattern too.
+            originalStrokeDashArray:
+              shapeElement.style.strokeDashArray &&
+              shapeElement.style.strokeDashArray.length > 0
+                ? [...shapeElement.style.strokeDashArray]
+                : null,
           };
         }
         break;
@@ -733,6 +751,14 @@ export async function renderElementsOverlay(
   if (onElementSelected && !readonly) {
     attachSelectionHandlers(canvas, onElementSelected);
   }
+
+  // Reveal a shape's real fill/stroke while it is selected (and re-mask it on
+  // deselect). In view the shape is shown by the raster (transparent overlay);
+  // on selection we paint the overlay with its `data.original*` so what the user
+  // edits is visible. Idempotent per canvas; skipped in read-only surfaces.
+  if (!readonly) {
+    attachShapeStyleReveal(canvas);
+  }
 }
 
 /**
@@ -785,4 +811,71 @@ function attachSelectionHandlers(
 
   canvas.on("selection:created", handleSelection);
   canvas.on("selection:updated", handleSelection);
+}
+
+/**
+ * Reveal a shape overlay's real fill/stroke while it is selected, then re-mask
+ * it (transparent) on deselection. In view, shapes are shown by the text-free
+ * raster background (the overlay is a transparent hit-target, see the `"shape"`
+ * case): painting the overlay too would double them and would depend on the
+ * unreliable per-index `renderPageExcluding`. Selecting a shape paints the
+ * overlay with its stashed `data.original*` so the element the user edits is
+ * visible; the move/resize/restyle pipeline bakes the change into the PDF and
+ * the page re-renders, after which the raster shows the result. Idempotent per
+ * canvas (guarded by a meta flag), so re-renders never stack listeners.
+ */
+function attachShapeStyleReveal(canvas: FabricCanvas): void {
+  const canvasWithMeta = canvas as unknown as {
+    _shapeRevealHandlerAttached?: boolean;
+    _shapeRevealed?: FabricObjectWithData[];
+  };
+  if (canvasWithMeta._shapeRevealHandlerAttached) return;
+  canvasWithMeta._shapeRevealHandlerAttached = true;
+  canvasWithMeta._shapeRevealed = [];
+
+  const restore = (obj: FabricObjectWithData) => {
+    obj.set({ fill: "transparent", stroke: "transparent", strokeWidth: 0 });
+  };
+
+  const reveal = (obj: FabricObjectWithData) => {
+    const data = obj.data;
+    if (!data || data.type !== "shape") return;
+    const fill =
+      typeof data.originalFill === "string" ? data.originalFill : "transparent";
+    const stroke =
+      typeof data.originalStroke === "string"
+        ? data.originalStroke
+        : "transparent";
+    const strokeWidth =
+      typeof data.originalStrokeWidth === "number"
+        ? data.originalStrokeWidth
+        : 0;
+    obj.set({ fill, stroke, strokeWidth });
+    if (Array.isArray(data.originalStrokeDashArray)) {
+      obj.set({ strokeDashArray: [...data.originalStrokeDashArray] });
+    }
+  };
+
+  const clearRevealed = () => {
+    const revealed = canvasWithMeta._shapeRevealed ?? [];
+    for (const obj of revealed) restore(obj);
+    canvasWithMeta._shapeRevealed = [];
+  };
+
+  const handle = (e: { selected?: FabricObject[] }) => {
+    // Re-mask any shapes revealed by a previous selection (selection change).
+    clearRevealed();
+    const selected = (e.selected ?? []) as FabricObjectWithData[];
+    const shapes = selected.filter((o) => o.data?.type === "shape");
+    for (const obj of shapes) reveal(obj);
+    canvasWithMeta._shapeRevealed = shapes;
+    if (shapes.length > 0) canvas.requestRenderAll();
+  };
+
+  canvas.on("selection:created", handle);
+  canvas.on("selection:updated", handle);
+  canvas.on("selection:cleared", () => {
+    clearRevealed();
+    canvas.requestRenderAll();
+  });
 }
