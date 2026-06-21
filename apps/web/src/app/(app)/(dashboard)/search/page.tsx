@@ -33,6 +33,9 @@ function SemanticSearchView() {
   const [query, setQuery] = useState(() => initialQuery);
   const [status, setStatus] = useState<SearchStatus>("idle");
   const [results, setResults] = useState<SemanticSearchResult[]>([]);
+  // The query that produced `results` — used to highlight matching terms in the
+  // result snippets (kept separate from the live input the user may keep typing).
+  const [submittedQuery, setSubmittedQuery] = useState("");
 
   // Appel async pur : seule source de l'effet de bord réseau, partagée par le
   // submit manuel ET l'amorçage par ?q=. Ne dérive aucun state — il ne fait que
@@ -41,6 +44,7 @@ function SemanticSearchView() {
     const trimmed = rawQuery.trim();
     if (trimmed.length === 0) return;
 
+    setSubmittedQuery(trimmed);
     setStatus("loading");
     try {
       const response = await api.semanticSearch(trimmed, RESULT_LIMIT);
@@ -106,7 +110,7 @@ function SemanticSearchView() {
         </Button>
       </form>
 
-      <SearchBody status={status} results={results} />
+      <SearchBody status={status} results={results} query={submittedQuery} />
     </div>
   );
 }
@@ -114,9 +118,11 @@ function SemanticSearchView() {
 function SearchBody({
   status,
   results,
+  query,
 }: {
   status: SearchStatus;
   results: SemanticSearchResult[];
+  query: string;
 }) {
   const t = useTranslations("semanticSearch");
 
@@ -183,6 +189,7 @@ function SearchBody({
           <SemanticResultCard
             key={`${result.document_id}-${result.page}-${result.snippet.slice(0, 16)}`}
             result={result}
+            query={query}
           />
         ))}
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Badge } from "@giga-pdf/ui";
@@ -10,6 +10,43 @@ import { clientLogger } from "@/lib/client-logger";
 
 interface SemanticResultCardProps {
   result: SemanticSearchResult;
+  /** The searched query, used to highlight matching terms in the snippet. */
+  query?: string;
+}
+
+/**
+ * Wrap occurrences of the query terms in the snippet with <mark>. Semantic
+ * search matches by meaning, so the exact words may not appear — we highlight
+ * what is present (case-insensitive, terms of ≥ 2 chars). Returns the snippet
+ * unchanged when there is nothing to highlight.
+ */
+function highlightTerms(text: string, query: string | undefined): ReactNode {
+  const terms = Array.from(
+    new Set(
+      (query ?? "")
+        .toLowerCase()
+        .split(/\s+/)
+        .map((term) => term.trim())
+        .filter((term) => term.length >= 2),
+    ),
+  );
+  if (terms.length === 0) return text;
+
+  const escaped = terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  // One capturing group → String.split keeps the matches at odd indices.
+  const parts = text.split(new RegExp(`(${escaped.join("|")})`, "gi"));
+  return parts.map((part, index) =>
+    index % 2 === 1 ? (
+      <mark
+        key={index}
+        className="rounded bg-yellow-200 px-0.5 font-medium text-foreground dark:bg-yellow-500/40"
+      >
+        {part}
+      </mark>
+    ) : (
+      part
+    ),
+  );
 }
 
 interface PreviewState {
@@ -29,7 +66,7 @@ interface PreviewState {
  * POST /api/pdf/document-page-image (rotation-aware), so this component only
  * scales the returned rect into the rendered <img> via percentages.
  */
-export function SemanticResultCard({ result }: SemanticResultCardProps) {
+export function SemanticResultCard({ result, query }: SemanticResultCardProps) {
   const t = useTranslations("semanticSearch");
   const router = useRouter();
   const [preview, setPreview] = useState<PreviewState | null>(null);
@@ -177,7 +214,7 @@ export function SemanticResultCard({ result }: SemanticResultCardProps) {
           {t("page", { page: result.page })}
         </p>
         <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">
-          {result.snippet}
+          {highlightTerms(result.snippet, query)}
         </p>
       </div>
     </button>
