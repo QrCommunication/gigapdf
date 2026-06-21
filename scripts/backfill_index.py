@@ -33,13 +33,19 @@ import sys
 import tempfile
 from pathlib import Path
 
-from sqlalchemy import select
-from sqlalchemy import text as sql_text
+# Make ``app`` importable when invoked as a plain script (uvicorn gets it from
+# its working directory; a direct ``python scripts/backfill_index.py`` does not).
+_REPO_ROOT_FOR_PATH = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT_FOR_PATH) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT_FOR_PATH))
 
-from app.api.v1.storage import reindex_document_text
-from app.core.database import get_session_factory
-from app.models.database import DocumentVersion, StoredDocument
-from app.services.s3_service import s3_service
+from sqlalchemy import select  # noqa: E402
+from sqlalchemy import text as sql_text  # noqa: E402
+
+from app.api.v1.storage import reindex_document_text  # noqa: E402
+from app.core.database import get_session_factory  # noqa: E402
+from app.models.database import DocumentVersion, StoredDocument  # noqa: E402
+from app.services.s3_service import s3_service  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _WEB_DIR = _REPO_ROOT / "apps" / "web"
