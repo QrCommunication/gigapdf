@@ -75,12 +75,14 @@ export interface EditorCanvasHandle {
    * Remonter un élément au premier plan (z-order). Localise l'objet Fabric par
    * `data.elementId`, le passe devant tous les autres (Fabric v6
    * `canvas.bringObjectToFront`) et persiste l'ordre via le scene graph
-   * (`onElementModified`). No-op si l'élément n'est pas sur la page affichée.
+   * (`onElementModified`) ET dans le binaire PDF (`onElementReordered` →
+   * engine `reorderElement`). No-op si l'élément n'est pas sur la page affichée.
    */
   bringToFront: (elementId: string) => void;
   /**
    * Renvoyer un élément à l'arrière-plan (z-order). Pendant du `bringToFront`
-   * via `canvas.sendObjectToBack`. Persiste l'ordre via le scene graph.
+   * via `canvas.sendObjectToBack`. Persiste l'ordre via le scene graph ET dans
+   * le binaire PDF (`onElementReordered` → engine `reorderElement`).
    */
   sendToBack: (elementId: string) => void;
   /** Obtenir les IDs des éléments sélectionnés */
@@ -228,6 +230,13 @@ export interface EditorCanvasProps {
    *  cette modification (utilisé par apply-elements pour clear la zone
    *  d'origine avant de redessiner — sinon le glyphe original reste). */
   onElementModified?: (element: Element, oldBounds?: Bounds) => void;
+  /**
+   * Callback quand l'ordre d'empilement (z-order) d'un élément change via
+   * bringToFront/sendToBack. `toFront` = remonté au premier plan (`true`) ou
+   * renvoyé en arrière (`false`). Permet de persister le nouvel ordre DANS le
+   * binaire PDF (engine `reorderElement`), en plus du reflet scene-graph.
+   */
+  onElementReordered?: (element: Element, toFront: boolean) => void;
   /** Callback quand un élément est supprimé */
   onElementRemoved?: (elementId: string) => void;
   /** Callback quand la sélection change */
@@ -389,6 +398,7 @@ export function EditorCanvas({
   strokeWidth = 2,
   onElementAdded,
   onElementModified,
+  onElementReordered,
   onElementRemoved,
   onSelectionChanged,
   onZoomChanged,
@@ -416,6 +426,7 @@ export function EditorCanvas({
   // Refs for callbacks to avoid stale closures in Fabric.js event handlers
   const onElementAddedRef = useRef(onElementAdded);
   const onElementModifiedRef = useRef(onElementModified);
+  const onElementReorderedRef = useRef(onElementReordered);
   const onElementRemovedRef = useRef(onElementRemoved);
   const onSelectionChangedRef = useRef(onSelectionChanged);
   const onZoomChangedRef = useRef(onZoomChanged);
@@ -489,6 +500,7 @@ export function EditorCanvas({
     documentIdRef.current = documentId;
     onElementAddedRef.current = onElementAdded;
     onElementModifiedRef.current = onElementModified;
+    onElementReorderedRef.current = onElementReordered;
     onElementRemovedRef.current = onElementRemoved;
     onSelectionChangedRef.current = onSelectionChanged;
     onZoomChangedRef.current = onZoomChanged;
@@ -1913,6 +1925,22 @@ export function EditorCanvas({
             // Rendre à une résolution plus élevée (HiDPI) pour un rendu net,
             // puis réduire l'image via scaleX/scaleY pour garder les dimensions PDF correctes.
             const renderScale = backgroundRenderScale(window.devicePixelRatio);
+            // Exclude the page's SHAPE elements (by their engine unified index)
+            // from the raster: they are painted as VISIBLE, editable Fabric
+            // overlays on top — the same direct-edit model as text — so restyle
+            // is WYSIWYG with no stale shape left in the background. Only shapes
+            // that ARE overlaid (valid index) are excluded, so nothing is both
+            // in the raster and the overlay (no double-render).
+            const shapeExcludeIndices = pageData.elements
+              ? pageData.elements
+                  .filter(
+                    (el): el is Extract<Element, { type: "shape" }> =>
+                      el.type === "shape" &&
+                      typeof (el as { index?: number }).index === "number" &&
+                      (el as { index: number }).index >= 0,
+                  )
+                  .map((el) => el.index as number)
+              : [];
             const dataUrl = await renderer.renderPageToDataURL(pageData.pageNumber, {
               scale: renderScale,
               // Text-free raster: the engine renders everything EXCEPT text
@@ -1920,6 +1948,10 @@ export function EditorCanvas({
               // editable text is painted as a visible Fabric overlay on top, so
               // editing is direct and works on any background — no colour mask.
               skipText: true,
+              // Also omit the overlaid shapes (see above) — live shape restyle.
+              ...(shapeExcludeIndices.length > 0
+                ? { excludeIndices: shapeExcludeIndices }
+                : {}),
             });
             renderer.dispose();
 
@@ -2200,16 +2232,16 @@ export function EditorCanvas({
         // Fabric v6 renamed the z-order API to the `*Object*` form.
         canvas.bringObjectToFront(obj);
         canvas.requestRenderAll();
-        // Persist the new stacking position in the scene graph. The PDF-binary
-        // pass has no unified "reorder" op (the engine exposes
-        // transform/remove/replace but not z-reorder), so the canonical
-        // z-order lives in the scene-graph element ORDER — re-emitting the
-        // element keeps the editor/collab state authoritative. The bounds are
-        // unchanged, so this records no redaction.
+        // Persist the new stacking BOTH ways:
+        //  - scene-graph order (collab/editor authority) via onElementModified;
+        //  - PDF binary via a dedicated `reorder` op → engine `reorderElement`,
+        //    so the z-order survives reload (not just the live editor). Bounds
+        //    are unchanged, so onElementModified records no redaction.
         const element = fabricObjectToElement(obj);
         if (element) {
           const oldBounds = lastKnownBoundsRef.current.get(element.elementId);
           onElementModifiedRef.current?.(element, oldBounds);
+          onElementReorderedRef.current?.(element, true);
         }
         saveHistory(canvas);
       },
@@ -2228,6 +2260,7 @@ export function EditorCanvas({
         if (element) {
           const oldBounds = lastKnownBoundsRef.current.get(element.elementId);
           onElementModifiedRef.current?.(element, oldBounds);
+          onElementReorderedRef.current?.(element, false);
         }
         saveHistory(canvas);
       },

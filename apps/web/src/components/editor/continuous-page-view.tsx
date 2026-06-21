@@ -108,6 +108,11 @@ export interface ContinuousPageViewProps {
    * apply-elements bake → save), so continuous editing persists identically.
    */
   onElementModified?: (element: Element, oldBounds?: Bounds) => void;
+  /**
+   * Z-order change (bringToFront/sendToBack) on the ACTIVE page. Wired to the
+   * same page.tsx handler (queueReorder → engine `reorderElement` bake → save).
+   */
+  onElementReordered?: (element: Element, toFront: boolean) => void;
   /** Element removed on the ACTIVE page (same pipeline as single-page). */
   onElementRemoved?: (elementId: string) => void;
   /** Selection changed on the ACTIVE page (drives the page-scoped panels). */
@@ -140,6 +145,7 @@ function ContinuousPageViewImpl(
     getFontFaceName,
     onElementAdded,
     onElementModified,
+    onElementReordered,
     onElementRemoved,
     onSelectionChanged,
     onCanvasReady,
@@ -491,6 +497,9 @@ function ContinuousPageViewImpl(
                   {...(isActive && onElementAdded ? { onElementAdded } : {})}
                   {...(isActive && onElementModified
                     ? { onElementModified }
+                    : {})}
+                  {...(isActive && onElementReordered
+                    ? { onElementReordered }
                     : {})}
                   {...(isActive && onElementRemoved
                     ? { onElementRemoved }

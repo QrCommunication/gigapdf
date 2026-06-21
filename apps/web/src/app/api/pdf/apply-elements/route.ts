@@ -2,8 +2,8 @@
  * PDF Apply Elements route
  *
  * POST /api/pdf/apply-elements
- * Applies an ordered list of element operations (add, update, delete) to a PDF
- * and returns the modified PDF binary.
+ * Applies an ordered list of element operations (add, update, delete, reorder)
+ * to a PDF and returns the modified PDF binary.
  *
  * Form fields (multipart/form-data):
  *   file       — PDF file (required)
@@ -11,10 +11,11 @@
  *
  * ElementOperation schema:
  * {
- *   action: 'add' | 'update' | 'delete',
+ *   action: 'add' | 'update' | 'delete' | 'reorder',
  *   pageNumber: number,           // 1-based
  *   element: Record<string, unknown>,
- *   oldBounds?: { x, y, width, height }  // required for 'update'; used for 'delete'
+ *   oldBounds?: { x, y, width, height },  // required for 'update'; used for 'delete'
+ *   reorder?: { toFront: boolean }        // required for 'reorder' (z-order)
  * }
  *
  * Supported element types: text, image, shape, annotation, form_field

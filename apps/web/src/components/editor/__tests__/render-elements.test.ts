@@ -128,7 +128,7 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     expect(it_.opts.fontFamily).toBe("gigapdf-doc-font-abc");
   });
 
-  it("renders shapes transparent (visible via the raster, hit-target only)", async () => {
+  it("renders shapes with their REAL fill (direct-edit: raster omits the shape)", async () => {
     const canvas = makeCanvas();
     const shape = {
       type: "shape",
@@ -137,16 +137,51 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
       bounds: { x: 0, y: 0, width: 50, height: 50 },
       visible: true,
       locked: false,
+      index: 7,
       geometry: {},
-      style: { fillColor: "#ff0000", fillOpacity: 1, strokeWidth: 0 },
+      style: {
+        fillColor: "#ff0000",
+        fillOpacity: 1,
+        strokeColor: "#0000ff",
+        strokeWidth: 2,
+        strokeOpacity: 1,
+      },
     } as unknown as Element;
     await renderElementsOverlay(canvas, [shape], fabricMock);
 
     const rect = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
       (o) => o instanceof Rect,
     ) as Rect;
-    expect(rect.opts.fill).toBe("transparent");
-    expect(rect.opts.stroke).toBe("transparent");
+    // The raster background is rendered WITHOUT this shape (renderPageExcluding
+    // on its unified index), so the overlay IS the visible shape — painted in
+    // its real fill/stroke/width (no doubling).
+    expect(rect.opts.fill).toBe("#ff0000");
+    expect(rect.opts.stroke).toBe("#0000ff");
+    expect(rect.opts.strokeWidth).toBe(2);
+    // Originals are still stashed on .data for the properties panel.
+    expect((rect.data as Record<string, unknown>).originalFill).toBe("#ff0000");
+  });
+
+  it("applies fillOpacity into the shape's rendered fill colour", async () => {
+    const canvas = makeCanvas();
+    const shape = {
+      type: "shape",
+      elementId: "s2",
+      shapeType: "rectangle",
+      bounds: { x: 0, y: 0, width: 50, height: 50 },
+      visible: true,
+      locked: false,
+      index: 3,
+      geometry: {},
+      style: { fillColor: "#ff0000", fillOpacity: 0.5, strokeWidth: 0 },
+    } as unknown as Element;
+    await renderElementsOverlay(canvas, [shape], fabricMock);
+
+    const rect = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof Rect,
+    ) as Rect;
+    // 50% alpha → rgba string (no stale background underneath to double).
+    expect(rect.opts.fill).toBe("rgba(255, 0, 0, 0.5)");
   });
 
   it("deduplicates a stacked twin text run at the same position", async () => {

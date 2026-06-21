@@ -14,7 +14,7 @@ import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { Element, Bounds, UUID } from "@giga-pdf/types";
 
-export type ElementOperationAction = "add" | "update" | "delete";
+export type ElementOperationAction = "add" | "update" | "delete" | "reorder";
 
 export interface ElementOperation {
   action: ElementOperationAction;
@@ -26,9 +26,16 @@ export interface ElementOperation {
    * in-place `removeElement` instead of redact+add. Absent / `< 0` (a sentinel
    * the engine uses for FORM-XObject text) means the delete falls back to
    * redact + add — handled entirely by the engine, never special-cased here.
+   * For reorder: the full Element (carries the unified `index`); the new
+   * stacking is baked into the PDF via the engine's `reorderElement`.
    */
   element: Element | Record<string, unknown>;
   oldBounds?: Bounds;
+  /**
+   * For `reorder`: bring the element to the front (`true`) or send it to the
+   * back (`false`). Consumed by apply-operations → `reorderElement`.
+   */
+  reorder?: { toFront: boolean };
 }
 
 export interface OperationsStore {
@@ -52,6 +59,17 @@ export interface OperationsStore {
     elementId: UUID,
     bounds: Bounds,
     index?: number,
+  ) => void;
+  /**
+   * Queue a z-order (reorder) op. Persists the new stacking into the PDF binary
+   * via the engine's `reorderElement` (not just the editor scene-graph order).
+   * `toFront` brings the element on top; otherwise it is sent behind. Coalesces
+   * repeated reorders of the same element — last action wins the final z-order.
+   */
+  queueReorder: (
+    pageNumber: number,
+    element: Element,
+    toFront: boolean,
   ) => void;
 
   /** Retrieve and clear all pending operations (consumed during save). */
@@ -119,6 +137,30 @@ export const useOperationsStore: UseBoundStore<StoreApi<OperationsStore>> =
             },
             oldBounds: bounds,
           });
+        }),
+
+      queueReorder: (pageNumber, element, toFront) =>
+        set((state) => {
+          // Coalesce repeated reorders of the same element on the same page —
+          // only the LAST action determines the final z-order, so keep one op
+          // per element and overwrite its target + payload.
+          const existing = state.operations.find(
+            (op) =>
+              op.action === "reorder" &&
+              op.pageNumber === pageNumber &&
+              (op.element as Element).elementId === element.elementId,
+          );
+          if (existing) {
+            existing.element = element;
+            existing.reorder = { toFront };
+          } else {
+            state.operations.push({
+              action: "reorder",
+              pageNumber,
+              element,
+              reorder: { toFront },
+            });
+          }
         }),
 
       drain: () => {

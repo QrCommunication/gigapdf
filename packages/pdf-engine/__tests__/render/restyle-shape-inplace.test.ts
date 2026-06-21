@@ -11,8 +11,9 @@
  *     === 0, `inPlaceRestyled === 1`, `inPlaceTransformed === 0`).
  *   - a combined geometry + style `update` does BOTH in place on the same index
  *     (`inPlaceTransformed === 1` AND `inPlaceRestyled === 1`), still NO redaction.
- *   - an OPACITY-only change FALLS BACK (a redaction target IS recorded,
- *     `inPlaceRestyled === 0`) — `setPathStyle` can't emit `/ca`/`/CA`.
+ *   - an OPACITY-only change is now baked IN PLACE via `setPathStyle`'s
+ *     `fillAlpha`/`strokeAlpha` (`inPlaceRestyled === 1`, NO redaction) — the
+ *     engine emits `/ca`/`/CA` through an `/ExtGState`.
  *   - a shape op whose `index` does NOT resolve to a path (non-path / stale
  *     index) FALLS BACK, proving the safe legacy path is intact.
  */
@@ -132,14 +133,14 @@ describe('applyOperations — in-place shape restyle (setPathStyle)', () => {
     expect(blue!.bounds.y).toBeCloseTo(newBounds.y, 0);
   });
 
-  it('falls back (records a redaction target) for an OPACITY-only change', async () => {
+  it('bakes an OPACITY-only change in place via setPathStyle (NO redaction)', async () => {
     const input = await pdfWithRedRect();
     const before = await page1Shapes(input);
     const target = findByFill(before, '#ff0000');
     expect(target).toBeDefined();
 
-    // Only the fill opacity changes — setPathStyle cannot emit /ca, so this
-    // must route to redact + add (which re-adds the shape with the new opacity).
+    // Only the fill opacity changes — setPathStyle now emits /ca via an
+    // /ExtGState, so this is one in-place setPathStyle with NO redaction.
     const dimmed: ShapeElement = {
       ...target!,
       style: { ...target!.style, fillOpacity: 0.5 },
@@ -155,9 +156,14 @@ describe('applyOperations — in-place shape restyle (setPathStyle)', () => {
 
     const result = await applyOperations(input, ops);
 
-    expect(result.inPlaceRestyled).toBe(0);
+    expect(result.inPlaceRestyled).toBe(1);
     expect(result.inPlaceTransformed).toBe(0);
-    expect(result.redactionTargetsCount).toBe(1);
+    expect(result.redactionTargetsCount).toBe(0);
+    expect(result.addsApplied).toBe(0);
+
+    // The path survives in place — still the same fill colour, alpha applied.
+    const after = await page1Shapes(result.bytes);
+    expect(findByFill(after, '#ff0000')).toBeDefined();
   });
 
   it('falls back when the shape index does NOT resolve to a path (non-path / stale)', async () => {

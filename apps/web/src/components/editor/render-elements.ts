@@ -4,20 +4,28 @@
  * render-elements.ts
  *
  * SINGLE canonical renderer for parsed PDF elements (text / image / shape /
- * annotation / form_field) onto a Fabric.js canvas. Both editor surfaces use
+ * annotation / form_field) onto a Fabric.js canvas. The editable surface uses
  * THIS function — there is no second implementation:
  *
- *   - the single-page editor (`editor-canvas.tsx`) delegates to it;
- *   - the continuous Word-like view (`page-canvas-host.tsx`) calls it directly.
+ *   - the single-page editor (`editor-canvas.tsx`) delegates to it; in the
+ *     continuous Word-like view the ACTIVE page mounts the same `<EditorCanvas>`
+ *     (embedded), so it goes through here too. Inactive pages in the continuous
+ *     view render a read-only full raster (no overlay) via `page-canvas-host.tsx`.
  *
- * 1:1 FIDELITY MODEL (why text is invisible)
- * ------------------------------------------
- * The visible page is the PDF rasterised at index 0 (the background image). The
- * element overlay built here is INVISIBLE (`fill: rgba(0,0,0,0)`, shapes
- * transparent): it exists only as a click / edit hit-target sitting exactly on
- * top of the rasterised glyphs. Painting the overlay with real colours would
- * draw every glyph twice (raster + overlay) — the "doubled text" bug. The real
- * colours/styles are stashed on `obj.data.*` so edit-mode can reveal them.
+ * DIRECT-EDIT FIDELITY MODEL (what is visible vs a hit-target)
+ * -----------------------------------------------------------
+ * The visible page is the PDF rasterised at index 0 (the background image),
+ * rendered by the editor WITHOUT the elements it overlays editably:
+ *   - TEXT   — the raster omits ALL text (`renderPageNoText`); this overlay
+ *     paints the REAL editable text on top (real colour + embedded font).
+ *   - SHAPES — the raster omits the overlaid shapes (`renderPageExcluding` on
+ *     their unified index); this overlay paints them in their REAL fill/stroke/
+ *     width/opacity, so restyle is WYSIWYG with no stale shape underneath.
+ *   - IMAGES — still drawn by the raster; this overlay is an INVISIBLE
+ *     (transparent) hit-target sitting exactly on top for click/move/resize.
+ * Because each overlaid element is OMITTED from the raster, nothing is drawn
+ * twice (no "doubled text"/"doubled shape" bug). The original colours/styles are
+ * also stashed on `obj.data.*` for the properties panel and the layer-hide toggle.
  *
  * Dependencies that differ per surface (embedded-font resolution, edit-time
  * hide-mask, image URL resolution) are INJECTED via {@link RenderElementsOptions}
@@ -422,10 +430,11 @@ export async function renderElementsOverlay(
         const hasStroke =
           shapeElement.style.strokeColor && shapeElement.style.strokeWidth > 0;
         const hasFill = !!shapeElement.style.fillColor;
-        // 1:1 fidelity mode: shapes from the source PDF are visible via the
-        // rasterised background image. The Fabric overlay only needs to
-        // exist as a click hit-target. Stash original styling on .data so
-        // the properties panel + edit mode can restore them.
+        // DIRECT-SHAPE model: the page background is rasterised WITHOUT these
+        // shapes (engine `renderPageExcluding` on their unified index), so the
+        // Fabric overlay IS the visible shape — painted in its REAL fill/stroke/
+        // width/opacity. Restyle is therefore WYSIWYG with no stale shape left
+        // underneath. data.* keeps the original values for the properties panel.
         const fillCss = hasFill
           ? colorWithAlpha(
               shapeElement.style.fillColor as string,
@@ -438,12 +447,17 @@ export async function renderElementsOverlay(
               shapeElement.style.strokeOpacity ?? 1,
             )
           : "transparent";
+        const shapeStrokeWidth = hasStroke ? shapeElement.style.strokeWidth : 0;
         const shapeOptions = {
           ...baseOptions,
-          // Transparent in view; data.* keeps the real values for editing.
-          fill: "transparent",
-          stroke: "transparent",
-          strokeWidth: 0,
+          // Real paint — the shape is no longer in the raster background.
+          fill: fillCss,
+          stroke: strokeCss,
+          strokeWidth: shapeStrokeWidth,
+          ...(shapeElement.style.strokeDashArray &&
+          shapeElement.style.strokeDashArray.length > 0
+            ? { strokeDashArray: [...shapeElement.style.strokeDashArray] }
+            : {}),
           opacity: 1,
           // Make the selected state obvious — same rationale as text overlays.
           hasControls: true,
@@ -454,9 +468,6 @@ export async function renderElementsOverlay(
           cornerSize: 8,
           transparentCorners: false,
         };
-        // Eslint-keep references — used when entering edit mode
-        void fillCss;
-        void strokeCss;
         const w = shapeElement.bounds.width;
         const h = shapeElement.bounds.height;
 
@@ -722,11 +733,6 @@ export async function renderElementsOverlay(
   if (onElementSelected && !readonly) {
     attachSelectionHandlers(canvas, onElementSelected);
   }
-
-  // Révélation du style réel des formes à la sélection (feedback d'édition P3).
-  if (!readonly) {
-    attachShapeStyleReveal(canvas);
-  }
 }
 
 /**
@@ -779,68 +785,4 @@ function attachSelectionHandlers(
 
   canvas.on("selection:created", handleSelection);
   canvas.on("selection:updated", handleSelection);
-}
-
-/**
- * Révèle le VRAI remplissage / contour d'une forme quand elle est sélectionnée,
- * et le remasque (transparent) à la désélection. En mode 1:1 les formes du PDF
- * sont visibles via le raster de fond ; l'overlay Fabric est transparent (simple
- * hit-target). À la sélection on peint l'overlay avec `data.originalFill` /
- * `data.originalStroke` / `data.originalStrokeWidth` pour donner un retour visuel
- * pendant l'édition de style (P3 "vector restyle").
- *
- * CAVEAT connu (acceptable pour P3) : le raster de fond montre TOUJOURS l'ancien
- * style sous l'overlay révélé tant que la page n'a pas été re-bakée / re-rendue
- * (le moteur n'expose pas de `renderPageNoShapes`). La révélation est donc une
- * pré-visualisation par-dessus le fond, pas un remplacement du raster.
- *
- * Idempotent : un seul jeu de handlers par canvas.
- */
-function attachShapeStyleReveal(canvas: FabricCanvas): void {
-  const canvasWithMeta = canvas as unknown as {
-    _shapeRevealHandlerAttached?: boolean;
-    _shapeRevealed?: FabricObjectWithData[];
-  };
-  if (canvasWithMeta._shapeRevealHandlerAttached) return;
-  canvasWithMeta._shapeRevealHandlerAttached = true;
-  canvasWithMeta._shapeRevealed = [];
-
-  const restore = (obj: FabricObjectWithData) => {
-    obj.set({ fill: "transparent", stroke: "transparent", strokeWidth: 0 });
-  };
-
-  const reveal = (obj: FabricObjectWithData) => {
-    const data = obj.data;
-    if (!data || data.type !== "shape") return;
-    const fill =
-      typeof data.originalFill === "string" ? data.originalFill : "transparent";
-    const stroke =
-      typeof data.originalStroke === "string" ? data.originalStroke : "transparent";
-    const strokeWidth =
-      typeof data.originalStrokeWidth === "number" ? data.originalStrokeWidth : 0;
-    obj.set({ fill, stroke, strokeWidth });
-  };
-
-  const clearRevealed = () => {
-    const revealed = canvasWithMeta._shapeRevealed ?? [];
-    for (const obj of revealed) restore(obj);
-    canvasWithMeta._shapeRevealed = [];
-  };
-
-  const handle = (e: { selected?: FabricObject[] }) => {
-    // Remasquer les formes précédemment révélées (changement de sélection).
-    clearRevealed();
-    const selected = (e.selected ?? []) as FabricObjectWithData[];
-    const shapes = selected.filter((o) => o.data?.type === "shape");
-    for (const obj of shapes) reveal(obj);
-    canvasWithMeta._shapeRevealed = shapes;
-    if (shapes.length > 0) canvas.requestRenderAll();
-  };
-
-  canvas.on("selection:created", handle);
-  canvas.on("selection:updated", handle);
-  canvas.on("selection:cleared", () => {
-    clearRevealed();
-    canvas.requestRenderAll();
-  });
 }

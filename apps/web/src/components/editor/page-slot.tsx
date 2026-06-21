@@ -77,6 +77,8 @@ export interface PageSlotProps {
   onElementAdded?: (element: Element) => void;
   /** Forwarded to the active page's EditorCanvas: element moved/resized/retyped. */
   onElementModified?: (element: Element, oldBounds?: Bounds) => void;
+  /** Forwarded to the active page's EditorCanvas: z-order change (bring/send). */
+  onElementReordered?: (element: Element, toFront: boolean) => void;
   /** Forwarded to the active page's EditorCanvas: element removed. */
   onElementRemoved?: (elementId: string) => void;
   /** Forwarded to the active page's EditorCanvas: selection changed. */
@@ -116,6 +118,7 @@ function PageSlotImpl({
   getFontFaceName,
   onElementAdded,
   onElementModified,
+  onElementReordered,
   onElementRemoved,
   onSelectionChanged,
   onCanvasReady,
@@ -164,6 +167,7 @@ function PageSlotImpl({
             {...(getFontFaceName ? { getFontFaceName } : {})}
             {...(onElementAdded ? { onElementAdded } : {})}
             {...(onElementModified ? { onElementModified } : {})}
+            {...(onElementReordered ? { onElementReordered } : {})}
             {...(onElementRemoved ? { onElementRemoved } : {})}
             {...(onSelectionChanged ? { onSelectionChanged } : {})}
             {...(onCanvasReady ? { onCanvasReady } : {})}

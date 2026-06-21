@@ -13,14 +13,17 @@
  *     - delete                             → `removeElement`
  *   Images and shapes carrying a valid unified `index` likewise edit in place:
  *     - move/resize (rotation unchanged)   → `transformElement`
- *     - shape fill/stroke/width/dash       → `setPathStyle` (P3 "vector restyle")
+ *     - shape fill/stroke/width/dash/alpha → `setPathStyle` (P3 "vector restyle")
+ *     - image opacity                      → `setElementOpacity`
+ *     - z-order (reorder)                  → `reorderElement`
  *     - delete                             → `removeElement`
  *   A pure shape STYLE change (geometry unchanged) is one `setPathStyle`; a
  *   combined geometry + style change is `transformElement` THEN `setPathStyle`
  *   on the SAME index (neither changes the element count, so indices stay
- *   valid). Opacity changes are NOT expressible in place — `setPathStyle`
- *   cannot emit `/ca`/`/CA` (needs an `/ExtGState`) — so they take the fallback
- *   (which re-adds the shape with opacity).
+ *   valid). Opacity is now fully expressible in place: `setPathStyle` emits
+ *   `/ca`/`/CA` via an `/ExtGState` for shapes (folded into the SAME restyle
+ *   call as fill/stroke/width/dash), and `setElementOpacity` does the same for
+ *   images. So an opacity-only change no longer forces the redact + add path.
  *   This rewrites the original content stream (font, size, colour and position
  *   preserved), so there is NO duplicate left behind and NO redaction needed —
  *   copy/paste in the result reveals exactly one run.
@@ -49,11 +52,22 @@
  * Batch index stability
  * =====================
  * `removeElement` shifts the indices of every later run on the same page;
- * `replaceText`/`moveElement` do not change the run count. The robust rule is
- * therefore to process a page's in-place ops in DESCENDING index order — a
- * remove can only invalidate HIGHER indices, which have already been processed,
- * so a lower (not-yet-processed) index is never disturbed. If two in-place
- * edits target the same `(page, index)` that's a caller bug: last wins, logged.
+ * `reorderElement` MOVES an element's op range (to the end for front, the start
+ * for back), which renumbers indices on the page too; `replaceText`/
+ * `moveElement`/`transformElement`/`setPathStyle`/`setElementOpacity` do not
+ * change the element count or order. The robust rule is therefore to process a
+ * page's in-place ops in two phases:
+ *   1. Count-/order-STABLE ops (replace/move/transform/restyle/opacity) and
+ *      `remove` in DESCENDING index order — a remove can only invalidate HIGHER
+ *      indices, which have already been processed, so a lower (not-yet-processed)
+ *      index is never disturbed.
+ *   2. `reorder` ops LAST, one at a time, each RE-READING the current element by
+ *      its original identity is not needed because reorders are applied after all
+ *      other edits and each `reorderElement` returns the post-move state; we
+ *      apply reorders sequentially on the still-valid pre-reorder indices (no
+ *      other reorder has run yet for the first, and we re-read between them).
+ * If two in-place edits target the same `(page, index)` that's a caller bug:
+ * last wins, logged.
  *
  * This is the single source of truth for the edit pipeline. All routes
  * (`/api/pdf/apply-elements`, `/api/pdf/text`, `/api/pdf/image`, and any
@@ -85,14 +99,20 @@ import type {
 } from '@giga-pdf/types';
 
 export interface ElementOperation {
-  /** `add`: materialise new content; `update`: redact oldBounds + add at element.bounds; `delete`: redact bounds only. */
-  action: 'add' | 'update' | 'delete';
+  /**
+   * `add`: materialise new content; `update`: redact oldBounds + add at
+   * element.bounds; `delete`: redact bounds only; `reorder`: change the
+   * element's paint order (z-order) in the PDF binary via `reorderElement`.
+   */
+  action: 'add' | 'update' | 'delete' | 'reorder';
   /** 1-based page number. */
   pageNumber: number;
-  /** Element payload (must include `type`). For `delete`, only `bounds` may be present. */
+  /** Element payload (must include `type`). For `delete`, only `bounds` may be present. For `reorder`, must carry the engine unified `index`. */
   element: Record<string, unknown>;
   /** Web-coordinate bounds of the area to redact (required for `update`, optional for `delete`). */
   oldBounds?: { x: number; y: number; width: number; height: number };
+  /** For `reorder`: bring the element to the front (`true`) or send it to the back (`false`). */
+  reorder?: { toFront: boolean };
 }
 
 export interface ApplyOperationsOptions {
@@ -117,8 +137,12 @@ export interface ApplyOperationsResult {
   inPlaceMoved: number;
   /** Number of `transformElement` in-place affine edits applied (image/shape move/resize). */
   inPlaceTransformed: number;
-  /** Number of `setPathStyle` in-place shape restyles applied (fill/stroke/width/dash). */
+  /** Number of `setPathStyle` in-place shape restyles applied (fill/stroke/width/dash/opacity). */
   inPlaceRestyled: number;
+  /** Number of `setElementOpacity` in-place image-opacity edits applied. */
+  inPlaceOpacitySet: number;
+  /** Number of `reorderElement` in-place z-order edits applied. */
+  inPlaceReordered: number;
   /** Number of `removeElement` in-place deletes applied. */
   inPlaceRemoved: number;
 }
@@ -221,6 +245,8 @@ type PathStyleOverride = {
   fill?: [number, number, number];
   stroke?: [number, number, number];
   strokeWidth?: number;
+  fillAlpha?: number;
+  strokeAlpha?: number;
   dash?: number[];
 };
 
@@ -231,19 +257,27 @@ interface InPlaceOp {
   /**
    * `replace`: set new text (+ optional move) on a TEXT run.
    * `transform`: apply an affine `matrix` to an IMAGE/SHAPE element in place.
-   * `restyle`: re-style a SHAPE path via `setPathStyle` (optionally preceded by
-   *   an affine `matrix` when geometry ALSO changed — both on the same index).
+   * `restyle`: re-style a SHAPE path via `setPathStyle` (fill/stroke/width/dash
+   *   and/or fill/stroke alpha), optionally preceded by an affine `matrix` when
+   *   geometry ALSO changed — both on the same index.
+   * `setOpacity`: set a constant opacity on an IMAGE element via
+   *   `setElementOpacity` (optionally preceded by a geometry `matrix`).
+   * `reorder`: change z-order via `reorderElement` (text/image/shape).
    * `remove`: delete the element (text/image/shape).
    */
-  kind: 'replace' | 'transform' | 'restyle' | 'remove';
+  kind: 'replace' | 'transform' | 'restyle' | 'setOpacity' | 'reorder' | 'remove';
   /** New text content (for `replace`). */
   newText?: string;
   /** PDF-space deltas for an accompanying `moveElement` (for `replace`). */
   move?: { dx: number; dy: number };
-  /** Affine matrix `[a,b,c,d,e,f]` for `transformElement` (for `transform`/`restyle`). */
+  /** Affine matrix `[a,b,c,d,e,f]` for `transformElement` (for `transform`/`restyle`/`setOpacity`). */
   matrix?: [number, number, number, number, number, number];
   /** Style override for `setPathStyle` (for `restyle`) — only changed fields. */
   style?: PathStyleOverride;
+  /** Constant fill alpha for `setElementOpacity` (for `setOpacity`), 0..1. */
+  opacity?: number;
+  /** Bring to front (`true`) or send to back (`false`) for `reorder`. */
+  toFront?: boolean;
   /** Diagnostics. */
   originalIndex: number;
 }
@@ -333,29 +367,34 @@ function computeShapeStyleChange(
   return { expressible: true, style: out };
 }
 
+/** Small tolerance (per channel, 0..1) for the alpha "unchanged" test. */
+const OPACITY_TOLERANCE = 1e-3;
+
 /**
- * Whether the shape's OPACITY (fill/stroke alpha) changed vs the path's current
- * alpha. Opacity is NOT expressible by `setPathStyle` (it would need an
- * `/ExtGState`), so any opacity change forces the redact + add fallback — which
- * re-adds the shape WITH the new opacity. Compared within a small tolerance.
+ * Classify a shape's OPACITY (fill/stroke alpha) delta vs the path's current
+ * alpha. Opacity IS now expressible in place: `setPathStyle` emits `/ca`/`/CA`
+ * via an `/ExtGState`, so a changed fill/stroke alpha is folded into the SAME
+ * `setPathStyle` override as fill/stroke/width/dash. Returns the changed alpha
+ * fields only (`{}` when nothing changed). A fill/stroke alpha is only emitted
+ * when the path actually has that paint (`hasFill`/`hasStroke`) — setting an
+ * alpha on a non-existent paint would be meaningless.
  */
-function shapeOpacityChanged(
+function computeShapeOpacityChange(
   element: ShapeElement,
   original: { fillAlpha: number; strokeAlpha: number; hasFill: boolean; hasStroke: boolean },
-): boolean {
-  const OPACITY_TOLERANCE = 1e-3;
+): Pick<PathStyleOverride, 'fillAlpha' | 'strokeAlpha'> {
+  const out: Pick<PathStyleOverride, 'fillAlpha' | 'strokeAlpha'> = {};
   const style = element.style;
-  if (!style) return false;
-  if (original.hasFill && Math.abs((style.fillOpacity ?? 1) - original.fillAlpha) > OPACITY_TOLERANCE) {
-    return true;
+  if (!style) return out;
+  const newFillAlpha = style.fillOpacity ?? 1;
+  if (original.hasFill && Math.abs(newFillAlpha - original.fillAlpha) > OPACITY_TOLERANCE) {
+    out.fillAlpha = Math.max(0, Math.min(1, newFillAlpha));
   }
-  if (
-    original.hasStroke &&
-    Math.abs((style.strokeOpacity ?? 1) - original.strokeAlpha) > OPACITY_TOLERANCE
-  ) {
-    return true;
+  const newStrokeAlpha = style.strokeOpacity ?? 1;
+  if (original.hasStroke && Math.abs(newStrokeAlpha - original.strokeAlpha) > OPACITY_TOLERANCE) {
+    out.strokeAlpha = Math.max(0, Math.min(1, newStrokeAlpha));
   }
-  return false;
+  return out;
 }
 
 /** Element types eligible for index-based in-place edits beyond text. */
@@ -503,14 +542,35 @@ export async function applyOperations(
     const { action, pageNumber, element } = op;
     const elementType = element['type'] as string | undefined;
 
+    const rawIndex = (element as Partial<TextElement>).index;
+    const hasValidIndex = isValidRunIndex(rawIndex);
+
+    // ── Z-order (reorder) — `reorderElement` for text/image/shape ───────────
+    // A reorder carries the element's unified `index` and a `toFront` flag.
+    // It changes the paint order in the PDF binary so the stacking persists on
+    // reload (not just the editor's scene-graph order). Applied in a dedicated
+    // LAST phase below (it renumbers indices), so capturing the index here is
+    // safe — no other in-place op has run yet.
+    if (action === 'reorder') {
+      if (hasValidIndex && op.reorder) {
+        inPlaceOps.push({
+          pageNumber,
+          index: rawIndex as number,
+          kind: 'reorder',
+          toFront: op.reorder.toFront,
+          originalIndex: opIndex,
+        });
+      }
+      // No valid index → nothing the engine can target; drop silently (the
+      // scene-graph order already reflects the change for the live editor).
+      continue;
+    }
+
     // `add` always materialises brand-new content (no existing element to edit).
     if (action !== 'update' && action !== 'delete') {
       fallbackOps.push(op);
       continue;
     }
-
-    const rawIndex = (element as Partial<TextElement>).index;
-    const hasValidIndex = isValidRunIndex(rawIndex);
 
     // ── Image / shape in-place (index-based geometry edits) ─────────────────
     // An image/shape carrying a valid unified index can be deleted or
@@ -554,10 +614,11 @@ export async function applyOperations(
       }
 
       // ── Shape STYLE classification (P3 "vector restyle") ──────────────────
-      // For a shape we ALSO consider a fill/stroke/width/dash change, baked in
-      // place via `setPathStyle`. Opacity is NOT expressible in place, so an
-      // opacity change forces the whole op to the redact + add fallback (which
-      // re-adds the shape with the new opacity, geometry and style together).
+      // For a shape we ALSO consider a fill/stroke/width/dash change AND an
+      // opacity (fill/stroke alpha) change, all baked in place via a SINGLE
+      // `setPathStyle` (it emits `/ca`/`/CA` via an `/ExtGState`). Only a
+      // null↔non-null paint transition (adding/removing a fill or stroke) is
+      // inexpressible and still forces the redact + add fallback.
       let restyle: PathStyleOverride | undefined;
       if (geometryType === 'shape') {
         const path = original as ReturnType<typeof pathsFor>[number];
@@ -568,17 +629,6 @@ export async function applyOperations(
           strokeWidth: path.strokeWidth,
           dash: path.dash,
         };
-        if (
-          shapeOpacityChanged(shapeEl, {
-            fillAlpha: path.fillAlpha,
-            strokeAlpha: path.strokeAlpha,
-            hasFill: path.fill !== null,
-            hasStroke: path.stroke !== null,
-          })
-        ) {
-          fallbackOps.push(op);
-          continue;
-        }
         const styleChange = computeShapeStyleChange(shapeEl, originalStyle);
         if (styleChange && !styleChange.expressible) {
           // A style change we can't bake in place (fill/stroke added or removed)
@@ -586,7 +636,31 @@ export async function applyOperations(
           fallbackOps.push(op);
           continue;
         }
-        if (styleChange) restyle = styleChange.style;
+        // Opacity (alpha) is now expressible — fold the changed alpha fields
+        // into the SAME setPathStyle override as fill/stroke/width/dash.
+        const opacityChange = computeShapeOpacityChange(shapeEl, {
+          fillAlpha: path.fillAlpha,
+          strokeAlpha: path.strokeAlpha,
+          hasFill: path.fill !== null,
+          hasStroke: path.stroke !== null,
+        });
+        if (styleChange || opacityChange.fillAlpha !== undefined || opacityChange.strokeAlpha !== undefined) {
+          restyle = { ...(styleChange ? styleChange.style : {}), ...opacityChange };
+        }
+      }
+
+      // ── Image OPACITY classification ──────────────────────────────────────
+      // An image's alpha is set in place via `setElementOpacity` (a constant
+      // /ca = /CA on an /ExtGState wrapping the image's op range). Compared
+      // against the image's current opacity reported by the engine snapshot.
+      let imageOpacity: number | undefined;
+      if (geometryType === 'image') {
+        const imgInfo = original as ReturnType<typeof imagesFor>[number];
+        const imgEl = element as unknown as ImageElement;
+        const newOpacity = imgEl.style?.opacity ?? 1;
+        if (Math.abs(newOpacity - imgInfo.opacity) > OPACITY_TOLERANCE) {
+          imageOpacity = Math.max(0, Math.min(1, newOpacity));
+        }
       }
 
       // Geometry (move/resize) component — `null` when unchanged (or degenerate).
@@ -600,9 +674,11 @@ export async function applyOperations(
           : null;
 
       // Route on what actually changed:
-      //  - style changed (restyle present): one `restyle` op, carrying the
-      //    geometry matrix too when geometry ALSO changed (transform THEN
-      //    setPathStyle on the same index — count is stable, indices valid).
+      //  - shape style/opacity changed (restyle present): one `restyle` op,
+      //    carrying the geometry matrix too when geometry ALSO changed
+      //    (transform THEN setPathStyle on the same index — count stable).
+      //  - image opacity changed (imageOpacity present): one `setOpacity` op,
+      //    carrying the geometry matrix too when geometry ALSO changed.
       //  - geometry only: a plain `transform`.
       //  - neither: nothing expressible changed.
       if (restyle) {
@@ -611,6 +687,17 @@ export async function applyOperations(
           index,
           kind: 'restyle',
           style: restyle,
+          matrix: matrix ?? undefined,
+          originalIndex: opIndex,
+        });
+        continue;
+      }
+      if (imageOpacity !== undefined) {
+        inPlaceOps.push({
+          pageNumber,
+          index,
+          kind: 'setOpacity',
+          opacity: imageOpacity,
           matrix: matrix ?? undefined,
           originalIndex: opIndex,
         });
@@ -683,12 +770,13 @@ export async function applyOperations(
     });
   }
 
-  // Apply the in-place ops PER PAGE in DESCENDING index order so a
-  // `removeElement` never invalidates a not-yet-processed lower index.
+  // Apply the in-place ops PER PAGE.
   let inPlaceReplaced = 0;
   let inPlaceMoved = 0;
   let inPlaceTransformed = 0;
   let inPlaceRestyled = 0;
+  let inPlaceOpacitySet = 0;
+  let inPlaceReordered = 0;
   let inPlaceRemoved = 0;
 
   if (inPlaceOps.length > 0) {
@@ -700,9 +788,15 @@ export async function applyOperations(
     }
 
     for (const [page, ops] of byPage) {
-      // Detect duplicate targets on the same page (caller bug) — last wins.
+      // Split count-/order-STABLE + remove ops from reorder ops: a `reorder`
+      // renumbers indices on the page, so it must run LAST (after every other
+      // edit's captured index has been consumed).
+      const reorderOps = ops.filter((ip) => ip.kind === 'reorder');
+      const stableOps = ops.filter((ip) => ip.kind !== 'reorder');
+
+      // Detect duplicate targets among the stable ops (caller bug) — last wins.
       const seen = new Set<number>();
-      for (const ip of ops) {
+      for (const ip of stableOps) {
         if (seen.has(ip.index)) {
           engineLogger.warn('applyOperations: duplicate in-place op for same run', {
             page,
@@ -712,9 +806,11 @@ export async function applyOperations(
         seen.add(ip.index);
       }
 
-      ops.sort((a, b) => b.index - a.index); // descending
+      // Phase 1 — stable + remove ops in DESCENDING index order so a
+      // `removeElement` never invalidates a not-yet-processed lower index.
+      stableOps.sort((a, b) => b.index - a.index); // descending
 
-      for (const ip of ops) {
+      for (const ip of stableOps) {
         try {
           if (ip.kind === 'remove') {
             if (inPlaceHandle._doc.removeElement(page, ip.index)) inPlaceRemoved++;
@@ -731,6 +827,18 @@ export async function applyOperations(
             }
             if (ip.style && inPlaceHandle._doc.setPathStyle(page, ip.index, ip.style)) {
               inPlaceRestyled++;
+            }
+          } else if (ip.kind === 'setOpacity') {
+            // Geometry first (if any), then the constant opacity. Same index,
+            // count stable between calls.
+            if (ip.matrix && inPlaceHandle._doc.transformElement(page, ip.index, ip.matrix)) {
+              inPlaceTransformed++;
+            }
+            if (
+              ip.opacity !== undefined &&
+              inPlaceHandle._doc.setElementOpacity(page, ip.index, ip.opacity)
+            ) {
+              inPlaceOpacitySet++;
             }
           } else {
             if (inPlaceHandle._doc.replaceText(page, ip.index, ip.newText ?? '')) {
@@ -750,6 +858,33 @@ export async function applyOperations(
             page,
             index: ip.index,
             kind: ip.kind,
+            originalIndex: ip.originalIndex,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      // Phase 2 — reorder ops LAST, one at a time in QUEUED (original op) order
+      // so the final paint order reflects the user's sequence of bring-to-front
+      // / send-to-back actions (last action wins z-order). Each `reorderElement`
+      // moves the element's op range, renumbering indices, so they are applied
+      // sequentially on the captured indices (valid pre-reorder); a multi-target
+      // reorder batch is rare and best-effort here — the common single-reorder
+      // case is exact.
+      reorderOps.sort((a, b) => a.originalIndex - b.originalIndex);
+      for (const ip of reorderOps) {
+        try {
+          if (
+            ip.toFront !== undefined &&
+            inPlaceHandle._doc.reorderElement(page, ip.index, ip.toFront)
+          ) {
+            inPlaceReordered++;
+          }
+        } catch (err) {
+          engineLogger.warn('applyOperations: in-place reorder failed', {
+            page,
+            index: ip.index,
+            toFront: ip.toFront,
             originalIndex: ip.originalIndex,
             error: err instanceof Error ? err.message : String(err),
           });
@@ -894,6 +1029,8 @@ export async function applyOperations(
     inPlaceMoved,
     inPlaceTransformed,
     inPlaceRestyled,
+    inPlaceOpacitySet,
+    inPlaceReordered,
     inPlaceRemoved,
   };
 }

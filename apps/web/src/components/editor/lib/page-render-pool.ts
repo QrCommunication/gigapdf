@@ -45,7 +45,7 @@ export interface SharedRenderer {
   loadDocument(source: ArrayBuffer | Uint8Array): Promise<void>;
   renderPageToDataURL(
     pageNumber: number,
-    options?: { scale?: number; skipText?: boolean },
+    options?: { scale?: number; skipText?: boolean; excludeIndices?: number[] },
   ): Promise<string>;
   dispose(): void;
 }
