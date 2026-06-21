@@ -25,7 +25,8 @@
  *     canvas hydration mid-fling, hydrates on settle ~120 ms later).
  *
  * Active page: clicking into a page sets it active (`onActivatePage`); the
- * active page renders the editable overlay (`mode="full"` in the slot).
+ * active page renders a real embedded `<EditorCanvas>` (full editing), while the
+ * other in-window pages render cheap read-only bitmaps.
  */
 
 import React, {
@@ -38,10 +39,11 @@ import React, {
   useState,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { PageObject } from "@giga-pdf/types";
+import type { PageObject, Element, Bounds, Tool } from "@giga-pdf/types";
 import { useViewStore } from "@giga-pdf/editor";
 import { clientLogger } from "@/lib/client-logger";
 import { PageSlot } from "./page-slot";
+import type { EditorCanvasHandle } from "./editor-canvas";
 import { PageRenderPool } from "./lib/page-render-pool";
 import { computePageLayout, pageIndexAtScroll } from "./lib/page-layout";
 import { readAllPageMargins, type PageMargins } from "./lib/page-margins";
@@ -71,7 +73,11 @@ export interface ContinuousPageViewProps {
   zoom: number;
   /** The PDF binary backing the page backgrounds (single source of truth). */
   pdfFile: File | null;
-  /** 0-based index of the active/focused page (editable overlay). */
+  /** Document ID (session backend) — forwarded to the active page's EditorCanvas. */
+  documentId?: string | null;
+  /** Active tool — forwarded to the active page's EditorCanvas (create/select/…). */
+  tool?: Tool;
+  /** 0-based index of the active/focused page (editable EditorCanvas). */
   activePageIndex: number;
   /** Click into a page → caller updates the active page (+ selection store). */
   onActivatePage: (index: number) => void;
@@ -84,6 +90,35 @@ export interface ContinuousPageViewProps {
    * dropped. When omitted, the draggable margin guides are not rendered.
    */
   onMarginsCommit?: (index: number, margins: PageMargins) => void;
+  /**
+   * Resolves the registered FontFace name for an embedded PDF font. Forwarded to
+   * the active page's EditorCanvas so the continuous (Word-like) view resolves
+   * embedded fonts identically to the single-page editor.
+   */
+  getFontFaceName?: (originalName: string) => string | null;
+  /**
+   * Element CREATED at mouse on the ACTIVE page. Wired to the same page.tsx
+   * handler as the single-page editor (scene graph + queue + apply-elements
+   * bake → save).
+   */
+  onElementAdded?: (element: Element) => void;
+  /**
+   * Element moved/resized/rotated or text retyped on the ACTIVE page. Wired to
+   * the same page.tsx handler as the single-page editor (queueUpdate →
+   * apply-elements bake → save), so continuous editing persists identically.
+   */
+  onElementModified?: (element: Element, oldBounds?: Bounds) => void;
+  /** Element removed on the ACTIVE page (same pipeline as single-page). */
+  onElementRemoved?: (elementId: string) => void;
+  /** Selection changed on the ACTIVE page (drives the page-scoped panels). */
+  onSelectionChanged?: (elementIds: string[]) => void;
+  /**
+   * The ACTIVE page's imperative handle. Routing this to page.tsx's
+   * `setCanvasHandle` makes the toolbar (delete/undo/redo/duplicate/format/
+   * addImage) drive the ACTIVE page automatically — the same handle the
+   * single-page editor exposes.
+   */
+  onCanvasReady?: (handle: EditorCanvasHandle) => void;
 }
 
 /**
@@ -95,11 +130,19 @@ function ContinuousPageViewImpl(
     pages,
     zoom,
     pdfFile,
+    documentId,
+    tool,
     activePageIndex,
     onActivatePage,
     showRulers = false,
     rulerUnit = "mm",
     onMarginsCommit,
+    getFontFaceName,
+    onElementAdded,
+    onElementModified,
+    onElementRemoved,
+    onSelectionChanged,
+    onCanvasReady,
   }: ContinuousPageViewProps,
   ref: React.ForwardedRef<ContinuousPageViewHandle>,
 ) {
@@ -442,6 +485,20 @@ function ContinuousPageViewImpl(
                   rulerUnit={rulerUnit}
                   margins={pageMargins[index] ?? null}
                   {...(onMarginsCommit ? { onMarginsCommit } : {})}
+                  {...(getFontFaceName ? { getFontFaceName } : {})}
+                  {...(isActive ? { documentId } : {})}
+                  {...(isActive && tool ? { tool } : {})}
+                  {...(isActive && onElementAdded ? { onElementAdded } : {})}
+                  {...(isActive && onElementModified
+                    ? { onElementModified }
+                    : {})}
+                  {...(isActive && onElementRemoved
+                    ? { onElementRemoved }
+                    : {})}
+                  {...(isActive && onSelectionChanged
+                    ? { onSelectionChanged }
+                    : {})}
+                  {...(isActive && onCanvasReady ? { onCanvasReady } : {})}
                   onActivate={onActivatePage}
                 />
               ) : null}

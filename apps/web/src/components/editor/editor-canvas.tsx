@@ -8,7 +8,6 @@ import type {
   Element,
   ShapeType,
   AnnotationType,
-  AnnotationElement,
   FieldType,
   FieldCreationKind,
   FormFieldElement,
@@ -19,6 +18,20 @@ import { clientLogger } from "@/lib/client-logger";
 // Shared PDF-background builder — the same index-0 FabricImage construction the
 // continuous-view PageCanvasHost uses, so the logic lives in one place.
 import { addPdfBackground, backgroundRenderScale } from "./lib/pdf-background";
+// Single canonical element-overlay renderer. In the continuous (Word-like)
+// view, the active page mounts this same EditorCanvas in `embedded` mode, so the
+// editable Fabric overlay is built identically there — never duplicated. The
+// single-page editor injects its embedded-font resolver + edit-time hide-mask
+// below.
+import { renderElementsOverlay as renderElementsOverlayShared } from "./render-elements";
+// Pure Fabric<->Element helpers in lib/fabric-element-io.ts, so any surface that
+// serialises Fabric objects back to Elements does so identically.
+import {
+  generateId,
+  isBoldFontWeight,
+  fabricObjectToElement as fabricObjectToElementImpl,
+  sampleBackgroundUnder as sampleBackgroundUnderImpl,
+} from "./lib/fabric-element-io";
 
 /** Zoom hard bounds (10% – 800%) shared by wheel, toolbar and fit modes. */
 const MIN_ZOOM = 0.1;
@@ -32,22 +45,6 @@ const FIELD_SNAP_DISTANCE = 4;
 
 function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
-}
-
-// API base URL for image loading
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-/**
- * Resolve image URL - prepend API base URL if it's a relative path
- */
-function resolveImageUrl(url: string): string {
-  if (!url) return "";
-  // If already absolute URL, return as-is
-  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
-    return url;
-  }
-  // Prepend API base URL for relative paths
-  return `${API_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
 /** Actions de formatage applicables aux textes sélectionnés depuis la toolbar */
@@ -188,6 +185,17 @@ export interface EditorCanvasProps {
    * par onZoomChanged — c'est au parent de remettre fitMode à null.
    */
   fitMode?: "page" | "width" | null;
+  /**
+   * Mode "intégré" : le composant est monté à l'intérieur d'un autre scroller
+   * (le défileur continu Word-like). Dans ce mode il ne possède PAS son propre
+   * viewport scrollable : pas de wrapper `overflow-auto`, pas de centrage
+   * `m-auto`, pas de padding — juste le `canvas-container` dimensionné à
+   * page×zoom. Le zoom est piloté par le parent (prop `zoom`), donc `fitMode`
+   * est forcé à null et le wheel-zoom local (qui pilotait le scroll du wrapper)
+   * laisse buller l'événement vers le scroller parent. Tout le reste (outils,
+   * édition, handle impératif, callbacks, fond text-free) est identique.
+   */
+  embedded?: boolean;
   /** Zoom recalculé par un mode fit (page/width). */
   onFitZoomChange?: (zoom: number) => void;
   /**
@@ -225,11 +233,6 @@ export interface EditorCanvasProps {
    * elements (see the Redaction tool).
    */
   onRedactionMarksChanged?: (count: number) => void;
-}
-
-// Génère un ID unique
-function generateId(): string {
-  return `el_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
 /** Tailles par défaut des widgets de formulaire, par variante de création. */
@@ -318,17 +321,6 @@ function createFormFieldElement(params: NewFormFieldParams): FormFieldElement {
   };
 }
 
-// Fabric stocke fontWeight soit en string ("bold"/"normal"/"700"), soit en
-// nombre CSS (400/600/700…). Normalise les deux conventions : toute valeur
-// numérique ≥ 600 compte comme bold (semi-bold et au-delà).
-function isBoldFontWeight(weight: string | number | undefined): boolean {
-  if (typeof weight === "number") return weight >= 600;
-  if (!weight) return false;
-  if (weight === "bold" || weight === "bolder") return true;
-  const numeric = Number.parseInt(weight, 10);
-  return Number.isFinite(numeric) && numeric >= 600;
-}
-
 // Famille de police dominante parmi les éléments texte de la page courante,
 // pondérée par la longueur du contenu (un paragraphe long pèse plus qu'une
 // puce d'un caractère). Les nouveaux textes créés par l'utilisateur héritent
@@ -355,35 +347,6 @@ function getDocumentDefaultFontFamily(elements: readonly Element[] | undefined):
   return best ?? "Arial";
 }
 
-// Bake an alpha value into a hex/rgb colour string. Used for shape fill/
-// stroke so a shape with mixed-alpha paint (fill 0.5 + stroke 1.0) keeps
-// both layers correct. Pass-through transparent / empty strings unchanged.
-function colorWithAlpha(color: string, alpha: number): string {
-  if (!color || color === "transparent" || color === "none") return "transparent";
-  const a = Math.max(0, Math.min(1, alpha ?? 1));
-  if (a >= 0.999) return color;
-  const hex = color.trim();
-  if (hex.startsWith("#")) {
-    let r = 0, g = 0, b = 0;
-    if (hex.length === 4) {
-      r = parseInt(hex[1]! + hex[1]!, 16);
-      g = parseInt(hex[2]! + hex[2]!, 16);
-      b = parseInt(hex[3]! + hex[3]!, 16);
-    } else if (hex.length === 7) {
-      r = parseInt(hex.slice(1, 3), 16);
-      g = parseInt(hex.slice(3, 5), 16);
-      b = parseInt(hex.slice(5, 7), 16);
-    } else {
-      return color;
-    }
-    return `rgba(${r}, ${g}, ${b}, ${a})`;
-  }
-  if (hex.startsWith("rgb(")) {
-    return hex.replace(/^rgb\(/, "rgba(").replace(/\)$/, `, ${a})`);
-  }
-  return color;
-}
-
 // Type helper for fabric objects with custom data
 interface FabricObjectWithData extends FabricObject {
   data?: { elementId?: string; [key: string]: unknown };
@@ -405,7 +368,8 @@ export function EditorCanvas({
   annotationType = "highlight",
   fieldType = "text",
   fieldKind = "text",
-  fitMode = null,
+  fitMode: fitModeProp = null,
+  embedded = false,
   onFitZoomChange,
   overlay,
   strokeColor = "#000000",
@@ -420,6 +384,10 @@ export function EditorCanvas({
   onHyperlinkClick,
   onRedactionMarksChanged,
 }: EditorCanvasProps) {
+  // En mode intégré, le parent (défileur continu) possède le zoom : on neutralise
+  // tout mode "fit" local (qui réécrirait le zoom depuis le viewport interne
+  // absent). En mode standalone, comportement inchangé.
+  const fitMode = embedded ? null : fitModeProp;
   const t = useTranslations("editor.canvas");
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -476,6 +444,13 @@ export function EditorCanvas({
   //   isSpaceDownRef           → tracks the Space key for "hold-to-pan" UX.
   //   isPanningRef + panStart  → tracks an in-progress pan drag.
   const zoomFromWheelRef = useRef(false);
+  // Miroir ref de `embedded` : lu par le handler mouse:wheel (enregistré une
+  // seule fois à l'init de Fabric) pour laisser le ctrl+molette buller vers le
+  // scroller parent au lieu de piloter un wrapper interne inexistant.
+  const embeddedRef = useRef(embedded);
+  useEffect(() => {
+    embeddedRef.current = embedded;
+  }, [embedded]);
   const isSpaceDownRef = useRef(false);
   const isPanningRef = useRef(false);
   const panStartRef = useRef<{
@@ -783,307 +758,9 @@ export function EditorCanvas({
 
   // Convertir un objet Fabric.js en Element
   const fabricObjectToElement = useCallback(
-    (obj: FabricObjectWithData): Element | null => {
-      const elementId = obj.data?.elementId || generateId();
-      const scaleX = obj.scaleX ?? 1;
-      const scaleY = obj.scaleY ?? 1;
-
-      // Base element properties matching ElementBase interface
-      const baseElement = {
-        elementId,
-        bounds: {
-          x: obj.left || 0,
-          y: obj.top || 0,
-          width: (obj.width || 100) * scaleX,
-          height: (obj.height || 100) * scaleY,
-        },
-        transform: {
-          rotation: obj.angle || 0,
-          scaleX: 1, // Already applied to bounds
-          scaleY: 1,
-          skewX: obj.skewX || 0,
-          skewY: obj.skewY || 0,
-        },
-        layerId: null,
-        locked: !obj.selectable,
-        visible: obj.visible ?? true,
-      };
-
-      // Check object type using Fabric's `type` property (stable string).
-      // We CANNOT use obj.constructor.name here — production bundlers minify
-      // class names (IText becomes "t" in Turbopack output), so any check
-      // against "IText"/"Rect"/etc. silently fails and fabricObjectToElement
-      // returns null. The Fabric `type` getter returns the same string in
-      // dev and prod ("i-text", "rect", "image", …) and is the canonical
-      // way to discriminate Fabric object types.
-      const typeName = (obj as FabricObject & { type?: string }).type ?? "";
-
-      if (typeName === "i-text" || typeName === "text" || typeName === "textbox") {
-        const textObj = obj as FabricObjectWithData & {
-          text?: string;
-          fontSize?: number;
-          fontFamily?: string;
-          fontWeight?: string | number;
-          fontStyle?: string;
-          fill?: string;
-          textAlign?: string;
-          lineHeight?: number;
-          charSpacing?: number;
-          originY?: string;
-        };
-        const textObjWithStyles = textObj as typeof textObj & {
-          underline?: boolean;
-          linethrough?: boolean;
-          textBackgroundColor?: string;
-        };
-        const data = (obj as FabricObjectWithData).data;
-        const fontSize = textObj.fontSize || 16;
-
-        // Inverse of the renderer transform: Fabric IText was created with
-        //   top = bounds.y + fontSize + descenderOffset, originY = 'bottom'
-        // so the PDF baseline = top - descenderOffset = bounds.y + fontSize.
-        // To recover the original bounds.y (= top of glyph in browser coords)
-        // we therefore subtract (fontSize + descenderOffset) from obj.top.
-        // Storing bounds.y as the baseline (the previous behaviour) put the
-        // mask 1 fontSize below the glyph — confirmed via mutool show on a
-        // baked v32 of the Free invoice — and produced the LICHALICHA2 doublon.
-        const isOriginYBottom = textObj.originY === "bottom";
-        const descenderOffset = isOriginYBottom ? fontSize * 0.22 : 0;
-        const topOfGlyphY = (obj.top || 0) - descenderOffset - fontSize;
-
-        // Preserve the parser-extracted PDF font name so the bake side
-        // (apply-elements -> updateText -> font lookup) can re-use the
-        // SAME font as the original glyph instead of falling back to a
-        // generic Arial. The Fabric fontFamily ("gigapdf-…") is only valid
-        // in the browser FontFace registry, never on the server-side
-        // pdf-engine, so we must hand back originalFont separately.
-        const originalFont = (data?.originalFont as string | null) ?? null;
-        const fontFamilyForRoundTrip =
-          originalFont || textObj.fontFamily || "Arial";
-
-        return {
-          ...baseElement,
-          // Top-left corner of the glyph bbox in browser coords. height = fontSize
-          // covers approximately ascender+descender — close enough to mask the
-          // glyph cleanly without bleeding into the line above/below.
-          bounds: {
-            x: obj.left || 0,
-            y: topOfGlyphY,
-            width: (obj.width || 100) * scaleX,
-            height: fontSize,
-          },
-          type: "text" as const,
-          content: textObj.text || "",
-          style: {
-            fontFamily: fontFamilyForRoundTrip,
-            fontSize,
-            // Numeric CSS weights (600/700) must round-trip as "bold" too —
-            // applyTextFormat and parsed PDFs can both produce them.
-            fontWeight: isBoldFontWeight(textObj.fontWeight) ? "bold" : "normal",
-            fontStyle: textObj.fontStyle === "italic" ? "italic" : "normal",
-            color: (textObj.fill as string) || "#000000",
-            opacity: obj.opacity ?? 1,
-            textAlign: (textObj.textAlign as "left" | "center" | "right" | "justify") || "left",
-            lineHeight: textObj.lineHeight || 1.2,
-            letterSpacing: textObj.charSpacing || 0,
-            writingMode: "horizontal-tb" as const,
-            underline: textObjWithStyles.underline || false,
-            strikethrough: textObjWithStyles.linethrough || false,
-            backgroundColor: textObjWithStyles.textBackgroundColor || null,
-            verticalAlign: "baseline" as const,
-            originalFont,
-          },
-          ocrConfidence: null,
-          linkUrl: (data?.linkUrl as string) || null,
-          linkPage: (data?.linkPage as number) || null,
-          // Carry the ORIGINAL engine run index (stamped onto data by the
-          // renderer for parsed runs) so an edited text run keeps its in-place
-          // identity: apply-operations uses it to fire replaceText/moveElement
-          // instead of redact+add. Never regenerated — newly-added text has no
-          // index in data, so this stays undefined and falls back to add.
-          index: data?.index as number | undefined,
-        };
-      }
-
-      if (typeName === "image") {
-        const imgObj = obj as FabricObjectWithData & {
-          getSrc?: () => string;
-          width?: number;
-          height?: number;
-          scaleX?: number;
-          scaleY?: number;
-        };
-        const rawSrc = imgObj.getSrc?.() ?? "";
-        // Sniff the actual mimetype from the data URL prefix so the backend
-        // can pick the right embed path (pdf-lib only handles PNG and JPEG;
-        // anything else must be flagged here, not silently mislabelled "png"
-        // and re-detected by header bytes downstream).
-        const mimeMatch = rawSrc.match(/^data:image\/(png|jpe?g|webp|gif|avif);base64,/i);
-        const detected = mimeMatch?.[1]?.toLowerCase().replace("jpeg", "jpg");
-        const originalFormat: string = detected ?? "png";
-        return {
-          ...baseElement,
-          type: "image" as const,
-          source: {
-            type: "embedded" as const,
-            dataUrl: rawSrc,
-            originalFormat,
-            originalDimensions: {
-              width: imgObj.width || 100,
-              height: imgObj.height || 100,
-            },
-          },
-          style: {
-            opacity: obj.opacity ?? 1,
-            blendMode: "normal" as const,
-          },
-          crop: null,
-        };
-      }
-
-      // Annotations are stored as Fabric Rect/Line/Circle but carry a
-      // data.annotationType marker. If we returned them as "shape" they'd
-      // be drawn as regular graphics and the /Annot dict would never be
-      // created — annotations must come out as AnnotationElement so the
-      // backend renderer produces real PDF annotations (highlight,
-      // underline, sticky note, freetext…).
-      const dataAnnotationType = (obj.data?.annotationType ?? null) as
-        | null
-        | 'highlight'
-        | 'underline'
-        | 'strikeout'
-        | 'strikethrough'
-        | 'squiggly'
-        | 'note'
-        | 'comment'
-        | 'freetext'
-        | 'stamp'
-        | 'line'
-        | 'arrow'
-        | 'link';
-      if (dataAnnotationType) {
-        const isLineLike = dataAnnotationType === 'line' || dataAnnotationType === 'arrow';
-        return {
-          ...baseElement,
-          type: 'annotation' as const,
-          annotationType: dataAnnotationType,
-          content: (obj.data?.content as string) ?? '',
-          style: {
-            color: (obj.stroke as string) || (obj.fill as string) || '#ffff00',
-            opacity: obj.opacity ?? 1,
-            // strokeWidth drives the line/arrow thickness in the PDF annotation.
-            ...(isLineLike
-              ? { strokeWidth: (obj.data?.strokeWidth as number) ?? (obj.strokeWidth as number) ?? 2 }
-              : {}),
-          },
-          linkDestination: (obj.data?.linkDestination as AnnotationElement['linkDestination']) ?? null,
-          popup: null,
-          author: (obj.data?.author as string) ?? undefined,
-          // For line/arrow, explicit endpoints when present; otherwise the
-          // backend renderer falls back to the diagonal of `bounds`.
-          ...(isLineLike && obj.data?.linePoints
-            ? { linePoints: obj.data.linePoints as AnnotationElement['linePoints'] }
-            : {}),
-          // quads is omitted — renderer falls back to bounds when undefined
-        } as AnnotationElement;
-      }
-
-      // Form fields — testés AVANT la branche shapes : un champ re-rendu par
-      // renderElementsOverlay est un Rect Fabric, qui matcherait sinon la
-      // branche shape et perdrait son identité de champ.
-      // Source de vérité : data.formFieldElement (élément complet stocké à
-      // la création ET par renderElementsOverlay), re-fusionné avec les
-      // bounds/transform réels de l'objet Fabric — déplacement/resize pris
-      // en compte SANS perdre les propriétés métier (options, required,
-      // multiline, format…).
-      const storedFormField = obj.data?.formFieldElement as
-        | FormFieldElement
-        | undefined;
-      if (storedFormField && storedFormField.type === "form_field") {
-        return {
-          ...storedFormField,
-          ...baseElement,
-          type: "form_field" as const,
-          fieldType: storedFormField.fieldType,
-        };
-      }
-
-      if (["rect", "circle", "triangle", "ellipse", "line"].includes(typeName)) {
-        let shapeTypeResult: ShapeType = "rectangle";
-        if (typeName === "circle") shapeTypeResult = "circle";
-        if (typeName === "ellipse") shapeTypeResult = "ellipse";
-        if (typeName === "line") shapeTypeResult = "line";
-        if (typeName === "triangle") shapeTypeResult = "triangle";
-
-        return {
-          ...baseElement,
-          type: "shape" as const,
-          shapeType: shapeTypeResult,
-          geometry: {
-            points: [],
-            pathData: null,
-            cornerRadius: 0,
-          },
-          style: {
-            fillColor: (obj.fill as string) || null,
-            fillOpacity: obj.opacity ?? 1,
-            strokeColor: (obj.stroke as string) || null,
-            strokeWidth: obj.strokeWidth || 1,
-            strokeOpacity: 1,
-            strokeDashArray: [],
-          },
-        };
-      }
-
-      // Fallback legacy : Groups créés avant l'introduction de
-      // data.formFieldElement (dont la zone de signature du draw tool).
-      if (obj.data?.formFieldType) {
-        const ft = obj.data.formFieldType as FieldType;
-        const isBooleanField = ft === "checkbox";
-        const isRadioField = ft === "radio";
-        const isListField = ft === "dropdown" || ft === "listbox";
-        return {
-          ...baseElement,
-          type: "form_field" as const,
-          fieldType: ft,
-          fieldName: (obj.data.fieldName as string) ?? `${ft}_${Date.now()}`,
-          value: isBooleanField
-            ? false
-            : isRadioField
-              ? ((obj.data.exportValue as string) ?? "")
-              : isListField
-                ? []
-                : "",
-          defaultValue: isBooleanField ? false : isListField ? [] : "",
-          options:
-            isListField || isRadioField
-              ? ((obj.data.options as string[]) ?? (isListField ? [] : null))
-              : null,
-          properties: {
-            required: Boolean(obj.data.required),
-            readOnly: false,
-            maxLength: null,
-            multiline: Boolean(obj.data.multiline),
-            password: false,
-            comb: false,
-          },
-          style: {
-            fontFamily: "Arial",
-            fontSize: 12,
-            textColor: "#000000",
-            backgroundColor: "#ffffff",
-            borderColor: "#cccccc",
-            borderWidth: 1,
-          },
-          format: { type: "none" as const, pattern: null },
-          placeholder: (obj.data.placeholder as string) || null,
-          tooltip: null,
-        };
-      }
-
-      return null;
-    },
-    []
+    (obj: FabricObjectWithData): Element | null =>
+      fabricObjectToElementImpl(obj),
+    [],
   );
 
   // Suppression des événements de sélection pendant applyLocalElementUpdate :
@@ -1116,122 +793,14 @@ export function EditorCanvas({
   // all four sides so the glyph itself never contaminates the sample.
   // Returns rgb() string, or null if the canvas is unreadable (cross-
   // origin tainted, scaled to 0, etc.).
-  const sampleBackgroundUnder = useCallback((
-    obj: FabricObject,
-    textRgb?: [number, number, number] | null,
-  ): string | null => {
-    const o = obj as unknown as {
-      left?: number;
-      top?: number;
-      width?: number;
-      height?: number;
-      originY?: string;
-      canvas?: { lowerCanvasEl?: HTMLCanvasElement; getZoom?: () => number };
-    };
-    const lower = o.canvas?.lowerCanvasEl;
-    if (!lower) return null;
-    const ctx = lower.getContext("2d");
-    if (!ctx) return null;
-    const zoom = o.canvas?.getZoom?.() ?? 1;
-    const left = o.left ?? 0;
-    const top = o.top ?? 0;
-    const width = o.width ?? 0;
-    const height = o.height ?? 0;
-    // For text we use originY='bottom' (top = baseline). Translate to a
-    // top-left bbox so the probes land in the right places.
-    const topLeftY = o.originY === "bottom" ? top - height : top;
-
-    // Probe a fan of points spread across:
-    //   - the inside of the bbox (between glyphs we mostly hit the background)
-    //   - the immediate edge (1-2 px out of the glyph but still inside any
-    //     thin coloured band, e.g. the red "Somme à payer" banner)
-    //   - the wider edge (4-6 px out, captures larger uniform areas)
-    // We then drop pixels that match the text colour (so the glyph itself
-    // doesn't contaminate the result) and pick the dominant remaining shade.
-    const probes: Array<[number, number]> = [];
-    // Inside bbox sweep
-    for (let f = 0.1; f <= 0.9; f += 0.1) {
-      probes.push([left + width * f, topLeftY + height * 0.5]);
-    }
-    // Top / bottom edges (just inside, then 2px and 5px outside)
-    for (const dy of [-5, -2, 1, height - 1, height + 2, height + 5]) {
-      probes.push([left + width * 0.5, topLeftY + dy]);
-      probes.push([left + width * 0.25, topLeftY + dy]);
-      probes.push([left + width * 0.75, topLeftY + dy]);
-    }
-    // Left / right edges
-    for (const dx of [-5, -2, width + 2, width + 5]) {
-      probes.push([left + dx, topLeftY + height * 0.5]);
-    }
-
-    const counts = new Map<string, number>();
-    for (const [cx, cy] of probes) {
-      const px = Math.round(cx * zoom);
-      const py = Math.round(cy * zoom);
-      if (px < 0 || py < 0 || px >= lower.width || py >= lower.height) continue;
-      let pixel: Uint8ClampedArray;
-      try {
-        pixel = ctx.getImageData(px, py, 1, 1).data;
-      } catch {
-        return null; // tainted canvas (CORS) — cannot read
-      }
-      const r = pixel[0]!;
-      const g = pixel[1]!;
-      const b = pixel[2]!;
-      // Skip pixels that match the text colour within ±20 — they are
-      // glyph fragments, not background.
-      if (textRgb) {
-        const dr = Math.abs(r - textRgb[0]);
-        const dg = Math.abs(g - textRgb[1]);
-        const db = Math.abs(b - textRgb[2]);
-        if (dr < 20 && dg < 20 && db < 20) continue;
-      }
-      // Quantize to 8-step buckets so anti-aliasing fringes vote together.
-      // Math.round(255/8)*8 = 256 — clamp back into [0, 255] so the rgb()
-      // string we forward to apply-elements stays in pdf-lib's valid range
-      // (it rejects red/green/blue > 1.0 with a misleading 500).
-      const qr = Math.min(255, Math.round(r / 8) * 8);
-      const qg = Math.min(255, Math.round(g / 8) * 8);
-      const qb = Math.min(255, Math.round(b / 8) * 8);
-      const key = `${qr},${qg},${qb}`;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    if (counts.size === 0) return null;
-    const [winner] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]!;
-    const [r, g, b] = winner.split(",").map((n) => Number(n));
-    return `rgb(${r}, ${g}, ${b})`;
-  }, []);
-
-  // Parse a CSS colour string like '#ffffff' or 'rgb(255, 0, 0)' into rgb tuple.
-  // Returns null for unsupported formats — caller skips text-colour filtering.
-  const parseColorToRgb = useCallback(
-    (color: string | undefined | null): [number, number, number] | null => {
-      if (!color) return null;
-      const c = color.trim().toLowerCase();
-      if (c.startsWith("#")) {
-        const hex = c.slice(1);
-        if (hex.length === 3) {
-          return [
-            parseInt(hex[0]! + hex[0]!, 16),
-            parseInt(hex[1]! + hex[1]!, 16),
-            parseInt(hex[2]! + hex[2]!, 16),
-          ];
-        }
-        if (hex.length === 6) {
-          return [
-            parseInt(hex.slice(0, 2), 16),
-            parseInt(hex.slice(2, 4), 16),
-            parseInt(hex.slice(4, 6), 16),
-          ];
-        }
-        return null;
-      }
-      const m = c.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-      if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
-      return null;
-    },
+  const sampleBackgroundUnder = useCallback(
+    (
+      obj: FabricObject,
+      textRgb?: [number, number, number] | null,
+    ): string | null => sampleBackgroundUnderImpl(obj, textRgb),
     [],
   );
+
 
   // --- Masquage réel d'un élément "caché" (toggle œil du panneau calques) ---
   //
@@ -1343,41 +912,28 @@ export function EditorCanvas({
     if (!e.target) return;
     const obj = e.target as FabricObjectWithData;
     const typeName = (obj as FabricObject & { type?: string }).type ?? "";
-
-    if (typeName === "i-text" || typeName === "textbox" || typeName === "text") {
-      const elementId = obj.data?.elementId;
-      const currentText = (obj as FabricObjectWithData & { text?: string }).text || "";
-
-      if (elementId) {
-        originalContentRef.current.set(elementId, currentText);
-      }
-
-      const realFill = (obj.data?.originalFill as string | undefined) || "#000000";
-      // Order of preference for the masking colour:
-      //   1. the parser-extracted background (style.backgroundColor) if
-      //      present — most accurate when the PDF has an explicit text bg
-      //   2. the live pixel sample around the glyph (handles red banners,
-      //      coloured cards, gradients) — works for the vast majority of
-      //      real-world PDFs
-      //   3. fall back to white only if the canvas is unreadable
-      const parsedBg = obj.data?.originalBgColor;
-      const sampledBg = sampleBackgroundUnder(
-        obj as FabricObject,
-        parseColorToRgb(realFill),
-      );
-      const realBg =
-        (parsedBg && parsedBg !== "" && parsedBg !== "transparent" && parsedBg)
-        || sampledBg
-        || "#ffffff";
-      (obj as FabricObject & { set: (...args: unknown[]) => void }).set({
-        fill: realFill,
-        textBackgroundColor: realBg,
-        borderColor: "rgba(0, 100, 200, 0.6)",
-      });
-      const canvas = (obj as FabricObject & { canvas?: { requestRenderAll?: () => void } }).canvas;
-      canvas?.requestRenderAll?.();
+    if (typeName !== "i-text" && typeName !== "textbox" && typeName !== "text") {
+      return;
     }
-  }, [sampleBackgroundUnder, parseColorToRgb]);
+    // DIRECT-TEXT model: the page is rasterised WITHOUT text, so this overlay is
+    // already the visible text in its real colour — there is no glyph beneath to
+    // mask. Just remember the original content (to detect a real change on exit)
+    // and show a subtle edit border. No fill/background mutation, so editing
+    // works over any background (gradients included).
+    const elementId = obj.data?.elementId;
+    const currentText =
+      (obj as FabricObjectWithData & { text?: string }).text || "";
+    if (elementId) {
+      originalContentRef.current.set(elementId, currentText);
+    }
+    (obj as FabricObject & { set: (...args: unknown[]) => void }).set({
+      borderColor: "rgba(0, 100, 200, 0.6)",
+    });
+    const canvas = (
+      obj as FabricObject & { canvas?: { requestRenderAll?: () => void } }
+    ).canvas;
+    canvas?.requestRenderAll?.();
+  }, []);
 
   // Handler appele quand le texte change en temps reel
   const handleTextChanged = useCallback((e: { target?: FabricObject }) => {
@@ -1408,37 +964,11 @@ export function EditorCanvas({
     const originalText = elementId ? originalContentRef.current.get(elementId) : undefined;
     const contentChanged = originalText !== undefined && originalText !== currentText;
 
+    // DIRECT-TEXT model: the text stays VISIBLE in its real colour whether or
+    // not it changed (no mask, never invisible — the raster under it has no
+    // text). Only reset the edit border.
     const set = (obj as FabricObject & { set: (...args: unknown[]) => void }).set;
-    if (contentChanged) {
-      // User edited the text. Keep it visible with a SOLID background that
-      // matches the real PDF colour beneath (sampled live), so the stale
-      // native glyph stays hidden without slapping a white box on coloured
-      // banners. Same priority order as edit-enter.
-      const parsedBg = obj.data?.originalBgColor;
-      const sampledBg = sampleBackgroundUnder(
-        obj as FabricObject,
-        parseColorToRgb((obj.data?.originalFill as string | undefined) ?? "#000000"),
-      );
-      const matchingBg =
-        (parsedBg && parsedBg !== "" && parsedBg !== "transparent" && parsedBg)
-        || sampledBg
-        || "#ffffff";
-      set.call(obj, {
-        fill: obj.data?.originalFill || "#000000",
-        textBackgroundColor: matchingBg,
-        borderColor: "rgba(0, 100, 200, 0.75)",
-      });
-    } else {
-      // No change — restore the invisible-overlay state for 1:1 fidelity.
-      // Border stays visible while the object remains the active target so
-      // the user keeps the visual selection feedback (Fabric only paints
-      // the border on the active object anyway, so other glyphs are clean).
-      set.call(obj, {
-        fill: "rgba(0,0,0,0)",
-        textBackgroundColor: "",
-        borderColor: "rgba(0, 100, 200, 0.75)",
-      });
-    }
+    set.call(obj, { borderColor: "rgba(0, 100, 200, 0.75)" });
     const canvas = (obj as FabricObject & { canvas?: { requestRenderAll?: () => void } }).canvas;
     canvas?.requestRenderAll?.();
 
@@ -1461,7 +991,7 @@ export function EditorCanvas({
         onElementModifiedRef.current?.(updatedElement, oldBounds);
       }
     }
-  }, [sampleBackgroundUnder, parseColorToRgb, fabricObjectToElement]);
+  }, [fabricObjectToElement]);
 
   const handleObjectModified = useCallback(
     (e: { target?: FabricObject }) => {
@@ -2125,6 +1655,14 @@ export function EditorCanvas({
       canvas.on("mouse:wheel", (opt) => {
         const event = opt.e as WheelEvent;
 
+        // Mode intégré : le scroll ET le zoom appartiennent au scroller parent.
+        // On ne preventDefault rien → l'événement bulle (ctrl+molette = zoom
+        // parent, molette seule = scroll continu). Pas de wrapper local à
+        // piloter ici.
+        if (embeddedRef.current) {
+          return;
+        }
+
         if (event.ctrlKey || event.metaKey) {
           event.preventDefault();
           event.stopPropagation();
@@ -2308,509 +1846,24 @@ export function EditorCanvas({
   // useCallback (et non simple const) : référencé par le useEffect qui expose
   // EditorCanvasHandle — sans identité stable, le handle serait reconstruit à
   // chaque render. Seule dépendance réelle : getFontFaceName (fonts embarquées).
-  const renderElementsOverlay = useCallback(async (
-    canvas: FabricCanvas,
-    elements: Element[],
-    fabricModule: typeof import("fabric")
-  ): Promise<void> => {
-    const { Rect, Circle, Ellipse, Triangle, Line, IText, FabricImage, Path: FabricPath, Polygon } = fabricModule;
-
-    // Collect image-load promises to await them all before the final renderAll
-    const imageLoadPromises: Promise<void>[] = [];
-
-    // 1. SORT BY Z-ORDER LAYER: shapes (background fills, banner rectangles)
-    //    must render BEHIND text and images. Without this, a red banner shape
-    //    extracted later in the parser ends up on top of its own text label,
-    //    making it unreadable. Layer order: shape < image < text < annotation < form_field.
-    const layerRank: Record<string, number> = {
-      shape: 0,
-      image: 1,
-      draw: 2,
-      text: 3,
-      annotation: 4,
-      form_field: 5,
-    };
-    const sortedElements = [...elements].sort((a, b) => {
-      const ra = layerRank[a.type] ?? 99;
-      const rb = layerRank[b.type] ?? 99;
-      return ra - rb;
-    });
-
-    // 2. DEDUPLICATE near-identical text runs. PDFs sometimes render the
-    //    same string twice — generators do this for shadow/relief effects,
-    //    or because they layer a vector outline (custom font) above an
-    //    invisible selectable-text trace (system font fallback). Both
-    //    cases produce two stacked IText objects in our scene graph; the
-    //    user sees a doubled title and clicking one selects the wrong
-    //    layer.
-    //
-    //    The signature deliberately ignores fontFamily because the duplicate
-    //    typically uses a different family (embedded outline vs Helvetica
-    //    fallback). Matching on content + rounded fontSize + tight position
-    //    (≤2px) is enough — wider tolerance kills legitimate repeats like
-    //    "RONY LICHA" appearing twice on a billing page (sender + recipient).
-    //    A real shadow/outline duplicate sits within sub-pixel of its twin;
-    //    if x or y differs by >2 px the layout intentionally placed two
-    //    runs and we must keep both.
-    // Two-tier dedupe heuristic:
-    //   1. Same content + same colour + within 2px both axes  → shadow/outline
-    //      (drop the second occurrence)
-    //   2. Same content + same colour + same X (≤3px) + ANY Y → save-loop
-    //      duplicate (form re-renders that bake the overlay back into the
-    //      PDF and re-parse it). Drop the second occurrence too.
-    //   Otherwise (same content, different X) it is a legitimate cross-line
-    //   repeat such as "RONY LICHA" appearing on two address lines, both
-    //   on the same y but offset horizontally — keep both.
-    //
-    //   Colour is part of the signature so a white "6,99€" on a red banner
-    //   does not get killed by a black drop-shadow twin that appeared first
-    //   in the parser stream.
-    const seenTextSignatures = new Map<string, Array<{ x: number; y: number }>>();
-    const dedupedElements = sortedElements.filter((el) => {
-      if (el.type !== "text") return true;
-      const textElement = el as Extract<Element, { type: "text" }>;
-      const colourKey = (textElement.style.color || "#000000").toLowerCase();
-      const sig = `${textElement.content}|${Math.round(textElement.style.fontSize)}|${colourKey}`;
-      const positions = seenTextSignatures.get(sig);
-      const here = { x: textElement.bounds.x, y: textElement.bounds.y };
-      if (!positions) {
-        seenTextSignatures.set(sig, [here]);
-        return true;
-      }
-      const isDuplicate = positions.some((p) => {
-        const dx = Math.abs(p.x - here.x);
-        const dy = Math.abs(p.y - here.y);
-        const shadowOverlap = dx <= 2 && dy <= 2;
-        const verticalStack = dx <= 3; // same column, ANY Y → save-loop dupe
-        return shadowOverlap || verticalStack;
+  const renderElementsOverlay = useCallback(
+    async (
+      canvas: FabricCanvas,
+      elements: Element[],
+      fabricModule: typeof import("fabric"),
+    ): Promise<void> => {
+      // Delegate to the single canonical overlay renderer (render-elements.ts).
+      // The continuous view (PageCanvasHost) calls the SAME function, so both
+      // surfaces build the Fabric overlay identically (invisible 1:1-fidelity
+      // hit-targets). We inject the single-page editor's embedded-font resolver
+      // and edit-time hide-mask; everything else lives in one place.
+      await renderElementsOverlayShared(canvas, elements, fabricModule, {
+        applyHideMask,
+        ...(getFontFaceName ? { getFontFaceName } : {}),
       });
-      if (isDuplicate) return false;
-      positions.push(here);
-      return true;
-    });
-
-    for (const element of dedupedElements) {
-      // Guard: skip elements with missing or zero-size bounds
-      if (!element.bounds || element.bounds.width <= 0 || element.bounds.height <= 0) {
-        continue;
-      }
-
-      const baseOptions = {
-        left: element.bounds.x,
-        top: element.bounds.y,
-        // Fabric 6.x defaults to originX/Y: 'center' which treats left/top as
-        // the OBJECT CENTER. Parser produces top-left coords, so force origin
-        // to 'left'/'top' to avoid visual offset of width/2, height/2.
-        originX: "left" as const,
-        originY: "top" as const,
-        angle: element.transform?.rotation || 0,
-        selectable: !element.locked,
-        evented: !element.locked,
-        visible: element.visible,
-      };
-
-      let fabricObj: FabricObject | null = null;
-
-      switch (element.type) {
-        case "text": {
-          const textElement = element;
-          // Resolved colour (kept on .data so edit mode can restore it)
-          const textColour = textElement.style.color || "#000000";
-          // pdf-engine text-extractor stores bounds.{x,y} at the TOP-LEFT
-          // of the glyph bbox (= baseline - fontSize approximated as ascender).
-          // For Fabric's baseline to land on the PDF baseline (= bounds.y +
-          // fontSize), use originY='bottom' with top = bounds.y + fontSize +
-          // descender. Without the descender (~22% of fontSize), Fabric
-          // would put its bbox bottom (= baseline + descender) at the PDF
-          // baseline, overshooting by descender — visible as a "léger
-          // décalage vers le bas" of the editable overlay.
-          const _fontSize = textElement.style.fontSize ?? 12;
-          const _descenderOffset = _fontSize * 0.22;
-          const _baselineY = textElement.bounds.y + _fontSize;
-          const textObj = new IText(textElement.content || "", {
-            ...baseOptions,
-            top: _baselineY + _descenderOffset,
-            originY: "bottom" as const,
-            width: textElement.bounds.width,
-            fontSize: _fontSize,
-            fontFamily: (() => {
-              const orig = textElement.style.originalFont;
-              if (orig && getFontFaceName) {
-                const registered = getFontFaceName(orig);
-                if (registered) return registered;
-              }
-              return textElement.style.fontFamily || "Helvetica";
-            })(),
-            fontWeight: textElement.style.fontWeight || "normal",
-            fontStyle: textElement.style.fontStyle || "normal",
-            // 1:1 fidelity mode: text is INVISIBLE in view (PDF native text shows
-            // through), but kept selectable as a click hit-target for editing.
-            // We stash the real colour in data.originalFill so on edit-enter we
-            // can show the editor cursor + a faint highlight, and on edit-exit
-            // restore back to invisible.
-            fill: "rgba(0,0,0,0)",
-            opacity: 1,
-            textAlign: textElement.style.textAlign || "left",
-            lineHeight: textElement.style.lineHeight || 1.2,
-            charSpacing: (textElement.style.letterSpacing || 0) * 10,
-            underline: textElement.style.underline || false,
-            linethrough: textElement.style.strikethrough || false,
-            textBackgroundColor: "",
-            cursorColor: textColour,
-            cursorWidth: 1,
-            // Selection visuals stay subtle so we don't pollute the page
-            selectionColor: "rgba(0, 100, 200, 0.18)",
-            // Selected state must be visually obvious — without a visible
-            // border + controls the user clicks the title and sees nothing
-            // change, then concludes "the editor is broken". Fabric only
-            // draws border/controls when the object is the active target,
-            // so this stays clean for the unselected glyphs.
-            hasControls: true,
-            hasBorders: true,
-            borderColor: "rgba(0, 100, 200, 0.75)",
-            borderScaleFactor: 1,
-            cornerColor: "rgb(0, 100, 200)",
-            cornerStrokeColor: "#ffffff",
-            cornerSize: 8,
-            transparentCorners: false,
-          });
-          (textObj as FabricObjectWithData).data = {
-            elementId: textElement.elementId,
-            type: "text",
-            originalFont: textElement.style.originalFont,
-            originalFill: textColour,
-            originalBgColor: textElement.style.backgroundColor || "",
-            linkUrl: textElement.linkUrl,
-            linkPage: textElement.linkPage,
-          };
-          // Style hyperlinks
-          if ((textElement.linkUrl || textElement.linkPage) && !textElement.style.underline) {
-            textObj.set({ underline: true });
-          }
-          fabricObj = textObj;
-          break;
-        }
-
-        case "image": {
-          const imgElement = element;
-          if (imgElement.source?.dataUrl) {
-            const imageUrl = resolveImageUrl(imgElement.source.dataUrl);
-            const originalWidth = imgElement.source.originalDimensions?.width || imgElement.bounds.width;
-            const originalHeight = imgElement.source.originalDimensions?.height || imgElement.bounds.height;
-            const targetScaleX = imgElement.bounds.width / (originalWidth || 1);
-            const targetScaleY = imgElement.bounds.height / (originalHeight || 1);
-
-            const loadPromise = FabricImage.fromURL(imageUrl, { crossOrigin: "anonymous" })
-              .then((img: FabricObject) => {
-                img.set({
-                  ...baseOptions,
-                  scaleX: targetScaleX,
-                  scaleY: targetScaleY,
-                  opacity: imgElement.style?.opacity ?? 1,
-                });
-                (img as FabricObjectWithData).data = {
-                  elementId: imgElement.elementId,
-                  type: "image",
-                };
-                canvas.add(img);
-              })
-              .catch((err) => {
-                clientLogger.error("[EditorCanvas] Failed to load image element:", imgElement.elementId, err);
-              });
-            imageLoadPromises.push(loadPromise);
-          }
-          break;
-        }
-
-        case "shape": {
-          const shapeElement = element;
-          const hasStroke = shapeElement.style.strokeColor && shapeElement.style.strokeWidth > 0;
-          const hasFill = !!shapeElement.style.fillColor;
-          // 1:1 fidelity mode: shapes from the source PDF are visible via the
-          // pdfjs-rendered background image. The Fabric overlay only needs to
-          // exist as a click hit-target. Stash original styling on .data so
-          // the properties panel + edit mode can restore them.
-          const fillCss = hasFill
-            ? colorWithAlpha(shapeElement.style.fillColor as string, shapeElement.style.fillOpacity ?? 1)
-            : "transparent";
-          const strokeCss = hasStroke
-            ? colorWithAlpha(shapeElement.style.strokeColor as string, shapeElement.style.strokeOpacity ?? 1)
-            : "transparent";
-          const shapeOptions = {
-            ...baseOptions,
-            // Transparent in view; data.* keeps the real values for editing.
-            fill: "transparent",
-            stroke: "transparent",
-            strokeWidth: 0,
-            opacity: 1,
-            // Make the selected state obvious — same rationale as text overlays.
-            hasControls: true,
-            hasBorders: true,
-            borderColor: "rgba(0, 100, 200, 0.75)",
-            cornerColor: "rgb(0, 100, 200)",
-            cornerStrokeColor: "#ffffff",
-            cornerSize: 8,
-            transparentCorners: false,
-          };
-          // Eslint-keep references — used when entering edit mode
-          void fillCss; void strokeCss;
-          const w = shapeElement.bounds.width;
-          const h = shapeElement.bounds.height;
-
-          switch (shapeElement.shapeType) {
-            case "rectangle":
-              fabricObj = new Rect({
-                ...shapeOptions,
-                width: w,
-                height: h,
-                rx: shapeElement.geometry?.cornerRadius || 0,
-                ry: shapeElement.geometry?.cornerRadius || 0,
-              });
-              break;
-            case "circle":
-              fabricObj = new Circle({ ...shapeOptions, radius: w / 2 });
-              break;
-            case "ellipse":
-              fabricObj = new Ellipse({ ...shapeOptions, rx: w / 2, ry: h / 2 });
-              break;
-            case "line":
-            case "arrow":
-              fabricObj = new Line([0, 0, w, 0], shapeOptions);
-              break;
-            case "triangle":
-              fabricObj = new Triangle({ ...shapeOptions, width: w, height: h });
-              break;
-            case "polygon": {
-              // fabric.Polygon needs an explicit points array. We have it on
-              // geometry.points (already in canvas coords).
-              const pts = shapeElement.geometry?.points ?? [];
-              if (pts.length >= 3) {
-                fabricObj = new Polygon(pts, shapeOptions);
-              } else {
-                fabricObj = new Rect({ ...shapeOptions, width: w, height: h });
-              }
-              break;
-            }
-            case "path":
-            default: {
-              // Render via SVG pathData when available — required for any
-              // shape with Bezier curves (logos, icons, complex outlines).
-              // Falling back to Rect would render a meaningless filled box.
-              const pathData = shapeElement.geometry?.pathData;
-              if (pathData) {
-                // Fabric.Path positions itself at the path's own bounding box
-                // top-left, then offsets via left/top. Pass the bounds origin
-                // explicitly so the path keeps its absolute canvas position.
-                fabricObj = new FabricPath(pathData, {
-                  ...shapeOptions,
-                  // Override bounds.{x,y} from baseOptions to use the path's
-                  // intrinsic bbox; otherwise the path is double-translated.
-                  left: shapeElement.bounds.x,
-                  top: shapeElement.bounds.y,
-                  originX: "left",
-                  originY: "top",
-                  // fabric.Path computes its own width/height from the path —
-                  // do not override.
-                });
-              } else {
-                fabricObj = new Rect({ ...shapeOptions, width: w, height: h });
-              }
-            }
-          }
-          if (fabricObj) {
-            (fabricObj as FabricObjectWithData).data = {
-              elementId: shapeElement.elementId,
-              type: "shape",
-              originalFill: hasFill ? fillCss : null,
-              originalStroke: hasStroke ? strokeCss : null,
-              originalStrokeWidth: hasStroke ? shapeElement.style.strokeWidth : 0,
-            };
-          }
-          break;
-        }
-
-        case "annotation": {
-          const annoElement = element;
-          const annoOptions = {
-            ...baseOptions,
-            opacity: annoElement.style?.opacity ?? 1,
-          };
-          const annoWidth = annoElement.bounds.width;
-          const annoHeight = annoElement.bounds.height;
-          const annoColor = annoElement.style?.color || "#ff0000";
-
-          switch (annoElement.annotationType) {
-            case "highlight":
-              fabricObj = new Rect({
-                ...annoOptions,
-                width: annoWidth,
-                height: annoHeight,
-                fill: "rgba(255, 255, 0, 0.3)",
-                stroke: "transparent",
-              });
-              break;
-            case "underline":
-              fabricObj = new Line([0, 0, annoWidth, 0], {
-                ...annoOptions,
-                stroke: annoColor,
-                strokeWidth: 2,
-              });
-              break;
-            case "strikethrough":
-            case "strikeout":
-              fabricObj = new Line([0, 0, annoWidth, 0], {
-                ...annoOptions,
-                stroke: annoColor,
-                strokeWidth: 1,
-              });
-              break;
-            case "squiggly":
-              // Render as a colored underline for now
-              fabricObj = new Line([0, 0, annoWidth, 0], {
-                ...annoOptions,
-                stroke: annoColor,
-                strokeWidth: 2,
-                strokeDashArray: [2, 2],
-              });
-              break;
-            case "note":
-            case "stamp":
-              fabricObj = new Rect({
-                ...annoOptions,
-                width: Math.min(annoWidth, 30),
-                height: Math.min(annoHeight, 30),
-                fill: "#ffeb3b",
-                stroke: "#ffc107",
-                strokeWidth: 1,
-              });
-              break;
-            case "comment":
-            case "freetext":
-              fabricObj = new Circle({
-                ...annoOptions,
-                radius: Math.min(annoWidth, annoHeight) / 2,
-                fill: "#2196f3",
-                stroke: "#1976d2",
-                strokeWidth: 1,
-              });
-              break;
-            case "link":
-              fabricObj = new Rect({
-                ...annoOptions,
-                width: annoWidth,
-                height: annoHeight,
-                fill: "rgba(0, 100, 200, 0.1)",
-                stroke: "#0066cc",
-                strokeWidth: 1,
-              });
-              break;
-            default:
-              fabricObj = new Rect({
-                ...annoOptions,
-                width: annoWidth,
-                height: annoHeight,
-                fill: "rgba(255, 255, 0, 0.3)",
-              });
-          }
-          if (fabricObj) {
-            (fabricObj as FabricObjectWithData).data = {
-              elementId: annoElement.elementId,
-              type: "annotation",
-              annotationType: annoElement.annotationType,
-              linkDestination: annoElement.linkDestination,
-            };
-          }
-          break;
-        }
-
-        case "form_field": {
-          const formElement = element;
-          const fieldColorMap: Record<string, string> = {
-            text: "rgba(0, 100, 255, 0.08)",
-            checkbox: "rgba(0, 180, 0, 0.1)",
-            radio: "rgba(0, 180, 0, 0.1)",
-            dropdown: "rgba(100, 0, 255, 0.08)",
-            listbox: "rgba(100, 0, 255, 0.08)",
-            signature: "rgba(255, 100, 0, 0.1)",
-            button: "rgba(50, 50, 50, 0.1)",
-          };
-          const fieldBorderMap: Record<string, string> = {
-            text: "#0066cc",
-            checkbox: "#00aa00",
-            radio: "#00aa00",
-            dropdown: "#6600cc",
-            listbox: "#6600cc",
-            signature: "#ff6600",
-            button: "#333333",
-          };
-          const fieldFill = fieldColorMap[formElement.fieldType] ?? "rgba(0, 100, 255, 0.08)";
-          const fieldStroke = fieldBorderMap[formElement.fieldType] ?? "#0066cc";
-
-          fabricObj = new Rect({
-            ...baseOptions,
-            width: formElement.bounds.width,
-            height: formElement.bounds.height,
-            fill: fieldFill,
-            stroke: fieldStroke,
-            strokeDashArray: [4, 4],
-            strokeWidth: 1,
-          });
-          (fabricObj as FabricObjectWithData).data = {
-            elementId: formElement.elementId,
-            type: "form_field",
-            fieldName: formElement.fieldName,
-            fieldType: formElement.fieldType,
-            // Élément complet : fabricObjectToElement le re-fusionne avec
-            // les bounds réels → aucune propriété métier perdue au move.
-            formFieldElement: formElement,
-          };
-          break;
-        }
-      }
-
-      if (fabricObj) {
-        // Mémoriser l'état de verrou sur l'objet Fabric (DRY, point unique) :
-        // setElementVisibility en a besoin pour ne PAS ré-activer un élément
-        // verrouillé quand on le réaffiche, et le re-render le rétablit ici.
-        (fabricObj as FabricObjectWithData).data = {
-          ...(fabricObj as FabricObjectWithData).data,
-          locked: element.locked === true,
-        };
-        canvas.add(fabricObj);
-      }
-    }
-
-    // Wait for all async image loads before final render
-    if (imageLoadPromises.length > 0) {
-      await Promise.all(imageLoadPromises);
-    }
-
-    canvas.renderAll();
-
-    // Repose les masques de visibilité pour les éléments cachés (navigation de
-    // page / re-render). Fait APRÈS renderAll() pour que sampleBackgroundUnder
-    // lise le raster du fond déjà peint. Les overlays cachés sont aussi rendus
-    // non-evented (cohérent avec setElementVisibility : pas d'édition au
-    // double-clic sur un élément masqué).
-    const hidden = sortedElements.filter((el) => el.visible === false);
-    if (hidden.length > 0) {
-      for (const el of hidden) {
-        const obj = canvas
-          .getObjects()
-          .find(
-            (o) =>
-              (o as FabricObjectWithData).data?.elementId === el.elementId &&
-              (o as FabricObjectWithData).data?.isHideMask !== true,
-          ) as FabricObjectWithData | undefined;
-        if (!obj) continue;
-        await applyHideMask(canvas, obj);
-        (obj as FabricObject & { set: (o: Record<string, unknown>) => void }).set(
-          { evented: false, selectable: false },
-        );
-      }
-      canvas.requestRenderAll();
-    }
-  }, [getFontFaceName, applyHideMask]);
+    },
+    [getFontFaceName, applyHideMask],
+  );
 
   // Charger une page dans le canvas
   const loadPage = useCallback(
@@ -2850,11 +1903,11 @@ export function EditorCanvas({
             const renderScale = backgroundRenderScale(window.devicePixelRatio);
             const dataUrl = await renderer.renderPageToDataURL(pageData.pageNumber, {
               scale: renderScale,
-              // Render PDF natively (text + paths). The Fabric overlay above
-              // is rendered TRANSPARENT so it acts as a click hit-target only,
-              // preserving 1:1 visual fidelity. Mask only kicks in once the
-              // user enters edit mode on a specific text item.
-              maskText: false,
+              // Text-free raster: the engine renders everything EXCEPT text
+              // (vector art, gradients/shadings, images stay 1:1). The REAL
+              // editable text is painted as a visible Fabric overlay on top, so
+              // editing is direct and works on any background — no colour mask.
+              skipText: true,
             });
             renderer.dispose();
 
@@ -3622,6 +2675,93 @@ export function EditorCanvas({
   const canvasWidth = page?.dimensions?.width || width;
   const canvasHeight = page?.dimensions?.height || height;
 
+  // Conteneur canvas + overlays — IDENTIQUE dans les deux modes (standalone et
+  // intégré). En mode intégré il est rendu seul (le slot du défileur est déjà
+  // dimensionné à page×zoom) ; en standalone il est enveloppé dans le viewport
+  // scrollable ci-dessous.
+  const canvasContainer = (
+    <div
+      ref={containerRef}
+      className="canvas-container relative bg-white shadow-lg rounded-sm"
+      style={{
+        width: canvasWidth * zoom,
+        height: canvasHeight * zoom,
+      }}
+    >
+      <canvas ref={canvasRef} />
+
+      {/* Overlay applicatif (ex: surlignage des champs en mode Remplir).
+          Positionné dans le repère page×zoom, défile avec la page. */}
+      {overlay ? (
+        <div className="absolute inset-0 z-10 pointer-events-none">
+          {overlay}
+        </div>
+      ) : null}
+
+      {/* Mini-formulaire de création d'un groupe de boutons radio. */}
+      {radioPrompt ? (
+        <div
+          className="absolute z-20 w-64 rounded-lg border bg-background p-3 shadow-xl"
+          style={{
+            left: Math.max(0, radioPrompt.x * zoom),
+            top: Math.max(0, radioPrompt.y * zoom),
+          }}
+        >
+          <h4 className="text-sm font-medium mb-2">
+            {t("radioPrompt.title")}
+          </h4>
+          <label className="block text-xs text-muted-foreground mb-1">
+            {t("radioPrompt.groupName")}
+          </label>
+          <input
+            type="text"
+            value={radioGroupName}
+            onChange={(e) => setRadioGroupName(e.target.value)}
+            className="w-full h-8 px-2 mb-2 rounded border bg-background text-sm"
+          />
+          <label className="block text-xs text-muted-foreground mb-1">
+            {t("radioPrompt.options")}
+          </label>
+          <textarea
+            value={radioOptionsText}
+            onChange={(e) => setRadioOptionsText(e.target.value)}
+            rows={4}
+            className="w-full px-2 py-1 mb-1 rounded border bg-background text-sm resize-y"
+          />
+          <p className="text-[10px] text-muted-foreground mb-2">
+            {t("radioPrompt.optionsHint")}
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setRadioPrompt(null)}
+              className="px-2.5 py-1.5 rounded text-xs border hover:bg-muted transition-colors"
+            >
+              {t("radioPrompt.cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void handleConfirmRadioGroup();
+              }}
+              className="px-2.5 py-1.5 rounded text-xs bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              {t("radioPrompt.create")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  // Mode intégré : pas de viewport scrollable, pas de centrage, pas de padding.
+  // Le slot du défileur continu mesure exactement page×zoom ; on rend donc le
+  // conteneur canvas directement (aucun scrollbar imbriqué). `scrollWrapperRef`
+  // reste non attaché — toutes les lectures du wrapper sont déjà gardées.
+  if (embedded) {
+    return canvasContainer;
+  }
+
   return (
     // Viewport scrollable : le contenu interne prend page×zoom (+ padding),
     // les scrollbars natives apparaissent dans les 2 axes dès que la page
@@ -3638,78 +2778,7 @@ export function EditorCanvas({
           de la zone scrollable : marge confortable aux 4 bords, même
           zoomé à fond. */}
       <div className="m-auto" style={{ padding: CANVAS_VIEWPORT_PADDING }}>
-        <div
-          ref={containerRef}
-          className="canvas-container relative bg-white shadow-lg rounded-sm"
-          style={{
-            width: canvasWidth * zoom,
-            height: canvasHeight * zoom,
-          }}
-        >
-          <canvas ref={canvasRef} />
-
-          {/* Overlay applicatif (ex: surlignage des champs en mode Remplir).
-              Positionné dans le repère page×zoom, défile avec la page. */}
-          {overlay ? (
-            <div className="absolute inset-0 z-10 pointer-events-none">
-              {overlay}
-            </div>
-          ) : null}
-
-          {/* Mini-formulaire de création d'un groupe de boutons radio. */}
-          {radioPrompt ? (
-            <div
-              className="absolute z-20 w-64 rounded-lg border bg-background p-3 shadow-xl"
-              style={{
-                left: Math.max(0, radioPrompt.x * zoom),
-                top: Math.max(0, radioPrompt.y * zoom),
-              }}
-            >
-              <h4 className="text-sm font-medium mb-2">
-                {t("radioPrompt.title")}
-              </h4>
-              <label className="block text-xs text-muted-foreground mb-1">
-                {t("radioPrompt.groupName")}
-              </label>
-              <input
-                type="text"
-                value={radioGroupName}
-                onChange={(e) => setRadioGroupName(e.target.value)}
-                className="w-full h-8 px-2 mb-2 rounded border bg-background text-sm"
-              />
-              <label className="block text-xs text-muted-foreground mb-1">
-                {t("radioPrompt.options")}
-              </label>
-              <textarea
-                value={radioOptionsText}
-                onChange={(e) => setRadioOptionsText(e.target.value)}
-                rows={4}
-                className="w-full px-2 py-1 mb-1 rounded border bg-background text-sm resize-y"
-              />
-              <p className="text-[10px] text-muted-foreground mb-2">
-                {t("radioPrompt.optionsHint")}
-              </p>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRadioPrompt(null)}
-                  className="px-2.5 py-1.5 rounded text-xs border hover:bg-muted transition-colors"
-                >
-                  {t("radioPrompt.cancel")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleConfirmRadioGroup();
-                  }}
-                  className="px-2.5 py-1.5 rounded text-xs bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-                >
-                  {t("radioPrompt.create")}
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
+        {canvasContainer}
       </div>
     </div>
   );

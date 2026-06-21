@@ -3,30 +3,25 @@
 /**
  * page-canvas-host.tsx
  *
- * Renders a single PDF page onto its own pooled `fabric.Canvas` for the
- * Word-like continuous editor view. Each host:
+ * Renders a single PDF page as a READ-ONLY bitmap onto its own pooled
+ * `fabric.Canvas` for the Word-like continuous editor view. Each host:
  *
  *   1. mounts one `<canvas>` sized to the page (points × scale, rotation-aware);
  *   2. acquires a recycled `fabric.Canvas` from the shared {@link PageRenderPool};
- *   3. paints the PDF background at index 0 (via the shared `addPdfBackground`);
- *   4. **only when `mode === 'full'`** builds the editable Fabric overlay by
- *      reusing `renderElementsOverlay` from `render-elements.ts` — the same core
- *      the single-page editor uses, never re-implemented here;
- *   5. releases its pool slot on unmount.
+ *   3. paints the FULL PDF background (with text) at index 0 via the shared
+ *      `addPdfBackground`;
+ *   4. releases its pool slot on unmount.
  *
- * `mode === 'background'` renders the bitmap only (cheap, for off-focus pages in
- * the virtualised list). This component never wires page-mutation callbacks —
- * continuous-mode editing is Phase 2.
+ * This host is used ONLY for INACTIVE pages in the continuous scroller — the
+ * cheap, pixel-perfect bitmap. The ACTIVE/focused page renders a real embedded
+ * `<EditorCanvas>` instead (full tooling: create/move/resize/retype/delete,
+ * undo/redo, toolbar handle), so the editable overlay lives there, never here.
  */
 
 import React, { useEffect, useRef } from "react";
 import type { PageObject } from "@giga-pdf/types";
 import type { Canvas as FabricCanvas } from "fabric";
 import { clientLogger } from "@/lib/client-logger";
-import {
-  renderElementsOverlay,
-  type RenderElementsOptions,
-} from "./render-elements";
 import { addPdfBackground, backgroundRenderScale } from "./lib/pdf-background";
 import { effectivePagePoints } from "./lib/page-layout";
 import type { PageRenderPool } from "./lib/page-render-pool";
@@ -38,32 +33,24 @@ export interface PageCanvasHostProps {
   index: number;
   /** Zoom factor (1 = 100%): page points → CSS px for this host's canvas. */
   scale: number;
-  /**
-   * `'background'` paints only the rasterised PDF bitmap. `'full'` additionally
-   * builds the editable element overlay (the focused/active page).
-   */
-  mode: "background" | "full";
   /** Shared pool providing the recycled canvas + memoised page backgrounds. */
   pool: PageRenderPool;
-  /** Optional read-only selection callback forwarded to the overlay (`full` only). */
-  onElementSelected?: RenderElementsOptions["onElementSelected"];
-  /** Notified once the page (background + overlay) has finished rendering. */
+  /** Notified once the page background has finished rendering. */
   onReady?: (index: number) => void;
   /** Notified when the host releases its pool slot on unmount. */
   onDispose?: (index: number) => void;
 }
 
 /**
- * One page → one pooled Fabric canvas. Re-renders whenever `page`, `scale` or
- * `mode` changes; releases the pool slot on unmount.
+ * One inactive page → one pooled Fabric canvas painted with the full page
+ * bitmap. Re-renders whenever `page` or `scale` changes; releases the pool slot
+ * on unmount.
  */
 export function PageCanvasHost({
   page,
   index,
   scale,
-  mode,
   pool,
-  onElementSelected,
   onReady,
   onDispose,
 }: PageCanvasHostProps) {
@@ -73,11 +60,9 @@ export function PageCanvasHost({
   // re-rasterise the page) merely because a parent passed new closures.
   const onReadyRef = useRef(onReady);
   const onDisposeRef = useRef(onDispose);
-  const onElementSelectedRef = useRef(onElementSelected);
   useEffect(() => {
     onReadyRef.current = onReady;
     onDisposeRef.current = onDispose;
-    onElementSelectedRef.current = onElementSelected;
   });
 
   const { w: pageW, h: pageH } = effectivePagePoints(page);
@@ -112,8 +97,8 @@ export function PageCanvasHost({
       acquired = canvas;
 
       // Size the Fabric canvas to the page bitmap (points), then apply zoom so
-      // the whole scene (background + overlay) scales together — mirrors the
-      // single-page editor: overlay coords stay in points, canvas zoom = scale.
+      // the scene scales together — mirrors the single-page editor: background
+      // coords stay in points, canvas zoom = scale.
       const withDims = canvas as unknown as {
         setDimensions?: (d: { width: number; height: number }) => void;
         setZoom?: (z: number) => void;
@@ -157,34 +142,6 @@ export function PageCanvasHost({
         return;
       }
 
-      // --- Editable overlay (full mode only) --------------------------------
-      // Reuses the shared `renderElementsOverlay` core — identical Fabric object
-      // construction as the single-page editor, never duplicated here.
-      if (mode === "full" && page.elements && page.elements.length > 0) {
-        try {
-          const fabric = await import("fabric");
-          if (cancelled) {
-            return;
-          }
-          await renderElementsOverlay(
-            canvas,
-            page.elements,
-            fabric as unknown as typeof import("fabric"),
-            {
-              scale: 1,
-              ...(onElementSelectedRef.current
-                ? { onElementSelected: onElementSelectedRef.current }
-                : {}),
-            },
-          );
-        } catch (err) {
-          clientLogger.warn("[PageCanvasHost] overlay render failed:", err);
-        }
-      }
-      if (cancelled) {
-        return;
-      }
-
       try {
         withDims.requestRenderAll();
       } catch {
@@ -200,9 +157,9 @@ export function PageCanvasHost({
         onDisposeRef.current?.(index);
       }
     };
-    // Re-render on page identity, geometry, mode or pool change. Callbacks are
-    // read via refs (kept stable) so new closures don't force re-rasterisation.
-  }, [pool, index, page.pageId, page.elements, mode, scale, cssWidth, cssHeight]);
+    // Re-render on page identity, geometry or pool change. Callbacks are read
+    // via refs (kept stable) so new closures don't force re-rasterisation.
+  }, [pool, index, page.pageId, scale, cssWidth, cssHeight]);
 
   return (
     <canvas

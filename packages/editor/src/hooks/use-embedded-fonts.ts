@@ -549,11 +549,35 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
         }));
         setFonts(initialFonts);
 
-        // All fonts loaded in parallel — one failure does not block others.
-        // Non-embedded (or non-extractable) fonts attempt the Google Fonts
-        // proxy fallback inside loadSingleFont before being marked failed.
-        await Promise.allSettled(
-          metadataList.map((meta) => loadSingleFont(meta, signal)),
+        // Fonts load with BOUNDED concurrency — never all-at-once. A PDF can
+        // embed dozens of subset fonts (Ameli/admin forms routinely have 20-30
+        // TimesNewRoman subsets); firing them all in parallel bursts the
+        // per-user rate limit (HTTP 429) and can exhaust the browser socket
+        // pool (ERR_INSUFFICIENT_RESOURCES). A small worker pool smooths the
+        // burst while still loading every font. Per-font failures stay isolated
+        // (parity with the previous Promise.allSettled): each worker swallows
+        // rejections so one bad font never aborts the batch. The IndexedDB
+        // cache makes subsequent renders near-instant regardless.
+        const FONT_LOAD_CONCURRENCY = 4;
+        const fontCursor = { value: 0 };
+        const runFontWorker = async (): Promise<void> => {
+          for (;;) {
+            if (signal.aborted) return;
+            const meta = metadataList[fontCursor.value++];
+            if (!meta) return;
+            try {
+              await loadSingleFont(meta, signal);
+            } catch {
+              // loadSingleFont already logs + marks the font 'failed'. A single
+              // failure must not abort the remaining fonts.
+            }
+          }
+        };
+        await Promise.all(
+          Array.from(
+            { length: Math.min(FONT_LOAD_CONCURRENCY, metadataList.length) },
+            () => runFontWorker(),
+          ),
         );
 
         if (signal.aborted) return;

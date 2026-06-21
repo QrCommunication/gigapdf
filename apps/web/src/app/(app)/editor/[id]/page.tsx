@@ -3369,11 +3369,19 @@ export default function EditorPage() {
               pages={pages}
               zoom={zoom}
               pdfFile={currentPdfFile}
+              documentId={documentId}
+              tool={activeTool}
               activePageIndex={effectivePageIndex}
               onActivatePage={activatePage}
               showRulers={showRulers}
               rulerUnit={rulerUnit}
               onMarginsCommit={handleMarginsCommit}
+              getFontFaceName={getFontFaceName}
+              onElementAdded={handleElementAdded}
+              onElementModified={handleElementModified}
+              onElementRemoved={handleElementRemoved}
+              onSelectionChanged={handleSelectionChanged}
+              onCanvasReady={setCanvasHandle}
             />
           ) : (
             <>

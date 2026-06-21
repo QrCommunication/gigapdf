@@ -43,6 +43,20 @@ documents/versions).
 - Admin App: Tenant and user administration.
 - Mobile App: Expo-based client for viewing and simple workflows.
 
+### Editor rendering model (direct text editing)
+- The edited page is rasterised by the engine **without its text**
+  (`renderPageNoText`): the background keeps all non-text content
+  (vector art, gradients/shadings, images, annotations) pixel-perfect.
+- The real text is drawn on top as **live, editable text** in its embedded
+  font and true colour — there is no flattened text image and no colour mask,
+  so editing works directly over any background (gradients included).
+- Embedded fonts are served to the browser with a synthesised, valid `cmap`
+  and all required tables, so the original glyphs render 1:1 even when the
+  embedded subset's character map is missing or corrupt.
+- Single-page and continuous (Word-like) views share the same `EditorCanvas`
+  component, so editing behaves identically. In the continuous view the focused
+  page is a full editor; other pages are fast, read-only page bitmaps.
+
 ### Storage
 - PostgreSQL: Core data, users, tenants, permissions, metadata.
 - Redis: Cache, rate limits, async job queues.

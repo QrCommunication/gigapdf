@@ -5,6 +5,31 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-06-21
+
+### Changed
+- **Direct text editing — the editor now renders real, editable text instead of
+  a flat image.** Each page is rasterised *without* its text (engine
+  `renderPageNoText`); the real text is drawn on top as live, editable text in
+  its embedded font and true colour. Editing a text run is now direct and works
+  over any background — including gradients and patterns — with no colour mask.
+  Non-text content (vector art, gradients/shadings, images) stays pixel-perfect.
+- **1:1 text fidelity even with broken embedded fonts.** Embedded subset fonts
+  whose character map is missing/corrupt are now repaired server-side (a valid
+  `cmap` and the required tables are synthesised from the PDF's encoding /
+  `ToUnicode` / CID maps), so the browser always renders the original glyphs.
+- **Full editing on every page of the continuous (Word-like) view.** The focused
+  page is now a complete editor (create text/shapes, move/resize, retype, delete,
+  undo/redo, toolbar) — identical to single-page mode; other pages stay fast,
+  read-only previews.
+
+### Fixed
+- Text and form fields no longer appear duplicated when opening a document in the
+  continuous editor.
+- Embedded-font loading no longer floods the server (requests are now throttled
+  and have a dedicated rate-limit budget), fixing failed font loads on
+  font-heavy documents.
+
 ## [1.7.0] - 2026-06-21
 
 ### Added
