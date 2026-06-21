@@ -43,7 +43,7 @@ const COPY: Record<
   fr: {
     metaTitle: "Outils PDF en ligne gratuits : éditer, signer, convertir",
     metaDescription:
-      "20 outils PDF gratuits et open source : édition, fusion, signature numérique, OCR, compression, conversion Office et plus. Sans filigrane, auto-hébergeable.",
+      "29 outils PDF gratuits et open source : édition, fusion, signature numérique, OCR, compression, conversion Office et plus. Sans filigrane, auto-hébergeable.",
     ogTitle: "Outils PDF en ligne gratuits | GigaPDF",
     ogDescription:
       "Tous les outils PDF dont vous avez besoin, gratuits et open source : édition, signature, OCR, conversion, protection.",
@@ -60,7 +60,7 @@ const COPY: Record<
   en: {
     metaTitle: "Free Online PDF Tools: Edit, Sign, Convert",
     metaDescription:
-      "20 free, open-source PDF tools: editing, merging, digital signing, OCR, compression, Office conversion and more. No watermark, self-hostable.",
+      "29 free, open-source PDF tools: editing, merging, digital signing, OCR, compression, Office conversion and more. No watermark, self-hostable.",
     ogTitle: "Free Online PDF Tools | GigaPDF",
     ogDescription:
       "Every PDF tool you need, free and open source: editing, signing, OCR, conversion, protection.",

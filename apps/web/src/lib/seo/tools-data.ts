@@ -17,9 +17,14 @@ export interface ToolHowTo {
   steps: string[];
 }
 
+/** Famille fonctionnelle d'un outil, pour le regroupement (mégamenu, filtres). */
+export type ToolCategory = "organize" | "convert" | "edit" | "secure" | "ocr";
+
 export interface ToolData {
   slug: string;
   name: string;
+  /** Famille fonctionnelle pour le regroupement dans le mégamenu */
+  category: ToolCategory;
   /** ≤ 60 caractères */
   metaTitle: string;
   /** ≤ 155 caractères */
@@ -35,12 +40,18 @@ export interface ToolData {
   relatedSolutions: string[];
   /** Nom d'icône lucide (mappé dans components/seo/tool-icon.tsx) */
   icon: string;
+  /**
+   * Lien interne optionnel vers l'outil fonctionnel correspondant dans l'app
+   * (ex: "/merge"). Si présent, la page outil affiche un CTA direct vers l'outil.
+   */
+  appHref?: string;
 }
 
 export const TOOLS: ToolData[] = [
   {
     slug: "editer-pdf",
     name: "Éditer un PDF",
+    category: "edit",
     metaTitle: "Éditer un PDF en ligne gratuitement | GigaPDF",
     metaDescription:
       "Modifiez texte, images et formes directement dans vos PDF, avec les polices d'origine. Éditeur WYSIWYG gratuit, open source et auto-hébergeable.",
@@ -108,6 +119,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "fusionner-pdf",
     name: "Fusionner des PDF",
+    category: "organize",
     metaTitle: "Fusionner des PDF en ligne gratuitement | GigaPDF",
     metaDescription:
       "Combinez plusieurs PDF en un seul fichier, dans l'ordre de votre choix. Outil gratuit, sans filigrane ajouté, open source et auto-hébergeable.",
@@ -169,6 +181,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "diviser-pdf",
     name: "Diviser un PDF",
+    category: "organize",
     metaTitle: "Diviser un PDF : extraire des pages en ligne | GigaPDF",
     metaDescription:
       "Découpez un PDF en plusieurs fichiers ou extrayez les pages utiles. Sélection visuelle par miniatures, gratuit et open source.",
@@ -230,6 +243,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "compresser-pdf",
     name: "Compresser un PDF",
+    category: "edit",
     metaTitle: "Compresser un PDF en ligne gratuitement | GigaPDF",
     metaDescription:
       "Réduisez le poids de vos PDF sans sacrifier la lisibilité : nettoyage de structure et optimisation web par le moteur maison. Gratuit et open source.",
@@ -276,7 +290,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Puis-je compresser plusieurs documents d'affilée ?",
         answer:
-          "Oui. La compression est une action disponible sur chaque document de votre espace, sans quota d'utilisation. Les limites du plan gratuit portent sur le stockage (5 Go) et le nombre de documents (100), pas sur le nombre d'opérations effectuées.",
+          "Oui. La compression est une action disponible sur chaque document de votre espace, sans quota d'utilisation. Les limites du plan gratuit portent sur le stockage (5 Go) et le nombre de documents (1000), pas sur le nombre d'opérations effectuées.",
       },
     ],
     useCases: [
@@ -291,6 +305,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "signer-pdf",
     name: "Signer un PDF",
+    category: "secure",
     metaTitle: "Signature électronique de PDF (PKCS#7) | GigaPDF",
     metaDescription:
       "Signez vos PDF avec un vrai certificat numérique P12/PFX : signature PKCS#7 vérifiable dans Adobe Reader. Gratuit, open source, auto-hébergeable.",
@@ -357,9 +372,10 @@ export const TOOLS: ToolData[] = [
   {
     slug: "ocr-pdf",
     name: "OCR PDF",
+    category: "ocr",
     metaTitle: "OCR en ligne : scans et images vers texte | GigaPDF",
     metaDescription:
-      "Reconnaissance de texte maison multilingue (latin, cyrillique, grec, arabe, hébreu, écritures indiennes et chinois) sur vos scans et images (PDF scannés, JPG, PNG, photos de documents) : copiez, cherchez, exportez le contenu. Gratuit et open source.",
+      "OCR en ligne sur vos PDF scannés et images : rendez votre contenu cherchable et copiable. Reconnaissance multilingue, gratuite et open source.",
     h1: "OCR : extraire le texte de vos scans et images",
     intro: [
       "Un document composé uniquement d'images — un PDF scanné, mais aussi une photo de document ou un fichier JPG ou PNG — n'est qu'une suite de photographies de pages : impossible d'y rechercher un mot, de copier un paragraphe ou d'en extraire les montants. Tant que le texte n'est pas reconnu, le fichier reste muet pour vos outils — y compris pour la recherche de votre propre GED. La reconnaissance optique de caractères (OCR) transforme ces images en texte exploitable.",
@@ -399,7 +415,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "L'OCR reconnaît-il l'écriture manuscrite ?",
         answer:
-          "Oui. Le moteur embarque un modèle dédié à l'écriture manuscrite : sur le benchmark de référence IAM, GigaPDF est le premier moteur sans dépendance tierce à dépasser Tesseract sur du manuscrit réel. La reconnaissance reste plus fiable sur une écriture soignée que sur un tracé très cursif ou négligé, et l'imprimé net donne toujours les meilleurs résultats — mais le manuscrit est bel et bien pris en charge.",
+          "Oui. Le moteur embarque un modèle dédié à l'écriture manuscrite : un OCR sans dépendance tierce, solide sur l'imprimé net et correct sur du manuscrit soigné. La reconnaissance reste plus fiable sur une écriture soignée que sur un tracé très cursif ou négligé, et l'imprimé net donne toujours les meilleurs résultats — mais le manuscrit est bel et bien pris en charge.",
       },
       {
         question: "Que devient le document ou l'image d'origine après l'OCR ?",
@@ -419,6 +435,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "pdf-cherchable",
     name: "PDF cherchable",
+    category: "ocr",
     metaTitle: "Rendre un PDF cherchable (calque texte OCR) | GigaPDF",
     metaDescription:
       "Ajoutez un calque de texte invisible sur vos scans : le PDF garde son apparence et devient sélectionnable et cherchable. Gratuit, open source.",
@@ -480,13 +497,14 @@ export const TOOLS: ToolData[] = [
   {
     slug: "proteger-pdf",
     name: "Protéger un PDF",
+    category: "secure",
     metaTitle: "Protéger un PDF : mot de passe et chiffrement | GigaPDF",
     metaDescription:
-      "Chiffrez vos PDF (AES-256, AES-128 ou RC4) et contrôlez impression, copie et modification. Protection par mot de passe gratuite et open source.",
+      "Chiffrez vos PDF en AES-256 ou AES-128 et contrôlez impression, copie et modification. Protection par mot de passe gratuite et open source.",
     h1: "Protéger un PDF par mot de passe et chiffrement",
     intro: [
       "Envoyer un bulletin de salaire, un relevé médical ou une offre commerciale par e-mail, c'est accepter que le fichier circule au-delà du destinataire prévu : transferts, boîtes partagées, pièces jointes archivées par des serveurs tiers. Le chiffrement du PDF lui-même est la parade la plus simple — le document devient illisible sans le mot de passe, où qu'il se trouve.",
-      "GigaPDF chiffre vos fichiers au standard PDF avec trois algorithmes au choix : AES-256, le niveau recommandé aujourd'hui ; AES-128, largement compatible ; et RC4, conservé uniquement pour les rares visionneuses anciennes qui l'exigent. Vous définissez un mot de passe d'ouverture et, séparément, un mot de passe propriétaire assorti de permissions : autoriser ou interdire l'impression, la copie de texte, la modification du contenu et le remplissage de formulaires.",
+      "GigaPDF chiffre vos fichiers au standard PDF avec deux algorithmes au choix : AES-256, le niveau recommandé aujourd'hui, et AES-128, largement compatible ; les PDF hérités protégés en RC4 restent lisibles en déchiffrement, mais le chiffrement actif se fait toujours en AES. Vous définissez un mot de passe d'ouverture et, séparément, un mot de passe propriétaire assorti de permissions granulaires : autoriser ou interdire l'impression, la copie de texte, la modification du contenu, les annotations, le remplissage de formulaires, l'extraction de contenu, l'assemblage du document et l'impression haute qualité.",
       "La distinction entre les deux mots de passe est précieuse : vous pouvez diffuser un document lisible par tous mais verrouillé en modification, ou au contraire totalement confidentiel. Le chiffrement s'applique en un clic depuis votre espace, sans supplément — comme toutes les fonctions de GigaPDF, il est inclus dans le plan gratuit et disponible en auto-hébergement.",
     ],
     howTo: {
@@ -495,14 +513,15 @@ export const TOOLS: ToolData[] = [
         "Importez le document à protéger dans votre espace GigaPDF.",
         "Ouvrez l'outil de protection et choisissez l'algorithme : AES-256 recommandé.",
         "Définissez le mot de passe d'ouverture, à transmettre au destinataire par un canal séparé.",
-        "Réglez les permissions : impression, copie, modification, remplissage de formulaires.",
+        "Réglez les permissions : impression, copie, modification, annotations, remplissage de formulaires, extraction de contenu, assemblage et impression haute qualité.",
         "Validez et téléchargez le PDF chiffré : sans mot de passe, son contenu est illisible.",
       ],
     },
     capabilities: [
-      "Chiffrement AES-256, AES-128 ou RC4 selon vos contraintes de compatibilité",
+      "Chiffrement AES-256 ou AES-128 selon vos contraintes de compatibilité",
+      "Déchiffrement des PDF hérités protégés en RC4 pris en charge (lecture)",
       "Mot de passe d'ouverture (lecture) distinct du mot de passe propriétaire (droits)",
-      "Permissions granulaires : impression, copie de texte, modification, formulaires",
+      "8 permissions granulaires : impression, copie de texte, modification, annotations, remplissage de formulaires, extraction de contenu, assemblage du document, impression haute qualité",
       "Suppression de la protection d'un fichier dont vous connaissez le mot de passe",
       "Application en un clic depuis la GED, sans logiciel à installer",
       "Chaîne complète opérable sur votre propre serveur en auto-hébergement",
@@ -511,7 +530,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Quel algorithme de chiffrement choisir ?",
         answer:
-          "AES-256 dans la quasi-totalité des cas : c'est le standard le plus robuste pris en charge par le format PDF et par toutes les visionneuses modernes. AES-128 reste un choix sûr si vous visez de très vieux lecteurs. RC4 est obsolète sur le plan cryptographique et ne devrait servir qu'en compatibilité contrainte avec des systèmes anciens.",
+          "AES-256 dans la quasi-totalité des cas : c'est le standard le plus robuste pris en charge par le format PDF et par toutes les visionneuses modernes. AES-128 reste un choix sûr si vous visez de très vieux lecteurs. GigaPDF chiffre uniquement en AES ; RC4, obsolète sur le plan cryptographique, n'est pris en charge qu'en déchiffrement, pour ouvrir des PDF hérités déjà protégés avec cet algorithme.",
       },
       {
         question: "Quelle différence entre mot de passe d'ouverture et mot de passe propriétaire ?",
@@ -541,6 +560,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "filigrane-pdf",
     name: "Filigrane PDF",
+    category: "edit",
     metaTitle: "Ajouter un filigrane à un PDF en ligne | GigaPDF",
     metaDescription:
       "Apposez un filigrane texte ou image (logo) sur toutes les pages d'un PDF : CONFIDENTIEL, BROUILLON, marque… Gratuit et open source.",
@@ -602,6 +622,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "organiser-pages-pdf",
     name: "Organiser les pages",
+    category: "organize",
     metaTitle: "Organiser un PDF : trier et pivoter les pages | GigaPDF",
     metaDescription:
       "Réordonnez, faites pivoter, supprimez ou extrayez les pages d'un PDF par glisser-déposer sur miniatures. Gratuit, open source, auto-hébergeable.",
@@ -663,6 +684,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "annoter-pdf",
     name: "Annoter un PDF",
+    category: "edit",
     metaTitle: "Annoter un PDF en ligne : notes et surlignage | GigaPDF",
     metaDescription:
       "Surlignez, commentez et dessinez sur vos PDF avec des annotations natives lisibles dans toutes les visionneuses. Gratuit et open source.",
@@ -724,6 +746,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "formulaires-pdf",
     name: "Formulaires PDF",
+    category: "edit",
     metaTitle: "Remplir un formulaire PDF en ligne | GigaPDF",
     metaDescription:
       "Remplissez les champs d'un formulaire PDF dans le navigateur et aplatissez le résultat pour figer les réponses. Gratuit et open source.",
@@ -785,6 +808,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "pdf-vers-word",
     name: "PDF vers Word",
+    category: "convert",
     metaTitle: "Convertir un PDF en Word (DOCX) en ligne | GigaPDF",
     metaDescription:
       "Transformez vos PDF en documents Word modifiables (.docx), mise en page préservée. Conversion gratuite, open source, sans filigrane.",
@@ -831,7 +855,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Y a-t-il une limite de taille ou un filigrane sur la conversion gratuite ?",
         answer:
-          "Aucun filigrane, jamais. La conversion est une fonction complète du plan gratuit, dont les limites sont le stockage (5 Go) et le nombre de documents (100) — pas une dégradation du résultat. Le fichier produit vous appartient, propre.",
+          "Aucun filigrane, jamais. La conversion est une fonction complète du plan gratuit, dont les limites sont le stockage (5 Go) et le nombre de documents (1000) — pas une dégradation du résultat. Le fichier produit vous appartient, propre.",
       },
     ],
     useCases: [
@@ -846,19 +870,20 @@ export const TOOLS: ToolData[] = [
   {
     slug: "word-vers-pdf",
     name: "Word vers PDF",
-    metaTitle: "Convertir Word en PDF (.doc, .docx) en ligne | GigaPDF",
+    category: "convert",
+    metaTitle: "Convertir Word en PDF (.doc, .docx, .odt) | GigaPDF",
     metaDescription:
-      "Convertissez vos documents Word en PDF fidèles avec le moteur maison : .docx récents et anciens .doc. Gratuit, open source, sans filigrane.",
+      "Convertissez vos documents Word et ODT en PDF fidèles : .docx, anciens .doc et .odt. Gratuit, open source, sans filigrane.",
     h1: "Convertir un document Word en PDF",
     intro: [
       "Envoyer un .docx, c'est envoyer un document vivant : il s'affichera différemment selon la version de Word, les polices installées et la machine du destinataire — quand il ne sera pas modifié en route. Le passage en PDF verrouille la mise en page : ce que vous avez composé est exactement ce qui sera lu et imprimé, partout.",
-      "GigaPDF convertit avec son moteur de conversion bureautique maison exécuté côté serveur, éprouvé et fidèle. Il prend en charge le .docx moderne comme l'ancien format .doc — celui des archives Word 97-2003 qui traînent dans tous les serveurs de fichiers et que beaucoup de convertisseurs en ligne refusent. Styles, tableaux, images, en-têtes et pieds de page sont rendus dans un PDF propre, sans filigrane publicitaire.",
+      "GigaPDF convertit avec son moteur de conversion bureautique maison exécuté côté serveur, éprouvé et fidèle. Il prend en charge le .docx moderne, l'ancien format .doc — celui des archives Word 97-2003 qui traînent dans tous les serveurs de fichiers et que beaucoup de convertisseurs en ligne refusent — et le format ouvert .odt des suites OpenDocument. Styles, tableaux, images, en-têtes et pieds de page sont rendus dans un PDF propre, sans filigrane publicitaire.",
       "Vous n'avez pas besoin de Microsoft Office, ni d'aucune installation : le navigateur suffit. Et le PDF produit atterrit directement dans votre GED GigaPDF, où il peut être fusionné avec d'autres pièces, signé numériquement, protégé par chiffrement ou archivé en PDF/A — la conversion n'est que la première étape d'une chaîne documentaire complète.",
     ],
     howTo: {
       title: "Comment convertir un fichier Word en PDF",
       steps: [
-        "Importez votre fichier .docx ou .doc dans votre espace GigaPDF.",
+        "Importez votre fichier .docx, .doc ou .odt dans votre espace GigaPDF.",
         "Lancez la conversion : le moteur maison restitue le document côté serveur.",
         "Vérifiez le PDF obtenu dans la visionneuse intégrée.",
         "Enchaînez si besoin : fusion avec d'autres pièces, signature, chiffrement ou filigrane.",
@@ -866,18 +891,18 @@ export const TOOLS: ToolData[] = [
       ],
     },
     capabilities: [
-      "Conversion des .docx et des anciens .doc (Word 97-2003)",
+      "Conversion des .docx, des anciens .doc (Word 97-2003) et des .odt (OpenDocument)",
       "Moteur de conversion maison côté serveur : aucune installation, pas besoin de Microsoft Office",
       "Restitution des styles, tableaux, images, en-têtes et pieds de page",
       "Aucun filigrane sur le PDF produit",
       "Enchaînement immédiat : fusion, signature numérique, chiffrement, PDF/A",
-      "Import des autres formats bureautiques depuis le même flux : Excel, PowerPoint, OpenDocument",
+      "Import des autres formats bureautiques depuis le même flux : Excel (.xls, .xlsx, .ods), PowerPoint (.ppt, .pptx, .odp)",
     ],
     faq: [
       {
-        question: "Les anciens fichiers .doc sont-ils vraiment pris en charge ?",
+        question: "Quels formats de traitement de texte sont acceptés en entrée ?",
         answer:
-          "Oui, c'est une spécificité utile de GigaPDF : le moteur maison lit le format binaire Word 97-2003 en plus du .docx moderne. Les archives bureautiques anciennes se convertissent sans passer par une réouverture manuelle dans Word — précieux pour numériser proprement un historique documentaire.",
+          "Trois : le .docx moderne, l'ancien format binaire .doc (Word 97-2003) que beaucoup de convertisseurs refusent, et le .odt des suites OpenDocument. Le moteur maison lit les trois et les rend en PDF sans réouverture manuelle dans Word — précieux pour numériser proprement un historique documentaire hétérogène.",
       },
       {
         question: "La mise en page de mon document sera-t-elle respectée ?",
@@ -907,31 +932,32 @@ export const TOOLS: ToolData[] = [
   {
     slug: "excel-vers-pdf",
     name: "Excel vers PDF",
-    metaTitle: "Convertir Excel en PDF (.xls, .xlsx) en ligne | GigaPDF",
+    category: "convert",
+    metaTitle: "Convertir Excel en PDF (.xls, .xlsx, .ods) | GigaPDF",
     metaDescription:
-      "Transformez vos classeurs Excel en PDF propres et imprimables avec le moteur maison : .xlsx et anciens .xls. Conversion gratuite et open source.",
+      "Convertissez vos classeurs Excel et ODS en PDF propres et imprimables : .xlsx, anciens .xls et .ods. Gratuit et open source.",
     h1: "Convertir un classeur Excel en PDF",
     intro: [
       "Un tableur transmis en .xlsx est un document à risques : formules visibles, onglets de travail oubliés, colonnes masquées qu'un clic révèle, et une mise en page qui explose à l'impression chez le destinataire. Pour communiquer des chiffres — devis, tableau de bord, budget — le PDF présente le résultat, et seulement le résultat, exactement cadré.",
-      "GigaPDF convertit vos classeurs avec son moteur maison côté serveur : les formats .xlsx et .xls (Excel 97-2003) sont acceptés, les valeurs calculées remplacent les formules, et la zone d'impression définie dans le classeur structure la pagination du PDF. Bordures, couleurs de cellules, graphiques et formats de nombres sont restitués tels que le tableur les affiche.",
+      "GigaPDF convertit vos classeurs avec son moteur maison côté serveur : les formats .xlsx, .xls (Excel 97-2003) et .ods (OpenDocument) sont acceptés, les valeurs calculées remplacent les formules, et la zone d'impression définie dans le classeur structure la pagination du PDF. Bordures, couleurs de cellules, graphiques et formats de nombres sont restitués tels que le tableur les affiche.",
       "Conseil hérité de l'impression : la qualité du PDF se joue dans le classeur, avant conversion. Une zone d'impression définie, une orientation paysage pour les tableaux larges et un ajustement « une page en largeur » donnent un document final net. Une fois converti, le PDF se fusionne avec vos autres pièces, se protège par mot de passe ou se filigrane — sans quitter GigaPDF, gratuitement.",
     ],
     howTo: {
       title: "Comment convertir un fichier Excel en PDF",
       steps: [
         "Préparez le classeur : zone d'impression et orientation définies dans votre tableur.",
-        "Importez le fichier .xlsx ou .xls dans votre espace GigaPDF.",
+        "Importez le fichier .xlsx, .xls ou .ods dans votre espace GigaPDF.",
         "Lancez la conversion : le moteur maison calcule le rendu et pagine le document.",
         "Contrôlez le PDF dans la visionneuse : coupures de colonnes, lisibilité des chiffres.",
         "Téléchargez, fusionnez avec d'autres pièces ou partagez le PDF par lien.",
       ],
     },
     capabilities: [
-      "Conversion des .xlsx et des anciens .xls (Excel 97-2003)",
+      "Conversion des .xlsx, des anciens .xls (Excel 97-2003) et des .ods (OpenDocument)",
       "Valeurs calculées dans le PDF : les formules ne sont pas exposées",
       "Respect des zones d'impression et de l'orientation définies dans le classeur",
       "Restitution des bordures, couleurs, graphiques et formats de nombres",
-      "Import des classeurs OpenDocument (.ods) par le même moteur",
+      "Classeurs OpenDocument .ods traités par le même moteur maison",
       "Fusion, protection et filigrane du PDF produit dans la même plateforme",
     ],
     faq: [
@@ -968,19 +994,20 @@ export const TOOLS: ToolData[] = [
   {
     slug: "powerpoint-vers-pdf",
     name: "PowerPoint vers PDF",
-    metaTitle: "Convertir PowerPoint en PDF (.ppt, .pptx) | GigaPDF",
+    category: "convert",
+    metaTitle: "Convertir PowerPoint en PDF (.ppt, .pptx, .odp) | GigaPDF",
     metaDescription:
-      "Convertissez vos présentations PowerPoint en PDF fidèles avec le moteur maison : .pptx et anciens .ppt. Gratuit, open source, sans filigrane.",
+      "Convertissez vos présentations PowerPoint et ODP en PDF fidèles : .pptx, anciens .ppt et .odp. Gratuit, open source, sans filigrane.",
     h1: "Convertir une présentation PowerPoint en PDF",
     intro: [
       "Une présentation envoyée en .pptx arrive rarement intacte : polices substituées, animations qui n'ont plus de sens à l'arrêt, slides décalées selon la version de PowerPoint — et un fichier modifiable par n'importe qui. Le support qui circule après la réunion mérite mieux : un PDF où chaque diapositive est figée exactement comme vous l'avez conçue.",
-      "GigaPDF s'appuie sur son moteur maison côté serveur pour convertir les .pptx comme les anciens .ppt (PowerPoint 97-2003). Chaque diapositive devient une page du PDF : arrière-plans, images, schémas et blocs de texte sont rendus à leur position exacte. Les animations et transitions, propres au mode diaporama, sont naturellement absentes du support figé — c'est l'état final de chaque slide qui est restitué.",
+      "GigaPDF s'appuie sur son moteur maison côté serveur pour convertir les .pptx, les anciens .ppt (PowerPoint 97-2003) et les .odp (présentations OpenDocument). Chaque diapositive devient une page du PDF : arrière-plans, images, schémas et blocs de texte sont rendus à leur position exacte. Les animations et transitions, propres au mode diaporama, sont naturellement absentes du support figé — c'est l'état final de chaque slide qui est restitué.",
       "Le PDF obtenu est plus léger à diffuser qu'un .pptx chargé d'images, lisible sur tout appareil sans PowerPoint, et imprimable proprement. Besoin d'aller plus loin ? GigaPDF exporte aussi dans l'autre sens (PDF vers PPTX) pour reprendre un vieux support dont le fichier source a disparu — les deux sens de conversion sont inclus dans le plan gratuit.",
     ],
     howTo: {
       title: "Comment convertir un PowerPoint en PDF",
       steps: [
-        "Importez votre présentation .pptx ou .ppt dans votre espace GigaPDF.",
+        "Importez votre présentation .pptx, .ppt ou .odp dans votre espace GigaPDF.",
         "Lancez la conversion : chaque diapositive est rendue en page PDF par le moteur maison.",
         "Vérifiez le résultat dans la visionneuse : polices, images et schémas en place.",
         "Appliquez si besoin un filigrane ou une protection avant diffusion.",
@@ -988,11 +1015,11 @@ export const TOOLS: ToolData[] = [
       ],
     },
     capabilities: [
-      "Conversion des .pptx et des anciens .ppt (PowerPoint 97-2003)",
+      "Conversion des .pptx, des anciens .ppt (PowerPoint 97-2003) et des .odp (OpenDocument)",
       "Une diapositive = une page PDF, à la mise en page exacte",
       "Restitution des arrière-plans, images, schémas et zones de texte",
       "Conversion inverse disponible : export d'un PDF vers PPTX",
-      "Import des présentations OpenDocument (.odp) par le même moteur",
+      "Présentations OpenDocument .odp traitées par le même moteur maison",
       "Filigrane, protection et partage par lien depuis la même plateforme",
     ],
     faq: [
@@ -1029,6 +1056,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "opendocument-pdf",
     name: "OpenDocument et PDF",
+    category: "convert",
     metaTitle: "Convertir OpenDocument en PDF (ODT, ODS, ODP) | GigaPDF",
     metaDescription:
       "Convertissez ODT, ODS et ODP en PDF, et repassez du PDF vers ODT ou ODP. Le pont OpenDocument ↔ PDF, gratuit et open source.",
@@ -1090,6 +1118,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "pdf-vers-odt",
     name: "PDF vers ODT",
+    category: "convert",
     metaTitle: "Convertir un PDF en ODT (OpenDocument) | GigaPDF",
     metaDescription:
       "Transformez un PDF en document ODT modifiable dans votre traitement de texte, texte et images repris. Conversion gratuite et open source.",
@@ -1151,6 +1180,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "html-vers-pdf",
     name: "HTML vers PDF",
+    category: "convert",
     metaTitle: "Convertir HTML ou une page web en PDF | GigaPDF",
     metaDescription:
       "Transformez du HTML ou une URL en PDF rendu par le moteur maison : CSS moderne, polices web, pages longues. Gratuit, open source, avec API.",
@@ -1212,6 +1242,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "pdf-a",
     name: "PDF/A",
+    category: "organize",
     metaTitle: "Convertir en PDF/A : archivage conforme | GigaPDF",
     metaDescription:
       "Convertissez vos PDF au format d'archivage PDF/A-1b ou PDF/A-2b, conforme ISO 19005. Outil gratuit, open source et auto-hébergeable.",
@@ -1269,6 +1300,571 @@ export const TOOLS: ToolData[] = [
     relatedTools: ["signer-pdf", "ocr-pdf", "pdf-cherchable", "proteger-pdf"],
     relatedSolutions: ["avocats", "experts-comptables", "sante"],
     icon: "archive",
+  },
+  {
+    slug: "fusion-universelle",
+    name: "Fusion universelle",
+    category: "organize",
+    metaTitle: "Fusion universelle : tout fichier en un PDF | GigaPDF",
+    metaDescription:
+      "Fusionnez PDF, Word, Excel, PowerPoint, OpenDocument, images et HTML en un seul PDF. Chaque fichier converti puis assemblé. Gratuit, open source.",
+    h1: "Fusion universelle : réunir n'importe quels fichiers en un seul PDF",
+    intro: [
+      "La fusion classique a une limite frustrante : elle n'assemble que des PDF. Or un dossier réel est rarement homogène — un contrat en Word, un budget en Excel, un support en PowerPoint, des justificatifs photographiés, une page web exportée. Les réunir oblige d'ordinaire à convertir chaque pièce à la main, une par une, avant de pouvoir les combiner. La fusion universelle supprime cette corvée.",
+      "Vous déposez vos fichiers tels quels, quel que soit leur format : PDF, documents Word (.doc, .docx) et OpenDocument texte (.odt), classeurs Excel (.xls, .xlsx) et tableurs .ods, présentations PowerPoint (.ppt, .pptx) et .odp, images JPG, PNG, GIF, WebP et AVIF, pages HTML, fichiers texte. GigaPDF convertit chaque pièce en PDF avec son moteur maison côté serveur, puis assemble l'ensemble dans l'ordre que vous définissez — un document unique, paginé en continu, prêt à transmettre. C'est l'outil phare de la plateforme : tout ce qui peut devenir une page de PDF se fond dans le même fichier final.",
+      "Le résultat rejoint votre GED comme n'importe quel document : taggable, cherchable en texte intégral, partageable par lien. Aucun filigrane n'est ajouté, et la fonction est incluse dans le plan gratuit. Pour les organisations attachées à la confidentialité, toute la chaîne — conversions comprises — s'exécute sur votre propre serveur en auto-hébergement.",
+    ],
+    howTo: {
+      title: "Comment fusionner des fichiers de formats différents en un PDF",
+      steps: [
+        "Importez tous vos fichiers dans GigaPDF : PDF, Word, Excel, PowerPoint, OpenDocument, images, HTML ou texte.",
+        "Sélectionnez les pièces à réunir, sans vous soucier de leur format d'origine.",
+        "Glissez-déposez les fichiers pour définir l'ordre d'assemblage final.",
+        "Lancez la fusion universelle : chaque pièce non-PDF est d'abord convertie par le moteur maison.",
+        "Toutes les pièces converties sont assemblées en un seul PDF paginé en continu.",
+        "Classez, partagez ou téléchargez le document unique obtenu depuis votre espace.",
+      ],
+    },
+    capabilities: [
+      "Fusion de formats hétérogènes en un seul PDF : PDF, bureautique, images, HTML, texte",
+      "Conversion automatique de chaque pièce non-PDF par le moteur maison avant assemblage",
+      "Prise en charge de Word (.doc, .docx), Excel (.xls, .xlsx), PowerPoint (.ppt, .pptx) et OpenDocument (.odt, .ods, .odp)",
+      "Intégration des images JPG, PNG et WebP comme pages du document final",
+      "Définition libre de l'ordre des pièces avant la fusion",
+      "Aucun filigrane ajouté, résultat classé dans la GED et partageable par lien",
+    ],
+    faq: [
+      {
+        question: "Quels formats puis-je mélanger dans une même fusion ?",
+        answer:
+          "Tous ceux que GigaPDF sait transformer en page de PDF : les PDF eux-mêmes, les documents Word et OpenDocument texte, les classeurs Excel et .ods, les présentations PowerPoint et .odp, les images JPG, PNG et WebP, le HTML et les fichiers texte. Vous pouvez réunir un contrat Word, un budget Excel et trois justificatifs photographiés dans un seul fichier, en une opération.",
+      },
+      {
+        question: "Comment les fichiers non-PDF sont-ils intégrés ?",
+        answer:
+          "Chaque pièce qui n'est pas déjà un PDF est d'abord convertie par le moteur maison de GigaPDF — une diapositive devient une page, une image occupe une page, un document Word est rendu fidèlement. Les PDF obtenus sont ensuite assemblés dans l'ordre choisi. Le résultat est un PDF unique et homogène, sans trace des formats d'origine.",
+      },
+      {
+        question: "L'ordre des fichiers dans le document final est-il modifiable ?",
+        answer:
+          "Oui, avant la fusion : vous réordonnez les pièces par glisser-déposer pour fixer la séquence d'assemblage. Et après, si un ajustement s'impose, le document fusionné s'ouvre dans l'éditeur où la vue en miniatures permet de déplacer, faire pivoter ou retirer n'importe quelle page.",
+      },
+      {
+        question: "La fidélité des conversions est-elle préservée dans la fusion ?",
+        answer:
+          "La conversion de chaque pièce s'appuie sur le même moteur maison que les outils de conversion dédiés de GigaPDF — la fidélité est donc identique. Les documents textuels classiques se convertissent très proprement ; les mises en page très graphiques peuvent demander, comme toujours, un contrôle visuel sur le document final.",
+      },
+      {
+        question: "Y a-t-il un filigrane ou une limite sur la fusion universelle ?",
+        answer:
+          "Aucun filigrane n'est jamais apposé. La fonction est incluse dans le plan gratuit, dont les seules limites portent sur le stockage (5 Go) et le nombre de documents, pas sur le nombre de pièces réunies ni d'opérations effectuées.",
+      },
+    ],
+    useCases: [
+      "Assembler un dossier complet — contrat Word, budget Excel, justificatifs photographiés — en un seul PDF à transmettre",
+      "Réunir des sources hétérogènes (présentation, page web, scans) en un support unique paginé",
+      "Constituer une liasse de candidature ou de subvention sans convertir chaque pièce à la main",
+    ],
+    relatedTools: ["fusionner-pdf", "image-vers-pdf", "word-vers-pdf", "organiser-pages-pdf"],
+    relatedSolutions: ["associations", "experts-comptables", "immobilier"],
+    icon: "combine",
+    appHref: "/merge",
+  },
+  {
+    slug: "image-vers-pdf",
+    name: "Image vers PDF",
+    category: "convert",
+    metaTitle: "Convertir une image en PDF (JPG, PNG, WebP) | GigaPDF",
+    metaDescription:
+      "Convertissez vos images JPG, PNG, WebP, GIF et AVIF en PDF : une ou plusieurs images réunies en un PDF multipage. Gratuit et open source.",
+    h1: "Convertir des images en PDF, une ou plusieurs par document",
+    intro: [
+      "Une image n'est pas un document : un JPG ou un PNG se prête mal à l'envoi formel, à l'archivage ou à l'impression cadrée, et un lot de photos de pages reste un dossier éparpillé tant qu'il n'a pas été relié. Le PDF leur donne un cadre — un fichier unique, ordonné, paginé, qui circule et s'imprime proprement.",
+      "GigaPDF convertit vos images en PDF côté serveur : les formats JPG, PNG, WebP, GIF et AVIF sont pris en charge. Une seule image devient un PDF d'une page ; plusieurs images sélectionnées ensemble forment un PDF multipage, dans l'ordre que vous fixez — idéal pour relier les photos successives d'un document numérisé au téléphone. Chaque image est placée sur sa page, à sa résolution d'origine, sans recompression destructrice.",
+      "Le PDF produit rejoint votre espace : taggable, cherchable une fois passé à l'OCR, partageable par lien. La conversion est incluse dans le plan gratuit, sans filigrane, et fonctionne sur une instance auto-hébergée pour qui veut garder ses images sur sa propre infrastructure. C'est aussi le complément naturel de la fusion universelle, qui mêle images et autres formats dans un même document.",
+    ],
+    howTo: {
+      title: "Comment convertir une ou plusieurs images en PDF",
+      steps: [
+        "Importez vos images (JPG, PNG, WebP, GIF, AVIF) dans votre espace GigaPDF.",
+        "Sélectionnez une seule image, ou plusieurs pour un document multipage.",
+        "Définissez l'ordre des images si vous en réunissez plusieurs.",
+        "Lancez la conversion : chaque image est placée sur sa page à sa résolution d'origine.",
+        "Téléchargez le PDF, passez-le à l'OCR pour le rendre cherchable, ou partagez-le par lien.",
+      ],
+    },
+    capabilities: [
+      "Conversion des formats JPG, PNG, WebP, GIF et AVIF en PDF",
+      "Une image en PDF d'une page, ou plusieurs en un PDF multipage",
+      "Ordre des images défini librement avant la conversion",
+      "Images placées à leur résolution d'origine, sans recompression destructrice",
+      "Enchaînement avec l'OCR pour rendre le document cherchable",
+      "Aucun filigrane ajouté, résultat classé dans la GED",
+    ],
+    faq: [
+      {
+        question: "Puis-je réunir plusieurs images dans un seul PDF ?",
+        answer:
+          "Oui : sélectionnez toutes les images concernées, fixez leur ordre, et GigaPDF génère un PDF où chaque image occupe une page, dans la séquence choisie. C'est la façon la plus simple de relier les photos successives d'un document scanné au téléphone en un fichier unique et ordonné.",
+      },
+      {
+        question: "Quels formats d'image sont acceptés ?",
+        answer:
+          "Les formats courants du web et de la photo : JPG, PNG, WebP, GIF et AVIF. Vous pouvez mélanger plusieurs de ces formats dans une même conversion — GigaPDF les place tous sur leurs pages respectives dans le PDF final.",
+      },
+      {
+        question: "La qualité de mes images est-elle dégradée ?",
+        answer:
+          "Non : chaque image est intégrée à sa résolution d'origine, sans recompression destructrice. Si le PDF obtenu est volumineux — beaucoup de photos haute définition —, l'outil de compression de GigaPDF s'applique ensuite, en option, pour l'alléger.",
+      },
+      {
+        question: "Le texte de mes photos de documents deviendra-t-il cherchable ?",
+        answer:
+          "Pas directement : une image reste une image dans le PDF. Mais en enchaînant l'OCR maison de GigaPDF, le texte des pages est reconnu et un calque cherchable peut être ajouté — le document garde son apparence de photo tout en devenant interrogeable et sélectionnable.",
+      },
+    ],
+    useCases: [
+      "Relier les photos successives d'un document numérisé au téléphone en un PDF ordonné",
+      "Transformer un justificatif ou un ticket photographié en pièce PDF transmissible",
+      "Préparer un lot d'images au format PDF avant de les fusionner avec d'autres documents",
+    ],
+    relatedTools: ["pdf-vers-image", "fusion-universelle", "compresser-pdf"],
+    relatedSolutions: ["immobilier", "experts-comptables", "freelances"],
+    icon: "image",
+  },
+  {
+    slug: "pdf-vers-image",
+    name: "PDF vers image",
+    category: "convert",
+    metaTitle: "Convertir un PDF en image (PNG, JPG) | GigaPDF",
+    metaDescription:
+      "Exportez chaque page d'un PDF en image PNG ou JPG : vignettes, illustrations, aperçus. Conversion gratuite, open source, sans filigrane.",
+    h1: "Convertir un PDF en images PNG ou JPG, page par page",
+    intro: [
+      "Un PDF ne s'insère pas partout : une page de document qu'on veut glisser dans une présentation, illustrer sur un site, joindre à un message dans une messagerie qui n'affiche pas les PDF en aperçu, ou utiliser comme vignette a souvent besoin de devenir une image. L'export PDF vers image répond à ce besoin en transformant chaque page en fichier PNG ou JPG autonome.",
+      "GigaPDF rend chaque page du PDF en image côté serveur : vous choisissez le format de sortie — PNG pour une qualité sans perte et la transparence, JPG pour des fichiers plus légers — et le moteur produit une image par page, fidèle à l'affichage du document. Texte vectoriel, illustrations et mises en page sont rastérisés proprement, à une résolution adaptée à l'usage.",
+      "Les images obtenues s'utilisent partout : insertion dans un diaporama, publication en ligne, partage rapide. La conversion est incluse dans le plan gratuit, sans filigrane, et le chemin inverse — image vers PDF — existe aussi dans GigaPDF pour reconstituer un PDF à partir d'images. L'ensemble fonctionne sur une instance auto-hébergée.",
+    ],
+    howTo: {
+      title: "Comment convertir un PDF en images",
+      steps: [
+        "Importez le PDF à exporter dans votre espace GigaPDF.",
+        "Lancez l'export en image depuis le menu de conversion.",
+        "Choisissez le format de sortie : PNG (sans perte, transparence) ou JPG (plus léger).",
+        "Le moteur rend chaque page en une image fidèle à l'affichage du document.",
+        "Récupérez les images produites, page par page, prêtes à être insérées ou partagées.",
+      ],
+    },
+    capabilities: [
+      "Export de chaque page du PDF en image autonome",
+      "Choix du format de sortie : PNG (sans perte, transparence) ou JPG (plus léger)",
+      "Rendu fidèle du texte, des illustrations et de la mise en page",
+      "Résolution adaptée à l'usage : aperçu, insertion ou publication",
+      "Conversion inverse disponible : image vers PDF dans la même plateforme",
+      "Aucun filigrane ajouté sur les images produites",
+    ],
+    faq: [
+      {
+        question: "Chaque page devient-elle une image séparée ?",
+        answer:
+          "Oui : GigaPDF rend une image par page du PDF. Un document de cinq pages produit cinq fichiers image, ce qui vous laisse choisir précisément lesquels insérer ou partager. Vous récupérez les pages dont vous avez besoin, individuellement.",
+      },
+      {
+        question: "PNG ou JPG : lequel choisir ?",
+        answer:
+          "PNG offre une qualité sans perte et gère la transparence — c'est le choix pour un rendu net du texte et des aplats, au prix de fichiers plus lourds. JPG produit des images plus légères, bien adaptées aux photos et aux pages riches en images, avec une compression visuellement discrète. Le bon format dépend de votre usage final.",
+      },
+      {
+        question: "Le rendu est-il fidèle au PDF d'origine ?",
+        answer:
+          "Oui : le moteur rastérise chaque page telle qu'elle s'affiche — texte, vecteurs, images et mise en page à leur place. L'image obtenue correspond à ce que montre une visionneuse PDF, à la résolution choisie.",
+      },
+      {
+        question: "Puis-je refaire un PDF à partir d'images ?",
+        answer:
+          "Oui, c'est l'opération inverse, également disponible dans GigaPDF : l'outil image vers PDF réunit une ou plusieurs images en un PDF, d'une ou plusieurs pages. Vous pouvez ainsi exporter des pages en images, les retoucher, puis reconstituer un PDF.",
+      },
+    ],
+    useCases: [
+      "Insérer une page de PDF comme illustration dans une présentation ou un site",
+      "Produire des vignettes ou des aperçus d'un document pour le web",
+      "Partager rapidement une page sous forme d'image dans une messagerie sans aperçu PDF",
+    ],
+    relatedTools: ["image-vers-pdf", "compresser-pdf", "diviser-pdf"],
+    relatedSolutions: ["freelances", "enseignants-formateurs", "architectes-btp"],
+    icon: "images",
+  },
+  {
+    slug: "pdf-vers-powerpoint",
+    name: "PDF vers PowerPoint",
+    category: "convert",
+    metaTitle: "Convertir un PDF en PowerPoint (PPTX) | GigaPDF",
+    metaDescription:
+      "Transformez un PDF en présentation PowerPoint modifiable (.pptx), une slide par page. Conversion gratuite, open source, sans filigrane.",
+    h1: "Convertir un PDF en présentation PowerPoint modifiable",
+    intro: [
+      "Reprendre un support de présentation dont le fichier source a disparu est un casse-tête courant : il ne reste que le PDF, figé, alors qu'il faudrait actualiser un chiffre, remplacer une diapositive ou repartir d'une trame existante. La conversion PDF vers PPTX reconstruit la présentation dans un format où chaque page redevient une diapositive éditable.",
+      "GigaPDF analyse le PDF page par page et génère un fichier .pptx ouvert par PowerPoint ou votre logiciel de présentation : chaque page du document devient une diapositive, ses textes et ses images repris comme éléments manipulables. Vous retrouvez un support sur lequel travailler — déplacer un bloc, corriger un libellé, ajouter une slide — au lieu d'une suite d'images figées. La conversion s'exécute côté serveur, sans installation.",
+      "C'est le complément exact de l'outil PowerPoint vers PDF : les deux sens de conversion sont inclus dans le plan gratuit, sans filigrane. Le .pptx produit rejoint votre GED, où il peut être classé, partagé ou reconverti, et toute la chaîne fonctionne sur une instance auto-hébergée pour les organisations qui gardent leurs supports en interne.",
+    ],
+    howTo: {
+      title: "Comment convertir un PDF en PowerPoint",
+      steps: [
+        "Importez le PDF à convertir dans votre espace GigaPDF.",
+        "Choisissez l'export au format PPTX dans le menu de conversion.",
+        "Le moteur reconstruit chaque page en une diapositive avec ses textes et images.",
+        "Téléchargez le .pptx et ouvrez-le dans PowerPoint ou votre logiciel de présentation.",
+        "Reprenez la présentation : déplacez les blocs, corrigez les libellés, ajoutez des diapositives.",
+      ],
+    },
+    capabilities: [
+      "Export PPTX compatible PowerPoint et logiciels de présentation",
+      "Une page de PDF = une diapositive éditable",
+      "Textes et images repris comme éléments manipulables",
+      "Conversion côté serveur, sans installation locale",
+      "Complément de l'outil PowerPoint vers PDF : conversion dans les deux sens",
+      "Aucun filigrane ajouté sur la présentation convertie",
+    ],
+    faq: [
+      {
+        question: "Chaque page du PDF devient-elle une diapositive ?",
+        answer:
+          "Oui : la conversion fait correspondre une page du PDF à une diapositive du .pptx. Un document de douze pages produit une présentation de douze diapositives, dont les textes et images sont repris comme éléments éditables dans PowerPoint.",
+      },
+      {
+        question: "Le résultat est-il vraiment modifiable, ou juste une image par slide ?",
+        answer:
+          "L'objectif est la réelle éditabilité : les textes détectés reviennent comme blocs de texte et les images comme éléments distincts, manipulables. Les mises en page très graphiques peuvent demander des ajustements après conversion, mais vous obtenez bien un support sur lequel travailler, pas une suite d'images figées.",
+      },
+      {
+        question: "Quand utiliser cette conversion plutôt que l'édition directe ?",
+        answer:
+          "Quand vous voulez retravailler le support dans votre logiciel de présentation habituel — réorganiser les diapositives, appliquer un thème, réutiliser des éléments. Pour une retouche ponctuelle sur le PDF lui-même (corriger une date, masquer une mention), l'éditeur PDF de GigaPDF est plus direct.",
+      },
+      {
+        question: "Y a-t-il un filigrane sur la présentation convertie ?",
+        answer:
+          "Aucun. La conversion PDF vers PPTX est une fonction complète du plan gratuit, sans filigrane ni dégradation. Le fichier produit vous appartient, prêt à être édité et présenté.",
+      },
+    ],
+    useCases: [
+      "Reprendre un support de formation ou de conférence dont le fichier PowerPoint d'origine a été perdu",
+      "Actualiser une présentation client diffusée uniquement en PDF",
+      "Réutiliser les diapositives d'un PDF comme base d'un nouveau support",
+    ],
+    relatedTools: ["powerpoint-vers-pdf", "pdf-vers-word", "fusionner-pdf"],
+    relatedSolutions: ["enseignants-formateurs", "freelances", "associations"],
+    icon: "presentation",
+  },
+  {
+    slug: "pdf-vers-excel",
+    name: "PDF vers Excel",
+    category: "convert",
+    metaTitle: "Convertir un PDF en Excel (XLSX) | GigaPDF",
+    metaDescription:
+      "Extrayez les tableaux d'un PDF vers un classeur Excel modifiable (.xlsx). Reconstruction des tableaux, gratuit et open source.",
+    h1: "Convertir un PDF en classeur Excel modifiable",
+    intro: [
+      "Récupérer dans un tableur les chiffres figés d'un PDF — un relevé, un export de comptabilité, un tableau de bord reçu sans son fichier source — est l'une des manipulations les plus pénibles : ressaisir cellule par cellule, ou copier-coller un bloc qui s'écrase dans une seule colonne. La conversion PDF vers XLSX reconstruit les tableaux du document dans un classeur où chaque valeur retrouve sa cellule.",
+      "GigaPDF analyse la structure tabulaire du PDF et génère un fichier .xlsx ouvert par Excel, votre tableur ou Google Sheets : les lignes et les colonnes détectées sont restituées en cellules, prêtes à être triées, filtrées ou recalculées. Le travail de reconstruction vise à respecter l'organisation du tableau d'origine plutôt que de déverser le texte en vrac. Le traitement s'effectue en ligne, sans logiciel à installer.",
+      "Un cas mérite attention : les PDF scannés, dépourvus de texte numérique. Passez d'abord le document à l'OCR multilingue de GigaPDF, puis convertissez — la chaîne scan → OCR → XLSX rend exploitable un tableau numérisé. La conversion est incluse dans le plan gratuit, sans filigrane, et fonctionne en auto-hébergement.",
+    ],
+    howTo: {
+      title: "Comment convertir un PDF en Excel",
+      steps: [
+        "Importez le PDF contenant les tableaux dans votre espace GigaPDF.",
+        "S'il s'agit d'un scan, lancez d'abord l'OCR pour reconnaître le texte.",
+        "Choisissez l'export au format XLSX dans le menu de conversion.",
+        "Le moteur reconstruit les lignes et colonnes détectées en cellules.",
+        "Téléchargez le .xlsx et ouvrez-le dans Excel, votre tableur ou Google Sheets.",
+      ],
+    },
+    capabilities: [
+      "Export XLSX compatible Excel, tableurs et Google Sheets",
+      "Reconstruction des tableaux du PDF en lignes et colonnes",
+      "Valeurs replacées dans leurs cellules, prêtes à trier, filtrer, recalculer",
+      "Chaîne scan → OCR → XLSX pour les tableaux numérisés",
+      "Conversion côté serveur, sans installation locale",
+      "Aucun filigrane ajouté sur le classeur converti",
+    ],
+    faq: [
+      {
+        question: "Les tableaux du PDF redeviennent-ils de vrais tableaux dans Excel ?",
+        answer:
+          "C'est le but : les structures tabulaires détectées sont restituées en lignes et colonnes, chaque valeur dans sa cellule. Vous retrouvez un classeur sur lequel trier, filtrer et recalculer. Les tableaux très complexes — cellules fusionnées en cascade, tableaux dessinés sans structure régulière — peuvent demander un contrôle et quelques ajustements après conversion.",
+      },
+      {
+        question: "Puis-je convertir un tableau scanné en Excel ?",
+        answer:
+          "Oui, en deux temps : l'OCR d'abord, la conversion ensuite. Un scan ne contient que des images ; l'OCR maison de GigaPDF en extrait le texte, qui alimente alors la reconstruction du tableau en .xlsx. Sans cette étape, il n'y a aucune donnée numérique à replacer dans les cellules.",
+      },
+      {
+        question: "Que se passe-t-il pour le texte hors tableau ?",
+        answer:
+          "La conversion privilégie les zones tabulaires du document. Le texte purement narratif d'un PDF se prête mal au format cellule : pour reprendre un document mêlant prose et tableaux, l'export vers Word ou ODT est souvent plus adapté, et l'export XLSX se réserve aux pages réellement tabulaires.",
+      },
+      {
+        question: "Y a-t-il un filigrane sur le classeur produit ?",
+        answer:
+          "Aucun. La conversion PDF vers XLSX est incluse dans le plan gratuit sans filigrane ni dégradation. Le fichier produit vous appartient, prêt à être retravaillé dans votre tableur.",
+      },
+    ],
+    useCases: [
+      "Récupérer les chiffres d'un relevé ou d'un export comptable reçu sans son fichier source",
+      "Reprendre un tableau de bord PDF dans un tableur pour le trier et le recalculer",
+      "Convertir un tableau scanné en classeur exploitable via OCR puis conversion",
+    ],
+    relatedTools: ["excel-vers-pdf", "pdf-vers-word", "pdf-vers-powerpoint"],
+    relatedSolutions: ["experts-comptables", "freelances", "associations"],
+    icon: "table",
+  },
+  {
+    slug: "rtf-pdf",
+    name: "RTF et PDF",
+    category: "convert",
+    metaTitle: "Convertir RTF en PDF et PDF en RTF | GigaPDF",
+    metaDescription:
+      "Convertissez vos fichiers RTF en PDF, et repassez du PDF vers le RTF modifiable. Le pont RTF ↔ PDF, gratuit et open source.",
+    h1: "RTF vers PDF, et retour : le format texte universel",
+    intro: [
+      "Le RTF (Rich Text Format) est le format texte d'échange le plus universel : lisible par tous les traitements de texte, indépendant de l'éditeur, il sert encore de pivot dans bien des chaînes documentaires et des exports d'applications anciennes. Mais pour figer ou diffuser un .rtf, le PDF reste la référence — et inversement, reprendre le contenu d'un PDF dans un format texte simple passe naturellement par le RTF.",
+      "GigaPDF assure les deux sens avec son moteur de conversion maison côté serveur. Le RTF se convertit en PDF en préservant la mise en forme du texte — styles, paragraphes, attributs de caractères —, dans un document figé prêt à transmettre. Et un PDF s'exporte en RTF pour récupérer son texte dans un format ouvert que tout traitement de texte rouvre et retravaille, sans dépendance à une suite particulière.",
+      "Cette bidirectionnalité fait du RTF un format de transit commode entre le monde figé du PDF et celui des traitements de texte. La conversion est incluse dans le plan gratuit, sans filigrane, et s'exécute sur une instance auto-hébergée. Pour les documents scannés, l'OCR maison fournit d'abord le texte avant l'export RTF.",
+    ],
+    howTo: {
+      title: "Comment convertir entre RTF et PDF",
+      steps: [
+        "Importez votre fichier .rtf — ou le PDF à reprendre — dans votre espace GigaPDF.",
+        "Pour figer un RTF, lancez la conversion en PDF : la mise en forme du texte est préservée.",
+        "Pour le sens inverse, ouvrez un PDF et exportez-le en RTF.",
+        "S'il s'agit d'un PDF scanné, appliquez d'abord l'OCR pour reconnaître le texte.",
+        "Ouvrez le RTF dans votre traitement de texte, ou classez le PDF dans la GED.",
+      ],
+    },
+    capabilities: [
+      "Conversion du RTF vers PDF avec préservation de la mise en forme du texte",
+      "Export inverse du PDF vers RTF pour récupérer le contenu dans un format ouvert",
+      "Moteur de conversion maison côté serveur, sans installation",
+      "Chaîne scan → OCR → RTF pour les documents numérisés",
+      "RTF lisible par tout traitement de texte, sans dépendance à une suite",
+      "Aucun filigrane, conversion incluse dans le plan gratuit",
+    ],
+    faq: [
+      {
+        question: "Pourquoi passer par le RTF plutôt que le DOCX ?",
+        answer:
+          "Le RTF est plus universel et plus léger : c'est un format texte ouvert lisible par à peu près tous les traitements de texte, y compris anciens, et utilisé comme pivot par de nombreux outils. Pour un échange de texte simple sans dépendance à une suite précise, il est souvent plus sûr que le .docx. Pour une mise en page riche, GigaPDF propose aussi l'export DOCX.",
+      },
+      {
+        question: "La mise en forme de mon RTF est-elle conservée dans le PDF ?",
+        answer:
+          "Oui : styles de paragraphes, graisses, italiques, alignements et tailles de caractères sont restitués dans le PDF. Le RTF décrivant une mise en forme plus simple que le PDF, la conversion est généralement très fidèle sur les documents textuels.",
+      },
+      {
+        question: "Puis-je convertir un PDF scanné en RTF ?",
+        answer:
+          "Oui, en chaînant deux outils : l'OCR maison de GigaPDF reconnaît d'abord le texte du scan, puis l'export RTF le structure dans un fichier texte modifiable. Sans l'étape OCR, un scan n'a pas de texte à exporter.",
+      },
+      {
+        question: "Le RTF produit s'ouvre-t-il dans n'importe quel logiciel ?",
+        answer:
+          "Oui : le RTF est un format standard ouvert que tous les traitements de texte courants — Word, les suites OpenDocument, les éditeurs légers — savent ouvrir et réenregistrer. Vous n'êtes enfermé dans aucun éditeur particulier.",
+      },
+    ],
+    useCases: [
+      "Figer un document RTF en PDF avant transmission, mise en forme préservée",
+      "Récupérer le texte d'un PDF dans un format ouvert rouvrable partout",
+      "Reprendre le contenu d'un courrier scanné en RTF via l'OCR intégré",
+    ],
+    relatedTools: ["texte-vers-pdf", "word-vers-pdf", "pdf-vers-word"],
+    relatedSolutions: ["associations", "freelances", "education-etudiants"],
+    icon: "file-text",
+  },
+  {
+    slug: "texte-vers-pdf",
+    name: "Texte vers PDF",
+    category: "convert",
+    metaTitle: "Convertir un fichier texte (.txt) en PDF | GigaPDF",
+    metaDescription:
+      "Transformez un fichier texte brut (.txt) en PDF propre et lisible, pagination soignée. Conversion gratuite, open source, sans filigrane.",
+    h1: "Convertir un fichier texte (.txt) en PDF propre",
+    intro: [
+      "Un fichier texte brut (.txt) est universel mais ingrat à diffuser : pas de mise en page, un rendu qui varie selon l'éditeur et l'encodage, des retours à la ligne aléatoires d'un logiciel à l'autre. Logs, notes, exports de données, contenus copiés depuis une console : ces fichiers utiles gagnent à être figés en PDF lisible avant d'être transmis, imprimés ou archivés.",
+      "GigaPDF convertit un .txt en PDF côté serveur : le texte est mis en page proprement, paginé et rendu dans un document à l'apparence stable, identique sur tous les écrans. L'encodage est respecté — accents et caractères spéciaux du français sont correctement restitués —, et le résultat est un PDF net, prêt à être classé ou partagé, là où le fichier texte d'origine restait un brouillon technique.",
+      "L'outil est disponible dans le plan gratuit, sans filigrane, hébergé en propre. Le PDF produit rejoint votre GED comme n'importe quel document, et s'enchaîne avec les autres outils — fusion, protection, archivage PDF/A. Pour un texte enrichi avec mise en forme, l'outil RTF vers PDF prend le relais ; pour une mise en page complexe, le HTML vers PDF.",
+    ],
+    howTo: {
+      title: "Comment convertir un fichier texte en PDF",
+      steps: [
+        "Importez votre fichier .txt dans votre espace GigaPDF.",
+        "Lancez la conversion en PDF depuis le menu d'actions.",
+        "Le moteur met le texte en page et le pagine proprement, encodage respecté.",
+        "Contrôlez le rendu dans la visionneuse intégrée.",
+        "Téléchargez le PDF, partagez-le par lien ou classez-le dans la GED.",
+      ],
+    },
+    capabilities: [
+      "Conversion d'un fichier texte brut (.txt) en PDF propre et paginé",
+      "Mise en page stable, identique sur tous les écrans",
+      "Encodage respecté : accents et caractères spéciaux du français restitués",
+      "Conversion côté serveur, sans installation locale",
+      "Enchaînement avec la fusion, la protection et l'archivage PDF/A",
+      "Aucun filigrane ajouté sur le document produit",
+    ],
+    faq: [
+      {
+        question: "Mes accents et caractères spéciaux seront-ils corrects ?",
+        answer:
+          "Oui : la conversion respecte l'encodage du fichier, si bien que les accents, cédilles et caractères spéciaux du français sont restitués fidèlement dans le PDF. Le rendu est stable, contrairement à l'ouverture d'un .txt qui dépend de l'éditeur et de ses réglages d'encodage.",
+      },
+      {
+        question: "Puis-je convertir un texte avec une mise en forme (gras, titres) ?",
+        answer:
+          "Un fichier .txt ne contient, par définition, aucune mise en forme — seulement du texte brut. Si votre contenu comporte des styles, partez plutôt d'un fichier RTF (outil RTF vers PDF) ou d'un gabarit HTML (outil HTML vers PDF) : ces formats portent la mise en forme que le .txt ne peut pas exprimer.",
+      },
+      {
+        question: "La pagination est-elle gérée pour les longs fichiers ?",
+        answer:
+          "Oui : le texte est réparti sur autant de pages que nécessaire, avec une pagination propre. Un long fichier de logs ou de notes devient un PDF multipage lisible, plutôt qu'un bloc de texte ininterrompu.",
+      },
+      {
+        question: "Y a-t-il un filigrane sur le PDF produit ?",
+        answer:
+          "Aucun. La conversion texte vers PDF est une fonction complète du plan gratuit, sans filigrane. Le fichier produit vous appartient, propre et prêt à diffuser.",
+      },
+    ],
+    useCases: [
+      "Figer un fichier de logs ou de notes en PDF lisible avant transmission",
+      "Transformer un export de données texte en document propre et paginé",
+      "Archiver proprement un contenu copié depuis une console ou un terminal",
+    ],
+    relatedTools: ["rtf-pdf", "html-vers-pdf", "word-vers-pdf"],
+    relatedSolutions: ["education-etudiants", "freelances", "associations"],
+    icon: "file-type",
+  },
+  {
+    slug: "caviarder-pdf",
+    name: "Caviarder un PDF",
+    category: "edit",
+    metaTitle: "Caviarder un PDF : caviardage permanent | GigaPDF",
+    metaDescription:
+      "Caviardez vos PDF pour de bon : le contenu sous la zone est réellement supprimé du fichier, pas masqué d'un rectangle noir. Gratuit, open source.",
+    h1: "Caviarder un PDF : une suppression réelle, pas un rectangle noir",
+    intro: [
+      "Le piège du caviardage est documenté et récurrent : un rectangle noir posé par-dessus un nom, un montant ou une clause, dont le texte réapparaît au premier copier-coller ou à la première extraction. La plupart des outils dessinent un masque sans toucher au contenu situé dessous — la donnée sensible est toujours là, dans le fichier, accessible à qui sait la chercher. Pour un document confidentiel, c'est une fuite en un clic.",
+      "GigaPDF applique un caviardage réel : les opérateurs de texte situés dans la zone caviardée sont physiquement retirés du flux de contenu du fichier, et non recouverts. Après traitement, le texte n'existe plus — ni au copier-coller, ni à l'extraction, ni à la recherche. La zone est ensuite recouverte visuellement, mais c'est la suppression sous-jacente qui fait la sécurité : il n'y a plus rien à révéler. La vérification est simple — tentez de sélectionner ou de rechercher un mot occulté, il ne ressort pas.",
+      "Cette redaction conforme est portée par le moteur PDF maison de GigaPDF. Elle s'adresse en priorité aux professions qui manient des pièces sensibles — juristes, RH, santé — et tout dossier soumis à un devoir de confidentialité. La fonction est incluse dans le plan gratuit, l'original reste conservé dans l'historique, et toute la chaîne s'opère en auto-hébergement pour ne jamais sortir le document de votre infrastructure.",
+    ],
+    howTo: {
+      title: "Comment caviarder un PDF de façon permanente",
+      steps: [
+        "Importez le document à caviarder dans votre espace GigaPDF.",
+        "Ouvrez-le dans l'éditeur et tracez les zones à occulter sur les passages sensibles.",
+        "Appliquez le caviardage : le moteur maison retire le texte sous la zone du flux de contenu.",
+        "Vérifiez l'efficacité en tentant un copier-coller ou une recherche sur un mot occulté — rien ne ressort.",
+        "Téléchargez le PDF caviardé ; l'original intact reste disponible dans l'historique de versions.",
+      ],
+    },
+    capabilities: [
+      "Caviardage réel : le contenu sous la zone est supprimé du fichier, pas masqué",
+      "Opérateurs de texte retirés du flux de contenu par le moteur PDF maison",
+      "Aucune réapparition au copier-coller, à l'extraction ou à la recherche",
+      "Vérification immédiate par tentative de sélection sur une zone occultée",
+      "Original conservé dans l'historique de versions",
+      "Chaîne entièrement auto-hébergeable pour les documents confidentiels",
+    ],
+    faq: [
+      {
+        question: "En quoi est-ce différent d'un rectangle noir posé sur le texte ?",
+        answer:
+          "Un rectangle noir n'est qu'un dessin par-dessus : le texte reste intact dans le fichier, et un copier-coller, une extraction ou une recherche le révèlent. Le caviardage de GigaPDF retire physiquement les opérateurs de texte du flux de contenu — la donnée n'existe plus dans le document. La zone est recouverte, mais c'est la suppression sous-jacente qui protège.",
+      },
+      {
+        question: "Comment vérifier que le contenu a réellement disparu ?",
+        answer:
+          "Faites le test qui piège les mauvais outils : sélectionnez la zone caviardée et tentez un copier-coller, ou lancez une recherche sur un mot occulté. Avec le caviardage réel de GigaPDF, rien ne ressort — les opérateurs de texte ont été supprimés, le mot n'est plus dans le fichier.",
+      },
+      {
+        question: "Puis-je revenir en arrière après avoir caviardé ?",
+        answer:
+          "Oui sur l'original, non sur la donnée caviardée — et c'est voulu. Le caviardage produit une nouvelle version dont le contenu est réellement supprimé ; l'historique conserve la version d'origine, complète, que vous pouvez restaurer. La copie diffusée, elle, ne contient plus rien à révéler.",
+      },
+      {
+        question: "Le caviardage couvre-t-il aussi les images et les métadonnées de la zone ?",
+        answer:
+          "Le caviardage agit sur le contenu situé dans la zone tracée, texte en premier lieu. Pour un document particulièrement sensible, combinez-le avec les autres garde-fous de GigaPDF : chiffrement AES pour la diffusion et signature numérique qui révèle toute altération ultérieure du fichier.",
+      },
+    ],
+    useCases: [
+      "Occulter définitivement un nom ou un montant dans une pièce avant communication",
+      "Caviarder des données personnelles d'un document soumis à confidentialité",
+      "Préparer une version publique d'un dossier en supprimant réellement les passages sensibles",
+    ],
+    relatedTools: ["annoter-pdf", "proteger-pdf", "filigrane-pdf"],
+    relatedSolutions: ["avocats", "ressources-humaines", "sante"],
+    icon: "square-pen",
+  },
+  {
+    slug: "deverrouiller-pdf",
+    name: "Déverrouiller un PDF",
+    category: "secure",
+    metaTitle: "Déverrouiller un PDF : retirer le mot de passe | GigaPDF",
+    metaDescription:
+      "Retirez le mot de passe d'un PDF que vous connaissez : déchiffrement et suppression de la protection. Gratuit, open source, auto-hébergeable.",
+    h1: "Déverrouiller un PDF : retirer un mot de passe que vous connaissez",
+    intro: [
+      "Un PDF chiffré rend service tant qu'il circule, mais devient encombrant une fois arrivé à bon port : ressaisir le mot de passe à chaque ouverture, se heurter au refus d'impression ou de copie, ne pas pouvoir l'indexer ni le retravailler. Quand vous détenez légitimement le mot de passe, retirer la protection rend le document à nouveau pratique au quotidien.",
+      "GigaPDF déchiffre le fichier à partir du mot de passe que vous fournissez et produit une version déverrouillée, lisible et manipulable sans contrainte. L'opération suppose une condition stricte et non négociable : connaître le mot de passe. GigaPDF ne casse aucun chiffrement et ne contourne aucune protection — c'est un outil de déchiffrement légitime pour vos propres documents ou ceux que vous êtes autorisé à ouvrir, pas un outil de forçage.",
+      "Une fois déverrouillé, le document s'édite, se fusionne, s'indexe et se rechiffre au besoin avec un nouveau mot de passe. La fonction est incluse dans le plan gratuit, et toute la chaîne s'opère en auto-hébergement pour les documents qui ne doivent pas quitter votre infrastructure. C'est l'opération complémentaire de la protection par mot de passe.",
+    ],
+    howTo: {
+      title: "Comment retirer le mot de passe d'un PDF",
+      steps: [
+        "Importez le PDF protégé dans votre espace GigaPDF.",
+        "Ouvrez l'outil de déverrouillage et saisissez le mot de passe du document.",
+        "Validez : GigaPDF déchiffre le fichier à partir du mot de passe fourni.",
+        "Récupérez la version déverrouillée, lisible et manipulable sans contrainte.",
+        "Rechiffrez-la si besoin avec un nouveau mot de passe, ou classez-la dans la GED.",
+      ],
+    },
+    capabilities: [
+      "Déchiffrement d'un PDF à partir du mot de passe que vous fournissez",
+      "Suppression de la protection : plus de saisie de mot de passe à l'ouverture",
+      "Levée des restrictions d'impression et de copie une fois le document déchiffré",
+      "Rechiffrement possible ensuite avec un nouveau mot de passe",
+      "Aucun contournement de protection : le mot de passe est requis",
+      "Chaîne entièrement auto-hébergeable pour les documents sensibles",
+    ],
+    faq: [
+      {
+        question: "Faut-il connaître le mot de passe pour déverrouiller le PDF ?",
+        answer:
+          "Oui, c'est une condition stricte et non négociable. GigaPDF déchiffre le document à partir du mot de passe que vous fournissez ; il ne casse aucun chiffrement et ne contourne aucune protection. C'est un outil légitime pour vos propres fichiers ou ceux que vous êtes autorisé à ouvrir, pas un outil de forçage.",
+      },
+      {
+        question: "GigaPDF peut-il déverrouiller un PDF dont j'ai perdu le mot de passe ?",
+        answer:
+          "Non, et c'est précisément ce qui fait la valeur du chiffrement : il n'existe pas de porte dérobée. Sans le mot de passe d'ouverture, un PDF chiffré en AES-256 est cryptographiquement illisible. Si le fichier d'origine non chiffré est encore dans votre espace, l'historique de versions peut vous permettre de le récupérer.",
+      },
+      {
+        question: "Le document déverrouillé peut-il être rechiffré ensuite ?",
+        answer:
+          "Oui : une fois la protection retirée, vous pouvez retravailler le document puis le rechiffrer avec un nouveau mot de passe via l'outil de protection de GigaPDF. C'est utile pour changer un mot de passe : déverrouiller avec l'ancien, rechiffrer avec le nouveau.",
+      },
+      {
+        question: "Quelle différence entre déverrouiller et lever les restrictions d'impression ?",
+        answer:
+          "Un PDF peut porter deux verrous : un mot de passe d'ouverture (lecture) et un mot de passe propriétaire (droits d'impression, copie). Le déverrouillage à partir du mot de passe que vous détenez retire la protection et rend le document librement lisible et manipulable, restrictions comprises.",
+      },
+    ],
+    useCases: [
+      "Retirer le mot de passe d'un document chiffré une fois qu'il n'a plus besoin de circuler protégé",
+      "Changer le mot de passe d'un PDF : déverrouiller avec l'ancien, rechiffrer avec le nouveau",
+      "Rendre indexable et éditable un PDF protégé dont vous détenez le mot de passe",
+    ],
+    relatedTools: ["proteger-pdf", "signer-pdf", "caviarder-pdf"],
+    relatedSolutions: ["ressources-humaines", "experts-comptables", "avocats"],
+    icon: "unlock",
   },
 ];
 

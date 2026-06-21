@@ -1165,6 +1165,182 @@ X-RateLimit-Reset: 1705312200
 
 ---
 
+## Next.js Processing Routes (`/api/pdf/*`)
+
+These routes run inside the **Next.js** runtime (port 3000) and are handled by
+the TypeScript PDF engine (`packages/pdf-engine` + `@qrcommunication/gigapdf-lib`
+WASM). They are **distinct from the FastAPI REST API** (`/api/v1/*`): they require
+a valid user **session cookie** (not a Bearer token) and are not covered by the
+OpenAPI spec at `/api/docs`.
+
+Ces routes s'exécutent dans le **runtime Next.js** (port 3000) via le moteur PDF
+TypeScript. Elles nécessitent un **cookie de session** valide (pas un token
+Bearer) et ne figurent pas dans la spec OpenAPI FastAPI.
+
+---
+
+### Universal merge / Fusion universelle
+
+Merge any combination of supported file types into a single PDF. Every non-PDF
+file is converted automatically before merging.
+
+Fusionner n'importe quelle combinaison de fichiers supportés en un seul PDF.
+Chaque fichier non-PDF est converti automatiquement avant la fusion.
+
+```http
+POST /api/pdf/merge-universal
+Content-Type: multipart/form-data
+Cookie: session=<session_cookie>
+```
+
+**Supported input formats / Formats acceptés:**
+PDF, DOCX, DOC, XLSX, XLS, PPTX, PPT, ODT, ODS, ODP,
+JPG/JPEG, PNG, GIF, WebP, AVIF, HTML, TXT, RTF
+
+#### Parameters / Paramètres
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `files[]` | file[] | Yes | Files to merge (heterogeneous types allowed) |
+| `outputName` | string | No | Name of the resulting PDF file |
+
+#### Examples / Exemples
+
+**cURL:**
+```bash
+curl -X POST "https://giga-pdf.com/api/pdf/merge-universal" \
+  -b "session=$SESSION" \
+  -F "files[]=@report.pdf" \
+  -F "files[]=@data.xlsx" \
+  -F "files[]=@photo.png" \
+  -F "outputName=merged.pdf" \
+  --output merged.pdf
+```
+
+**JavaScript:**
+```javascript
+const formData = new FormData();
+formData.append('files[]', pdfFile);
+formData.append('files[]', xlsxFile);
+formData.append('files[]', pngFile);
+formData.append('outputName', 'merged.pdf');
+
+const response = await fetch('/api/pdf/merge-universal', {
+  method: 'POST',
+  body: formData,
+  credentials: 'include'   // sends session cookie
+});
+
+const blob = await response.blob();
+```
+
+**Response / Réponse:** `200 OK` — `application/pdf` binary
+
+---
+
+### Image to PDF / Image en PDF
+
+Convert one or more images to a single PDF. Supports full color depth,
+transparency (PNG), interlacing, and all common image formats.
+
+Convertir une ou plusieurs images en un seul PDF. Supporte la transparence
+(PNG), l'interlacement et tous les formats d'images courants.
+
+```http
+POST /api/pdf/image-to-pdf
+Content-Type: multipart/form-data
+Cookie: session=<session_cookie>
+```
+
+**Supported formats / Formats acceptés:** JPG/JPEG, PNG (including RGBA), GIF, WebP, AVIF
+
+#### Parameters / Paramètres
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `files[]` | file[] | Yes | Image files (one page per image) |
+| `outputName` | string | No | Name of the resulting PDF file |
+
+#### Examples / Exemples
+
+**cURL:**
+```bash
+curl -X POST "https://giga-pdf.com/api/pdf/image-to-pdf" \
+  -b "session=$SESSION" \
+  -F "files[]=@page1.png" \
+  -F "files[]=@page2.jpg" \
+  -F "outputName=images.pdf" \
+  --output images.pdf
+```
+
+**JavaScript:**
+```javascript
+const formData = new FormData();
+images.forEach(img => formData.append('files[]', img));
+formData.append('outputName', 'images.pdf');
+
+const response = await fetch('/api/pdf/image-to-pdf', {
+  method: 'POST',
+  body: formData,
+  credentials: 'include'
+});
+```
+
+**Response / Réponse:** `200 OK` — `application/pdf` binary
+
+---
+
+### PDF to images / PDF en images
+
+Rasterize each page of a PDF as a PNG and return them in a single ZIP archive.
+
+Rasteriser chaque page d'un PDF en PNG et les retourner dans une archive ZIP.
+
+```http
+POST /api/pdf/to-image
+Content-Type: multipart/form-data
+Cookie: session=<session_cookie>
+```
+
+#### Parameters / Paramètres
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `file` | file | Yes | PDF file to rasterize |
+| `scale` | number | No | Render scale factor (default `2.0`) |
+
+#### Examples / Exemples
+
+**cURL:**
+```bash
+curl -X POST "https://giga-pdf.com/api/pdf/to-image" \
+  -b "session=$SESSION" \
+  -F "file=@document.pdf" \
+  -F "scale=2" \
+  --output pages.zip
+```
+
+**JavaScript:**
+```javascript
+const formData = new FormData();
+formData.append('file', pdfFile);
+formData.append('scale', '2');
+
+const response = await fetch('/api/pdf/to-image', {
+  method: 'POST',
+  body: formData,
+  credentials: 'include'
+});
+
+const blob = await response.blob();   // ZIP containing page-1.png, page-2.png …
+```
+
+**Response / Réponse:** `200 OK` — `application/zip`
+Each entry inside the archive is named `page-<N>.png` (1-indexed).
+Chaque entrée dans l'archive est nommée `page-<N>.png` (index 1).
+
+---
+
 ## SDKs & Libraries / SDKs et bibliothèques
 
 ### Official SDKs

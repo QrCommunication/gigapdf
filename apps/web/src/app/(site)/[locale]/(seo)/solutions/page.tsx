@@ -53,7 +53,7 @@ const COPY: Record<
       "Un avocat ne demande pas la même chose à un PDF qu'un expert-comptable ou qu'un architecte : le premier exige un caviardage qui supprime réellement le texte, le deuxième veut retrouver une facture scannée par son montant, le troisième annote des plans de plusieurs dizaines de mégaoctets. Ces pages décrivent, métier par métier, les workflows concrets que GigaPDF outille — avec les mêmes fonctions pour tous, car le plan gratuit n'ampute rien : signature numérique PKCS#7, OCR, chiffrement AES-256, GED complète et collaboration en temps réel, le tout open source et auto-hébergeable.",
     toolsTitle: "Les outils derrière les workflows",
     toolsText:
-      "Chaque solution métier s'appuie sur les mêmes briques : les vingt outils PDF de la plateforme, utilisables individuellement et tous documentés.",
+      "Chaque solution métier s'appuie sur les mêmes briques : les vingt-neuf outils PDF de la plateforme, utilisables individuellement et tous documentés.",
     ctaTitle: "Adoptez GigaPDF pour votre activité",
   },
   en: {
@@ -70,7 +70,7 @@ const COPY: Record<
       "A lawyer does not ask the same things of a PDF as an accountant or an architect: the first demands redaction that genuinely removes the text, the second wants to find a scanned invoice by its amount, the third annotates plans weighing tens of megabytes. These pages describe, profession by profession, the concrete workflows GigaPDF equips — with the same features for everyone, because the free plan cuts nothing out: PKCS#7 digital signing, OCR, AES-256 encryption, full document management and real-time collaboration, all open source and self-hostable.",
     toolsTitle: "The tools behind the workflows",
     toolsText:
-      "Every business solution relies on the same building blocks: the platform's twenty PDF tools, usable individually and all documented.",
+      "Every business solution relies on the same building blocks: the platform's twenty-nine PDF tools, usable individually and all documented.",
     ctaTitle: "Adopt GigaPDF for your business",
   },
 };

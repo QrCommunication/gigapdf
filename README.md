@@ -165,7 +165,7 @@ The self-hosted version uses the exact same code base.
 
 ### Document operations
 - Page management (add, remove, reorder, rotate)
-- Merge & split documents
+- Merge & split documents — including **universal merge** (`POST /api/pdf/merge-universal`): any combination of PDF, Word, Excel, PowerPoint, OpenDocument, images, HTML, text and RTF files is accepted; each is converted automatically before merging
 - Compression with the achieved ratio shown before applying
 - Encryption & password protection
 - Digital signatures (PKCS#7) with your own P12/PFX certificate —
@@ -187,6 +187,10 @@ The self-hosted version uses the exact same code base.
 - Tags with filtering and autocomplete
 - Full-text search across document names and content (PostgreSQL
   `tsvector` + GIN index)
+- **Semantic document search** (`/search`) — vector-based search across document
+  contents, backed by `GET /api/v1/search/semantic`
+- **Global command palette** (Ctrl/Cmd+K) — navigate to any tool or page and
+  trigger semantic search from anywhere in the app
 - Real thumbnails generated at upload and refreshed after editing
 - Document duplication, folder organization & renaming
 - Parallel uploads (3 concurrent)
@@ -195,6 +199,8 @@ The self-hosted version uses the exact same code base.
 - Bilingual app — interface in French and English; public pages are served
   under locale-prefixed URLs (French by default, English under `/en/*`)
   with per-page canonical and `fr`/`en`/`x-default` hreflang
+- **29 PDF tools** with a "Features" mega-menu listing them all by
+  category, available on every page of the marketing site
 - 32 SEO guide pages (20 PDF tools, 10 professions, 2 hubs) written in
   both languages with localized slugs and JSON-LD structured data
   (SoftwareApplication, HowTo, FAQPage)

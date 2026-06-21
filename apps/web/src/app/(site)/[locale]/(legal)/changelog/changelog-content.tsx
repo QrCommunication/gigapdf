@@ -15,6 +15,54 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.7.0",
+    date: "2026-06-21",
+    type: "minor",
+    changes: [
+      { type: "feature", description: "Universal merge: combine any files — PDF, Word, Excel, PowerPoint, OpenDocument, images, HTML or text — into a single PDF; every file is converted automatically before merging" },
+      { type: "feature", description: "Global command palette (Ctrl/Cmd+K): jump to any tool or page, or run a semantic search across your documents from anywhere" },
+      { type: "feature", description: "Nine new tools, now 29 in total: universal merge, image to PDF, PDF to image, PDF to PowerPoint, PDF to Excel, RTF and PDF, text to PDF, redact PDF and unlock PDF" },
+      { type: "feature", description: "New 'Features' mega-menu listing every tool by category, available on every page" },
+      { type: "improvement", description: "Image to PDF now handles PNG (including transparency), JPEG, GIF, WebP and AVIF, with full color-depth and interlacing support" },
+      { type: "improvement", description: "Unified header and footer across the whole marketing site" },
+      { type: "fix", description: "The semantic search page (/search) no longer returns a 404" },
+    ],
+  },
+  {
+    version: "1.6.0",
+    date: "2026-06-18",
+    type: "minor",
+    changes: [
+      { type: "improvement", description: "All PDF processing — rendering, thumbnails, redaction, compression, text extraction, search and conversions — now runs on the in-house Rust-to-WebAssembly engine, with no third-party PDF library" },
+      { type: "feature", description: "New /engine page (French and English) presenting the in-house engine: real content editing, AcroForm forms, annotations, RC4/AES encryption, PKCS#7 digital signatures, Office conversions and OCR" },
+      { type: "feature", description: "Dedicated /open-source page covering the license, the technology stack and how to contribute" },
+    ],
+  },
+  {
+    version: "1.5.0",
+    date: "2026-06-14",
+    type: "minor",
+    changes: [
+      { type: "feature", description: "Every export format — PNG, JPEG, WebP, DOCX, XLSX, PPTX, ODT, ODP — is now selectable directly from the editor toolbar and the document library" },
+      { type: "fix", description: "PDF-to-image export no longer returns an error: pages are rasterized correctly, including documents containing embedded images" },
+      { type: "fix", description: "'Document not found' errors on rapid export bursts are resolved" },
+      { type: "security", description: "All 76 open dependency security alerts cleared — critical and high-severity transitive dependencies patched" },
+      { type: "improvement", description: "Continuous deployment: every change merged to the main branch is now automatically deployed to production once checks pass" },
+    ],
+  },
+  {
+    version: "1.4.0",
+    date: "2026-06-13",
+    type: "minor",
+    changes: [
+      { type: "improvement", description: "The entire public site (landing, auth, legal and SEO pages) is now statically pre-rendered per language — faster page loads and fully crawlable HTML in French and English" },
+      { type: "feature", description: "Expanded self-hosting documentation on /docs: step-by-step Docker and native install guide, plus links to the interactive Swagger and Redoc API references" },
+      { type: "security", description: "Editor hyperlinks now open only http/https URLs with noopener and noreferrer — javascript: and data: URI injection through PDF links is blocked" },
+      { type: "security", description: "The embeddable viewer now validates the parent page origin before responding to messages and returning the file" },
+      { type: "fix", description: "Unknown or cross-language tool and solution URLs now return a real 404 instead of a soft 200" },
+    ],
+  },
+  {
     version: "1.3.0",
     date: "2026-06-13",
     type: "minor",

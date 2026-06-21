@@ -16,6 +16,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "edit-pdf",
     name: "Edit PDF",
+    category: "edit",
     metaTitle: "Edit PDF Online: Change Text & Images Free | GigaPDF",
     metaDescription:
       "Edit text, images, and shapes inside your PDF with the original fonts. Free WYSIWYG editor — open source, self-hostable, no watermark.",
@@ -83,6 +84,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "merge-pdf",
     name: "Merge PDF",
+    category: "organize",
     metaTitle: "Merge PDF Files Online Free | GigaPDF",
     metaDescription:
       "Combine several PDFs into one file, in the order you choose. Free, no added watermark, pages copied without recompression. Open source.",
@@ -144,6 +146,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "split-pdf",
     name: "Split PDF",
+    category: "organize",
     metaTitle: "Split PDF: Extract Pages Online Free | GigaPDF",
     metaDescription:
       "Cut a PDF into separate files or pull out just the pages you need. Visual thumbnail selection, free and open source.",
@@ -205,6 +208,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "compress-pdf",
     name: "Compress PDF",
+    category: "edit",
     metaTitle: "Compress PDF Online Free — Reduce File Size | GigaPDF",
     metaDescription:
       "Shrink heavy PDFs without wrecking them: the in-house engine strips unused objects and linearizes for fast web viewing. Free and open source.",
@@ -251,7 +255,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Can I compress several documents in a row?",
         answer:
-          "Yes. Compression is available on every document in your workspace with no usage quota. The free plan's limits are storage (5 GB) and document count (100), not the number of operations you run.",
+          "Yes. Compression is available on every document in your workspace with no usage quota. The free plan's limits are storage (5 GB) and document count (1000), not the number of operations you run.",
       },
     ],
     useCases: [
@@ -266,6 +270,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "sign-pdf",
     name: "Sign PDF",
+    category: "secure",
     metaTitle: "Sign PDF with Digital Certificate (PKCS#7) | GigaPDF",
     metaDescription:
       "Sign PDFs with a real P12/PFX digital certificate: PKCS#7 signatures verifiable in Adobe Reader. Free, open source, self-hostable.",
@@ -332,9 +337,10 @@ export const TOOLS: ToolData[] = [
   {
     slug: "ocr-pdf",
     name: "OCR PDF",
+    category: "ocr",
     metaTitle: "OCR Online: Scans and Images to Text | GigaPDF",
     metaDescription:
-      "Run multilingual in-house OCR (Latin, Cyrillic, Greek, Arabic, Hebrew, Indic scripts, and Chinese) on scans and images (scanned PDFs, JPG, PNG, photos of documents): copy, search, and export the recognized text. Free and open source.",
+      "Online OCR for scanned PDFs and images: make text searchable and copyable. Multilingual, free, and open-source recognition that keeps your layout.",
     h1: "OCR: pull the text out of your scans and images",
     intro: [
       "A document made only of images — a scanned PDF, but also a photo of a document or a JPG or PNG file — is just a stack of page photographs: you can't search for a word, copy a paragraph, or pull out the figures. Until the text is recognized, the file stays mute for every tool you own — including your own document manager's search. Optical character recognition (OCR) turns those images into text you can actually use.",
@@ -374,7 +380,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Does OCR read handwriting?",
         answer:
-          "Yes. The engine ships a dedicated handwriting model: on the reference IAM benchmark, GigaPDF is the first dependency-free engine to beat Tesseract on real handwriting. Recognition is more reliable on neat handwriting than on heavily cursive or messy strokes, and clean print still gives the best results — but handwriting is genuinely supported.",
+          "Yes. The engine ships a dedicated handwriting model: a dependency-free OCR that's strong on clean print and decent on tidy handwriting. Recognition is more reliable on neat handwriting than on heavily cursive or messy strokes, and clean print still gives the best results — but handwriting is genuinely supported.",
       },
       {
         question: "What happens to the original document or image after OCR?",
@@ -394,6 +400,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "searchable-pdf",
     name: "Searchable PDF",
+    category: "ocr",
     metaTitle: "Make a Scanned PDF Searchable (OCR Layer) | GigaPDF",
     metaDescription:
       "Add an invisible OCR text layer to your scans: the PDF looks identical but becomes selectable and searchable. Free, open source.",
@@ -455,13 +462,14 @@ export const TOOLS: ToolData[] = [
   {
     slug: "protect-pdf",
     name: "Protect PDF",
+    category: "secure",
     metaTitle: "Password Protect PDF Online (AES-256) | GigaPDF",
     metaDescription:
-      "Encrypt PDFs with AES-256, AES-128, or RC4 and control printing, copying, and editing. Free password protection, open source.",
+      "Encrypt PDFs with AES-256 or AES-128 and control printing, copying, and editing. Free password protection, open source.",
     h1: "Protect a PDF with a password and encryption",
     intro: [
       "Emailing a payslip, a medical report, or a commercial offer means accepting that the file will travel beyond its intended reader: forwards, shared inboxes, attachments archived by third-party servers. Encrypting the PDF itself is the simplest counter — the document becomes unreadable without its password, wherever it ends up.",
-      "GigaPDF encrypts files to the PDF standard with a choice of three algorithms: AES-256, today's recommended level; AES-128, broadly compatible; and RC4, kept only for the rare legacy viewers that demand it. You set an open password and, separately, an owner password tied to permissions: allow or block printing, text copying, content changes, and form filling.",
+      "GigaPDF encrypts files to the PDF standard with a choice of two algorithms: AES-256, today's recommended level, and AES-128, broadly compatible; legacy PDFs protected with RC4 can still be read through decryption, but active encryption is always AES. You set an open password and, separately, an owner password tied to granular permissions: allow or block printing, text copying, content changes, annotations, form filling, content extraction, document assembly, and high-quality printing.",
       "Keeping the two passwords distinct is genuinely useful: you can circulate a document anyone can read but nobody can modify, or one that is fully confidential. Protection applies in one click from your workspace, at no extra cost — like every GigaPDF feature, it's in the free plan and available when self-hosting.",
     ],
     howTo: {
@@ -470,14 +478,15 @@ export const TOOLS: ToolData[] = [
         "Upload the document you want to protect.",
         "Open the protection tool and pick the algorithm — AES-256 recommended.",
         "Set the open password, to be sent to the recipient through a separate channel.",
-        "Configure permissions: printing, copying, editing, form filling.",
+        "Configure permissions: printing, copying, editing, annotations, form filling, content extraction, assembly, and high-quality printing.",
         "Confirm and download the encrypted PDF: without the password, its content is unreadable.",
       ],
     },
     capabilities: [
-      "AES-256, AES-128, or RC4 encryption depending on your compatibility constraints",
+      "AES-256 or AES-128 encryption depending on your compatibility constraints",
+      "Decryption of legacy PDFs protected with RC4 supported (reading)",
       "Open password (reading) separate from the owner password (permissions)",
-      "Granular permissions: printing, text copying, modification, forms",
+      "8 granular permissions: printing, text copying, modification, annotations, form filling, content extraction, document assembly, high-quality printing",
       "Remove protection from a file whose password you know",
       "One-click application from the document manager, nothing to install",
       "Complete chain operable on your own server when self-hosted",
@@ -486,7 +495,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Which encryption algorithm should I pick?",
         answer:
-          "AES-256 in nearly every case: it's the strongest standard the PDF format supports and every modern viewer handles it. AES-128 remains a safe pick if you target very old readers. RC4 is cryptographically obsolete and should only serve forced compatibility with ancient systems.",
+          "AES-256 in nearly every case: it's the strongest standard the PDF format supports and every modern viewer handles it. AES-128 remains a safe pick if you target very old readers. GigaPDF only encrypts with AES; RC4, which is cryptographically obsolete, is supported for decryption only, to open legacy PDFs already protected with it.",
       },
       {
         question: "What's the difference between the open password and the owner password?",
@@ -516,6 +525,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "watermark-pdf",
     name: "Watermark PDF",
+    category: "edit",
     metaTitle: "Add a Watermark to PDF Online Free | GigaPDF",
     metaDescription:
       "Stamp a text or image watermark (CONFIDENTIAL, DRAFT, your logo) on every page of a PDF. Free, open source, no ads on your files.",
@@ -577,6 +587,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "organize-pdf-pages",
     name: "Organize Pages",
+    category: "organize",
     metaTitle: "Organize PDF Pages: Reorder & Rotate Free | GigaPDF",
     metaDescription:
       "Reorder, rotate, delete, or extract PDF pages by dragging thumbnails. Free, open source, and self-hostable.",
@@ -638,6 +649,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "annotate-pdf",
     name: "Annotate PDF",
+    category: "edit",
     metaTitle: "Annotate PDF Online: Highlight & Comment | GigaPDF",
     metaDescription:
       "Highlight, comment, and draw on PDFs with native annotations readable in any viewer. Free, open source, with real-time collaboration.",
@@ -699,6 +711,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "pdf-forms",
     name: "PDF Forms",
+    category: "edit",
     metaTitle: "Fill Out PDF Forms Online Free | GigaPDF",
     metaDescription:
       "Fill out PDF form fields in your browser and flatten the result to lock in your answers. Free and open source.",
@@ -760,6 +773,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "pdf-to-word",
     name: "PDF to Word",
+    category: "convert",
     metaTitle: "Convert PDF to Word (DOCX) Online Free | GigaPDF",
     metaDescription:
       "Turn PDFs into editable Word documents (.docx) with layout preserved. Free conversion, open source, no watermark.",
@@ -806,7 +820,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Is there a size limit or a watermark on the free conversion?",
         answer:
-          "No watermark, ever. Conversion is a full feature of the free plan, whose limits are storage (5 GB) and document count (100) — never a degraded output. The file you get is yours, clean.",
+          "No watermark, ever. Conversion is a full feature of the free plan, whose limits are storage (5 GB) and document count (1000) — never a degraded output. The file you get is yours, clean.",
       },
     ],
     useCases: [
@@ -821,19 +835,20 @@ export const TOOLS: ToolData[] = [
   {
     slug: "word-to-pdf",
     name: "Word to PDF",
+    category: "convert",
     metaTitle: "Convert Word to PDF Online (.doc, .docx) | GigaPDF",
     metaDescription:
       "Convert Word documents to faithful PDFs with the in-house engine: modern .docx and legacy .doc. Free, open source, no watermark.",
     h1: "Convert a Word document to PDF",
     intro: [
       "Sending a .docx means sending a living document: it will render differently depending on the recipient's Word version, installed fonts, and machine — when it isn't simply modified along the way. Converting to PDF locks the layout: what you composed is exactly what gets read and printed, everywhere.",
-      "GigaPDF converts with its in-house office conversion engine running server-side, battle-tested and faithful. It handles modern .docx as well as the old binary .doc — the Word 97-2003 format that haunts every file server and that many online converters turn away. Styles, tables, images, headers, and footers come out in a clean PDF with no advertising stamped on it.",
+      "GigaPDF converts with its in-house office conversion engine running server-side, battle-tested and faithful. It handles modern .docx, the old binary .doc — the Word 97-2003 format that haunts every file server and that many online converters turn away — and OpenDocument .odt for the free-software crowd. Styles, tables, images, headers, and footers come out in a clean PDF with no advertising stamped on it.",
       "You need neither Microsoft Office nor any installation: the browser is enough. The resulting PDF lands straight in your GigaPDF document manager, where it can be merged with other files, digitally signed, encrypted, or archived as PDF/A — conversion is just the first link in a complete document chain.",
     ],
     howTo: {
       title: "How to convert a Word file to PDF",
       steps: [
-        "Upload your .docx or .doc file to your workspace.",
+        "Upload your .docx, .doc, or .odt file to your workspace.",
         "Run the conversion: the in-house engine renders the document server-side.",
         "Check the resulting PDF in the built-in viewer.",
         "Chain the next step if needed: merging, signing, encryption, or watermarking.",
@@ -841,7 +856,7 @@ export const TOOLS: ToolData[] = [
       ],
     },
     capabilities: [
-      "Conversion of .docx and legacy .doc (Word 97-2003)",
+      "Conversion of .docx, legacy .doc (Word 97-2003), and OpenDocument .odt",
       "In-house conversion engine server-side: no install, no Microsoft Office required",
       "Faithful rendering of styles, tables, images, headers, and footers",
       "No watermark on the output PDF",
@@ -850,9 +865,9 @@ export const TOOLS: ToolData[] = [
     ],
     faq: [
       {
-        question: "Are old .doc files really supported?",
+        question: "Which Word formats are supported — .doc, .docx, .odt?",
         answer:
-          "Yes, and it's a genuinely useful trait of GigaPDF: the in-house engine reads the binary Word 97-2003 format alongside modern .docx. Old office archives convert without a manual round-trip through Word — valuable when cleaning up a document backlog.",
+          "All three. The in-house engine reads the binary Word 97-2003 format (.doc) alongside modern .docx, and it also takes OpenDocument text (.odt). Old office archives convert without a manual round-trip through Word, and free-software users skip the detour entirely — valuable when cleaning up a mixed document backlog.",
       },
       {
         question: "Will my document's layout be respected?",
@@ -882,6 +897,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "excel-to-pdf",
     name: "Excel to PDF",
+    category: "convert",
     metaTitle: "Convert Excel to PDF Online (.xls, .xlsx) | GigaPDF",
     metaDescription:
       "Turn Excel workbooks into clean, printable PDFs with the in-house engine: .xlsx and legacy .xls. Free, open source conversion.",
@@ -943,6 +959,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "powerpoint-to-pdf",
     name: "PowerPoint to PDF",
+    category: "convert",
     metaTitle: "Convert PowerPoint to PDF (.ppt, .pptx) | GigaPDF",
     metaDescription:
       "Convert PowerPoint decks to faithful PDFs with the in-house engine: .pptx and legacy .ppt. Free, open source, no watermark.",
@@ -1004,6 +1021,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "opendocument-pdf",
     name: "OpenDocument & PDF",
+    category: "convert",
     metaTitle: "Convert OpenDocument to PDF (ODT, ODS, ODP) | GigaPDF",
     metaDescription:
       "Convert ODT, ODS, and ODP to PDF — and go back from PDF to ODT or ODP. The OpenDocument-to-PDF bridge, free and open source.",
@@ -1065,6 +1083,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "pdf-to-odt",
     name: "PDF to ODT",
+    category: "convert",
     metaTitle: "Convert PDF to ODT (OpenDocument) | GigaPDF",
     metaDescription:
       "Turn a PDF into an editable ODT for your word processor, text and images carried over. Free, open source conversion.",
@@ -1126,6 +1145,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "html-to-pdf",
     name: "HTML to PDF",
+    category: "convert",
     metaTitle: "Convert HTML or a Web Page to PDF | GigaPDF",
     metaDescription:
       "Convert HTML or a URL to PDF rendered by the in-house engine: modern CSS, web fonts, long pages. Free, open source, with an API.",
@@ -1187,6 +1207,7 @@ export const TOOLS: ToolData[] = [
   {
     slug: "pdf-a",
     name: "PDF/A",
+    category: "organize",
     metaTitle: "Convert PDF to PDF/A for Archiving | GigaPDF",
     metaDescription:
       "Convert PDFs to the PDF/A-1b or PDF/A-2b archival format, ISO 19005 compliant. Free, open source, and self-hostable.",
@@ -1244,6 +1265,565 @@ export const TOOLS: ToolData[] = [
     relatedTools: ["sign-pdf", "ocr-pdf", "searchable-pdf", "protect-pdf"],
     relatedSolutions: ["lawyers", "accountants", "healthcare"],
     icon: "archive",
+  },
+  {
+    slug: "universal-merge",
+    name: "Universal Merge",
+    category: "organize",
+    metaTitle: "Universal Merge: Combine Any Files into One PDF",
+    metaDescription:
+      "Merge PDFs, Word, Excel, PowerPoint, OpenDocument, images, HTML, and text into a single PDF. Each file is converted then combined. Free, open source.",
+    h1: "Universal Merge: turn a pile of mixed files into one PDF",
+    intro: [
+      "Real-world bundles are never made of PDFs alone. A grant application mixes a Word cover letter, an Excel budget, two scanned attestations as JPGs, and a PDF activity report. A handover folder stacks a PowerPoint, an ODT note, and a screenshot. Ordinary merge tools refuse everything that isn't already a PDF, so you end up converting each file by hand, one site at a time, before you can even start combining.",
+      "Universal Merge collapses that whole chore into a single step. Drop in anything — PDF, Word (.doc, .docx, .odt), Excel (.xls, .xlsx, .ods), PowerPoint (.ppt, .pptx, .odp), images (JPG, PNG, GIF, WebP, AVIF), HTML, plain text — and GigaPDF converts each non-PDF to PDF with its in-house engine, then assembles all of them into one continuously paginated document, in the order you set. It is the flagship of the platform: the conversion tools and the merge engine working as one.",
+      "The result lands in your document manager like any other PDF — taggable, searchable in full text, shareable by link — and every step runs on GigaPDF's own engine with no third-party service in the loop. Universal Merge ships with the free plan, and since the code is source-available under PolyForm Noncommercial, the entire pipeline can run on your own server.",
+    ],
+    howTo: {
+      title: "How to merge mixed files into one PDF",
+      steps: [
+        "Upload your files of any kind: PDFs, Office documents, OpenDocument files, images, HTML, or text.",
+        "Each non-PDF file is converted to PDF automatically by the in-house engine.",
+        "Drag the files into the final assembly order.",
+        "Run Universal Merge: every piece is combined into one continuously paginated PDF.",
+        "Refine the page order in the editor if needed, then file or share the result.",
+      ],
+    },
+    capabilities: [
+      "Combine any mix of formats into a single PDF in one operation",
+      "Auto-conversion of Word, Excel, PowerPoint, and OpenDocument files",
+      "Images (JPG, PNG, WebP), HTML, and text folded into the same merge",
+      "Drag-and-drop ordering before assembly, page-level reordering after",
+      "Everything rendered by the in-house engine, no third-party service",
+      "Result filed in the document manager: folders, tags, full-text search",
+    ],
+    faq: [
+      {
+        question: "Which file types can I throw into a Universal Merge?",
+        answer:
+          "PDFs, of course, plus Word (.doc, .docx, .odt), Excel (.xls, .xlsx, .ods), PowerPoint (.ppt, .pptx, .odp), images (JPG, PNG, WebP), HTML, and plain text. Anything that isn't already a PDF is converted to PDF first by GigaPDF's in-house engine, then merged with the rest.",
+      },
+      {
+        question: "Do I have to convert my Office files to PDF beforehand?",
+        answer:
+          "No — that's the whole point. Universal Merge converts each Office, OpenDocument, image, HTML, or text file to PDF on the fly, so you skip the file-by-file detour through separate converters. You drop everything in once and get a single PDF back.",
+      },
+      {
+        question: "Can I control the order the files appear in?",
+        answer:
+          "Yes. You arrange the files by drag and drop before merging, and once the combined PDF is built you can still move, rotate, delete, or extract individual pages in the editor — so a document that landed in the wrong place is fixed without redoing the merge.",
+      },
+      {
+        question: "Is anything sent to an external service during conversion?",
+        answer:
+          "No. Every conversion and the merge itself run on GigaPDF's own engine. Combined with self-hosting — the project is open source — the whole pipeline can execute on your infrastructure, which matters when the bundle holds confidential material.",
+      },
+    ],
+    useCases: [
+      "Assemble a grant or tender application from Word, Excel, scans, and PDFs in one shot",
+      "Build a handover folder mixing slides, notes, screenshots, and reports",
+      "Combine a phone-photographed receipt, an invoice DOCX, and a PDF statement into one file",
+    ],
+    relatedTools: ["merge-pdf", "image-to-pdf", "word-to-pdf", "organize-pdf-pages"],
+    relatedSolutions: ["nonprofits", "accountants", "freelancers"],
+    icon: "combine",
+    appHref: "/merge",
+  },
+  {
+    slug: "image-to-pdf",
+    name: "Image to PDF",
+    category: "convert",
+    metaTitle: "Image to PDF: JPG, PNG, WebP to PDF Free | GigaPDF",
+    metaDescription:
+      "Convert JPG, PNG, WebP, GIF, and AVIF images to PDF — one picture or many into a single multipage file. Free, open source, no watermark.",
+    h1: "Convert images to PDF: one or many pictures into one file",
+    intro: [
+      "Photos of documents, scanned receipts, screenshots, a series of pictures from a phone: images are easy to produce and miserable to send as a coherent set. A handful of loose JPGs forces the recipient to open them one by one, in no particular order, with no pagination. Wrapping them in a single PDF turns a scatter of files into one document you can page through, print, and archive.",
+      "GigaPDF converts JPG, PNG, WebP, GIF, and AVIF to PDF, alone or in batches: each image becomes a page, and several images assemble into one multipage PDF in the order you choose. The picture is placed cleanly on the page without re-encoding it to mush, so a photographed document stays legible and a graphic keeps its sharpness.",
+      "Once converted, the PDF behaves like any GigaPDF document — it can be merged with other files, compressed, password-protected, or filed and searched in the document manager. Conversion is part of the free plan, with no watermark dropped on the result, and works the same on a self-hosted instance.",
+    ],
+    howTo: {
+      title: "How to convert images to a PDF",
+      steps: [
+        "Upload one or several images (JPG, PNG, WebP, GIF, AVIF).",
+        "Arrange them in the order you want them to appear.",
+        "Run the conversion: each image becomes a page of the PDF.",
+        "Several images assemble into a single multipage document.",
+        "Download the PDF, or merge and compress it further on the same platform.",
+      ],
+    },
+    capabilities: [
+      "Conversion of JPG, PNG, WebP, GIF, and AVIF to PDF",
+      "Single image or batch into one multipage PDF",
+      "Pages ordered the way you arrange the images",
+      "Images placed without quality-wrecking re-encoding",
+      "No watermark added to the converted file",
+      "Chains with merge, compression, and protection on the same platform",
+    ],
+    faq: [
+      {
+        question: "Can I turn several images into a single PDF?",
+        answer:
+          "Yes. Upload all the pictures at once, set their order, and GigaPDF assembles them into one multipage PDF — one image per page. It's the clean way to send a set of photographed documents or a series of screenshots as a single file instead of a dozen attachments.",
+      },
+      {
+        question: "Which image formats are supported?",
+        answer:
+          "The common ones and the modern ones: JPG and PNG, plus WebP, GIF, and AVIF. You can mix formats in the same conversion — a batch of JPGs and PNGs ends up in one homogeneous PDF without any pre-conversion on your side.",
+      },
+      {
+        question: "Does converting degrade my image quality?",
+        answer:
+          "No. The image is embedded in the PDF without being re-encoded into a blurry copy, so a photographed document stays readable and a graphic keeps its edges crisp. If you want a lighter file afterwards, the compression tool is there — but it's optional.",
+      },
+      {
+        question: "Can I go the other way, from PDF back to images?",
+        answer:
+          "Yes, with the PDF to Image tool: it exports each PDF page as a PNG or JPG. Image to PDF and PDF to Image are the two directions of the same bridge, both included in the free plan.",
+      },
+    ],
+    useCases: [
+      "Bundle phone photos of a document into one paginated PDF to send or file",
+      "Turn a set of receipts or screenshots into a single archivable file",
+      "Wrap a series of images into a PDF before merging it with other documents",
+    ],
+    relatedTools: ["pdf-to-image", "universal-merge", "compress-pdf"],
+    relatedSolutions: ["students", "freelancers", "accountants"],
+    icon: "image",
+  },
+  {
+    slug: "pdf-to-image",
+    name: "PDF to Image",
+    category: "convert",
+    metaTitle: "PDF to Image: Export Pages as PNG or JPG | GigaPDF",
+    metaDescription:
+      "Export each page of a PDF as a PNG or JPG image. Free, open source, no watermark — turn a document into ready-to-use pictures.",
+    h1: "Convert a PDF to images: each page as a PNG or JPG",
+    intro: [
+      "Sometimes a PDF is the wrong container: you need a thumbnail for a website, an image to drop into a slide, a preview to post where PDFs don't display, or a picture of a single page to share on a messaging app. For all of those, a page has to leave the PDF and become a plain image.",
+      "GigaPDF renders each page of your PDF as a crisp PNG or JPG with its in-house engine: text stays sharp, vector graphics are rasterized cleanly, and the page's exact appearance is preserved. You get one image per page, ready to use anywhere an image is expected — no PDF viewer required on the other end.",
+      "Because the output images are ordinary files, they slot straight into your everyday tools, and the source PDF stays untouched in your workspace. PDF to Image is part of the free plan, adds no watermark, and pairs naturally with Image to PDF for the round trip — both runnable on a self-hosted instance.",
+    ],
+    howTo: {
+      title: "How to convert a PDF to images",
+      steps: [
+        "Upload the PDF you want to turn into pictures.",
+        "Pick the image format for the export: PNG or JPG.",
+        "Run the conversion: the in-house engine renders each page.",
+        "Collect one image per page, faithful to the original appearance.",
+        "Use the images wherever you need them; the source PDF stays intact.",
+      ],
+    },
+    capabilities: [
+      "Each PDF page exported as a PNG or JPG image",
+      "In-house rendering: sharp text and cleanly rasterized vectors",
+      "Page appearance preserved exactly in the image",
+      "One image per page for multi-page documents",
+      "No watermark on the exported images",
+      "Round trip with Image to PDF on the same platform",
+    ],
+    faq: [
+      {
+        question: "Should I export to PNG or JPG?",
+        answer:
+          "PNG for crisp text, line art, and screenshots where you want lossless edges; JPG for photo-heavy pages where a smaller file matters more than pixel-perfect lines. Both render the page faithfully — the choice is about the kind of content and the file size you're after.",
+      },
+      {
+        question: "Does a multi-page PDF give me one image per page?",
+        answer:
+          "Yes. Each page is rendered separately, so a ten-page PDF produces ten images. That makes it easy to grab just the page you need, or to feed a whole document into a tool that only accepts pictures.",
+      },
+      {
+        question: "Is the image faithful to the original page?",
+        answer:
+          "It is: GigaPDF's in-house engine rasterizes the page as it would print — text, images, and vector graphics all in place. The image looks exactly like the PDF page, so it's safe to use as a preview or a thumbnail.",
+      },
+      {
+        question: "Can I rebuild a PDF from the images later?",
+        answer:
+          "Yes, with the Image to PDF tool, which assembles pictures back into a PDF. The two tools are the inverse of each other, so you can take a document apart into images and put it back together when needed.",
+      },
+    ],
+    useCases: [
+      "Produce a page preview or thumbnail for a website or a listing",
+      "Drop a PDF page into a slide or a document as a plain image",
+      "Share a single page on a channel that doesn't display PDFs",
+    ],
+    relatedTools: ["image-to-pdf", "compress-pdf", "pdf-to-word"],
+    relatedSolutions: ["freelancers", "students", "teachers-trainers"],
+    icon: "images",
+  },
+  {
+    slug: "pdf-to-powerpoint",
+    name: "PDF to PowerPoint",
+    category: "convert",
+    metaTitle: "Convert PDF to PowerPoint (PPTX) | GigaPDF",
+    metaDescription:
+      "Turn a PDF into an editable PowerPoint deck (.pptx), one slide per page. Free, open source conversion, no watermark.",
+    h1: "Convert a PDF into an editable PowerPoint deck",
+    intro: [
+      "A deck circulates as a PDF, the source .pptx is long gone, and now the presentation has to evolve: a slide to update, a figure to refresh, the whole thing to re-skin for a new audience. Re-typing it from scratch is wasted effort when the content already exists — it just needs to become editable slides again.",
+      "GigaPDF exports your PDF to PPTX: each page becomes a slide, with text blocks and images placed back where they belong, editable in PowerPoint, your presentation app, or an OpenDocument suite. It is the reverse of PowerPoint to PDF, built for exactly the moment when a deck's source file has vanished and the content has to keep moving.",
+      "The resulting .pptx opens like any other presentation, ready to restyle with your template, and the original PDF stays safe in your workspace. Conversion is included in the free plan, adds no watermark, and runs the same on a self-hosted instance.",
+    ],
+    howTo: {
+      title: "How to convert a PDF to PowerPoint",
+      steps: [
+        "Upload the PDF you want to turn back into slides.",
+        "Pick the PPTX export in the conversion menu.",
+        "The engine rebuilds one slide per page, texts and images included.",
+        "Download the .pptx and open it in PowerPoint or your presentation app.",
+        "Restyle, update, or extend the deck — the source PDF stays intact.",
+      ],
+    },
+    capabilities: [
+      "PPTX export editable in PowerPoint and presentation apps",
+      "One PDF page rebuilt as one slide",
+      "Text blocks and images placed back on each slide",
+      "Reverse of the PowerPoint-to-PDF conversion",
+      "No watermark on the converted deck",
+      "More exports from the same menu: DOCX, ODT, ODP, XLSX",
+    ],
+    faq: [
+      {
+        question: "Will the slides be editable in PowerPoint?",
+        answer:
+          "Yes: the export produces a genuine .pptx where text comes back as editable text and images return as objects, page by page. You open it in PowerPoint, your presentation app, or an OpenDocument suite and pick the deck up where the lost source left off.",
+      },
+      {
+        question: "Does each PDF page become one slide?",
+        answer:
+          "Yes, the mapping is one page to one slide. A 15-page PDF gives a 15-slide deck, each slide reproducing the layout of its source page as faithfully as the formats allow.",
+      },
+      {
+        question: "How faithful is the layout after conversion?",
+        answer:
+          "The goal is maximum fidelity, but PDF and PPTX describe documents differently: a heavily designed slide may need touch-ups after conversion. Straightforward decks — title, bullets, an image or two per slide — come back very cleanly and are quick to refine.",
+      },
+      {
+        question: "Can I convert a PowerPoint to PDF too?",
+        answer:
+          "Yes, with the PowerPoint to PDF tool, which freezes a deck into a fixed PDF. The two tools are the two directions of the same bridge: freeze a deck for distribution, or revive a PDF back into editable slides.",
+      },
+    ],
+    useCases: [
+      "Revive a deck whose source .pptx was lost, to update and reuse it",
+      "Extract slides from a PDF report to drop into a new presentation",
+      "Re-skin an old presentation that only survives as a PDF",
+    ],
+    relatedTools: ["powerpoint-to-pdf", "pdf-to-word", "pdf-to-excel"],
+    relatedSolutions: ["teachers-trainers", "freelancers", "nonprofits"],
+    icon: "presentation",
+  },
+  {
+    slug: "pdf-to-excel",
+    name: "PDF to Excel",
+    category: "convert",
+    metaTitle: "Convert PDF to Excel (XLSX) Online | GigaPDF",
+    metaDescription:
+      "Turn the tables in a PDF into an editable Excel workbook (.xlsx) with table reconstruction. Free, open source, no watermark.",
+    h1: "Convert a PDF into an editable Excel workbook",
+    intro: [
+      "The numbers you need are trapped in a PDF: a financial statement, a price list, an export from a tool that only produces PDFs. Re-keying a table cell by cell is slow and error-prone, and copy-pasting from a PDF usually collapses the columns into one mangled blob. What you want is the table back as a real spreadsheet.",
+      "GigaPDF exports your PDF to XLSX by reconstructing its tables: detected rows and columns are rebuilt into spreadsheet cells you can edit, sort, and recompute in Excel, your office suite, or an OpenDocument app saving to .ods. The structure is recovered, not flattened, so the figures land where they belong.",
+      "The workbook opens like any other spreadsheet and the source PDF stays in your workspace. PDF to Excel is part of the free plan, adds no watermark, and runs the same on a self-hosted instance — the counterpart to Excel to PDF for the return trip.",
+    ],
+    howTo: {
+      title: "How to convert a PDF to Excel",
+      steps: [
+        "Upload the PDF that contains the tables to recover.",
+        "Pick the XLSX export in the conversion menu.",
+        "The engine detects the tabular structure and rebuilds rows and columns.",
+        "Download the .xlsx and open it in Excel or your spreadsheet app.",
+        "Edit, sort, or recompute the figures; the source PDF stays intact.",
+      ],
+    },
+    capabilities: [
+      "XLSX export compatible with Excel and spreadsheet apps",
+      "Table reconstruction into editable rows and columns",
+      "Detected figures placed in real cells, not a flattened blob",
+      "Reverse of the Excel-to-PDF conversion",
+      "No watermark on the converted workbook",
+      "Re-saveable as OpenDocument .ods from your spreadsheet app",
+    ],
+    faq: [
+      {
+        question: "Do the PDF's tables come back as real spreadsheet cells?",
+        answer:
+          "Yes: GigaPDF reconstructs the detected tabular structure into rows and columns, so the figures land in proper Excel cells you can edit and recompute — not a single cell with everything jammed together. That's the difference from a raw copy-paste out of a PDF.",
+      },
+      {
+        question: "What about very complex or borderless tables?",
+        answer:
+          "Cleanly ruled tables reconstruct best. Tables drawn without real borders, or with cascading merged cells, may be partially simplified and deserve a quick visual check after conversion. For straightforward grids, the result is directly usable.",
+      },
+      {
+        question: "Can I convert a scanned PDF to Excel?",
+        answer:
+          "A scan holds only images, so run GigaPDF's in-house OCR first to recognize the text, then export to XLSX. Without that step there is no machine-readable text for the table reconstruction to work from.",
+      },
+      {
+        question: "Can I save the result as an OpenDocument spreadsheet?",
+        answer:
+          "Yes. The export is an .xlsx, which every modern spreadsheet app opens — including OpenDocument suites, where you can re-save it natively as .ods. You're not locked into a single format.",
+      },
+    ],
+    useCases: [
+      "Recover a financial statement or price list trapped in a PDF",
+      "Pull a data table out of a report to analyze it in a spreadsheet",
+      "Turn a scanned table into an editable workbook through OCR plus conversion",
+    ],
+    relatedTools: ["excel-to-pdf", "pdf-to-word", "pdf-to-powerpoint"],
+    relatedSolutions: ["accountants", "freelancers", "nonprofits"],
+    icon: "table",
+  },
+  {
+    slug: "rtf-pdf",
+    name: "RTF & PDF",
+    category: "convert",
+    metaTitle: "Convert RTF to PDF and PDF to RTF | GigaPDF",
+    metaDescription:
+      "Convert RTF to PDF to freeze the layout, and PDF back to editable RTF. The bidirectional RTF bridge, free and open source.",
+    h1: "RTF to PDF and back: the rich-text bridge",
+    intro: [
+      "RTF is the lingua franca of word processors: a rich-text format that almost every text editor reads and writes, used for documents that have to travel between incompatible tools. But RTF is still an editable, drifting format — to send a final version you want a PDF, and to rework an old PDF in any word processor, RTF is the universal way back in.",
+      "GigaPDF handles both directions. RTF to PDF freezes your rich-text document into a fixed PDF — identical on every screen and printer, formulas of layout settled. PDF to RTF rebuilds an editable rich-text file from a PDF, with text and basic formatting recovered, openable in Word, an OpenDocument suite, or any editor that speaks RTF.",
+      "Either way, the converted file lands in your document manager and the source stays intact. The RTF bridge is part of the free plan, adds no watermark, and runs the same on a self-hosted instance — handy when you need a format that opens absolutely everywhere.",
+    ],
+    howTo: {
+      title: "How to convert between RTF and PDF",
+      steps: [
+        "Upload your .rtf file, or the PDF you want to turn back into rich text.",
+        "Pick the direction: RTF to PDF, or PDF to RTF.",
+        "Run the conversion: the engine renders the PDF or rebuilds the RTF.",
+        "Check the result in the built-in viewer.",
+        "Download the file, or chain merge, signing, or archiving on the same platform.",
+      ],
+    },
+    capabilities: [
+      "RTF to PDF: rich-text document frozen into a fixed layout",
+      "PDF to RTF: editable rich text rebuilt from a PDF",
+      "Text and basic formatting carried across both directions",
+      "RTF readable in Word, OpenDocument suites, and any rich-text editor",
+      "No watermark on the converted document",
+      "Chains with merge, signing, and archiving on the same platform",
+    ],
+    faq: [
+      {
+        question: "Why convert RTF to PDF rather than send the RTF?",
+        answer:
+          "Because RTF still renders differently depending on the editor and its fonts, and anyone can change it. A PDF locks the layout: what you composed is exactly what the recipient reads and prints. RTF stays your working format; PDF is the one you hand over.",
+      },
+      {
+        question: "What does PDF to RTF give me?",
+        answer:
+          "An editable rich-text file with the text and its essential formatting recovered, openable in virtually any word processor — Word, an OpenDocument suite, or a lighter editor. It's the most universal way to bring a PDF's content back into an editable document.",
+      },
+      {
+        question: "Will complex formatting survive the round trip?",
+        answer:
+          "Plain text and basic formatting carry across reliably. RTF is a deliberately simple, portable format, so very elaborate layouts get simplified — which is exactly why it opens everywhere. For straightforward documents the round trip is clean.",
+      },
+      {
+        question: "Is RTF really opened by every word processor?",
+        answer:
+          "Practically, yes: RTF is one of the oldest interchange formats, supported by Word, OpenDocument suites, and most text editors across platforms. That universality is the reason to keep it in your toolkit alongside DOCX and ODT.",
+      },
+    ],
+    useCases: [
+      "Freeze a rich-text document as a PDF before sending it out",
+      "Bring an old PDF back into an editable form any word processor can open",
+      "Exchange documents between incompatible editors through a universal format",
+    ],
+    relatedTools: ["text-to-pdf", "word-to-pdf", "pdf-to-word"],
+    relatedSolutions: ["freelancers", "students", "nonprofits"],
+    icon: "file-text",
+  },
+  {
+    slug: "text-to-pdf",
+    name: "Text to PDF",
+    category: "convert",
+    metaTitle: "Convert a Text File (TXT) to PDF | GigaPDF",
+    metaDescription:
+      "Convert a plain .txt file into a clean, readable PDF with sensible pagination. Free, open source, no watermark.",
+    h1: "Convert a text file into a clean PDF",
+    intro: [
+      "Plain text is everywhere — logs, exports, notes, code listings, README files — and perfectly readable, until you need to hand it to someone who expects a proper document. A raw .txt has no pagination, no margins, and no presentation; pasted into an email it loses its line breaks. Wrapping it in a PDF gives it a clean, paginated, printable form.",
+      "GigaPDF converts a .txt file into a tidy PDF: the text is laid out with readable margins, a legible monospaced or standard font, and sensible page breaks so long files don't run off the edge. What was a wall of characters becomes a document you can page through, print, and archive without surprises.",
+      "The PDF lands in your document manager and the source text stays untouched. Text to PDF is part of the free plan, adds no watermark, and runs the same on a self-hosted instance — the simplest way to give plain text a presentable shell.",
+    ],
+    howTo: {
+      title: "How to convert a text file to PDF",
+      steps: [
+        "Upload your .txt file to your workspace.",
+        "Run the conversion: the text is laid out with margins and pagination.",
+        "Long files are split across pages so nothing runs off the edge.",
+        "Check the result in the built-in viewer.",
+        "Download the PDF, or merge and archive it on the same platform.",
+      ],
+    },
+    capabilities: [
+      "Conversion of plain .txt files into clean PDFs",
+      "Readable margins and a legible font applied automatically",
+      "Sensible page breaks for long text files",
+      "Source encoding handled for accented and special characters",
+      "No watermark on the converted document",
+      "Chains with merge and archiving on the same platform",
+    ],
+    faq: [
+      {
+        question: "What does converting a text file to PDF give me?",
+        answer:
+          "A clean, paginated document: GigaPDF applies readable margins, a legible font, and page breaks, so a raw .txt becomes something you can print and hand over without it running off the page or losing its line breaks in an email body.",
+      },
+      {
+        question: "Are long text files paginated automatically?",
+        answer:
+          "Yes. The text is flowed across as many pages as needed, with breaks placed so no line gets cut off at the edge. A long log or export turns into a properly paginated PDF rather than a single oversized page.",
+      },
+      {
+        question: "Are accents and special characters preserved?",
+        answer:
+          "Yes, the source encoding is handled so accented letters and special characters render correctly in the PDF. Your text comes through faithfully rather than peppered with replacement symbols.",
+      },
+      {
+        question: "What if I need richer formatting than plain text?",
+        answer:
+          "For rich text, use the RTF bridge; for full control over layout, fonts, and styling, build the document as HTML and use HTML to PDF. Text to PDF is the quickest path when the content is plain text and you just need a clean shell.",
+      },
+    ],
+    useCases: [
+      "Turn a log, export, or notes file into a paginated, printable PDF",
+      "Hand over plain text as a presentable document instead of a raw .txt",
+      "Wrap a code or data listing into a PDF before merging it with other files",
+    ],
+    relatedTools: ["rtf-pdf", "html-to-pdf", "word-to-pdf"],
+    relatedSolutions: ["students", "freelancers", "nonprofits"],
+    icon: "file-type",
+  },
+  {
+    slug: "redact-pdf",
+    name: "Redact PDF",
+    category: "edit",
+    metaTitle: "Redact PDF: Permanently Remove Content | GigaPDF",
+    metaDescription:
+      "True redaction: the content under the blackout is physically removed from the file, not hidden behind a rectangle. Free, open source.",
+    h1: "Redact a PDF: remove the content for good, not just hide it",
+    intro: [
+      "The redaction scandal repeats endlessly: documents 'blacked out' with a rectangle whose text reappears the instant someone copies and pastes it, because the tool drew a mask over the content instead of deleting it. A black box on top is not redaction — it is a cover that anyone can lift. For privileged, personal, or classified material, that distinction is the whole game.",
+      "GigaPDF performs real redaction with its in-house engine: the text and graphics inside the zone you mark are physically stripped from the file's content stream. After processing, the content no longer exists — not in copy-paste, not in text extraction, not in the document's metadata. You draw the zones over the passages to remove, apply, and the words are gone from the file itself, not merely obscured.",
+      "Verification is built into the workflow: try to copy-paste over a redacted zone and nothing comes back. The original stays intact in your workspace with its version history, so you keep an unredacted reference. Redaction is part of the free plan, adds no watermark, and — because GigaPDF is open source and self-hostable — can run entirely on your own server, which is exactly what sensitive documents demand.",
+    ],
+    howTo: {
+      title: "How to redact a PDF",
+      steps: [
+        "Upload the document to redact to your workspace.",
+        "Open it in the editor and draw the zones over the content to remove.",
+        "Apply the redaction: the in-house engine deletes the content from the file.",
+        "Verify by trying to copy-paste over a redacted zone — nothing comes out.",
+        "Download the redacted PDF; the original stays intact in version history.",
+      ],
+    },
+    capabilities: [
+      "True redaction: content physically removed from the content stream",
+      "No reappearance under copy-paste, extraction, or metadata inspection",
+      "Visual zone selection over the passages to remove",
+      "Built-in verification: copy-paste over a redacted zone returns nothing",
+      "Original preserved intact through version history",
+      "Self-hostable: sensitive redaction runs on your own server",
+    ],
+    faq: [
+      {
+        question: "How is this different from drawing a black rectangle over the text?",
+        answer:
+          "A black rectangle is just a shape painted on top — the text underneath is still in the file and resurfaces with a copy-paste or extraction. GigaPDF's redaction strips the text and graphics out of the content stream, so the content genuinely no longer exists in the file. That's the line between hiding and removing.",
+      },
+      {
+        question: "How can I be sure the content is really gone?",
+        answer:
+          "Run the test that exposes bad tools: select a redacted zone and try to copy-paste, or search for one of the removed words. With GigaPDF's redaction nothing comes out, because the underlying operators were deleted — not covered. You can verify before the document leaves your hands.",
+      },
+      {
+        question: "Do I keep a copy of the original, unredacted document?",
+        answer:
+          "Yes. Redaction produces a new version while the original stays in your workspace with its version history. You retain a full reference internally and disclose only the redacted file — the two never get confused.",
+      },
+      {
+        question: "Can redaction run without sending documents to a third party?",
+        answer:
+          "Yes. GigaPDF is open source and self-hostable, so the whole redaction workflow can execute on your own infrastructure. For privileged or classified material, that means sensitive documents never leave your perimeter.",
+      },
+    ],
+    useCases: [
+      "Black out privileged passages in an exhibit before disclosure, for real",
+      "Remove personal data from a document before sharing it more widely",
+      "Strip confidential figures or names from a report sent outside the organization",
+    ],
+    relatedTools: ["annotate-pdf", "protect-pdf", "watermark-pdf"],
+    relatedSolutions: ["lawyers", "healthcare", "human-resources"],
+    icon: "square-pen",
+  },
+  {
+    slug: "unlock-pdf",
+    name: "Unlock PDF",
+    category: "secure",
+    metaTitle: "Unlock PDF: Remove a Known Password | GigaPDF",
+    metaDescription:
+      "Remove the password from a PDF you can already open, to get an unencrypted copy. Free, open source — the known-password is required.",
+    h1: "Unlock a PDF: remove a password you already know",
+    intro: [
+      "Encryption is a blessing right up until it becomes a daily tax: a document you legitimately own that demands its password at every single open, an encrypted file you can't merge or annotate, a protected PDF that breaks your automated pipeline. When you already hold the password, re-entering it forever serves no purpose — you want a clean, unencrypted copy.",
+      "GigaPDF removes the password from a PDF you can open: you supply the password the file expects, GigaPDF decrypts the content, and you get back an unprotected copy — openable without a prompt, ready to merge, edit, or process. It works on the standard PDF encryption schemes, including AES, and lifts both the open password and the permission restrictions in one pass.",
+      "To be unambiguous: this is decryption with the known password, not password cracking. If you don't have the password, GigaPDF cannot — and will not — break the encryption open; that's precisely what makes PDF encryption worth using. Unlocking is part of the free plan, adds no watermark, and runs the same on a self-hosted instance, the natural counterpart to the Protect PDF tool.",
+    ],
+    howTo: {
+      title: "How to remove a password from a PDF",
+      steps: [
+        "Upload the encrypted PDF you can already open.",
+        "Enter the password the file requires.",
+        "Run the unlock: GigaPDF decrypts the content with that password.",
+        "Download the unprotected copy, openable without any prompt.",
+        "Merge, edit, or process the decrypted PDF on the same platform.",
+      ],
+    },
+    capabilities: [
+      "Password removed from a PDF you can already open",
+      "Standard PDF encryption schemes supported, AES included",
+      "Open password and permission restrictions lifted in one pass",
+      "Unprotected copy ready to merge, edit, or process",
+      "No watermark on the unlocked file",
+      "Self-hostable: decryption runs on your own server",
+    ],
+    faq: [
+      {
+        question: "Can GigaPDF unlock a PDF without the password?",
+        answer:
+          "No, and that's by design. Unlocking is decryption with the password you already have, not cracking. If the password is unknown, GigaPDF will not break the encryption — that resistance is exactly what makes AES protection worth applying in the first place.",
+      },
+      {
+        question: "What gets removed when I unlock a file?",
+        answer:
+          "Both the open password (the one that gates reading) and the permission restrictions (printing, copying, editing) are lifted, producing a clean unencrypted copy. The result opens without a prompt and behaves like an ordinary, unrestricted PDF.",
+      },
+      {
+        question: "Why would I remove a password I know?",
+        answer:
+          "Convenience and workflow: a document you constantly re-open, a file you need to merge or annotate (tools that an encrypted PDF blocks), or an automated pipeline that chokes on the prompt. Once you have a clean copy, you can re-protect it later with Protect PDF if needed.",
+      },
+      {
+        question: "Does unlocking change the document's content?",
+        answer:
+          "No. Only the encryption layer is removed; the pages, text, images, and structure are untouched. You get the same document, just without the password and permission restrictions wrapped around it.",
+      },
+    ],
+    useCases: [
+      "Get a prompt-free copy of a document you legitimately own and constantly open",
+      "Lift restrictions on a known-password PDF so you can merge or annotate it",
+      "Unblock an automated pipeline that an encrypted PDF was breaking",
+    ],
+    relatedTools: ["protect-pdf", "sign-pdf", "redact-pdf"],
+    relatedSolutions: ["accountants", "human-resources", "freelancers"],
+    icon: "unlock",
   },
 ];
 
