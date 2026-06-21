@@ -74,11 +74,13 @@ export interface PDFRenderOptions {
   /** Render scale (1 = 72 dpi). HiDPI editor backgrounds pass devicePixelRatio. */
   scale?: number;
   /**
-   * Accepted for backward compatibility and ignored: the engine renders the
-   * page as-is. Editors that need an editable text overlay render their own
-   * transparent layer above the bitmap rather than masking the background.
+   * Render the page WITHOUT its text (text-free raster) so the editor can paint
+   * the REAL editable text as a Fabric overlay on top — direct text editing with
+   * 1:1 fidelity, and no per-edit colour mask (which breaks on gradients). All
+   * non-text content (vector art, gradients/shadings, images) is still rendered
+   * faithfully by the engine. Implemented via the engine's `renderPageNoText`.
    */
-  maskText?: boolean;
+  skipText?: boolean;
 }
 
 // ─── PDFRenderer ─────────────────────────────────────────────────────────────
@@ -120,7 +122,10 @@ export class PDFRenderer {
   ): Promise<string> {
     if (!this.doc) throw new Error("PDF document not loaded");
     const { scale = 1 } = options;
-    const png = this.doc.renderPage(pageNumber, scale);
+    const skipText = options.skipText ?? options.maskText ?? false;
+    const png = skipText
+      ? this.doc.renderPageNoText(pageNumber, scale)
+      : this.doc.renderPage(pageNumber, scale);
     return pngToDataUrl(png);
   }
 

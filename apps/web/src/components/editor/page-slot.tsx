@@ -9,20 +9,24 @@
  * or unmount). Inside it sits a {@link PageChrome} sheet.
  *
  * Mounting strategy (the heart of the windowing):
- *   - `isVisible` → mount a real {@link PageCanvasHost} (Fabric canvas). The
- *     focused page uses `mode="full"` (editable overlay); the rest render a
- *     cheap bitmap background only.
+ *   - active page → mount a real {@link EditorCanvas} in `embedded` mode: FULL
+ *     editing (create text/shape at mouse via `tool`, move/resize/retype,
+ *     delete key, undo/redo, toolbar handle). Reuses the exact single-page
+ *     editor component — no duplication.
+ *   - other visible pages → mount a {@link PageCanvasHost}: the cheap, read-only
+ *     full page bitmap (with text).
  *   - off-window → render a lightweight placeholder (the server thumbnail if we
  *     have one, otherwise a sized skeleton). Zero canvas, zero Fabric — pure DOM.
  *
  * Because the box is pre-sized to the exact rendered page dimensions, swapping
- * between placeholder and canvas causes no layout shift.
+ * between placeholder, bitmap canvas and editor causes no layout shift.
  */
 
 import React from "react";
-import type { PageObject } from "@giga-pdf/types";
+import type { PageObject, Element, Bounds, Tool } from "@giga-pdf/types";
 import { PageChrome } from "./page-chrome";
 import { PageCanvasHost } from "./page-canvas-host";
+import { EditorCanvas, type EditorCanvasHandle } from "./editor-canvas";
 import { PageMarginGuides } from "./page-margin-guides";
 import { PageRulers } from "./page-rulers";
 import { effectivePagePoints } from "./lib/page-layout";
@@ -42,10 +46,14 @@ export interface PageSlotProps {
   slot: PageSlotGeometry;
   /** Whether this page is inside the virtualisation window (mount a canvas). */
   isVisible: boolean;
-  /** Whether this page is the active/focused one (editable overlay + ring). */
+  /** Whether this page is the active/focused one (editable EditorCanvas + ring). */
   isActive: boolean;
   /** Shared canvas + background-render pool. */
   pool: PageRenderPool;
+  /** Document ID (session backend) — forwarded to the active page's EditorCanvas. */
+  documentId?: string | null;
+  /** Active tool — forwarded to the active page's EditorCanvas (create/select/…). */
+  tool?: Tool;
   /** Show the rulers (active page only). */
   showRulers?: boolean;
   /** Ruler display unit. */
@@ -59,9 +67,29 @@ export interface PageSlotProps {
   onMarginsCommit?: (index: number, margins: PageMargins) => void;
   /** Click into the page body → caller sets the active page. */
   onActivate?: (index: number) => void;
-  /** Forwarded to the canvas host once the page finishes rendering. */
+  /**
+   * Resolves the registered FontFace name for an embedded PDF font, forwarded to
+   * the active page's EditorCanvas so the continuous view resolves embedded
+   * fonts exactly like the single-page editor.
+   */
+  getFontFaceName?: (originalName: string) => string | null;
+  /** Forwarded to the active page's EditorCanvas: element created at mouse. */
+  onElementAdded?: (element: Element) => void;
+  /** Forwarded to the active page's EditorCanvas: element moved/resized/retyped. */
+  onElementModified?: (element: Element, oldBounds?: Bounds) => void;
+  /** Forwarded to the active page's EditorCanvas: element removed. */
+  onElementRemoved?: (elementId: string) => void;
+  /** Forwarded to the active page's EditorCanvas: selection changed. */
+  onSelectionChanged?: (elementIds: string[]) => void;
+  /**
+   * Forwarded to the active page's EditorCanvas: the imperative handle. Routing
+   * this to page.tsx's `setCanvasHandle` makes the toolbar (delete/undo/redo/
+   * duplicate/format/addImage) drive the ACTIVE page automatically.
+   */
+  onCanvasReady?: (handle: EditorCanvasHandle) => void;
+  /** Forwarded to the (inactive) canvas host once the page finishes rendering. */
   onReady?: (index: number) => void;
-  /** Forwarded to the canvas host when it releases its pool slot. */
+  /** Forwarded to the (inactive) canvas host when it releases its pool slot. */
   onDispose?: (index: number) => void;
 }
 
@@ -78,11 +106,19 @@ function PageSlotImpl({
   isVisible,
   isActive,
   pool,
+  documentId,
+  tool,
   showRulers = false,
   rulerUnit = "mm",
   margins,
   onMarginsCommit,
   onActivate,
+  getFontFaceName,
+  onElementAdded,
+  onElementModified,
+  onElementRemoved,
+  onSelectionChanged,
+  onCanvasReady,
   onReady,
   onDispose,
 }: PageSlotProps) {
@@ -113,12 +149,31 @@ function PageSlotImpl({
         pageNumber={page.pageNumber}
         active={isActive}
       >
-        {isVisible ? (
+        {isActive ? (
+          // ACTIVE page → the real single-page editor, embedded (no own scroll
+          // viewport/zoom: the continuous scroller owns those). Full tooling +
+          // the imperative handle routed to the toolbar via onCanvasReady.
+          <EditorCanvas
+            embedded
+            page={page}
+            documentId={documentId}
+            zoom={zoom}
+            width={slot.width}
+            height={slot.height}
+            tool={tool ?? "select"}
+            {...(getFontFaceName ? { getFontFaceName } : {})}
+            {...(onElementAdded ? { onElementAdded } : {})}
+            {...(onElementModified ? { onElementModified } : {})}
+            {...(onElementRemoved ? { onElementRemoved } : {})}
+            {...(onSelectionChanged ? { onSelectionChanged } : {})}
+            {...(onCanvasReady ? { onCanvasReady } : {})}
+          />
+        ) : isVisible ? (
+          // Inactive but in-window → cheap read-only full bitmap (with text).
           <PageCanvasHost
             page={page}
             index={index}
             scale={zoom}
-            mode={isActive ? "full" : "background"}
             pool={pool}
             {...(onReady ? { onReady } : {})}
             {...(onDispose ? { onDispose } : {})}

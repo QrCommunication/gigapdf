@@ -43,7 +43,10 @@ type FabricModule = typeof FabricNamespace;
  */
 export interface SharedRenderer {
   loadDocument(source: ArrayBuffer | Uint8Array): Promise<void>;
-  renderPageToDataURL(pageNumber: number, options?: { scale?: number }): Promise<string>;
+  renderPageToDataURL(
+    pageNumber: number,
+    options?: { scale?: number; skipText?: boolean },
+  ): Promise<string>;
   dispose(): void;
 }
 
@@ -210,6 +213,11 @@ export class PageRenderPool {
         if (!renderer) {
           throw new Error("PageRenderPool: renderer unavailable");
         }
+        // Full raster WITH text: inactive pages render the complete page bitmap
+        // (read-only, cheap, pixel-perfect). The ACTIVE page is rendered by an
+        // embedded <EditorCanvas> instead (which draws its own text-free
+        // background + real editable text overlay), so only inactive pages use
+        // this pool background — they must show their text.
         return renderer.renderPageToDataURL(index + 1, { scale });
       })
       .catch((err: unknown) => {

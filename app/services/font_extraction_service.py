@@ -8,10 +8,31 @@ Subset TTFs extracted directly from PDFs (Type0/CIDFontType2 wrappers)
 preserve only the minimal tables needed by pdf.js (which uses CIDToGIDMap
 to drive glyph selection). Chrome's OpenType Sanitiser (OTS) is stricter:
 it rejects fonts with missing cmap/name/OS-2 tables or inconsistent hmtx
-side-bearings, producing the runtime error
+side-bearings, producing runtime errors such as
   "OTS parsing error: hmtx: Failed to read side bearing"
-We round-trip every extracted TTF through fontTools so save() rebuilds
-the internal checksums and produces a TTF file the browser will accept.
+  "OTS parsing error: cmap: missing required table"
+
+To guarantee a browser-loadable (OTS-valid) sfnt that draws the ORIGINAL
+embedded glyph outlines, every extracted font is repaired so that all
+OTS-required tables are present (cmap, head, hhea, hmtx, maxp, name, OS/2,
+post; glyf+loca for TrueType, CFF for CFF-OTF). The CRITICAL step is
+synthesising a `cmap` when the embedded one is missing/broken, built from
+the best available source on the PDF font dict — in priority order:
+
+  1. the font's own valid cmap (kept verbatim);
+  2. the simple-font /Encoding /Differences (glyph name → Unicode via the
+     Adobe Glyph List), with the code used as the glyph id of the subset;
+  3. the base /Encoding (WinAnsi/MacRoman/Standard) code → Unicode table;
+  4. the /ToUnicode CMap (char code → Unicode), with CIDToGIDMap driving
+     the glyph id for composite (Type0/CID) fonts.
+
+The emitted cmap maps those Unicode codepoints to the correct glyph ids
+(format 4 for the BMP, plus format 12 when supplementary-plane codepoints
+exist) so the browser, given the run's Unicode text, selects the right
+outline — making on-screen text 1:1 even when the PDF's cmap was absent.
+When no Unicode mapping is recoverable we fall back to a literal
+glyph-index → codepoint identity cmap (still OTS-valid and non-empty);
+the editor's background bitmap then carries the visually-correct render.
 """
 
 import base64
@@ -20,7 +41,7 @@ import io
 import logging
 import re
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import pikepdf
@@ -33,6 +54,16 @@ except ImportError:  # pragma: no cover — runtime detection
     TTFont = None  # type: ignore[assignment,misc]
     TTLibError = Exception  # type: ignore[assignment,misc]
     _FONTTOOLS_AVAILABLE = False
+
+try:
+    # fontTools.agl maps PostScript glyph names → Unicode (named glyphs,
+    # "uniXXXX", "uXXXXXX"). Used to recover a cmap from /Differences.
+    from fontTools.agl import toUnicode as _agl_to_unicode  # type: ignore[import-not-found]
+
+    _AGL_AVAILABLE = True
+except ImportError:  # pragma: no cover — runtime detection
+    _agl_to_unicode = None  # type: ignore[assignment,misc]
+    _AGL_AVAILABLE = False
 
 if TYPE_CHECKING:
     from app.schemas.fonts import ExtractedFontMetadata
@@ -56,6 +87,41 @@ class ExtractedFont:
 
     metadata: "ExtractedFontMetadata"
     data: bytes | None  # None when font is referenced but not extractable
+
+
+@dataclass
+class FontDictContext:
+    """
+    Code→glyph mapping context recovered from the PDF font dictionary.
+
+    Used to synthesise a browser-loadable cmap when the embedded font program
+    itself lacks a usable one. All fields are optional; the cmap builder uses
+    the best available source in priority order:
+
+        1. Differences (code → glyph name)         — exact, simple fonts
+        2. base_encoding (WinAnsi/MacRoman/Std)     — standard simple fonts
+        3. to_unicode (char code → unicode str)     — fallback / composite
+        4. cid_to_gid ("Identity" | bytes)          — Type0/CID GID resolution
+    """
+
+    is_composite: bool = False
+    # Simple-font /Encoding /Differences: code (int) → glyph name (str)
+    differences: dict[int, str] = field(default_factory=dict)
+    # Base encoding name: "WinAnsiEncoding" | "MacRomanEncoding" |
+    # "StandardEncoding" | "MacExpertEncoding" | None
+    base_encoding: str | None = None
+    # /ToUnicode CMap parsed: char code (int) → unicode string (str)
+    to_unicode: dict[int, str] = field(default_factory=dict)
+    # Type0/CID: "Identity" or a parsed CIDToGIDMap (cid:int → gid:int)
+    cid_to_gid: object | None = None
+
+    def has_mapping(self) -> bool:
+        return bool(
+            self.differences
+            or self.base_encoding
+            or self.to_unicode
+            or self.cid_to_gid is not None
+        )
 
 
 class FontExtractionService:
@@ -160,14 +226,20 @@ class FontExtractionService:
         # Attempt to find descriptor
         descriptor = font_dict.get("/FontDescriptor")
 
+        # Composite (Type0) fonts carry their encoding/glyph data in the inner
+        # CIDFont; simple fonts carry it on the top-level dict.
+        is_composite = subtype == "Type0"
+        inner_dict: dict | None = None
+
         # For Type0 (composite) fonts, inspect the DescendantFonts array
         if subtype == "Type0" and not descriptor:
             descendants = font_dict.get("/DescendantFonts")
             if descendants:
                 try:
                     inner = descendants[0]
-                    descriptor = dict(inner).get("/FontDescriptor")
-                    inner_subtype = dict(inner).get("/Subtype")
+                    inner_dict = dict(inner)
+                    descriptor = inner_dict.get("/FontDescriptor")
+                    inner_subtype = inner_dict.get("/Subtype")
                     if inner_subtype:
                         subtype = str(inner_subtype).lstrip("/")
                 except Exception as exc:
@@ -176,6 +248,12 @@ class FontExtractionService:
                         original_name,
                         exc,
                     )
+
+        # Recover the code→glyph mapping context from the PDF font dict so the
+        # cmap can be synthesised when the embedded program lacks one.
+        ctx = self._build_font_dict_context(
+            font_dict, inner_dict, is_composite, original_name
+        )
 
         font_bytes, font_file_key = self._extract_font_bytes(descriptor)
         font_present = font_bytes is not None
@@ -195,7 +273,7 @@ class FontExtractionService:
         # that Chrome OTS rejects.
         if font_bytes and detected_format in ("ttf", "otf"):
             repaired = self._repair_ttf_for_browser(
-                font_bytes, detected_format, postscript_name
+                font_bytes, detected_format, postscript_name, ctx
             )
             if repaired is not None:
                 font_bytes = repaired
@@ -205,7 +283,7 @@ class FontExtractionService:
             # fonts as bare CFF streams in FontFile3 — Chrome OTS only
             # accepts CFF inside an OTF wrapper.
             wrapped = self._wrap_cff_as_otf(
-                font_bytes, postscript_name, font_family
+                font_bytes, postscript_name, font_family, ctx
             )
             if wrapped is not None:
                 font_bytes = wrapped
@@ -239,6 +317,449 @@ class FontExtractionService:
             size_bytes=size_bytes,
         )
         return ExtractedFont(metadata=metadata, data=font_bytes)
+
+    # ------------------------------------------------------------------
+    # cmap-synthesis context extraction
+    # ------------------------------------------------------------------
+
+    def _build_font_dict_context(
+        self,
+        font_dict: dict,
+        inner_dict: dict | None,
+        is_composite: bool,
+        original_name: str,
+    ) -> FontDictContext:
+        """
+        Extract the code→glyph mapping context from a PDF font dictionary.
+
+        For simple fonts this reads /Encoding (base name + /Differences).
+        For composite (Type0) fonts this reads the inner CIDFont's
+        /CIDToGIDMap. In all cases it attempts to parse /ToUnicode.
+
+        Never raises — best-effort recovery, returns a (possibly empty)
+        context on any failure.
+        """
+        ctx = FontDictContext(is_composite=is_composite)
+
+        try:
+            # ── /Encoding (simple fonts) ──────────────────────────────
+            encoding = font_dict.get("/Encoding")
+            if encoding is not None:
+                if isinstance(encoding, pikepdf.Name):
+                    ctx.base_encoding = str(encoding).lstrip("/")
+                else:
+                    # Encoding dictionary: base + Differences
+                    try:
+                        enc_dict = dict(encoding)
+                    except Exception:
+                        enc_dict = {}
+                    base = enc_dict.get("/BaseEncoding")
+                    if base is not None:
+                        ctx.base_encoding = str(base).lstrip("/")
+                    diffs = enc_dict.get("/Differences")
+                    if diffs is not None:
+                        ctx.differences = self._parse_differences(diffs)
+        except Exception as exc:  # noqa: BLE001 — best-effort recovery
+            logger.debug(
+                "Could not parse /Encoding for '%s': %s", original_name, exc
+            )
+
+        try:
+            # ── /CIDToGIDMap (composite fonts) ────────────────────────
+            if inner_dict is not None:
+                c2g = inner_dict.get("/CIDToGIDMap")
+                if c2g is not None:
+                    if isinstance(c2g, pikepdf.Name):
+                        # "/Identity" — CID == GID
+                        ctx.cid_to_gid = "Identity"
+                    else:
+                        try:
+                            raw = bytes(c2g.read_bytes())
+                            ctx.cid_to_gid = self._parse_cid_to_gid(raw)
+                        except Exception:
+                            ctx.cid_to_gid = "Identity"
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "Could not parse /CIDToGIDMap for '%s': %s", original_name, exc
+            )
+
+        try:
+            # ── /ToUnicode CMap ───────────────────────────────────────
+            to_unicode = font_dict.get("/ToUnicode")
+            if to_unicode is not None:
+                try:
+                    cmap_bytes = bytes(to_unicode.read_bytes())
+                    ctx.to_unicode = self._parse_to_unicode_cmap(cmap_bytes)
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug(
+                        "Could not parse /ToUnicode for '%s': %s",
+                        original_name,
+                        exc,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "Could not access /ToUnicode for '%s': %s", original_name, exc
+            )
+
+        return ctx
+
+    @staticmethod
+    def _parse_differences(diffs: pikepdf.Object) -> dict[int, str]:
+        """
+        Parse a PDF /Differences array into {code: glyph_name}.
+
+        The array is [int name name ... int name ...]: each integer resets
+        the current code, and each subsequent name assigns the glyph at the
+        current code, incrementing it. Example:
+            [65 /A /B 97 /a]  →  {65:'A', 66:'B', 97:'a'}
+        """
+        mapping: dict[int, str] = {}
+        current = 0
+        try:
+            for item in diffs:
+                if isinstance(item, int):
+                    current = item
+                elif isinstance(item, pikepdf.Name):
+                    mapping[current] = str(item).lstrip("/")
+                    current += 1
+                else:
+                    # pikepdf may surface ints as Object; coerce defensively
+                    try:
+                        current = int(item)
+                    except (TypeError, ValueError):
+                        name = str(item).lstrip("/")
+                        if name:
+                            mapping[current] = name
+                            current += 1
+        except Exception:  # noqa: BLE001
+            return mapping
+        return mapping
+
+    @staticmethod
+    def _parse_cid_to_gid(raw: bytes) -> dict[int, int]:
+        """
+        Parse a binary /CIDToGIDMap stream into {cid: gid}.
+
+        The stream is a packed array of big-endian uint16: byte pair 2*cid
+        holds the GID for that CID. Zero GIDs (.notdef) are skipped.
+        """
+        mapping: dict[int, int] = {}
+        n = len(raw) // 2
+        for cid in range(n):
+            gid = struct.unpack(">H", raw[cid * 2 : cid * 2 + 2])[0]
+            if gid != 0:
+                mapping[cid] = gid
+        return mapping
+
+    @staticmethod
+    def _parse_to_unicode_cmap(cmap_bytes: bytes) -> dict[int, str]:
+        """
+        Parse a /ToUnicode CMap stream into {char_code: unicode_string}.
+
+        ToUnicode CMaps are a restricted PostScript dialect with two relevant
+        constructs:
+            beginbfchar ... endbfchar     — <src> <dst> pairs
+            beginbfrange ... endbfrange   — <lo> <hi> <dst>  (or [array])
+
+        We parse the hex-string forms (the common case for PDF producers).
+        Returns char code → decoded UTF-16BE unicode string.
+        """
+        text = cmap_bytes.decode("latin-1", errors="replace")
+        result: dict[int, str] = {}
+
+        def _hex_to_int(h: str) -> int:
+            return int(h, 16)
+
+        def _utf16be_hex_to_str(h: str) -> str:
+            try:
+                data = bytes.fromhex(h if len(h) % 2 == 0 else "0" + h)
+                return data.decode("utf-16-be", errors="replace")
+            except Exception:
+                return ""
+
+        # bfchar: <src> <dst>
+        for block in re.findall(
+            r"beginbfchar(.*?)endbfchar", text, re.DOTALL
+        ):
+            for src, dst in re.findall(
+                r"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>", block
+            ):
+                code = _hex_to_int(src)
+                result[code] = _utf16be_hex_to_str(dst)
+
+        # bfrange: <lo> <hi> <dst>  OR  <lo> <hi> [<d0> <d1> ...]
+        for block in re.findall(
+            r"beginbfrange(.*?)endbfrange", text, re.DOTALL
+        ):
+            # Array form: <lo> <hi> [ <d> <d> ... ]
+            for lo, _hi, arr in re.findall(
+                r"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[(.*?)\]",
+                block,
+                re.DOTALL,
+            ):
+                lo_i = _hex_to_int(lo)
+                dsts = re.findall(r"<([0-9A-Fa-f]+)>", arr)
+                for offset, dst in enumerate(dsts):
+                    result[lo_i + offset] = _utf16be_hex_to_str(dst)
+            # Scalar form: <lo> <hi> <dst>
+            for lo, hi, dst in re.findall(
+                r"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>",
+                block,
+            ):
+                lo_i = _hex_to_int(lo)
+                hi_i = _hex_to_int(hi)
+                base = _hex_to_int(dst)
+                # Each successive code increments the final UTF-16 code unit.
+                for offset in range(hi_i - lo_i + 1):
+                    cp = base + offset
+                    try:
+                        result[lo_i + offset] = chr(cp)
+                    except (ValueError, OverflowError):
+                        continue
+
+        return result
+
+    @staticmethod
+    def _glyph_name_to_unicode(name: str) -> int | None:
+        """
+        Resolve a PostScript glyph name to a Unicode codepoint.
+
+        Uses fontTools' AGL (named glyphs, "uniXXXX", "uXXXXXX"). Returns the
+        first codepoint of the mapped string, or None when unresolvable.
+        """
+        if not name or name == ".notdef":
+            return None
+        if _AGL_AVAILABLE and _agl_to_unicode is not None:
+            try:
+                s = _agl_to_unicode(name)
+                if s:
+                    return ord(s[0])
+            except Exception:  # noqa: BLE001
+                pass
+        return None
+
+    @staticmethod
+    def _base_encoding_table(name: str | None) -> dict[int, int] | None:
+        """
+        Return a {code: unicode_codepoint} table for a named base encoding.
+
+        Supports WinAnsiEncoding (cp1252), MacRomanEncoding (mac_roman) and
+        StandardEncoding (Adobe). Returns None for unknown encodings.
+        """
+        if not name:
+            return None
+        table: dict[int, int] = {}
+        try:
+            if name == "WinAnsiEncoding":
+                for code in range(256):
+                    try:
+                        ch = bytes([code]).decode("cp1252")
+                        table[code] = ord(ch)
+                    except UnicodeDecodeError:
+                        continue
+                return table
+            if name == "MacRomanEncoding":
+                for code in range(256):
+                    try:
+                        ch = bytes([code]).decode("mac_roman")
+                        table[code] = ord(ch)
+                    except UnicodeDecodeError:
+                        continue
+                return table
+            if name == "StandardEncoding":
+                try:
+                    from fontTools.encodings.StandardEncoding import (
+                        StandardEncoding,
+                    )
+                except ImportError:
+                    return None
+                for code, gname in enumerate(StandardEncoding):
+                    if not gname or gname == ".notdef":
+                        continue
+                    cp = FontExtractionService._glyph_name_to_unicode(gname)
+                    if cp is not None:
+                        table[code] = cp
+                return table
+        except Exception:  # noqa: BLE001
+            return None
+        return None
+
+    @classmethod
+    def _build_unicode_to_glyphname(
+        cls,
+        ctx: "FontDictContext | None",
+        glyph_order: list[str],
+        existing_cmap: dict[int, str] | None,
+    ) -> dict[int, str]:
+        """
+        Synthesise a {unicode_codepoint: glyph_name} mapping for a cmap.
+
+        Strategy (best source first), all keyed for SIMPLE fonts by the
+        single-byte code being equal to the glyph index in PDF subset
+        TrueType (the embedded font's glyph order is dense and code-ordered):
+
+          S1. existing_cmap — keep what the font already had (highest fidelity)
+          S2. /Differences  — code→glyph name; code is the GID → unicode→GID
+          S3. base_encoding — code→unicode; code is the GID → unicode→GID
+          S4. /ToUnicode    — code→unicode; code is the GID (or via CIDToGIDMap
+                              for composite fonts) → unicode→GID
+
+        For composite (Type0) fonts the run text is Unicode and the browser
+        resolves via this cmap, so we map unicode→gid using CIDToGIDMap when
+        present (CID==code for Identity-H), else assume code==gid.
+
+        The resulting glyph NAME is taken from glyph_order[gid] so fontTools
+        emits a cmap that points at the real outline.
+        """
+        num_glyphs = len(glyph_order)
+
+        def gid_to_name(gid: int) -> str | None:
+            if 0 <= gid < num_glyphs:
+                return glyph_order[gid]
+            return None
+
+        def resolve_gid(code: int) -> int | None:
+            """Map a character code to a glyph id."""
+            if ctx is not None and ctx.is_composite and ctx.cid_to_gid is not None:
+                if isinstance(ctx.cid_to_gid, dict):
+                    return ctx.cid_to_gid.get(code)
+                # "Identity": CID == GID == code
+                return code
+            # Simple font subset: the embedded program's glyph order is the
+            # subset's selection; pdf.js drives selection by code==gid for
+            # these subset TTFs.
+            return code
+
+        result: dict[int, str] = {}
+
+        # S1 — preserve the font's own valid cmap.
+        if existing_cmap:
+            for cp, gname in existing_cmap.items():
+                if 0 <= cp < 0x110000:
+                    result[cp] = gname
+
+        # S2 — /Differences: code → glyph name → unicode, GID from code.
+        if ctx is not None and ctx.differences:
+            for code, gname in ctx.differences.items():
+                cp = cls._glyph_name_to_unicode(gname)
+                if cp is None:
+                    continue
+                gid = resolve_gid(code)
+                if gid is None:
+                    continue
+                name = gid_to_name(gid)
+                if name is not None:
+                    result.setdefault(cp, name)
+
+        # S3 — base encoding table: code → unicode, GID from code.
+        if ctx is not None and ctx.base_encoding:
+            base_tbl = cls._base_encoding_table(ctx.base_encoding)
+            if base_tbl:
+                for code, cp in base_tbl.items():
+                    gid = resolve_gid(code)
+                    if gid is None:
+                        continue
+                    name = gid_to_name(gid)
+                    if name is not None:
+                        result.setdefault(cp, name)
+
+        # S4 — /ToUnicode: code → unicode string, GID from code/CIDToGIDMap.
+        if ctx is not None and ctx.to_unicode:
+            for code, ustr in ctx.to_unicode.items():
+                if not ustr:
+                    continue
+                cp = ord(ustr[0])
+                gid = resolve_gid(code)
+                if gid is None:
+                    continue
+                name = gid_to_name(gid)
+                if name is not None:
+                    result.setdefault(cp, name)
+
+        return result
+
+    @staticmethod
+    def _make_cmap_table(unicode_to_name: dict[int, str]):  # noqa: ANN205
+        """
+        Build a fontTools cmap table object with format 4 (BMP) plus
+        format 12 (full Unicode) when supplementary-plane codepoints exist.
+
+        Returns a newTable('cmap') ready to assign to font['cmap'], or None
+        when the mapping is empty.
+        """
+        if not unicode_to_name:
+            return None
+        from fontTools.ttLib import newTable
+        from fontTools.ttLib.tables import _c_m_a_p as cmap_mod
+
+        bmp = {cp: gn for cp, gn in unicode_to_name.items() if cp <= 0xFFFF}
+        has_supplementary = any(cp > 0xFFFF for cp in unicode_to_name)
+
+        cmap = newTable("cmap")
+        cmap.tableVersion = 0
+        subtables = []
+
+        # Format 4 — Windows BMP (platform 3, enc 1). Required by OTS.
+        sub4 = cmap_mod.cmap_format_4(4)
+        sub4.platformID = 3
+        sub4.platEncID = 1
+        sub4.format = 4
+        sub4.language = 0
+        sub4.cmap = dict(bmp)
+        subtables.append(sub4)
+
+        # Format 12 — Windows full repertoire (platform 3, enc 10).
+        if has_supplementary:
+            sub12 = cmap_mod.cmap_format_12(12)
+            sub12.platformID = 3
+            sub12.platEncID = 10
+            sub12.format = 12
+            sub12.reserved = 0
+            sub12.language = 0
+            sub12.nGroups = 0
+            sub12.length = 0
+            sub12.cmap = dict(unicode_to_name)
+            subtables.append(sub12)
+
+        cmap.tables = subtables
+        return cmap
+
+    @staticmethod
+    def _cmap_is_valid(font) -> bool:  # noqa: ANN001
+        """
+        Return True if the font has a non-empty, usable cmap subtable.
+
+        A cmap that exists but has zero mappings (or only a degenerate
+        single-entry table) is treated as broken so we re-synthesise it.
+        """
+        try:
+            cmap = font.get("cmap")
+            if cmap is None or not cmap.tables:
+                return False
+            for sub in cmap.tables:
+                mapping = getattr(sub, "cmap", None)
+                if mapping and len(mapping) > 0:
+                    return True
+            return False
+        except Exception:  # noqa: BLE001
+            return False
+
+    @staticmethod
+    def _existing_cmap_dict(font) -> dict[int, str] | None:  # noqa: ANN001
+        """Return the merged {codepoint: glyphname} from a font's cmap, or None."""
+        try:
+            cmap = font.get("cmap")
+            if cmap is None or not cmap.tables:
+                return None
+            merged: dict[int, str] = {}
+            # Prefer Windows/Unicode subtables; merge all non-empty ones.
+            for sub in cmap.tables:
+                mapping = getattr(sub, "cmap", None)
+                if mapping:
+                    merged.update(mapping)
+            return merged or None
+        except Exception:  # noqa: BLE001
+            return None
 
     @staticmethod
     def _pad_hmtx_table(font_bytes: bytes) -> bytes | None:
@@ -352,6 +873,7 @@ class FontExtractionService:
         cff_bytes: bytes,
         postscript_name: str | None,
         font_family: str | None,
+        ctx: "FontDictContext | None" = None,
     ) -> bytes | None:
         """
         Wrap raw CFF font data in a minimal OTF (sfnt) container.
@@ -533,25 +1055,29 @@ class FontExtractionService:
             os2.usMaxContext = 0
             font["OS/2"] = os2
 
-            # ── cmap (identity glyph→unicode mapping) ───────────────
-            # fontTools exposes one class per format under cmap_format_N.
-            # The cmap_format_4 constructor takes the format as its only
-            # arg (it is a generic dispatcher).
-            from fontTools.ttLib.tables import _c_m_a_p as cmap_mod
-            cmap = newTable("cmap")
-            cmap.tableVersion = 0
-            sub = cmap_mod.cmap_format_4(4)
-            sub.platEncID = 1
-            sub.platformID = 3
-            sub.format = 4
-            sub.length = 0
-            sub.language = 0
-            # Identity mapping: glyph index N → unicode N (skipping .notdef).
-            # Sufficient for editor fallback rendering since pdf.js renders
-            # the original glyphs in the bg bitmap.
-            sub.cmap = {i: gn for i, gn in enumerate(glyph_order) if i > 0 and i < 0xFFFF}
-            cmap.tables = [sub]
-            font["cmap"] = cmap
+            # ── cmap (synthesised from the PDF font dict) ───────────
+            # Build a unicode→glyph cmap from the PDF font dict context
+            # (/Differences, base encoding, /ToUnicode, CIDToGIDMap) so the
+            # browser, given the run's Unicode text, resolves the correct
+            # CFF outline. Falls back to a literal code→glyph identity map
+            # (glyph index N → codepoint N) only when no Unicode mapping is
+            # recoverable — that still yields an OTS-valid, non-empty cmap.
+            unicode_to_name = FontExtractionService._build_unicode_to_glyphname(
+                ctx, glyph_order, existing_cmap=None
+            )
+            cmap = FontExtractionService._make_cmap_table(unicode_to_name)
+            if cmap is None:
+                # Last resort: identity glyph-index → codepoint. Non-empty so
+                # OTS accepts the font; the editor's bg bitmap still carries
+                # the visually-correct rendering.
+                identity = {
+                    i: gn
+                    for i, gn in enumerate(glyph_order)
+                    if 0 < i < 0xFFFF
+                }
+                cmap = FontExtractionService._make_cmap_table(identity)
+            if cmap is not None:
+                font["cmap"] = cmap
 
             # ── post ────────────────────────────────────────────────
             post = newTable("post")
@@ -585,7 +1111,10 @@ class FontExtractionService:
 
     @staticmethod
     def _repair_ttf_for_browser(
-        font_bytes: bytes, font_format: str | None, postscript_name: str | None
+        font_bytes: bytes,
+        font_format: str | None,
+        postscript_name: str | None,
+        ctx: "FontDictContext | None" = None,
     ) -> bytes | None:
         """
         Round-trip a font through fontTools to make it browser-OTS-compliant.
@@ -594,8 +1123,13 @@ class FontExtractionService:
         TTFs typically:
         1. Truncate hmtx to skip trailing leftSideBearings (we pad with zeros)
         2. Have inconsistent table checksums (fontTools.save() regenerates)
-        3. Sometimes lack OS-2/name (fontTools.save() preserves whatever
-           was there, but the round-trip normalises layout)
+        3. **Lack a usable cmap** (subset TrueType driven by CIDToGIDMap) —
+           OTS rejects "cmap: missing required table". We SYNTHESISE one from
+           the PDF font dict (/Differences, base encoding, /ToUnicode,
+           CIDToGIDMap) so the browser resolves the run's Unicode text to the
+           correct glyph outline.
+        4. Sometimes lack OS/2, name, or post — we synthesise minimal versions
+           so every OTS-required table is present.
 
         Returns None when the font cannot be loaded or saved; callers should
         treat None as "not embeddable in browser" (the metadata stays
@@ -605,13 +1139,14 @@ class FontExtractionService:
             font_bytes: Raw font program from the PDF FontFile* stream.
             font_format: Detected format ("ttf", "otf", "cff") — only TTF/OTF
                 are repaired. CFF data needs separate handling.
-            postscript_name: Used only for logging.
+            postscript_name: Used for logging and the synthesised name table.
+            ctx: Code→glyph mapping context recovered from the PDF font dict,
+                used to synthesise the cmap when missing.
 
         Returns:
             Repaired font bytes (typically larger than input due to padded
-            tables and regenerated checksums), or the original bytes when
-            repair was not possible (fail-open: serving the raw subset gives
-            Firefox/Safari a chance and Chrome will fall back gracefully).
+            tables, a synthesised cmap and regenerated checksums), or the
+            original/padded bytes when full repair was not possible.
         """
         if not _FONTTOOLS_AVAILABLE:
             return font_bytes
@@ -656,6 +1191,21 @@ class FontExtractionService:
             )
             return padded
 
+        # Step 3: guarantee all OTS-required tables, synthesising the cmap
+        # from the PDF font dict context when the embedded one is missing or
+        # broken.
+        try:
+            FontExtractionService._ensure_ots_required_tables(
+                font, postscript_name, ctx
+            )
+        except Exception as exc:  # noqa: BLE001 — repair is best-effort
+            logger.warning(
+                "OTS table repair failed for font '%s': %s — "
+                "saving with whatever tables exist",
+                postscript_name or "unknown",
+                exc,
+            )
+
         try:
             buf = io.BytesIO()
             # reorderTables=False keeps the table physical order stable so
@@ -670,6 +1220,153 @@ class FontExtractionService:
                 exc,
             )
             return padded
+
+    @staticmethod
+    def _ensure_ots_required_tables(
+        font,  # noqa: ANN001 — fontTools.ttLib.TTFont
+        postscript_name: str | None,
+        ctx: "FontDictContext | None",
+    ) -> None:
+        """
+        Mutate a loaded TTFont in place so every OTS-required table exists.
+
+        OTS requires: cmap, head, hhea, hmtx, maxp, name, OS/2, post
+        (TrueType also needs glyf+loca, CFF needs the CFF table — both are
+        preserved untouched from the parsed font). This method focuses on the
+        metadata tables that PDF subsetters routinely omit, and CRITICALLY
+        synthesises a cmap when it is missing or empty.
+        """
+        from fontTools.ttLib import newTable
+
+        try:
+            glyph_order = list(font.getGlyphOrder())
+        except Exception:  # noqa: BLE001
+            glyph_order = []
+
+        units_per_em = 1000
+        try:
+            if "head" in font and getattr(font["head"], "unitsPerEm", None):
+                units_per_em = int(font["head"].unitsPerEm)
+        except Exception:  # noqa: BLE001
+            pass
+
+        # ── cmap — the critical OTS-required table ────────────────────
+        if not FontExtractionService._cmap_is_valid(font):
+            existing = FontExtractionService._existing_cmap_dict(font)
+            unicode_to_name = FontExtractionService._build_unicode_to_glyphname(
+                ctx, glyph_order, existing_cmap=existing
+            )
+            new_cmap = FontExtractionService._make_cmap_table(unicode_to_name)
+            if new_cmap is None and glyph_order:
+                # No Unicode mapping recoverable: map literal glyph index N to
+                # codepoint N (skipping .notdef). This produces an OTS-valid,
+                # non-empty cmap; the editor still relies on the bg bitmap for
+                # the visually-correct positioned rendering.
+                identity = {
+                    i: gn
+                    for i, gn in enumerate(glyph_order)
+                    if 0 < i < 0xFFFF
+                }
+                new_cmap = FontExtractionService._make_cmap_table(identity)
+                logger.info(
+                    "Font '%s': no Unicode mapping recoverable — emitted "
+                    "identity glyph-index cmap (run text must be raw codes)",
+                    postscript_name or "unknown",
+                )
+            else:
+                logger.debug(
+                    "Font '%s': synthesised cmap with %d entries",
+                    postscript_name or "unknown",
+                    len(unicode_to_name),
+                )
+            if new_cmap is not None:
+                font["cmap"] = new_cmap
+
+        # ── post — version 3.0 is OTS-acceptable and tiny ─────────────
+        if "post" not in font:
+            post = newTable("post")
+            post.formatType = 3.0
+            post.italicAngle = 0
+            post.underlinePosition = -100
+            post.underlineThickness = 50
+            post.isFixedPitch = 0
+            post.minMemType42 = 0
+            post.maxMemType42 = 0
+            post.minMemType1 = 0
+            post.maxMemType1 = 0
+            font["post"] = post
+
+        # ── name — minimal family/subfamily/full/PS records ───────────
+        if "name" not in font:
+            name_tbl = newTable("name")
+            name_tbl.names = []
+            display = postscript_name or "Embedded"
+            name_tbl.setName(display, 1, 3, 1, 0x409)  # Family
+            name_tbl.setName("Regular", 2, 3, 1, 0x409)  # Subfamily
+            name_tbl.setName(display, 4, 3, 1, 0x409)  # Full name
+            name_tbl.setName(display, 6, 3, 1, 0x409)  # PostScript name
+            font["name"] = name_tbl
+
+        # ── OS/2 — synthesise a minimal version 4 table if absent ─────
+        if "OS/2" not in font:
+            os2 = newTable("OS/2")
+            os2.version = 4
+            os2.xAvgCharWidth = 500
+            os2.usWeightClass = 400
+            os2.usWidthClass = 5
+            os2.fsType = 0
+            os2.ySubscriptXSize = 650
+            os2.ySubscriptYSize = 600
+            os2.ySubscriptXOffset = 0
+            os2.ySubscriptYOffset = 75
+            os2.ySuperscriptXSize = 650
+            os2.ySuperscriptYSize = 600
+            os2.ySuperscriptXOffset = 0
+            os2.ySuperscriptYOffset = 350
+            os2.yStrikeoutSize = 50
+            os2.yStrikeoutPosition = 250
+            os2.sFamilyClass = 0
+            try:
+                from fontTools.ttLib.tables.O_S_2f_2 import Panose
+
+                panose = Panose()
+                for attr in (
+                    "bFamilyType",
+                    "bSerifStyle",
+                    "bWeight",
+                    "bProportion",
+                    "bContrast",
+                    "bStrokeVariation",
+                    "bArmStyle",
+                    "bLetterform",
+                    "bMidline",
+                    "bXHeight",
+                ):
+                    setattr(panose, attr, 0)
+                os2.panose = panose
+            except ImportError:  # pragma: no cover
+                os2.panose = b"\x00" * 10
+            os2.ulUnicodeRange1 = 0xFFFFFFFF
+            os2.ulUnicodeRange2 = 0xFFFFFFFF
+            os2.ulUnicodeRange3 = 0xFFFFFFFF
+            os2.ulUnicodeRange4 = 0xFFFFFFFF
+            os2.achVendID = "    "
+            os2.fsSelection = 0x40  # Regular
+            os2.usFirstCharIndex = 0x20
+            os2.usLastCharIndex = 0xFFFF
+            os2.sTypoAscender = int(0.8 * units_per_em)
+            os2.sTypoDescender = int(-0.2 * units_per_em)
+            os2.sTypoLineGap = 0
+            os2.usWinAscent = int(0.8 * units_per_em)
+            os2.usWinDescent = int(0.2 * units_per_em)
+            os2.ulCodePageRange1 = 0xFFFFFFFF
+            os2.ulCodePageRange2 = 0xFFFFFFFF
+            os2.sxHeight = int(0.5 * units_per_em)
+            os2.sCapHeight = int(0.7 * units_per_em)
+            os2.usDefaultChar = 0
+            os2.usBreakChar = 0x20
+            os2.usMaxContext = 0
+            font["OS/2"] = os2
 
     def _extract_font_bytes(
         self, descriptor: pikepdf.Object | None
