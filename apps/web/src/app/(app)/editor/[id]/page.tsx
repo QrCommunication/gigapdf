@@ -897,7 +897,12 @@ export default function EditorPage() {
         }
       }
       const extractedText = parts.join("\n").slice(0, 500_000);
-      if (extractedText.length > 0) {
+      // Send the text even when empty so a document edited down to zero text
+      // purges its stale search index (FTS + semantic ocr_blocks) instead of
+      // keeping vectors for content that no longer exists. Guard on pages being
+      // loaded: an empty scene graph from a premature save must NOT purge a
+      // valid index (only a genuinely text-free, loaded document sends "").
+      if (pagesRef.current.length > 0) {
         await api.updateStoredDocument(storedDocumentId, {
           extracted_text: extractedText,
         });
