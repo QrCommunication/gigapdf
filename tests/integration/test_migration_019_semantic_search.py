@@ -147,3 +147,45 @@ def test_migration_019_up_down_against_real_db(throwaway_db):
     assert reup.returncode == 0, f"re-upgrade failed:\n{reup.stderr}"
     version = _psql(db, "SELECT version_num FROM alembic_version").stdout.strip()
     assert version == "019_semantic_search"
+
+
+def test_async_engine_round_trips_pgvector_value(throwaway_db):
+    """Regression: a real embedding must INSERT through the app's async engine.
+
+    Layering pgvector's *binary* asyncpg codec on top of the SQLAlchemy
+    ``Vector`` type made every embedding write raise
+    ``asyncpg.DataError: could not convert string to float`` (the type already
+    binds the value as the textual ``'[...]'`` form). That silently left
+    ``ocr_blocks`` empty in production — semantic-search writes never worked.
+    ``create_engine()`` must NOT register that codec; this asserts a vector value
+    round-trips (INSERT + SELECT) through it.
+    """
+    import asyncio
+    from unittest.mock import patch
+
+    from pgvector.sqlalchemy import Vector
+    from sqlalchemy import Column, MetaData, Table
+    from sqlalchemy import select as sa_select
+
+    from app.core.database import create_engine
+
+    assert _psql(throwaway_db, "CREATE EXTENSION IF NOT EXISTS vector").returncode == 0
+    assert _psql(throwaway_db, "CREATE TABLE vec_probe (v vector(3))").returncode == 0
+
+    asyncpg_dsn = _socket_dsn(throwaway_db).replace(
+        "postgresql://", "postgresql+asyncpg://", 1
+    )
+
+    async def _run() -> list[float]:
+        with patch("app.core.database.get_database_url", return_value=asyncpg_dsn):
+            engine = create_engine()
+        probe = Table("vec_probe", MetaData(), Column("v", Vector(3)))
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(probe.insert().values(v=[1.5, 2.5, 3.5]))
+                value = (await conn.execute(sa_select(probe.c.v))).scalar_one()
+            return [round(float(x), 1) for x in value]
+        finally:
+            await engine.dispose()
+
+    assert asyncio.run(_run()) == [1.5, 2.5, 3.5]

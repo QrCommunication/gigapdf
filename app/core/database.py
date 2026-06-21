@@ -26,21 +26,6 @@ from app.models.database import Base
 logger = logging.getLogger(__name__)
 
 
-def _register_pgvector_async(engine: AsyncEngine) -> None:
-    """Register the pgvector codec on every new asyncpg connection.
-
-    Without this, asyncpg doesn't know how to encode/decode the ``vector``
-    type, so inserting/selecting embeddings on ``ocr_blocks`` raises. The
-    codec is registered per physical connection via the sync ``connect``
-    event (asyncpg exposes ``run_async`` on the DBAPI connection wrapper).
-    """
-    from pgvector.asyncpg import register_vector
-
-    @event.listens_for(engine.sync_engine, "connect")
-    def _on_connect(dbapi_connection, _connection_record):  # noqa: ANN001
-        dbapi_connection.run_async(register_vector)
-
-
 def _register_pgvector_sync(engine: Engine) -> None:
     """Register the pgvector codec on every new psycopg2 connection (Celery)."""
     from pgvector.psycopg2 import register_vector
@@ -88,8 +73,16 @@ def create_engine() -> AsyncEngine:
         pool_recycle=3600,
     )
 
-    # Teach asyncpg the pgvector `vector` type (ocr_blocks.embedding).
-    _register_pgvector_async(engine)
+    # NOTE: do NOT register the pgvector *binary* asyncpg codec here. The
+    # SQLAlchemy ``Vector`` type already handles asyncpg on its own: its
+    # ``bind_processor`` serialises the embedding to the textual ``'[...]'`` form
+    # (PostgreSQL casts it to ``vector``) and its ``result_processor`` parses it
+    # back. Layering ``pgvector.asyncpg.register_vector`` on top adds a *binary*
+    # encoder that then receives the already-stringified value and raises
+    # ``asyncpg.DataError: could not convert string to float`` on EVERY embedding
+    # write (uploads, reindex). That silently broke the semantic-search write
+    # path (ocr_blocks stayed empty) until a real embedding was produced — see
+    # the ocr_blocks insert test. Let the ORM type own the round-trip.
 
     return engine
 
