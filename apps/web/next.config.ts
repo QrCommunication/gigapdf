@@ -77,20 +77,10 @@ const nextConfig: NextConfig = {
   ],
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
-  // The WASM engine's `loadDefault()` (Node-only, reads `gigapdf.wasm` from disk)
-  // statically `import()`s `fs/promises` + `url`. That class is bundled for the
-  // browser too (canvas renderer → editor → embed page), where the browser path
-  // uses `GigaPdfEngine.load(url)` and never reaches `loadDefault()`. Stub the
-  // Node builtins out of the CLIENT bundle only; the server keeps the real
-  // modules (the lib stays `serverExternalPackages`, resolved at runtime).
-  turbopack: {
-    resolveAlias: {
-      "fs/promises": { browser: "./src/lib/node-stub.ts" },
-      "node:fs/promises": { browser: "./src/lib/node-stub.ts" },
-      url: { browser: "./src/lib/node-stub.ts" },
-      "node:url": { browser: "./src/lib/node-stub.ts" },
-    },
-  },
+  // #62: gigapdf-lib >= 0.53.0 ships a `browser` export condition that remaps its
+  // Node-only fs/url loaders (`node-fs.js` → throwing `node-fs.browser.js`), so the
+  // browser bundle no longer imports `node:fs/promises`/`node:url`. The previous
+  // Turbopack `resolveAlias` node-stub workaround is therefore no longer needed.
   // next-intl `as-needed` + SSG : sans cela, une requête `/login` (locale par
   // défaut, non préfixée) est réécrite par le proxy vers le prerender `/fr/login`,
   // que le serveur standalone re-normalise en 307 → `/login` (le strip `/fr` de
