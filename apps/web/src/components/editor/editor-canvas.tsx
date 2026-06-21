@@ -412,7 +412,11 @@ export function EditorCanvas({
   const fitMode = embedded ? null : fitModeProp;
   const t = useTranslations("editor.canvas");
   const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Assigné IMPÉRATIVEMENT (plus via ref JSX) : le <canvas> est créé et attaché
+  // à containerRef dans l'effet d'init Fabric, car fabric v7 le déplace dans son
+  // propre wrapper `.canvas-container` — laisser React le gérer provoquerait un
+  // removeChild fantôme (NotFoundError) au démontage en mode continu.
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fabricRef = useRef<FabricCanvas | null>(null);
   const previousPageRef = useRef<string | null>(null);
   // Conteneur scrollable (viewport) — référence directe, JAMAIS de
@@ -1163,17 +1167,38 @@ export function EditorCanvas({
 
   // Initialiser Fabric.js
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!containerRef.current) return;
 
     // Import dynamique de Fabric.js pour éviter les erreurs SSR
     import("fabric").then((fabricModule) => {
       const { Canvas, Rect, Circle, Ellipse, Triangle, Line, IText, Group, FabricText } = fabricModule;
 
+      const host = containerRef.current;
+      // Le container a pu se démonter pendant l'import async (mode continu :
+      // la page sort de la fenêtre de virtualisation). Ne rien créer alors.
+      if (!host) return;
+
+      // Re-init propre : disposer une éventuelle instance Fabric précédente puis
+      // retirer son <canvas> impératif du DOM (dispose() est ASYNC en fabric v7 —
+      // on ne l'attend pas, mais on détache nous-mêmes le nœud pour éviter
+      // l'empilement de canvases au ré-init in-place).
       if (fabricRef.current) {
-        fabricRef.current.dispose();
+        try { fabricRef.current.dispose(); } catch { /* dispose best-effort */ }
+        fabricRef.current = null;
+      }
+      if (canvasRef.current && canvasRef.current.parentNode) {
+        canvasRef.current.parentNode.removeChild(canvasRef.current);
       }
 
-      const canvas = new Canvas(canvasRef.current!, {
+      // Création IMPÉRATIVE du <canvas> : fabric.Canvas() le déplacera dans un
+      // wrapper `.canvas-container` qu'il injecte dans `host`. React ne connaît
+      // que `host` (containerRef) et ne touchera jamais à ce canvas → pas de
+      // removeChild fantôme au démontage.
+      const el = document.createElement("canvas");
+      host.appendChild(el);
+      canvasRef.current = el;
+
+      const canvas = new Canvas(el, {
         width: (page?.dimensions?.width || width) * zoom,
         height: (page?.dimensions?.height || height) * zoom,
         backgroundColor: "#ffffff",
@@ -1851,10 +1876,19 @@ export function EditorCanvas({
     });
 
     return () => {
-      if (fabricRef.current) {
-        fabricRef.current.dispose();
-        fabricRef.current = null;
+      // dispose() est ASYNC en fabric v7 (la restauration du DOM par Fabric
+      // n'aura pas lieu avant le démontage React) — on ne l'attend pas.
+      try { fabricRef.current?.dispose(); } catch { /* dispose best-effort */ }
+      fabricRef.current = null;
+      // Détacher le canvas impératif de SON wrapper Fabric. Sûr car
+      // canvasRef.current vit dans le wrapper `.canvas-container` créé par
+      // Fabric (son vrai parent), que React ne gère pas. Au démontage React
+      // retire containerRef en entier ; ce retrait manuel sert surtout au
+      // ré-init in-place pour ne pas empiler les canvases.
+      if (canvasRef.current && canvasRef.current.parentNode) {
+        canvasRef.current.parentNode.removeChild(canvasRef.current);
       }
+      canvasRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -2798,7 +2832,14 @@ export function EditorCanvas({
         height: canvasHeight * zoom,
       }}
     >
-      <canvas ref={canvasRef} />
+      {/* Le <canvas> Fabric est créé IMPÉRATIVEMENT et attaché à containerRef
+          dans l'effet d'init (voir plus bas). Il n'est PAS rendu en JSX : fabric
+          v7 le déplace dans un wrapper `.canvas-container` qu'il injecte lui-même,
+          ce que React ignore. Si React gérait le <canvas> (ref JSX), son
+          removeChild au démontage échouerait (NotFoundError) car le nœud a été
+          déplacé par Fabric. En le créant nous-mêmes, React ne gère que ce div :
+          au démontage il retire containerRef en entier (canvas + wrapper Fabric
+          inclus) sans removeChild individuel → plus de crash. */}
 
       {/* Overlay applicatif (ex: surlignage des champs en mode Remplir).
           Positionné dans le repère page×zoom, défile avec la page. */}
