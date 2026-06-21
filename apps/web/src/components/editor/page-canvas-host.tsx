@@ -54,7 +54,15 @@ export function PageCanvasHost({
   onReady,
   onDispose,
 }: PageCanvasHostProps) {
-  const canvasElRef = useRef<HTMLCanvasElement>(null);
+  // React only ever owns this <div>. The <canvas> is created IMPERATIVELY and
+  // appended to it inside the render effect, because `fabric.Canvas(el)` (via
+  // the pool's `acquire`) moves the element into a `.canvas-container` wrapper it
+  // injects. If React owned the <canvas> (a JSX ref), its removeChild on unmount
+  // would throw NotFoundError — the node has been relocated by Fabric. With the
+  // <canvas> created here, React removes only this container <div> on unmount
+  // (taking the canvas + Fabric wrapper with it) — no phantom removeChild.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasElRef = useRef<HTMLCanvasElement | null>(null);
 
   // Keep the latest callbacks in refs so the render effect does not re-run (and
   // re-rasterise the page) merely because a parent passed new closures.
@@ -70,10 +78,23 @@ export function PageCanvasHost({
   const cssHeight = pageH * scale;
 
   useEffect(() => {
-    const el = canvasElRef.current;
-    if (!el) {
+    const host = containerRef.current;
+    if (!host) {
       return;
     }
+
+    // Create the <canvas> IMPERATIVELY and attach it to the container the React
+    // owns. The pool's `acquire` will hand it to `fabric.Canvas(el)` (or
+    // `el.replaceWith` a recycled node), relocating it into a Fabric wrapper —
+    // which is why React must never own this element.
+    const el = document.createElement("canvas");
+    el.width = cssWidth;
+    el.height = cssHeight;
+    el.style.width = `${cssWidth}px`;
+    el.style.height = `${cssHeight}px`;
+    el.style.display = "block";
+    host.appendChild(el);
+    canvasElRef.current = el;
 
     // `cancelled` guards against the effect being torn down (unmount, dep
     // change) while an async render is still in flight: a stale completion must
@@ -153,19 +174,32 @@ export function PageCanvasHost({
     return () => {
       cancelled = true;
       if (acquired) {
+        // Recycle the Fabric canvas back to the pool (clear + free-list). The
+        // pool keeps the DOM node alive for reuse; it is not removed here.
         pool.release(index);
         onDisposeRef.current?.(index);
       }
+      // Detach any residual <canvas> (the impérative one and/or the pool's
+      // recycled node Fabric left behind) so an in-place re-init (scale/page
+      // change WITHOUT a React unmount) starts from an empty container instead
+      // of stacking canvases. On a real React unmount this container <div> is
+      // removed wholesale by React, so this is a best-effort cleanup for the
+      // re-run path only.
+      const container = containerRef.current;
+      if (container) {
+        for (const node of Array.from(container.querySelectorAll("canvas"))) {
+          node.parentNode?.removeChild(node);
+        }
+      }
+      canvasElRef.current = null;
     };
     // Re-render on page identity, geometry or pool change. Callbacks are read
     // via refs (kept stable) so new closures don't force re-rasterisation.
   }, [pool, index, page.pageId, scale, cssWidth, cssHeight]);
 
   return (
-    <canvas
-      ref={canvasElRef}
-      width={cssWidth}
-      height={cssHeight}
+    <div
+      ref={containerRef}
       style={{ width: cssWidth, height: cssHeight, display: "block" }}
     />
   );
