@@ -31,8 +31,13 @@ import { clientLogger } from "@/lib/client-logger";
 
 type FabricModule = typeof FabricNamespace;
 
+// In the browser, never fall back to the internal dev URL (localhost:8000) —
+// it leaks into the bundle when NEXT_PUBLIC_API_URL is unset at build time and
+// gets blocked by CSP. Use the current origin (prod: https://giga-pdf.com).
+// SSR/Node keeps the local Python default.
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== "undefined" ? window.location.origin : "http://localhost:8000");
 
 // ---------------------------------------------------------------------------
 // Types publics
