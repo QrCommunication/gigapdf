@@ -5,11 +5,12 @@ Implements sliding window rate limiting using Redis
 to protect API endpoints from abuse.
 
 Scope (who is rate limited):
-  Only API-key consumers (programmatic usage) and anonymous traffic (e.g.
-  login brute-force) are throttled.  Interactive app-session users (JWT /
-  cookie, no API key) are EXEMPT — a logged-in user fires many legitimate
-  requests (dashboard widgets, navigation, polling, editor) and must never
-  receive a 429.  See ``_is_app_session``.
+  Rate limiting targets ONLY API-key consumers (``X-API-Key`` → programmatic
+  usage) and the ``auth`` category (login / PDF unlock → brute-force).  ALL
+  other traffic — interactive app sessions (cookie/JWT) and ordinary browsing
+  — is EXEMPT: a logged-in user fires many legitimate requests (dashboard
+  widgets, navigation, polling, editor) and must never receive a 429.  See
+  ``_should_rate_limit``.
 
 Rate limit key strategy (for the requests that ARE limited):
   - API-key / authenticated requests → keyed by (user_id + endpoint_category)
@@ -167,28 +168,33 @@ def get_rate_limit_key(request: Request, user_id: str | None = None) -> str:
     return f"ip:{client_ip}"
 
 
-def _is_app_session(request: Request) -> bool:
+def _should_rate_limit(request: Request, category: str) -> bool:
     """
-    Return True when the request is an interactive app session (JWT / cookie)
-    rather than a programmatic API-key call — such requests are EXEMPT from
-    rate limiting.
+    Decide whether a request must be rate limited.
 
-    Rate limiting only targets API-key usage and anonymous abuse: a logged-in
-    user browsing the app legitimately fires many requests (dashboard widgets,
-    navigation, polling, editor operations) and must never receive a 429.
+    Rate limiting targets ONLY:
+      * **API-key consumers** — ``request.state.api_key_id`` is set by
+        ``ApiKeyAuthMiddleware`` when an ``X-API-Key`` header is present
+        (programmatic usage, throttled per the key's plan).
+      * **The ``auth`` category** (login / PDF unlock) — kept limited even for
+        anonymous callers to prevent brute-force.
 
-    Detection is unambiguous and the two auth methods are mutually exclusive:
-      * ``ApiKeyAuthMiddleware`` sets ``request.state.api_key_id`` ONLY when an
-        ``X-API-Key`` header is present.
-      * ``JWTAuthMiddleware`` sets ``request.state.user_id`` for Bearer/cookie
-        app sessions.
-    Both auth middlewares run BEFORE the rate limiter (LIFO chain), so these
-    flags are already populated.  When an API key is present we never treat the
-    request as an app session, so the API-key path stays rate limited.
+    Everything else — interactive app sessions (cookie/JWT) AND ordinary
+    browsing — is NEVER throttled. A logged-in user legitimately fires many
+    requests (dashboard widgets, navigation, polling, editor) and must never
+    receive a 429.
+
+    This deliberately does NOT depend on ``request.state.user_id``: the JWT
+    decode in ``JWTAuthMiddleware`` is best-effort and frequently leaves
+    ``user_id`` unset, which made app traffic fall back to IP-based limiting and
+    (with ``TRUSTED_PROXIES`` unset) collapse onto a single shared
+    ``ip:127.0.0.1`` bucket — the 2026-06-21 incident where logged-in users got
+    429 on ``/storage/documents``. Keying the decision on the API key (a
+    deterministic header) and the endpoint category avoids that fragility.
     """
-    user_id = getattr(request.state, "user_id", None)
-    api_key_id = getattr(request.state, "api_key_id", None)
-    return user_id is not None and api_key_id is None
+    if getattr(request.state, "api_key_id", None) is not None:
+        return True
+    return category == "auth"
 
 
 def get_endpoint_category(path: str, method: str) -> str:
@@ -358,11 +364,12 @@ class RateLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Interactive app-session users (JWT/cookie, no API key) are never
-        # throttled — rate limiting targets API-key usage and anonymous abuse
-        # only. This runs after the auth middlewares (LIFO chain), so
-        # request.state is already populated. See _is_app_session().
-        if _is_app_session(request):
+        # Rate limiting applies ONLY to API-key consumers and the auth category
+        # (login/unlock brute-force). Interactive app sessions AND ordinary
+        # browsing are never throttled — see _should_rate_limit(). This does not
+        # rely on request.state.user_id (best-effort, often unset).
+        category = get_endpoint_category(path, request.method)
+        if not _should_rate_limit(request, category):
             await self.app(scope, receive, send)
             return
 
@@ -371,8 +378,10 @@ class RateLimitMiddleware:
         # middleware hasn't run yet (e.g., public endpoints).
         user_id: str | None = getattr(request.state, "user_id", None)
 
-        # Check rate limit
-        is_allowed, info = await check_rate_limit(request, user_id=user_id)
+        # Check rate limit (category already resolved above)
+        is_allowed, info = await check_rate_limit(
+            request, user_id=user_id, category=category
+        )
 
         if not is_allowed:
             # Get language from header
@@ -411,13 +420,17 @@ async def rate_limit_dependency(
 
     Raises 429 if rate limit exceeded.
     """
-    # App-session users (JWT/cookie, no API key) are exempt — only API-key and
-    # anonymous traffic is rate limited. See _is_app_session().
-    if _is_app_session(request):
+    # Only API-key consumers and the auth category (login/unlock) are rate
+    # limited; interactive app sessions and browsing are exempt. See
+    # _should_rate_limit().
+    category = get_endpoint_category(request.url.path, request.method)
+    if not _should_rate_limit(request, category):
         return
 
     user_id: str | None = getattr(request.state, "user_id", None)
-    is_allowed, info = await check_rate_limit(request, user_id=user_id)
+    is_allowed, info = await check_rate_limit(
+        request, user_id=user_id, category=category
+    )
 
     if not is_allowed:
         language = parse_accept_language(accept_language)
