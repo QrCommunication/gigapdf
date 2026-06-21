@@ -24,6 +24,8 @@ import type {
   FieldType,
   AnnotationElement,
   FormFieldElement,
+  TextElement,
+  TextStyle,
 } from "@giga-pdf/types";
 
 /** Fabric object carrying our custom `.data` metadata. */
@@ -110,12 +112,10 @@ export function fabricObjectToElement(
 ): Element | null {
   const elementId = obj.data?.elementId || generateId();
   const scaleY = obj.scaleY ?? 1;
-  // `data.cosmeticScaleX` flags a scaleX applied PURELY to shrink a text
-  // overlay so it fits its bounds.width when the embedded font is unavailable
-  // (the renderer's anti-overflow fallback). That scaleX is a visual fit only —
-  // baking it into `bounds.width` here would corrupt the redaction/replaceText
-  // region on save, so we neutralise it to 1 for the bounds computation.
-  const scaleX = obj.data?.cosmeticScaleX === true ? 1 : obj.scaleX ?? 1;
+  // A user resize bakes obj.scaleX into bounds.width here. There is no longer a
+  // cosmetic anti-overflow scaleX to neutralise (the renderer no longer squashes
+  // text to fit — see render-elements.ts), so scaleX is taken verbatim.
+  const scaleX = obj.scaleX ?? 1;
 
   // Base element properties matching ElementBase interface
   const baseElement = {
@@ -466,6 +466,195 @@ export function fabricObjectToElement(
   }
 
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Paragraph (multi-line Textbox) decomposition for save
+// ---------------------------------------------------------------------------
+
+/** A source run snapshot stashed on a paragraph Textbox's `data.paragraphRuns`. */
+interface StashedParagraphRun {
+  elementId: string;
+  index?: number;
+  bounds: { x: number; y: number; width: number; height: number };
+  content: string;
+}
+
+/**
+ * Minimal Fabric text shape we read style off when decomposing a Textbox. `fill`
+ * is NOT redeclared (it is inherited from FabricObject as `string | TFiller |
+ * null`); we read it through a cast at the use site, like fabricObjectToElement.
+ */
+interface FabricTextLike extends FabricObjectWithData {
+  text?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string | number;
+  fontStyle?: string;
+  textAlign?: string;
+  lineHeight?: number;
+  charSpacing?: number;
+  underline?: boolean;
+  linethrough?: boolean;
+}
+
+/**
+ * Build a single-line TextElement for one decomposed paragraph line. Style is
+ * read from the LIVE Textbox (so a colour/size/weight change made on the block
+ * applies to every line); `originalFont`, `elementId`, engine `index` and the
+ * source `bounds` are inherited from the source run so the apply pipeline keeps
+ * the run's in-place identity (`replaceText`). `dx`/`dy` translate the run if the
+ * whole block was moved. A line with no source run (paragraph grew) gets a fresh
+ * id, no index (→ add) and a synthesised bounds stacked under the previous line.
+ */
+function lineToTextElement(
+  tb: FabricTextLike,
+  content: string,
+  source: StashedParagraphRun | null,
+  fallbackBounds: { x: number; y: number; width: number; height: number },
+  dx: number,
+  dy: number,
+): TextElement {
+  const fontSize = tb.fontSize || source?.bounds.height || 12;
+  const originalFont = (tb.data?.originalFont as string | null) ?? null;
+  const fontFamilyForRoundTrip = originalFont || tb.fontFamily || "Arial";
+  const bounds = source
+    ? {
+        x: source.bounds.x + dx,
+        y: source.bounds.y + dy,
+        width: source.bounds.width,
+        height: fontSize,
+      }
+    : { ...fallbackBounds };
+
+  const style: TextStyle = {
+    fontFamily: fontFamilyForRoundTrip,
+    fontSize,
+    fontWeight: isBoldFontWeight(tb.fontWeight) ? "bold" : "normal",
+    fontStyle: tb.fontStyle === "italic" ? "italic" : "normal",
+    color: (tb.fill as string) || "#000000",
+    opacity: tb.opacity ?? 1,
+    textAlign:
+      (tb.textAlign as "left" | "center" | "right" | "justify") || "left",
+    lineHeight: tb.lineHeight || 1.2,
+    letterSpacing: tb.charSpacing || 0,
+    writingMode: "horizontal-tb",
+    underline: tb.underline || false,
+    strikethrough: tb.linethrough || false,
+    backgroundColor: null,
+    verticalAlign: "baseline",
+    originalFont,
+  };
+
+  return {
+    elementId: source?.elementId || generateId(),
+    type: "text",
+    bounds,
+    transform: {
+      rotation: tb.angle || 0,
+      scaleX: 1,
+      scaleY: 1,
+      skewX: tb.skewX || 0,
+      skewY: tb.skewY || 0,
+    },
+    layerId: null,
+    locked: !tb.selectable,
+    visible: tb.visible ?? true,
+    content,
+    style,
+    ocrConfidence: null,
+    linkUrl: null,
+    linkPage: null,
+    // Source run index → lossless replaceText; undefined for added lines → add.
+    ...(source?.index !== undefined ? { index: source.index } : {}),
+  };
+}
+
+/**
+ * Serialise a Fabric object to the Element(s) to persist. The INVERSE of the
+ * overlay renderer, but able to emit MORE THAN ONE element so a coalesced
+ * paragraph (multi-line {@link import("../render-elements").ParagraphGroup}
+ * Textbox) is DECOMPOSED back into its individual single-line runs on save.
+ *
+ * Why decompose: the bake pipeline (`addText`/`replaceText`) writes ONE run per
+ * call and gives no line-break semantics to a "\n" inside `content`. Persisting
+ * a paragraph as one multi-line TextElement would therefore drop every line but
+ * the first. We instead map the edited lines back onto the source runs:
+ *
+ *   - line i ↔ source run i  → run keeps its `index`/`elementId`/`bounds`
+ *     (in-place `replaceText`), with the current line text + the live block
+ *     style, translated by the block's move delta;
+ *   - fewer lines than runs (lines deleted) → surplus runs serialise with
+ *     `content:""` so `replaceText` erases them;
+ *   - more lines than runs (lines added)    → extra lines become NEW runs
+ *     (no `index` → add), stacked under the last line at the block's line step.
+ *
+ * Any non-paragraph object returns a single-element array (or empty for an
+ * unknown type), so existing 1:1 callers keep their exact behaviour.
+ */
+export function fabricObjectToElements(obj: FabricObjectWithData): Element[] {
+  const data = obj.data;
+  const typeName = (obj as FabricObject & { type?: string }).type ?? "";
+  const isTextual =
+    typeName === "i-text" || typeName === "text" || typeName === "textbox";
+  const runs = data?.paragraphRuns as StashedParagraphRun[] | undefined;
+
+  // Not a coalesced paragraph → keep the canonical 1:1 behaviour.
+  if (
+    data?.isParagraph !== true ||
+    !isTextual ||
+    !Array.isArray(runs) ||
+    runs.length === 0
+  ) {
+    const single = fabricObjectToElement(obj);
+    return single ? [single] : [];
+  }
+
+  const tb = obj as FabricTextLike;
+  const editedLines = (tb.text ?? "").split("\n");
+
+  // Block move delta: source block top-left vs the Textbox's current top-left.
+  const originLeft = Math.min(...runs.map((r) => r.bounds.x));
+  const originTop = Math.min(...runs.map((r) => r.bounds.y));
+  const dx = (obj.left ?? originLeft) - originLeft;
+  const dy = (obj.top ?? originTop) - originTop;
+
+  const fontSize = tb.fontSize || runs[0]!.bounds.height || 12;
+  const lineHeight = tb.lineHeight && tb.lineHeight > 0 ? tb.lineHeight : 1.2;
+  const lineStep = fontSize * lineHeight;
+  const blockWidth = (tb.width || runs[0]!.bounds.width) * (tb.scaleX ?? 1);
+
+  const out: Element[] = [];
+  const lastSource = runs[runs.length - 1]!;
+
+  // 1) Every edited line maps onto its source run (or becomes a new run).
+  for (let i = 0; i < editedLines.length; i++) {
+    const source = i < runs.length ? runs[i]! : null;
+    // New line (paragraph grew): stack it under the last source line.
+    const fallbackBounds = {
+      x: lastSource.bounds.x + dx,
+      y: lastSource.bounds.y + dy + (i - (runs.length - 1)) * lineStep,
+      width: blockWidth,
+      height: fontSize,
+    };
+    out.push(
+      lineToTextElement(tb, editedLines[i]!, source, fallbackBounds, dx, dy),
+    );
+  }
+
+  // 2) Lines were deleted: erase the surplus source runs (replaceText "").
+  for (let i = editedLines.length; i < runs.length; i++) {
+    const source = runs[i]!;
+    const fallbackBounds = {
+      x: source.bounds.x + dx,
+      y: source.bounds.y + dy,
+      width: source.bounds.width,
+      height: fontSize,
+    };
+    out.push(lineToTextElement(tb, "", source, fallbackBounds, dx, dy));
+  }
+
+  return out;
 }
 
 /**

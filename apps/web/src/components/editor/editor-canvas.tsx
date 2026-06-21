@@ -30,6 +30,7 @@ import {
   generateId,
   isBoldFontWeight,
   fabricObjectToElement as fabricObjectToElementImpl,
+  fabricObjectToElements as fabricObjectToElementsImpl,
   sampleBackgroundUnder as sampleBackgroundUnderImpl,
 } from "./lib/fabric-element-io";
 
@@ -791,6 +792,27 @@ export function EditorCanvas({
     [],
   );
 
+  // Forward a modified Fabric object to the parent for the PDF bake. Most
+  // objects map 1:1 to a single Element, but a COALESCED PARAGRAPH (multi-line
+  // Textbox, `data.isParagraph`) decomposes into its individual line runs via
+  // fabricObjectToElements — each run is forwarded with its OWN tracked
+  // oldBounds (the per-run zone to clear) so the bake stays lossless. For a
+  // single-element object this behaves exactly like the previous
+  // `fabricObjectToElement` + forward. Returns the elements it forwarded (so the
+  // caller can refresh per-element bounds tracking / dedupe).
+  const forwardElementModified = useCallback(
+    (obj: FabricObjectWithData): Element[] => {
+      const elements = fabricObjectToElementsImpl(obj);
+      for (const element of elements) {
+        const oldBounds = lastKnownBoundsRef.current.get(element.elementId);
+        lastKnownBoundsRef.current.set(element.elementId, element.bounds);
+        onElementModifiedRef.current?.(element, oldBounds);
+      }
+      return elements;
+    },
+    [],
+  );
+
   // Suppression des événements de sélection pendant applyLocalElementUpdate :
   // le retire/re-crée passe par discardActiveObject → selection:cleared puis
   // setActiveObject → selection:created. Forwarder ces transitions ferait
@@ -1041,20 +1063,18 @@ export function EditorCanvas({
     // reload. We pass the OLD bounds tracked since the last render so the
     // bake can clear the original glyph zone before painting the new text.
     if (contentChanged && elementId) {
-      const updatedElement = fabricObjectToElement(obj);
-      if (updatedElement) {
-        const oldBounds = lastKnownBoundsRef.current.get(elementId);
-        // Refresh tracking with the post-edit bounds so the next edit on
-        // the same element clears the right area.
-        lastKnownBoundsRef.current.set(elementId, updatedElement.bounds);
+      // Forward the edit (a coalesced paragraph Textbox decomposes into its
+      // line runs here — each with its own tracked oldBounds). Tracking is
+      // refreshed per element inside forwardElementModified.
+      const forwarded = forwardElementModified(obj);
+      if (forwarded.length > 0) {
         // Mark this elementId so the object:modified that Fabric fires
         // immediately after exitEditing() (because we mutate fill/bg here)
         // does NOT re-queue the same edit a second time.
         recentlyForwardedTextEditRef.current.set(elementId, Date.now());
-        onElementModifiedRef.current?.(updatedElement, oldBounds);
       }
     }
-  }, [fabricObjectToElement]);
+  }, [forwardElementModified]);
 
   const handleObjectModified = useCallback(
     (e: { target?: FabricObject }) => {
@@ -1103,22 +1123,24 @@ export function EditorCanvas({
         clientLogger.debug("[EditorCanvas] Non-text element modified (position/style)");
       }
 
-      const element = fabricObjectToElement(obj);
-      if (element) {
-        clientLogger.debug("[EditorCanvas] Object modified:", element.elementId, element.type, "modification:", modificationType);
-        // Récupère les bounds connues AVANT cette modification — c'est
-        // ces bounds qui doivent être passées à updateText pour clear
-        // la zone d'origine. Sans ça : doublon visuel post-bake.
-        const oldBounds = lastKnownBoundsRef.current.get(element.elementId);
-        // Mettre à jour pour la prochaine modification
-        lastKnownBoundsRef.current.set(element.elementId, element.bounds);
-        onElementModifiedRef.current?.(element, oldBounds);
+      // Forward the modification (a coalesced paragraph Textbox decomposes into
+      // its line runs). Each forwarded element carries the OLD bounds tracked
+      // before this change so updateText clears the original zone (no post-bake
+      // doubling); tracking is refreshed per element inside the helper.
+      const forwarded = forwardElementModified(obj);
+      if (forwarded.length > 0) {
+        clientLogger.debug(
+          "[EditorCanvas] Object modified:",
+          forwarded.map((el) => `${el.elementId}:${el.type}`).join(","),
+          "modification:",
+          modificationType,
+        );
       }
       if (fabricRef.current) {
         saveHistory(fabricRef.current);
       }
     },
-    [fabricObjectToElement, saveHistory]
+    [forwardElementModified, saveHistory]
   );
 
   const handleObjectAdded = useCallback(
@@ -1136,15 +1158,20 @@ export function EditorCanvas({
       // éléments du scene graph — ils ne doivent ni être queués/bakés ni
       // remontés à page.tsx. Leur application passe par redactPii (moteur).
       if ((e.target as FabricObjectWithData).data?.redactionMark) return;
-      const element = fabricObjectToElement(e.target as FabricObjectWithData);
-      if (element) {
+      // A coalesced paragraph Textbox (e.g. a duplicated paragraph) decomposes
+      // into its line runs so each is queued as its own add — a multi-line
+      // `content` would otherwise lose every line but the first at bake time.
+      const added = fabricObjectToElementsImpl(
+        e.target as FabricObjectWithData,
+      );
+      for (const element of added) {
         clientLogger.debug("[EditorCanvas] Object added:", element.elementId, element.type);
         // Mémoriser les bounds initiales (utilisé par handleObjectModified)
         lastKnownBoundsRef.current.set(element.elementId, element.bounds);
         onElementAddedRef.current?.(element);
       }
     },
-    [fabricObjectToElement]
+    []
   );
 
   const handleObjectRemoved = useCallback(
@@ -1162,7 +1189,26 @@ export function EditorCanvas({
         onRedactionMarksChangedRef.current?.(count);
         return;
       }
-      const elementId = (e.target as FabricObjectWithData).data?.elementId;
+      const removedData = (e.target as FabricObjectWithData).data;
+      // A coalesced paragraph holds several source runs; deleting the block must
+      // remove EVERY run (each by its own elementId), not just the first.
+      const paragraphRuns = removedData?.paragraphRuns as
+        | Array<{ elementId: string }>
+        | undefined;
+      if (
+        removedData?.isParagraph === true &&
+        Array.isArray(paragraphRuns) &&
+        paragraphRuns.length > 0
+      ) {
+        for (const run of paragraphRuns) {
+          if (run.elementId) {
+            clientLogger.debug("[EditorCanvas] Paragraph run removed:", run.elementId);
+            onElementRemovedRef.current?.(run.elementId);
+          }
+        }
+        return;
+      }
+      const elementId = removedData?.elementId;
       if (elementId) {
         clientLogger.debug("[EditorCanvas] Object removed:", elementId);
         onElementRemovedRef.current?.(elementId);
@@ -2262,6 +2308,24 @@ export function EditorCanvas({
               };
             void _index;
             void _rotation0;
+            // For a coalesced PARAGRAPH, also strip the per-run engine indices
+            // and re-id the stashed runs: the duplicate is brand-new content,
+            // so its lines must take the `add` path and must NEVER `replaceText`
+            // the ORIGINAL runs they were copied from.
+            const keepRuns = keep as { isParagraph?: boolean; paragraphRuns?: unknown };
+            if (keepRuns.isParagraph && Array.isArray(keepRuns.paragraphRuns)) {
+              keepRuns.paragraphRuns = (
+                keepRuns.paragraphRuns as Array<{
+                  index?: number;
+                  bounds: { x: number; y: number; width: number; height: number };
+                  content: string;
+                }>
+              ).map((r) => ({
+                elementId: generateId(),
+                bounds: { ...r.bounds },
+                content: r.content,
+              }));
+            }
             (cloned as FabricObjectWithData).data = {
               ...keep,
               elementId: generateId(),
