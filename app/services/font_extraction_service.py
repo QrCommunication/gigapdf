@@ -724,21 +724,43 @@ class FontExtractionService:
         cmap.tables = subtables
         return cmap
 
+    # (platformID, platEncID) combos that Chrome's OpenType Sanitiser treats as
+    # Unicode-capable cmap subtables. A font whose ONLY subtable is e.g. (1,0)
+    # Macintosh is NOT browser-loadable for Unicode text — OTS reports
+    # "cmap: no supported subtables were found" — so we must synthesise a
+    # Windows-Unicode (3,1) from the PDF font dict even when a Mac subtable
+    # already maps glyphs.
+    _UNICODE_CMAP_KEYS = frozenset(
+        {(0, 3), (0, 4), (0, 5), (0, 6), (0, 0), (3, 0), (3, 1), (3, 10)}
+    )
+
     @staticmethod
     def _cmap_is_valid(font) -> bool:  # noqa: ANN001
         """
-        Return True if the font has a non-empty, usable cmap subtable.
+        Return True only when the font already has a NON-EMPTY, UNICODE-capable
+        cmap subtable ((3,1)/(3,10)/(0,*)).
 
-        A cmap that exists but has zero mappings (or only a degenerate
-        single-entry table) is treated as broken so we re-synthesise it.
+        A non-empty but Mac-only (1,0) subtable is treated as BROKEN so we
+        synthesise a Windows-Unicode (3,1): Chrome's OTS rejects a font whose
+        only cmap is (1,0) with "cmap: no supported subtables were found",
+        which makes every glyph render as tofu (□ / ?) in the editor text
+        overlay. A degenerate (zero-mapping) subtable is likewise rejected.
         """
         try:
             cmap = font.get("cmap")
             if cmap is None or not cmap.tables:
                 return False
             for sub in cmap.tables:
+                key = (
+                    getattr(sub, "platformID", -1),
+                    getattr(sub, "platEncID", -1),
+                )
                 mapping = getattr(sub, "cmap", None)
-                if mapping and len(mapping) > 0:
+                if (
+                    key in FontExtractionService._UNICODE_CMAP_KEYS
+                    and mapping
+                    and len(mapping) > 0
+                ):
                     return True
             return False
         except Exception:  # noqa: BLE001
@@ -746,14 +768,29 @@ class FontExtractionService:
 
     @staticmethod
     def _existing_cmap_dict(font) -> dict[int, str] | None:  # noqa: ANN001
-        """Return the merged {codepoint: glyphname} from a font's cmap, or None."""
+        """
+        Return the merged {codepoint: glyphname} from a font's UNICODE cmap
+        subtables ((3,1)/(3,10)/(0,*)), or None.
+
+        Non-Unicode subtables (e.g. (1,0) Macintosh, which maps single-byte
+        codes — NOT Unicode codepoints — to glyphs) are SKIPPED: feeding their
+        byte keys to the cmap builder as if they were codepoints would mis-map
+        every char >= 0x80. For a Mac-only font this returns None, so the
+        builder falls back to the PDF /ToUnicode + /Differences sources (true
+        Unicode) to synthesise a correct (3,1).
+        """
         try:
             cmap = font.get("cmap")
             if cmap is None or not cmap.tables:
                 return None
             merged: dict[int, str] = {}
-            # Prefer Windows/Unicode subtables; merge all non-empty ones.
             for sub in cmap.tables:
+                key = (
+                    getattr(sub, "platformID", -1),
+                    getattr(sub, "platEncID", -1),
+                )
+                if key not in FontExtractionService._UNICODE_CMAP_KEYS:
+                    continue
                 mapping = getattr(sub, "cmap", None)
                 if mapping:
                     merged.update(mapping)

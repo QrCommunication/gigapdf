@@ -465,3 +465,41 @@ class TestCmapSynthesisHelpers:
         assert cmap is not None
         formats = {sub.format for sub in cmap.tables}
         assert 12 in formats
+
+    def test_cmap_is_valid_rejects_mac_only_subtable(self) -> None:
+        """
+        Regression (s1106.pdf): a font whose ONLY cmap subtable is (1,0)
+        Macintosh is NOT browser-loadable — Chrome's OTS rejects it with
+        "cmap: no supported subtables were found", rendering text as tofu.
+        _cmap_is_valid must report such a font BROKEN so a Windows-Unicode
+        (3,1) gets synthesised; _existing_cmap_dict must skip the Mac byte-code
+        mapping so it never poisons the synthesised cmap with codes >= 0x80.
+        """
+        from fontTools.ttLib import TTFont, newTable
+        from fontTools.ttLib.tables import _c_m_a_p as cmap_mod
+
+        def font_with(subtables: list) -> TTFont:  # noqa: ANN401
+            font = TTFont()
+            cmap = newTable("cmap")
+            cmap.tableVersion = 0
+            cmap.tables = subtables
+            font["cmap"] = cmap
+            return font
+
+        mac = cmap_mod.cmap_format_6(6)
+        mac.platformID, mac.platEncID, mac.language = 1, 0, 0
+        mac.cmap = {0x41: "A", 0x80: "Euro"}
+
+        win = cmap_mod.cmap_format_4(4)
+        win.platformID, win.platEncID, win.language = 3, 1, 0
+        win.cmap = {0x41: "A"}
+
+        # Mac-only → invalid (forces synthesis) + Mac byte mapping skipped.
+        mac_only = font_with([mac])
+        assert FontExtractionService._cmap_is_valid(mac_only) is False
+        assert FontExtractionService._existing_cmap_dict(mac_only) is None
+
+        # Windows-Unicode subtable present → valid + readable as Unicode.
+        with_unicode = font_with([win])
+        assert FontExtractionService._cmap_is_valid(with_unicode) is True
+        assert FontExtractionService._existing_cmap_dict(with_unicode) == {0x41: "A"}
