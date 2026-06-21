@@ -132,6 +132,14 @@ const changelog: ChangelogEntry[] = [
     ],
   },
   {
+    version: "1.1.1",
+    date: "2026-06-12",
+    type: "patch",
+    changes: [
+      { type: "fix", description: "Self-hosted: corrected the reference nginx configuration so every app API route works in production — Office conversion, health checks, the server-side Google Fonts proxy and the embed widget no longer return 404, and new Next.js API routes work without touching nginx" },
+    ],
+  },
+  {
     version: "1.1.0",
     date: "2026-06-12",
     type: "minor",
