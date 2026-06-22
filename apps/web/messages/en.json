@@ -1015,7 +1015,7 @@
     "import": {
       "button": "Import",
       "dialogTitle": "Import files",
-      "dialogDescription": "Files are imported into {path} and kept in their original format.",
+      "dialogDescription": "Files are imported into {path}. Office, Markdown and CSV files are converted to an editable PDF; PDFs and images are kept as-is.",
       "dropPrompt": "Drag & drop files here",
       "dropNow": "Drop to import",
       "anyFormatHint": "Any file type — up to {size} MB per file",

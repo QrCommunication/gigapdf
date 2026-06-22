@@ -1015,7 +1015,7 @@
     "import": {
       "button": "Importer",
       "dialogTitle": "Importer des fichiers",
-      "dialogDescription": "Les fichiers sont importés dans {path} et conservés dans leur format d'origine.",
+      "dialogDescription": "Les fichiers sont importés dans {path}. Les fichiers Office, Markdown et CSV sont convertis en PDF éditable ; les PDF et images sont conservés tels quels.",
       "dropPrompt": "Glissez-déposez vos fichiers ici",
       "dropNow": "Déposez pour importer",
       "anyFormatHint": "Tous les types de fichiers — jusqu'à {size} Mo par fichier",
