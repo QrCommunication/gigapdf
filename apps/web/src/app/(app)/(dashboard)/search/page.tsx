@@ -19,61 +19,35 @@ type SearchStatus = "idle" | "loading" | "done" | "error" | "unavailable";
 const RESULT_LIMIT = 60;
 
 /**
- * Collapse per-line results into ONE entry per DOCUMENT — the same document is
- * never shown twice, even when it matches on several pages.
- *
- * Two passes: first merge hits per (document, page) to get each page's boxes +
- * best score; then keep, per document, the single best-scoring page as the
- * preview (its boxes are the ones highlighted) while summing the total number of
- * matched passages across the whole document for the badge.
+ * Collapse per-line results into ONE entry per (document, PAGE). A document that
+ * matches on several pages yields several cards (one per page — wanted), but each
+ * page appears exactly ONCE, with all of its hits condensed (boxes + snippets +
+ * a match count), never repeated. Best score first.
  */
-function groupResultsByDocument(results: SemanticSearchResult[]): GroupedSemanticResult[] {
-  // Pass 1 — per (document, page).
-  const perPage = new Map<
-    string,
-    { docId: string; name: string; page: number; score: number; bboxes: SemanticSearchResult["bbox"][]; snippets: string[] }
-  >();
+function groupResultsByPage(results: SemanticSearchResult[]): GroupedSemanticResult[] {
+  const groups = new Map<string, GroupedSemanticResult>();
   for (const r of results) {
     const key = `${r.document_id}#${r.page}`;
     const hasBox = !!r.bbox && (r.bbox.w > 0 || r.bbox.h > 0);
-    const existing = perPage.get(key);
+    const existing = groups.get(key);
     if (existing) {
       if (r.score > existing.score) existing.score = r.score;
       if (hasBox) existing.bboxes.push(r.bbox);
       if (r.snippet && existing.snippets.length < 3) existing.snippets.push(r.snippet);
+      existing.matchTotal += 1;
     } else {
-      perPage.set(key, {
-        docId: r.document_id,
-        name: r.document_name,
+      groups.set(key, {
+        document_id: r.document_id,
+        document_name: r.document_name,
         page: r.page,
         score: r.score,
         bboxes: hasBox ? [r.bbox] : [],
         snippets: r.snippet ? [r.snippet] : [],
+        matchTotal: 1,
       });
     }
   }
-
-  // Pass 2 — keep the best page per document, sum total matches.
-  const perDoc = new Map<string, GroupedSemanticResult>();
-  const totals = new Map<string, number>();
-  for (const pg of perPage.values()) {
-    totals.set(pg.docId, (totals.get(pg.docId) ?? 0) + Math.max(pg.bboxes.length, pg.snippets.length, 1));
-    const existing = perDoc.get(pg.docId);
-    if (!existing || pg.score > existing.score) {
-      perDoc.set(pg.docId, {
-        document_id: pg.docId,
-        document_name: pg.name,
-        page: pg.page,
-        score: pg.score,
-        bboxes: pg.bboxes,
-        snippets: pg.snippets,
-        matchTotal: 0, // filled below
-      });
-    }
-  }
-  return [...perDoc.values()]
-    .map((g) => ({ ...g, matchTotal: totals.get(g.document_id) ?? g.bboxes.length }))
-    .sort((a, b) => b.score - a.score);
+  return [...groups.values()].sort((a, b) => b.score - a.score);
 }
 
 // useSearchParams() exige une frontière <Suspense> côté Next 16 (la page se
@@ -242,9 +216,9 @@ function SearchBody({
     );
   }
 
-  // One card per DOCUMENT (best-matching page shown): the same document is never
-  // shown twice, even when it matches on several pages.
-  const grouped = groupResultsByDocument(results);
+  // One card per (document, page): several pages of a document each get their
+  // own card (wanted), but a given page is shown once with all its hits merged.
+  const grouped = groupResultsByPage(results);
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
@@ -253,7 +227,7 @@ function SearchBody({
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {grouped.map((result) => (
           <SemanticResultCard
-            key={result.document_id}
+            key={`${result.document_id}-${result.page}`}
             result={result}
             query={query}
           />
