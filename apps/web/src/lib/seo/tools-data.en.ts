@@ -385,7 +385,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Does OCR read handwriting?",
         answer:
-          "No. The engine is designed for printed text: it recognizes typeset characters across many scripts, but it does not handle handwriting. For best results, use printed documents, scanned cleanly or photographed flat at a decent resolution.",
+          "Yes, for Latin scripts and on demand. The engine is built first for printed text, but an opt-in setting also recognizes Latin handwriting; this mode is never triggered automatically, and non-Latin scripts stay limited to printed text. For best results, use documents scanned cleanly or photographed flat at a decent resolution.",
       },
       {
         question: "What happens to the original document or image after OCR?",

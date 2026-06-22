@@ -266,7 +266,7 @@
             "verdict": "Supported"
           }
         },
-        "note": "Honest framing: a dependency-free OCR engine, running server-side, designed for printed text and most accurate on Latin scripts. It does not handle handwriting. On very degraded or very dense scans, Tesseract's breadth can still have the edge."
+        "note": "Honest framing: a dependency-free OCR engine, running server-side, designed for printed text and most accurate on Latin scripts. It also reads Latin handwriting on demand (never auto-detected); other scripts remain limited to printed text. On very degraded or very dense scans, Tesseract's breadth can still have the edge."
       },
       "langs": {
         "label": "Language coverage",
@@ -1514,6 +1514,9 @@
         "japanese": "Japanese",
         "korean": "Korean"
       },
+      "handwritingLabel": "Handwritten text (Latin)",
+      "handwritingHint": "Also recognizes Latin handwriting on top of printed text. Turn it on when you need it; available for Latin scripts only.",
+      "handwritingLatinOnlyHint": "Handwriting recognition is available for Latin scripts only",
       "pagesIgnoredHint": "Page selection is automatic (pages without text)",
       "searchableProcessing": "Running OCR and inserting the text layer…",
       "searchableButton": "Make searchable",

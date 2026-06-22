@@ -923,6 +923,12 @@ export const pdfService = {
        * model (auto-detection). See OcrScript in @giga-pdf/pdf-engine.
        */
       scripts?: string[];
+      /**
+       * Opt-in handwriting recognition for Latin scripts. Loads the cursive
+       * Latin model in addition to the printed recognizers. Latin only; never
+       * auto-detected. Defaults to printed text.
+       */
+      handwriting?: boolean;
     } = {},
   ): Promise<SearchablePdfResult> => {
     const form = new FormData();
@@ -934,6 +940,7 @@ export const pdfService = {
     if (options.scripts && options.scripts.length > 0) {
       form.append('scripts', JSON.stringify(options.scripts));
     }
+    if (options.handwriting) form.append('handwriting', 'true');
 
     const response = await fetch('/api/pdf/ocr', {
       method: 'POST',
@@ -971,6 +978,12 @@ export const pdfService = {
        * model (auto-detection). See OcrScript in @giga-pdf/pdf-engine.
        */
       scripts?: string[];
+      /**
+       * Opt-in handwriting recognition for Latin scripts. Loads the cursive
+       * Latin model in addition to the printed recognizers. Latin only; never
+       * auto-detected. Defaults to printed text.
+       */
+      handwriting?: boolean;
     } = {},
   ): Promise<EditableOcrPdfResult> => {
     const form = new FormData();
@@ -982,6 +995,7 @@ export const pdfService = {
     if (options.scripts && options.scripts.length > 0) {
       form.append('scripts', JSON.stringify(options.scripts));
     }
+    if (options.handwriting) form.append('handwriting', 'true');
 
     const response = await fetch('/api/pdf/ocr', {
       method: 'POST',

@@ -27,6 +27,9 @@
  *   format     — "text" | "hocr" (default "text"; output="text" only)
  *   force      — "true" to OCR every page even those that already contain
  *                extractable text (output="searchable"/"editable" only)
+ *   handwriting — "true" to also recognize HANDWRITTEN Latin text on demand
+ *                (output="searchable"/"editable" only). Latin scripts only;
+ *                never auto-detected. Defaults to printed text.
  *
  * Returns (output="text") JSON:
  *   {
@@ -138,12 +141,14 @@ export async function POST(request: Request): Promise<Response> {
       // Restrict OCR to the chosen writing systems when provided; otherwise the
       // engine loads every bundled model and auto-detects (default behaviour).
       const languages = parseScripts(formData.get('scripts') as string | null);
+      // Opt-in Latin handwriting recognition (printed text only by default).
+      const handwriting = (formData.get('handwriting') as string | null) === 'true';
       const arrayBuffer = await file.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
       const result =
         output === 'editable'
-          ? await makeEditableOcrPdf(bytes, { dpi: dpi as 144 | 200 | 300, force, languages })
-          : await makeSearchablePdf(bytes, { dpi: dpi as 144 | 200 | 300, force, languages });
+          ? await makeEditableOcrPdf(bytes, { dpi: dpi as 144 | 200 | 300, force, languages, handwriting })
+          : await makeSearchablePdf(bytes, { dpi: dpi as 144 | 200 | 300, force, languages, handwriting });
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/pdf',

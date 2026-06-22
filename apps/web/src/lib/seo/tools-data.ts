@@ -420,7 +420,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "L'OCR reconnaît-il l'écriture manuscrite ?",
         answer:
-          "Non. Le moteur est conçu pour le texte imprimé : il reconnaît les caractères dactylographiés sur de nombreuses écritures, mais ne traite pas l'écriture manuscrite. Pour un bon résultat, privilégiez des documents imprimés, scannés nets ou photographiés à plat et en bonne résolution.",
+          "Oui, pour l'écriture latine et sur demande. Le moteur est avant tout conçu pour le texte imprimé, mais une option à activer permet aussi de reconnaître l'écriture manuscrite latine ; ce mode n'est jamais déclenché automatiquement, et les écritures non latines restent limitées au texte imprimé. Pour un bon résultat, privilégiez des documents scannés nets ou photographiés à plat et en bonne résolution.",
       },
       {
         question: "Que devient le document ou l'image d'origine après l'OCR ?",

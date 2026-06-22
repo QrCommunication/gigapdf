@@ -266,7 +266,7 @@
             "verdict": "Pris en charge"
           }
         },
-        "note": "Cadre honnête : un moteur OCR sans dépendance tierce, exécuté côté serveur, conçu pour le texte imprimé et le plus précis sur les écritures latines. Il ne traite pas l'écriture manuscrite. Sur les scans très dégradés ou très denses, la largeur de Tesseract peut garder l'avantage."
+        "note": "Cadre honnête : un moteur OCR sans dépendance tierce, exécuté côté serveur, conçu pour le texte imprimé et le plus précis sur les écritures latines. Il reconnaît aussi l'écriture manuscrite latine, sur demande (jamais en détection automatique) ; les autres écritures restent limitées au texte imprimé. Sur les scans très dégradés ou très denses, la largeur de Tesseract peut garder l'avantage."
       },
       "langs": {
         "label": "Couverture linguistique",
@@ -1514,6 +1514,9 @@
         "japanese": "Japonais",
         "korean": "Coréen"
       },
+      "handwritingLabel": "Texte manuscrit (latin)",
+      "handwritingHint": "Reconnaît aussi l'écriture manuscrite latine, en plus du texte imprimé. À activer à la demande ; disponible uniquement pour l'écriture latine.",
+      "handwritingLatinOnlyHint": "La reconnaissance de l'écriture manuscrite n'est disponible que pour l'écriture latine",
       "pagesIgnoredHint": "La sélection de pages est automatique (pages sans texte)",
       "searchableProcessing": "OCR et insertion du calque de texte en cours…",
       "searchableButton": "Rendre cherchable",

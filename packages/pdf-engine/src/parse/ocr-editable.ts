@@ -214,7 +214,7 @@ export async function makeEditableOcrPdf(
 
   const scale = dpi / 72;
   const giga = await getEngine();
-  await ensureOcrModels(giga, options.languages);
+  await ensureOcrModels(giga, options.languages, options.handwriting);
   const doc = giga.open(pdfBytes);
 
   let pagesProcessed = 0;
