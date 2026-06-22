@@ -24,6 +24,7 @@ import { ImportDialog } from "@/components/dashboard/import-dialog";
 import {
   IMPORT_CONCURRENCY,
   MAX_IMPORT_FILE_SIZE_BYTES,
+  isOfficeFile,
   isPdfFile,
   runWithConcurrency,
   stripExtension,
@@ -209,6 +210,61 @@ async function extractPdfText(pdfFile: File): Promise<string | null> {
     clientLogger.warn("documents.text-extract-failed", err);
     return null;
   }
+}
+
+/**
+ * Thrown when an Office→PDF conversion fails. `kind` lets the caller pick the
+ * right localized reason: a real conversion failure (the file content can't be
+ * rendered) vs. the conversion service being unavailable.
+ */
+class OfficeConversionError extends Error {
+  constructor(
+    message: string,
+    readonly kind: "conversion" | "unavailable",
+  ) {
+    super(message);
+    this.name = "OfficeConversionError";
+  }
+}
+
+/**
+ * Convert an Office document to an editable PDF via POST /api/office/upload
+ * (server-side magic-byte validation + native WASM `convertOfficeToPdf`). The
+ * returned PDF is wrapped as a `<base>.pdf` File (application/pdf) so the rest
+ * of the import pipeline treats it exactly like an uploaded PDF — and the
+ * editor, which parses stored PDFs, opens it as editable pages.
+ *
+ * @throws {OfficeConversionError} on any non-2xx response (precise per-file reason)
+ */
+async function convertOfficeFileToPdf(file: File): Promise<File> {
+  const baseName = stripExtension(file.name) || file.name;
+  const form = new FormData();
+  form.append("file", file);
+
+  let res: Response;
+  try {
+    res = await fetch("/api/office/upload", {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+  } catch (err) {
+    clientLogger.warn("documents.office-convert-network-failed", err);
+    throw new OfficeConversionError("office conversion network error", "unavailable");
+  }
+
+  if (!res.ok) {
+    clientLogger.warn("documents.office-convert-failed", res.status);
+    // 503 = engine unavailable; everything else (400/413/422/500) is treated
+    // as a content/conversion failure from the user's perspective.
+    throw new OfficeConversionError(
+      `office conversion failed (${res.status})`,
+      res.status === 503 ? "unavailable" : "conversion",
+    );
+  }
+
+  const pdfBlob = await res.blob();
+  return new File([pdfBlob], `${baseName}.pdf`, { type: "application/pdf" });
 }
 
 /** Build the /documents URL preserving folder and tag query params. */
@@ -397,10 +453,12 @@ export default function DocumentsPage() {
     setImportDialogOpen(true);
   }, []);
 
-  // Imports ONE file, keeping its original format. The raw bytes are stored
-  // as-is (no Office→PDF conversion): the GED keeps the source document.
-  // PDFs additionally get a first-page thumbnail + extracted full text for
-  // search; non-PDF formats are stored without that PDF-only enrichment.
+  // Imports ONE file. Office documents (docx/xlsx/pptx/doc/xls/ppt/odt/ods/odp)
+  // are FIRST converted to an editable PDF (via /api/office/upload → native WASM
+  // engine) and the resulting PDF is stored, so the editor can open them as
+  // editable pages instead of failing to parse the raw Office bytes as a PDF.
+  // PDFs (uploaded or freshly converted) additionally get a first-page thumbnail
+  // + extracted full text for search; other formats are stored as-is.
   // Never throws: every failure is returned with a precise per-file reason,
   // so one bad file cannot abort the batch.
   const importSingleFile = useCallback(
@@ -415,23 +473,48 @@ export default function DocumentsPage() {
         };
       }
 
+      // Office → editable PDF. On failure we abort THIS file with a precise
+      // reason (never store broken/un-openable Office bytes silently).
+      let fileToStore = file;
+      const office = isOfficeFile(file);
+      if (office) {
+        try {
+          fileToStore = await convertOfficeFileToPdf(file);
+        } catch (err) {
+          const kind =
+            err instanceof OfficeConversionError ? err.kind : "conversion";
+          return {
+            ok: false,
+            name: file.name,
+            reason:
+              kind === "unavailable"
+                ? t("import.office.unavailable")
+                : t("import.office.conversionFailed"),
+          };
+        }
+      }
+
+      // From here on, treat the (possibly converted) file as the document to
+      // store. The displayed/stored title keeps the ORIGINAL name's base.
       const baseName = stripExtension(file.name) || file.name;
-      const pdf = isPdfFile(file);
+      const pdf = isPdfFile(fileToStore);
 
       try {
         // PDF-only enrichment, kicked off in parallel with the upload. Both
         // helpers are best-effort (resolve to null, never reject), so they
-        // cannot fail the import; non-PDFs skip them entirely.
-        const thumbnailPromise = pdf ? renderPdfThumbnail(file) : null;
-        const extractedTextPromise = pdf ? extractPdfText(file) : null;
+        // cannot fail the import; non-PDFs skip them entirely. For Office files
+        // these run on the freshly converted PDF (`fileToStore`).
+        const thumbnailPromise = pdf ? renderPdfThumbnail(fileToStore) : null;
+        const extractedTextPromise = pdf ? extractPdfText(fileToStore) : null;
 
         const extractedText = extractedTextPromise
           ? await extractedTextPromise
           : null;
 
-        // Store the ORIGINAL file as-is in the GED.
+        // Store the document: the original bytes for PDFs/images/other, or the
+        // converted PDF for Office files. The title keeps the original base name.
         const saved = await api.saveDocument({
-          file,
+          file: fileToStore,
           name: baseName,
           tags: [],
           folderId: currentFolderId || undefined,
@@ -461,10 +544,10 @@ export default function DocumentsPage() {
         if (pdf) {
           if (extractedText && extractedText.trim().length > 0) {
             // Text-layer PDF → positioned blocks (highlightable on the page).
-            void autoIndexTextBlocks(file, saved.stored_document_id);
+            void autoIndexTextBlocks(fileToStore, saved.stored_document_id);
           } else {
             // Scanned / image-only PDF → server OCR positioned blocks.
-            void autoIndexScannedDocument(file, saved.stored_document_id);
+            void autoIndexScannedDocument(fileToStore, saved.stored_document_id);
           }
         }
 

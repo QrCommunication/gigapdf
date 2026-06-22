@@ -3,6 +3,7 @@ import {
   IMPORT_CONCURRENCY,
   MAX_IMPORT_FILE_SIZE_BYTES,
   getFileExtension,
+  isOfficeFile,
   isPdfFile,
   runWithConcurrency,
   stripExtension,
@@ -74,6 +75,36 @@ describe("isPdfFile", () => {
   it("returns false for non-PDF files", () => {
     expect(isPdfFile({ name: "sheet.xlsx" })).toBe(false);
     expect(isPdfFile({ name: "image.png", type: "image/png" })).toBe(false);
+  });
+});
+
+describe("isOfficeFile", () => {
+  it("detects every supported Office format (case-insensitive)", () => {
+    for (const ext of [
+      "docx",
+      "xlsx",
+      "pptx",
+      "doc",
+      "xls",
+      "ppt",
+      "odt",
+      "ods",
+      "odp",
+    ]) {
+      expect(isOfficeFile({ name: `report.${ext}` })).toBe(true);
+      expect(isOfficeFile({ name: `report.${ext.toUpperCase()}` })).toBe(true);
+    }
+  });
+
+  it("returns false for PDFs, images and other formats", () => {
+    expect(isOfficeFile({ name: "doc.pdf" })).toBe(false);
+    expect(isOfficeFile({ name: "image.png" })).toBe(false);
+    expect(isOfficeFile({ name: "archive.zip" })).toBe(false);
+    expect(isOfficeFile({ name: "NOEXT" })).toBe(false);
+  });
+
+  it("does NOT treat rtf as convertible (engine/route reject it → stored as-is)", () => {
+    expect(isOfficeFile({ name: "letter.rtf" })).toBe(false);
   });
 });
 
