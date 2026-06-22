@@ -349,7 +349,7 @@ export const TOOLS: ToolData[] = [
     h1: "OCR: pull the text out of your scans and images",
     intro: [
       "A document made only of images — a scanned PDF, but also a photo of a document or a JPG or PNG file — is just a stack of page photographs: you can't search for a word, copy a paragraph, or pull out the figures. Until the text is recognized, the file stays mute for every tool you own — including your own document manager's search. Optical character recognition (OCR) turns those images into text you can actually use.",
-      "GigaPDF ships with its own optical character recognition engine, which loads its full set of models by default: it reads not only French, English, German, Spanish, Italian, Portuguese… but also Cyrillic, Greek, Arabic, Hebrew, Tamil, Devanagari, Bengali, and Chinese — accents, cedillas, and ligatures included. The engine remains strongest on Latin scripts while still supporting the other writing systems. It works equally on a scanned PDF, a standalone image (JPG, PNG), or a photo of a document: you launch OCR, the engine reads every page or image, and the recognized text comes back ready to copy, export, or index.",
+      "GigaPDF ships with its own optical character recognition engine, which loads its full set of models by default: it reads not only French, English, German, Spanish, Italian, Portuguese… but also Cyrillic, Arabic, Hebrew, Tamil, Devanagari, Telugu, Kannada, Chinese (Simplified and Traditional), Japanese, and Korean — accents, cedillas, and ligatures included. The engine is designed for printed text and remains strongest on Latin scripts while still supporting the other writing systems. It works equally on a scanned PDF, a standalone image (JPG, PNG), or a photo of a document: you launch OCR, the engine reads every page or image, and the recognized text comes back ready to copy, export, or index.",
       "OCR feeds the rest of the platform directly: once a document is recognized, full-text search finds it by its content, and the searchable-PDF tool can lay the text as an invisible layer under the original image. Everything works on the free plan — and on your own server if you self-host, which matters when the scans and images are confidential.",
     ],
     howTo: {
@@ -363,7 +363,7 @@ export const TOOLS: ToolData[] = [
       ],
     },
     capabilities: [
-      "Multilingual in-house OCR engine (Latin, Cyrillic, Greek, Arabic, Hebrew, Indic scripts, and Chinese)",
+      "Multilingual in-house OCR engine (Latin, Cyrillic, Arabic, Hebrew, Indic scripts, and CJK)",
       "Works on scanned PDFs as well as standalone images (JPG, PNG, photos of documents)",
       "Accurate handling of accented and special characters",
       "Page-by-page processing of multi-page documents and images",
@@ -375,17 +375,17 @@ export const TOOLS: ToolData[] = [
       {
         question: "Which languages does GigaPDF's OCR recognize?",
         answer:
-          "The OCR engine loads its full set of models by default: beyond French and English, it recognizes many scripts — Latin (German, Spanish, Italian, Portuguese…), Cyrillic, Greek, Arabic, Hebrew, Indic (Tamil, Devanagari, Bengali), and Chinese. A bilingual contract or an invoice mixing several languages is handled in a single pass, and accented characters come through correctly. The engine stays most accurate on Latin scripts.",
+          "The OCR engine loads its full set of models by default: beyond French and English, it recognizes many scripts — Latin (German, Spanish, Italian, Portuguese…), Cyrillic, Arabic, Hebrew, Indic (Tamil, Devanagari, Telugu, Kannada), and CJK (Simplified and Traditional Chinese, Japanese, Korean). A bilingual contract or an invoice mixing several languages is handled in a single pass, and accented characters come through correctly. The engine is designed for printed text and stays most accurate on Latin scripts.",
       },
       {
         question: "What scan or image quality do I need for good results?",
         answer:
-          "The OCR performs best on clean 300 dpi scans, or well-lit, well-framed photos, of printed or neatly handwritten text. Skewed pages, photocopies of photocopies, blurry shots, and tiny font sizes drag recognition down — when it matters, scan or photograph flat and at a decent resolution.",
+          "The OCR performs best on clean 300 dpi scans, or well-lit, well-framed photos, of printed text. Skewed pages, photocopies of photocopies, blurry shots, and tiny font sizes drag recognition down — when it matters, scan or photograph flat and at a decent resolution.",
       },
       {
         question: "Does OCR read handwriting?",
         answer:
-          "Yes. The engine ships a dedicated handwriting model: a dependency-free OCR that's strong on clean print and decent on tidy handwriting. Recognition is more reliable on neat handwriting than on heavily cursive or messy strokes, and clean print still gives the best results — but handwriting is genuinely supported.",
+          "No. The engine is designed for printed text: it recognizes typeset characters across many scripts, but it does not handle handwriting. For best results, use printed documents, scanned cleanly or photographed flat at a decent resolution.",
       },
       {
         question: "What happens to the original document or image after OCR?",
@@ -412,7 +412,7 @@ export const TOOLS: ToolData[] = [
     h1: "Make a scanned PDF searchable without changing how it looks",
     intro: [
       "The technique is known as the 'sandwich PDF': the scanned image — a scan, but also a photo of a document or an image (JPG, PNG) saved as PDF — stays exactly as displayed, and the OCR-recognized text is inserted underneath in an invisible layer aligned word for word with the image. Visually nothing changes — the stamp, the handwritten signature, the original layout all stay put. But the document now answers Ctrl+F, the text selects with the mouse, and screen readers can speak it.",
-      "GigaPDF builds that layer from its multilingual in-house OCR engine (Latin, Cyrillic, Greek, Arabic, Hebrew, Indic scripts, and Chinese): every recognized word is placed at the exact coordinates where it appears in the image, so a search highlights the right spot on the page and copy-paste follows the reading order. That is what separates it from a plain text export, which loses all connection to the page.",
+      "GigaPDF builds that layer from its multilingual in-house OCR engine (Latin, Cyrillic, Arabic, Hebrew, Indic scripts, and CJK): every recognized word is placed at the exact coordinates where it appears in the image, so a search highlights the right spot on the page and copy-paste follows the reading order. That is what separates it from a plain text export, which loses all connection to the page.",
       "For a document archive, this is the step that changes everything: a scanned collection becomes queryable in full text. Combined with GigaPDF's built-in search, it turns years of digitized paper into a base you can actually interrogate — in the cloud or on your own self-hosted server.",
     ],
     howTo: {
@@ -430,7 +430,7 @@ export const TOOLS: ToolData[] = [
       "Document appearance strictly unchanged: visible stamps and signatures preserved",
       "Ctrl+F search working in every PDF viewer",
       "Text selection and copy-paste directly on the scan",
-      "Multilingual in-house OCR recognition (Latin, Cyrillic, Greek, Arabic, Hebrew, Indic scripts, and Chinese)",
+      "Multilingual in-house OCR recognition (Latin, Cyrillic, Arabic, Hebrew, Indic scripts, and CJK)",
       "Automatic indexing in GigaPDF's full-text search",
     ],
     faq: [
