@@ -787,6 +787,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-to-word",
     name: "PDF to Word",
     category: "convert",
+    appHref: "/pdf-to-word",
     metaTitle: "Convert PDF to Word (DOCX) Online Free | GigaPDF",
     metaDescription:
       "Turn PDFs into editable Word documents (.docx) with layout preserved. Free conversion, open source, no watermark.",
@@ -1101,6 +1102,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-to-odt",
     name: "PDF to ODT",
     category: "convert",
+    appHref: "/pdf-to-odt",
     metaTitle: "Convert PDF to ODT (OpenDocument) | GigaPDF",
     metaDescription:
       "Turn a PDF into an editable ODT for your word processor, text and images carried over. Free, open source conversion.",
@@ -1163,6 +1165,7 @@ export const TOOLS: ToolData[] = [
     slug: "html-to-pdf",
     name: "HTML to PDF",
     category: "convert",
+    appHref: "/html-to-pdf",
     metaTitle: "Convert HTML or a Web Page to PDF | GigaPDF",
     metaDescription:
       "Convert HTML or a URL to PDF rendered by the in-house engine: modern CSS, web fonts, long pages. Free, open source, with an API.",
@@ -1477,6 +1480,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-to-powerpoint",
     name: "PDF to PowerPoint",
     category: "convert",
+    appHref: "/pdf-to-powerpoint",
     metaTitle: "Convert PDF to PowerPoint (PPTX) | GigaPDF",
     metaDescription:
       "Turn a PDF into an editable PowerPoint deck (.pptx), one slide per page. Free, open source conversion, no watermark.",
@@ -1539,6 +1543,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-to-excel",
     name: "PDF to Excel",
     category: "convert",
+    appHref: "/pdf-to-excel",
     metaTitle: "Convert PDF to Excel (XLSX) Online | GigaPDF",
     metaDescription:
       "Turn the tables in a PDF into an editable Excel workbook (.xlsx) with table reconstruction. Free, open source, no watermark.",
@@ -1663,6 +1668,7 @@ export const TOOLS: ToolData[] = [
     slug: "text-to-pdf",
     name: "Text to PDF",
     category: "convert",
+    appHref: "/text-to-pdf",
     metaTitle: "Convert a Text File (TXT) to PDF | GigaPDF",
     metaDescription:
       "Convert a plain .txt file into a clean, readable PDF with sensible pagination. Free, open source, no watermark.",

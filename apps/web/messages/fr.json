@@ -2980,7 +2980,8 @@
     "removeFileNamed": "Retirer le fichier {name}",
     "outputNameLabel": "Nom du fichier de sortie",
     "processing": "Traitement en cours…",
-    "processingHint": "Traitement du fichier en cours, cela peut prendre quelques instants…"
+    "processingHint": "Traitement du fichier en cours, cela peut prendre quelques instants…",
+    "overLength": "Le texte dépasse la limite de {max} caractères."
   },
   "tools": {
     "split": {
@@ -3136,6 +3137,80 @@
       "reasonPlaceholder": "Approbation du document",
       "locationLabel": "Lieu (facultatif)",
       "locationPlaceholder": "Paris, France"
+    },
+    "textToPdf": {
+      "title": "Texte vers PDF",
+      "subtitle": "Transformez du texte brut en PDF propre et imprimable.",
+      "actionButton": "Générer le PDF",
+      "toastSuccess": "PDF généré",
+      "toastError": "Échec de la génération",
+      "inputLabel": "Votre texte",
+      "inputPlaceholder": "Collez ou saisissez le texte à convertir en PDF…",
+      "inputDescription": "Les sauts de ligne et l'indentation sont conservés.",
+      "formatLabel": "Taille de page",
+      "formatA4": "A4",
+      "formatLetter": "Letter",
+      "formatLegal": "Legal",
+      "landscapeLabel": "Orientation paysage",
+      "landscapeDescription": "Pivoter la page à l'horizontale.",
+      "marginLabel": "Marges",
+      "marginNone": "Aucune",
+      "marginNarrow": "Étroites",
+      "marginNormal": "Normales",
+      "marginWide": "Larges"
+    },
+    "htmlToPdf": {
+      "title": "HTML vers PDF",
+      "subtitle": "Convertissez du HTML/CSS en PDF avec le moteur de rendu maison.",
+      "actionButton": "Convertir en PDF",
+      "toastSuccess": "PDF généré",
+      "toastError": "Échec de la conversion",
+      "inputLabel": "Code HTML",
+      "inputPlaceholder": "<!DOCTYPE html>\n<html>\n  <body>\n    <h1>Bonjour</h1>\n  </body>\n</html>",
+      "inputDescription": "Grilles et flex CSS, RTL, dégradés et bordures pointillées sont pris en charge.",
+      "formatLabel": "Taille de page",
+      "formatA4": "A4",
+      "formatLetter": "Letter",
+      "formatLegal": "Legal",
+      "landscapeLabel": "Orientation paysage",
+      "landscapeDescription": "Pivoter la page à l'horizontale.",
+      "marginLabel": "Marges",
+      "marginNone": "Aucune",
+      "marginNarrow": "Étroites",
+      "marginNormal": "Normales",
+      "marginWide": "Larges"
+    },
+    "pdfToWord": {
+      "title": "PDF vers Word",
+      "subtitle": "Convertissez un PDF en document Word (.docx) éditable.",
+      "formatsHint": "Fichier PDF uniquement.",
+      "actionButton": "Convertir en Word",
+      "toastSuccess": "Document converti",
+      "toastError": "Échec de la conversion"
+    },
+    "pdfToExcel": {
+      "title": "PDF vers Excel",
+      "subtitle": "Extrayez le texte d'un PDF dans un tableur Excel (.xlsx).",
+      "formatsHint": "Fichier PDF uniquement.",
+      "actionButton": "Convertir en Excel",
+      "toastSuccess": "Document converti",
+      "toastError": "Échec de la conversion"
+    },
+    "pdfToPowerpoint": {
+      "title": "PDF vers PowerPoint",
+      "subtitle": "Convertissez un PDF en présentation PowerPoint (.pptx).",
+      "formatsHint": "Fichier PDF uniquement.",
+      "actionButton": "Convertir en PowerPoint",
+      "toastSuccess": "Document converti",
+      "toastError": "Échec de la conversion"
+    },
+    "pdfToOdt": {
+      "title": "PDF vers ODT",
+      "subtitle": "Convertissez un PDF en fichier OpenDocument Text (.odt).",
+      "formatsHint": "Fichier PDF uniquement.",
+      "actionButton": "Convertir en ODT",
+      "toastSuccess": "Document converti",
+      "toastError": "Échec de la conversion"
     }
   }
 }

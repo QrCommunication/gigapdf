@@ -24,6 +24,71 @@ const ACCEPT_IMAGES = ".png,.jpg,.jpeg,.gif,.webp,.avif,image/*";
 const ACCEPT_OFFICE =
   ".doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp";
 
+/** Session-upload endpoint that returns `{ data: { document_id } }`. */
+const UPLOAD_ENDPOINT = "/api/v1/documents/upload";
+
+/** Escape a string for safe interpolation into HTML text content. */
+function escapeHtml(raw: string): string {
+  return raw
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Wrap plain text in a minimal, print-friendly HTML document so the in-house
+ * HTML→PDF engine renders it faithfully (monospace, wrapping preserved).
+ * `/api/pdf/convert` only accepts HTML/URL, so text tools convert to HTML here.
+ */
+function plainTextToHtml(raw: string): string {
+  return [
+    "<!DOCTYPE html>",
+    '<html><head><meta charset="utf-8"><style>',
+    "body{margin:0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12pt;line-height:1.5;color:#111}",
+    "pre{margin:0;white-space:pre-wrap;word-wrap:break-word;font-family:inherit}",
+    "</style></head><body><pre>",
+    escapeHtml(raw),
+    "</pre></body></html>",
+  ].join("");
+}
+
+/** Shared page-size options for the HTML/text → PDF tools. */
+const PAGE_SIZE_FIELD = {
+  type: "select" as const,
+  name: "format",
+  labelKey: "formatLabel",
+  defaultValue: "A4",
+  options: [
+    { value: "A4", labelKey: "formatA4" },
+    { value: "Letter", labelKey: "formatLetter" },
+    { value: "Legal", labelKey: "formatLegal" },
+  ],
+};
+
+/** Shared orientation switch (coerced to a real boolean in JSON mode). */
+const ORIENTATION_FIELD = {
+  type: "switch" as const,
+  name: "landscape",
+  labelKey: "landscapeLabel",
+  descriptionKey: "landscapeDescription",
+  defaultValue: "false",
+};
+
+/** Shared margin preset (mapped to a CSS length the convert route accepts). */
+const MARGIN_FIELD = {
+  type: "select" as const,
+  name: "margin",
+  labelKey: "marginLabel",
+  defaultValue: "20mm",
+  options: [
+    { value: "0", labelKey: "marginNone" },
+    { value: "12mm", labelKey: "marginNarrow" },
+    { value: "20mm", labelKey: "marginNormal" },
+    { value: "30mm", labelKey: "marginWide" },
+  ],
+};
+
 /**
  * Turn a human page-range expression ("1-5, 8, 10-12") into the JSON array
  * string the split endpoint expects (`["1-5","8","10-12"]`). Whitespace and
@@ -411,6 +476,135 @@ export const TOOL_CONFIGS = {
         placeholderKey: "locationPlaceholder",
       },
     ],
+  },
+
+  // ── Text / HTML → PDF (in-house HTML→PDF engine, JSON to /api/pdf/convert) ──
+
+  "text-to-pdf": {
+    id: "text-to-pdf",
+    namespace: "tools.textToPdf",
+    icon: "file-text",
+    endpoint: "/api/pdf/convert",
+    request: { kind: "json" },
+    input: {
+      kind: "text",
+      valueField: "html",
+      labelKey: "inputLabel",
+      placeholderKey: "inputPlaceholder",
+      descriptionKey: "inputDescription",
+      rows: 14,
+      maxLength: 500_000,
+      transform: plainTextToHtml,
+    },
+    responseKind: "binary",
+    defaultOutputName: "document.pdf",
+    allowOutputName: true,
+    constants: [{ name: "source", value: "html" }],
+    fields: [PAGE_SIZE_FIELD, ORIENTATION_FIELD, MARGIN_FIELD],
+  },
+
+  "html-to-pdf": {
+    id: "html-to-pdf",
+    namespace: "tools.htmlToPdf",
+    icon: "file-code",
+    endpoint: "/api/pdf/convert",
+    request: { kind: "json" },
+    input: {
+      kind: "text",
+      valueField: "html",
+      labelKey: "inputLabel",
+      placeholderKey: "inputPlaceholder",
+      descriptionKey: "inputDescription",
+      rows: 16,
+      maxLength: 2_000_000,
+    },
+    responseKind: "binary",
+    defaultOutputName: "page.pdf",
+    allowOutputName: true,
+    constants: [{ name: "source", value: "html" }],
+    fields: [PAGE_SIZE_FIELD, ORIENTATION_FIELD, MARGIN_FIELD],
+  },
+
+  // ── PDF → Office (upload session document, then export — two-step chain) ──
+
+  "pdf-to-word": {
+    id: "pdf-to-word",
+    namespace: "tools.pdfToWord",
+    icon: "file-type",
+    endpoint: "/api/office/export",
+    request: {
+      kind: "uploadExport",
+      uploadExport: { uploadEndpoint: UPLOAD_ENDPOINT },
+    },
+    uploadMode: "single",
+    accept: ACCEPT_PDF,
+    fileFieldName: "file",
+    responseKind: "binary",
+    defaultOutputName: "document.docx",
+    allowOutputName: true,
+    maxTotalBytes: MAX_250MB,
+    constants: [{ name: "format", value: "docx" }],
+    fields: [],
+  },
+
+  "pdf-to-excel": {
+    id: "pdf-to-excel",
+    namespace: "tools.pdfToExcel",
+    icon: "file-spreadsheet",
+    endpoint: "/api/office/export",
+    request: {
+      kind: "uploadExport",
+      uploadExport: { uploadEndpoint: UPLOAD_ENDPOINT },
+    },
+    uploadMode: "single",
+    accept: ACCEPT_PDF,
+    fileFieldName: "file",
+    responseKind: "binary",
+    defaultOutputName: "document.xlsx",
+    allowOutputName: true,
+    maxTotalBytes: MAX_250MB,
+    constants: [{ name: "format", value: "xlsx" }],
+    fields: [],
+  },
+
+  "pdf-to-powerpoint": {
+    id: "pdf-to-powerpoint",
+    namespace: "tools.pdfToPowerpoint",
+    icon: "presentation",
+    endpoint: "/api/office/export",
+    request: {
+      kind: "uploadExport",
+      uploadExport: { uploadEndpoint: UPLOAD_ENDPOINT },
+    },
+    uploadMode: "single",
+    accept: ACCEPT_PDF,
+    fileFieldName: "file",
+    responseKind: "binary",
+    defaultOutputName: "document.pptx",
+    allowOutputName: true,
+    maxTotalBytes: MAX_250MB,
+    constants: [{ name: "format", value: "pptx" }],
+    fields: [],
+  },
+
+  "pdf-to-odt": {
+    id: "pdf-to-odt",
+    namespace: "tools.pdfToOdt",
+    icon: "file-text",
+    endpoint: "/api/office/export",
+    request: {
+      kind: "uploadExport",
+      uploadExport: { uploadEndpoint: UPLOAD_ENDPOINT },
+    },
+    uploadMode: "single",
+    accept: ACCEPT_PDF,
+    fileFieldName: "file",
+    responseKind: "binary",
+    defaultOutputName: "document.odt",
+    allowOutputName: true,
+    maxTotalBytes: MAX_250MB,
+    constants: [{ name: "format", value: "odt" }],
+    fields: [],
   },
 } satisfies Record<string, ToolConfig>;
 
