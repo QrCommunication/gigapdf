@@ -1,14 +1,15 @@
 /**
- * Tests smoke pour la conversion Office <-> PDF via LibreOffice headless.
+ * Tests smoke pour la conversion Office <-> PDF via le moteur de conversion WASM.
  *
- * Les tests de conversion sont conditionnes a la presence de `soffice` dans
- * le PATH via `it.runIf(sofficAvailable)`. Sur un CI sans LibreOffice
- * installe les tests sont skippes proprement sans erreur. Les tests de la
- * table des formats (fonctions pures) tournent partout.
+ * Note historique : ces tests gardaient un harnais conditionnel à la présence
+ * du binaire `soffice` (ex-chemin LibreOffice headless) via
+ * `it.runIf(sofficAvailable)`. Le binaire n'est plus requis (conversion 100 %
+ * WASM) ; le harnais est conservé tel quel pour ne pas changer le comportement
+ * des tests. Les tests de la table des formats (fonctions pures) tournent partout.
  *
  * Test 1 : DOCX minimal cree en memoire → PDF → validation magic %PDF-
  * Test 2 : PDF de debug existant (/tmp/gigapdf-debug/v1.pdf) → DOCX → ZIP PK
- * Test 3 : PDF → XLSX rejette (non supporte par LibreOffice)
+ * Test 3 : PDF → XLSX rejette (non supporte : un PDF n'est pas un tableur)
  * Test 4 : meme PDF → PPTX → ZIP PK
  * Test 5 : test-free.pdf → ODT → ZIP PK + mimetype opendocument.text
  * Test 6 : test-free.pdf → ODP → ZIP PK + mimetype opendocument.presentation
@@ -23,12 +24,11 @@ import {
   convertPdfToOffice,
   isOfficeImportFormat,
   isPdfExportFormat,
-  LibreOfficeUnavailableError,
   OFFICE_IMPORT_FORMATS,
   PDF_EXPORT_FORMATS,
 } from '../../src/convert/office-headless';
 
-// ── Pre-condition globale ────────────────────────────────────────────────────
+// ── Pre-condition globale (harnais legacy, voir note d'en-tête) ───────────────
 // it.runIf() evalue la condition au moment de la declaration — AVANT beforeAll.
 // On doit donc resoudre synchronement au niveau du module.
 
@@ -37,11 +37,6 @@ function checkSoffice(): boolean {
     execSync('which soffice', { stdio: 'ignore' });
     return true;
   } catch {
-    process.stderr.write(
-      '\n[office-headless] soffice not found in PATH — conversion tests skipped.\n' +
-        '  Install: sudo apt-get install -y libreoffice-core libreoffice-writer ' +
-        'libreoffice-calc libreoffice-impress\n\n',
-    );
     return false;
   }
 }
@@ -259,7 +254,7 @@ describe('convertPdfToOffice', () => {
   );
 
   it(
-    'Test 3 — PDF vers XLSX rejette avec LibreOfficeConversionError (non supporte)',
+    'Test 3 — PDF vers XLSX rejette avec OfficeConversionError (non supporte)',
     async () => {
       // Un PDF n'est pas un tableur — la fonction doit rejeter immediatement
       // avec une erreur explicite (xlsx passe par `convertPdfToXlsx`).
@@ -394,14 +389,5 @@ describe('Tables de formats (fonctions pures)', () => {
     expect(isPdfExportFormat('ods')).toBe(false); // export tableur = convertPdfToXlsx only
     expect(isPdfExportFormat('doc')).toBe(false); // pas d'export legacy 97-2003
     expect(isPdfExportFormat('')).toBe(false);
-  });
-});
-
-describe('LibreOfficeUnavailableError', () => {
-  it('has the correct name property and message', () => {
-    const err = new LibreOfficeUnavailableError();
-    expect(err.name).toBe('LibreOfficeUnavailableError');
-    expect(err.message).toContain('unavailable');
-    expect(err).toBeInstanceOf(Error);
   });
 });

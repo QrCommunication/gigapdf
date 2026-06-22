@@ -2,7 +2,7 @@
  * Office → PDF Conversion Route
  *
  * POST /api/office/upload
- * Converts an Office document to PDF via LibreOffice headless.
+ * Converts an Office document to PDF via the WASM conversion engine.
  *
  * Accepted formats:
  *   - OOXML        : .docx, .xlsx, .pptx          (ZIP container)
@@ -25,16 +25,14 @@
  * Errors:
  *   400 — missing/invalid file
  *   413 — file too large
- *   422 — LibreOffice conversion failure
- *   503 — LibreOffice binary unavailable
+ *   422 — Office conversion failure
  *   500 — unhandled error
  */
 
 import { NextResponse } from 'next/server';
 import {
   convertOfficeToPdf,
-  LibreOfficeUnavailableError,
-  LibreOfficeConversionError,
+  OfficeConversionError,
 } from '@giga-pdf/pdf-engine';
 // Type-only import: erased at runtime, keeps unit-test mocks of the engine simple
 // while letting tsc enforce route ⊆ engine format compatibility.
@@ -216,18 +214,8 @@ export async function POST(request: Request): Promise<Response> {
       },
     });
   } catch (error: unknown) {
-    if (error instanceof LibreOfficeUnavailableError) {
-      serverLogger.error('[api/office/upload] LibreOffice binary not found', {
-        error,
-      });
-      return NextResponse.json(
-        { success: false, error: 'Office conversion service is currently unavailable.' },
-        { status: 503 },
-      );
-    }
-
-    if (error instanceof LibreOfficeConversionError) {
-      serverLogger.warn('[api/office/upload] LibreOffice conversion failed', {
+    if (error instanceof OfficeConversionError) {
+      serverLogger.warn('[api/office/upload] Office conversion failed', {
         error,
       });
       return NextResponse.json(

@@ -1,14 +1,12 @@
 /**
  * Conversion Office ↔ PDF via le moteur WASM `@qrcommunication/gigapdf-lib`.
  *
- * Remplace l'ancien chemin LibreOffice headless (`soffice`) : plus aucun binaire
- * système, plus aucun répertoire temporaire, plus aucune dépendance tierce — la
- * conversion est faite entièrement en WebAssembly (zéro-dépendance, déterministe,
- * sûr pour les appels parallèles).
+ * La conversion est faite entièrement en WebAssembly (zéro-dépendance,
+ * déterministe, sûr pour les appels parallèles) : plus aucun binaire système,
+ * plus aucun répertoire temporaire, plus aucune dépendance tierce.
  *
- * L'API publique (constantes de formats, gardes de type, classes d'erreur,
- * signatures) est **inchangée** : les routes consommatrices n'ont rien à adapter.
- * Les noms `LibreOffice*Error` sont conservés pour compatibilité de capture.
+ * Note historique : ce module remplaçait un ancien chemin LibreOffice headless
+ * (`soffice`) ; ce binaire n'est plus requis ni utilisé.
  */
 
 import { getEngine } from '../wasm';
@@ -55,23 +53,13 @@ export function isPdfExportFormat(value: string): value is PdfExportFormat {
   return (PDF_EXPORT_FORMATS as readonly string[]).includes(value);
 }
 
-// ── Erreurs dédiées (noms conservés pour compatibilité de capture) ─────────────
+// ── Erreur dédiée ──────────────────────────────────────────────────────────────
 
-/**
- * Conservée pour compatibilité : avec le moteur WASM embarqué, aucun binaire
- * externe n'est requis, donc cette erreur n'est plus levée en pratique.
- */
-export class LibreOfficeUnavailableError extends Error {
-  constructor() {
-    super('office conversion engine unavailable');
-    this.name = 'LibreOfficeUnavailableError';
-  }
-}
-
-export class LibreOfficeConversionError extends Error {
+/** Levée quand la conversion Office ↔ PDF échoue (contenu illisible, format cible non supporté). */
+export class OfficeConversionError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'LibreOfficeConversionError';
+    this.name = 'OfficeConversionError';
   }
 }
 
@@ -82,7 +70,7 @@ export class LibreOfficeConversionError extends Error {
  * auto-détecté ; `sourceFormat` n'est gardé que pour les messages d'erreur et
  * la compatibilité de signature.
  *
- * @throws {LibreOfficeConversionError} si le contenu est non reconnu ou vide
+ * @throws {OfficeConversionError} si le contenu est non reconnu ou vide
  */
 export async function convertOfficeToPdf(
   buffer: Uint8Array,
@@ -91,7 +79,7 @@ export async function convertOfficeToPdf(
   const giga = await getEngine();
   const pdf = giga.officeToPdf(buffer);
   if (pdf.length === 0) {
-    throw new LibreOfficeConversionError(
+    throw new OfficeConversionError(
       `could not convert ${sourceFormat} document to PDF (unrecognized or empty content)`,
     );
   }
@@ -108,15 +96,15 @@ export async function convertOfficeToPdf(
  *  - `odp`  → OpenDocument Presentation
  *  - `xlsx` → rejeté (utiliser `convertPdfToXlsx`)
  *
- * @throws {LibreOfficeConversionError} si le PDF est illisible ou le format cible
- *                                        n'est pas supporté
+ * @throws {OfficeConversionError} si le PDF est illisible ou le format cible
+ *                                  n'est pas supporté
  */
 export async function convertPdfToOffice(
   buffer: Uint8Array,
   targetFormat: PdfExportFormat,
 ): Promise<Uint8Array> {
   if (targetFormat === 'xlsx') {
-    throw new LibreOfficeConversionError(
+    throw new OfficeConversionError(
       'PDF → XLSX is not supported here: a PDF is not a spreadsheet. ' +
         'Use convertPdfToXlsx (table reconstruction) instead.',
     );
@@ -126,7 +114,7 @@ export async function convertPdfToOffice(
   try {
     doc = giga.open(buffer);
   } catch {
-    throw new LibreOfficeConversionError('could not parse the source PDF');
+    throw new OfficeConversionError('could not parse the source PDF');
   }
   try {
     switch (targetFormat) {

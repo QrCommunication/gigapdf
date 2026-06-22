@@ -6,15 +6,15 @@
  * converts the file to the requested Office format (docx, xlsx, pptx, odt,
  * odp) using the pdf-engine package.
  *
- * Conversion matrix:
- *   docx  — LibreOffice writer_pdf_import     (convertPdfToOffice)
- *   odt   — LibreOffice writer_pdf_import     (convertPdfToOffice)
- *   pptx  — LibreOffice impress_pdf_import    (convertPdfToOffice)
- *   odp   — LibreOffice impress_pdf_import    (convertPdfToOffice)
+ * Conversion matrix (all via the WASM conversion engine):
+ *   docx  — convertPdfToOffice
+ *   odt   — convertPdfToOffice
+ *   pptx  — convertPdfToOffice
+ *   odp   — convertPdfToOffice
  *   xlsx  — pdfjs + exceljs extraction        (convertPdfToXlsx — dynamic import)
  *
- * Note on xlsx: LibreOffice headless does not support PDF → XLSX (structural
- * limitation). A dedicated convertPdfToXlsx implementation based on pdfjs text
+ * Note on xlsx: PDF → XLSX is not a direct conversion (a PDF is not a
+ * spreadsheet). A dedicated convertPdfToXlsx implementation based on pdfjs text
  * extraction + exceljs is loaded via dynamic import so this file type-checks
  * even when the symbol has not yet been added to the pdf-engine barrel.
  *
@@ -28,8 +28,7 @@
  *   400  — Missing / invalid body
  *   401  — Unauthenticated
  *   404  — Document session not found in Python backend
- *   422  — Conversion failed (LibreOfficeConversionError)
- *   503  — LibreOffice binary unavailable on the server
+ *   422  — Conversion failed (OfficeConversionError)
  *   504  — Python backend timed out
  */
 
@@ -39,8 +38,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
   convertPdfToOffice,
-  LibreOfficeUnavailableError,
-  LibreOfficeConversionError,
+  OfficeConversionError,
   openDocument,
   saveDocument,
   flattenForms,
@@ -194,9 +192,9 @@ export async function POST(request: NextRequest): Promise<Response> {
     return jsonError('Failed to connect to backend.', 504);
   }
 
-  // ── 3.5 Flatten interactive widgets + annotations BEFORE handing the
-  //        PDF to LibreOffice / pdfjs. Without this, libreoffice can render
-  //        an editable AcroForm widget AND its baked appearance, producing
+  // ── 3.5 Flatten interactive widgets + annotations BEFORE the WASM
+  //        conversion / pdfjs extraction. Without this, an editable AcroForm
+  //        widget AND its baked appearance can both be rendered, producing
   //        duplicated cells / labels in the resulting docx/pptx; for xlsx,
   //        pdfjs would emit two text items at the same position.
   try {
@@ -233,23 +231,12 @@ export async function POST(request: NextRequest): Promise<Response> {
       };
       outputBytes = await convertPdfToXlsx(pdfBytes);
     } else {
-      // format is 'docx' | 'pptx' | 'odt' | 'odp' — handled by LibreOffice headless
+      // format is 'docx' | 'pptx' | 'odt' | 'odp' — handled by the WASM engine
       outputBytes = await convertPdfToOffice(pdfBytes, format);
     }
   } catch (err: unknown) {
-    if (err instanceof LibreOfficeUnavailableError) {
-      serverLogger.error('[api/office/export] LibreOffice binary not available', {
-        documentId,
-        format,
-      });
-      return jsonError(
-        'Office conversion is temporarily unavailable. LibreOffice is not installed on this server.',
-        503,
-      );
-    }
-
-    if (err instanceof LibreOfficeConversionError) {
-      serverLogger.warn('[api/office/export] LibreOffice conversion failed', {
+    if (err instanceof OfficeConversionError) {
+      serverLogger.warn('[api/office/export] Office conversion failed', {
         documentId,
         format,
         error: (err as Error).message,

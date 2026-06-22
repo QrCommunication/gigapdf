@@ -172,12 +172,11 @@ export type {
   GoogleFontResult,
 } from './utils/google-fonts';
 
-// Office ↔ PDF conversion via LibreOffice headless
+// Office ↔ PDF conversion via the WASM conversion engine
 export {
   convertOfficeToPdf,
   convertPdfToOffice,
-  LibreOfficeUnavailableError,
-  LibreOfficeConversionError,
+  OfficeConversionError,
   OFFICE_IMPORT_FORMATS,
   PDF_EXPORT_FORMATS,
   isOfficeImportFormat,
@@ -185,7 +184,7 @@ export {
 } from './convert/office-headless';
 export type { OfficeImportFormat, PdfExportFormat } from './convert/office-headless';
 
-// PDF → XLSX (custom extraction, libreoffice ne supporte pas)
+// PDF → XLSX (custom table reconstruction)
 export { convertPdfToXlsx } from './convert/pdf-to-xlsx';
 export type { ConvertPdfToXlsxOptions } from './convert/pdf-to-xlsx';
 
