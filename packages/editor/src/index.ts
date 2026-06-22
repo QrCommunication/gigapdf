@@ -68,3 +68,7 @@ export type {
   LoadedFont,
   FontLoadStatus,
 } from "./hooks/use-embedded-fonts";
+
+// Document (embedded) fonts → editor font-picker options
+export { buildDocumentFontOptions } from "./utils/document-font-options";
+export type { DocumentFontOption } from "./utils/document-font-options";

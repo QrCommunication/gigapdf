@@ -1690,6 +1690,8 @@
         "rtl": "Droite → Gauche",
         "contentPlaceholder": "Modifier le texte…",
         "fontFamily": "Police",
+        "documentFonts": "Polices du document",
+        "systemFonts": "Polices système",
         "fontSize": "Taille",
         "color": "Couleur",
         "opacity": "Opacité"

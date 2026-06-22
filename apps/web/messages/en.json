@@ -1690,6 +1690,8 @@
         "rtl": "Right → Left",
         "contentPlaceholder": "Edit the text…",
         "fontFamily": "Font",
+        "documentFonts": "Document fonts",
+        "systemFonts": "System fonts",
         "fontSize": "Size",
         "color": "Color",
         "opacity": "Opacity"

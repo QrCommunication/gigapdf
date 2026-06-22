@@ -23,6 +23,7 @@ import type {
   FormFieldElement,
   LayerObject,
 } from "@giga-pdf/types";
+import type { DocumentFontOption } from "@giga-pdf/editor";
 
 export interface PropertiesPanelProps {
   /** Élément(s) sélectionné(s) */
@@ -50,10 +51,35 @@ export interface PropertiesPanelProps {
   userLayers?: LayerObject[];
   /** Affecter l'élément sélectionné à un calque (ou `null` pour le détacher). */
   onAssignElementToLayer?: (elementId: string, layerId: string | null) => void;
+  /**
+   * Polices RÉELLES du document (faces embarquées chargées par `useEmbeddedFonts`).
+   * Listées en tête du sélecteur de police du texte, AVANT le petit set système
+   * de repli. Absent / vide ⇒ seules les polices système sont proposées
+   * (comportement historique). Choisir une police document applique sa face
+   * réelle (`gigapdf-{docId}-{fontId}`) + son nom d'origine à l'élément, pour un
+   * rendu 1:1 avec le PDF.
+   */
+  documentFonts?: DocumentFontOption[];
 }
 
 /** Charset AcroForm sûr pour un nom de champ (lettres, chiffres, _ . -). */
 const FIELD_NAME_PATTERN = /^[A-Za-z0-9_.\-]+$/;
+
+/**
+ * Petit set de polices SYSTÈME proposé en repli sous les polices du document.
+ * Leur `value` est une famille CSS générique (pas une face embarquée) — le
+ * renderer les rend via la branche CSS de `resolveTextFont`.
+ */
+const SYSTEM_FONT_FAMILIES: ReadonlyArray<string> = [
+  "Arial",
+  "Helvetica",
+  "Times New Roman",
+  "Courier New",
+  "Georgia",
+];
+
+/** Préfixe des valeurs de police « document » dans le sélecteur (= face réelle). */
+const DOC_FONT_FACE_PREFIX = "gigapdf-";
 
 // ============= Édition batch (multi-sélection) =============
 
@@ -955,8 +981,15 @@ export function PropertiesPanel({
   allFieldNames = [],
   userLayers = [],
   onAssignElementToLayer,
+  documentFonts = [],
 }: PropertiesPanelProps) {
   const t = useTranslations("editor.properties");
+
+  // Map face name → option, so a selection on a document font can also write
+  // the run's `originalFont` (the renderer's variant-aware resolution key).
+  const documentFontByFace = new Map(
+    documentFonts.map((font) => [font.faceName, font] as const),
+  );
 
   const selectedElement = selectedElements.length === 1 ? selectedElements[0] : null;
   const hasMultipleSelection = selectedElements.length > 1;
@@ -964,6 +997,36 @@ export function PropertiesPanel({
   // Calques utilisateur triés par `order` décroissant (cohérent avec le panneau
   // calques) pour le menu déroulant "Layer" de la section commune.
   const sortedUserLayers = [...userLayers].sort((a, b) => b.order - a.order);
+
+  // Valeur courante du sélecteur de police pour un run texte. Quand le run
+  // porte un `originalFont` correspondant à une police document chargée, on
+  // sélectionne sa face réelle ; sinon on retombe sur la famille CSS stockée
+  // dans `fontFamily` (police système) — défaut "Arial".
+  const selectedFontValue = (element: TextElement): string => {
+    const orig = element.style?.originalFont;
+    if (orig) {
+      const docMatch = documentFonts.find((f) => f.originalName === orig);
+      if (docMatch) return docMatch.faceName;
+    }
+    const family = element.style?.fontFamily;
+    if (family && documentFontByFace.has(family)) return family;
+    return family || "Arial";
+  };
+
+  // Applique le choix du sélecteur au run. Une police document écrit la face
+  // réelle dans `fontFamily` ET le nom d'origine dans `originalFont` (clé de
+  // résolution variant-aware du renderer). Une police système écrit la famille
+  // CSS et efface `originalFont` (sinon le renderer continuerait de résoudre la
+  // police embarquée précédente).
+  const applyFontSelection = (element: TextElement, value: string): void => {
+    const docFont = value.startsWith(DOC_FONT_FACE_PREFIX)
+      ? documentFontByFace.get(value)
+      : undefined;
+    const style = docFont
+      ? { ...element.style, fontFamily: docFont.faceName, originalFont: docFont.originalName }
+      : { ...element.style, fontFamily: value, originalFont: null };
+    onElementUpdate?.(element.elementId, { style } as Partial<TextElement>);
+  };
 
   // Render pour élément texte
   const renderTextProperties = (element: TextElement) => (
@@ -1021,19 +1084,28 @@ export function PropertiesPanel({
           {t("text.fontFamily")}
         </label>
         <select
-          value={element.style?.fontFamily || "Arial"}
-          onChange={(e) =>
-            onElementUpdate?.(element.elementId, {
-              style: { ...element.style, fontFamily: e.target.value },
-            } as Partial<TextElement>)
-          }
+          value={selectedFontValue(element)}
+          onChange={(e) => applyFontSelection(element, e.target.value)}
           className="w-full h-8 px-2 rounded border bg-background text-sm"
         >
-          <option value="Arial">Arial</option>
-          <option value="Helvetica">Helvetica</option>
-          <option value="Times New Roman">Times New Roman</option>
-          <option value="Courier New">Courier New</option>
-          <option value="Georgia">Georgia</option>
+          {/* Polices du document (faces réelles) — en tête pour un rendu 1:1. */}
+          {documentFonts.length > 0 && (
+            <optgroup label={t("text.documentFonts")}>
+              {documentFonts.map((font) => (
+                <option key={font.faceName} value={font.faceName}>
+                  {font.label}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {/* Polices système — repli quand aucune police document ne convient. */}
+          <optgroup label={t("text.systemFonts")}>
+            {SYSTEM_FONT_FAMILIES.map((family) => (
+              <option key={family} value={family}>
+                {family}
+              </option>
+            ))}
+          </optgroup>
         </select>
       </div>
 
