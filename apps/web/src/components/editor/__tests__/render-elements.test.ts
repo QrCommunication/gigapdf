@@ -17,6 +17,7 @@ import {
   renderElementsOverlay,
   groupTextRunsIntoParagraphs,
   pageBlockGroupsToParagraphs,
+  pageBlockGroupsToTablesAndLists,
 } from "../render-elements";
 
 // --- Minimal Fabric mock: each shape records its constructor options. --------
@@ -1034,6 +1035,178 @@ describe("renderElementsOverlay — engine blockGroups drive paragraph render", 
       fabricMock,
     );
     const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    expect(objects.filter((o) => o instanceof Textbox)).toHaveLength(0);
+    expect(objects.filter((o) => o instanceof IText)).toHaveLength(2);
+  });
+});
+
+// --- Table / list reconstruction (lib = source of structure) -----------------
+
+/** A `table` PageBlockGroup with the given grid of per-cell source indices. */
+function tableGroup(grid: number[][][]): PageBlockGroup {
+  const cells = grid.flatMap((row, r) =>
+    row.map((sourceIndices, c) => ({
+      row: r,
+      col: c,
+      colSpan: 1,
+      rowSpan: 1,
+      sourceIndices,
+    })),
+  );
+  return {
+    kind: "table",
+    sourceIndices: [],
+    table: {
+      rowCount: grid.length,
+      colCount: grid[0]?.length ?? 0,
+      colWidths: Array.from({ length: grid[0]?.length ?? 0 }, () => 100),
+      rowHeights: grid.map(() => 20),
+      cells,
+    },
+  };
+}
+
+/** A `list` PageBlockGroup whose items carry the given source indices. */
+function listGroup(items: number[][]): PageBlockGroup {
+  return {
+    kind: "list",
+    sourceIndices: [],
+    list: {
+      ordered: false,
+      marker: "-",
+      items: items.map((sourceIndices) => ({ level: 0, sourceIndices })),
+    },
+  };
+}
+
+describe("pageBlockGroupsToTablesAndLists (pure)", () => {
+  it("folds a multi-run table cell into a paragraph group", () => {
+    const elements = [
+      paraRun("a", 100, { index: 1, content: "Cell L1" }),
+      paraRun("b", 200, { index: 2, content: "Cell L2", x: 220 }),
+      paraRun("c", 300, { index: 3, content: "Other cell" }),
+    ];
+    // Cell[0][0] = runs 1,2 (multi-line → folds); cell[0][1] = run 3 (single → not).
+    const { paragraphs, standalone } = pageBlockGroupsToTablesAndLists(elements, [
+      tableGroup([[[1, 2], [3]]]),
+    ]);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]!.runs.map((r) => r.elementId)).toEqual(["a", "b"]);
+    // The single-run cell stays standalone (already an identically-placed IText).
+    expect(standalone.map((r) => r.elementId)).toEqual(["c"]);
+  });
+
+  it("leaves a table with no resolvable cell runs fully standalone", () => {
+    // Cells reference indices that no element carries (the `source_index: null`
+    // path) → nothing folded, every run stays element-rendered.
+    const elements = [
+      paraRun("a", 100, { index: 1 }),
+      paraRun("b", 114, { index: 2 }),
+    ];
+    const { paragraphs, standalone } = pageBlockGroupsToTablesAndLists(elements, [
+      tableGroup([[[91], [92]], [[93], [94]]]),
+    ]);
+    expect(paragraphs).toHaveLength(0);
+    expect(standalone.map((r) => r.elementId)).toEqual(["a", "b"]);
+  });
+
+  it("folds a multi-run list item into a paragraph group", () => {
+    const elements = [
+      paraRun("a", 100, { index: 10, content: "Item line 1" }),
+      paraRun("b", 200, { index: 11, content: "Item line 2", x: 220 }),
+    ];
+    const { paragraphs, standalone } = pageBlockGroupsToTablesAndLists(elements, [
+      listGroup([[10, 11]]),
+    ]);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]!.runs.map((r) => r.elementId)).toEqual(["a", "b"]);
+    expect(standalone).toHaveLength(0);
+  });
+
+  it("ignores paragraph/heading groups (handled by the paragraph path)", () => {
+    const elements = [
+      paraRun("a", 100, { index: 1 }),
+      paraRun("b", 114, { index: 2 }),
+    ];
+    const { paragraphs, standalone } = pageBlockGroupsToTablesAndLists(elements, [
+      { kind: "paragraph", sourceIndices: [1, 2] },
+    ]);
+    expect(paragraphs).toHaveLength(0);
+    expect(standalone.map((r) => r.elementId)).toEqual(["a", "b"]);
+  });
+
+  it("never claims the same run for two cells", () => {
+    const elements = [
+      paraRun("a", 100, { index: 1 }),
+      paraRun("b", 114, { index: 2 }),
+      paraRun("c", 128, { index: 3 }),
+    ];
+    // Cell A = [1,2], cell B = [2,3] (2 already consumed → B resolves only [3]).
+    const { paragraphs } = pageBlockGroupsToTablesAndLists(elements, [
+      tableGroup([[[1, 2], [2, 3]]]),
+    ]);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]!.runs.map((r) => r.elementId)).toEqual(["a", "b"]);
+  });
+});
+
+describe("renderElementsOverlay — table/list reconstruction", () => {
+  it("renders a multi-run table cell as ONE editable Textbox with lossless runs", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [
+        paraRun("a", 100, { index: 1, content: "Cell line A" }),
+        paraRun("b", 200, { index: 2, content: "Cell line B", x: 220 }),
+      ],
+      fabricMock,
+      { blockGroups: [tableGroup([[[1, 2]]])] },
+    );
+    const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    const tb = objects.find((o) => o instanceof Textbox) as Textbox | undefined;
+    expect(tb).toBeDefined();
+    expect(tb!.text).toBe("Cell line A\nCell line B");
+    const data = tb!.data as Record<string, unknown>;
+    // Reuses the paragraph decompose-save path → lossless replaceText.
+    expect(data.isParagraph).toBe(true);
+    const stashed = data.paragraphRuns as Array<{ elementId: string; index?: number }>;
+    expect(stashed.map((r) => r.index)).toEqual([1, 2]);
+    // No standalone IText for the folded cell runs.
+    expect(objects.filter((o) => o instanceof IText)).toHaveLength(0);
+  });
+
+  it("renders a multi-run list item as ONE editable Textbox", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [
+        paraRun("a", 100, { index: 5, content: "Bullet line 1" }),
+        paraRun("b", 200, { index: 6, content: "Bullet line 2", x: 220 }),
+      ],
+      fabricMock,
+      { blockGroups: [listGroup([[5, 6]])] },
+    );
+    const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    const tb = objects.find((o) => o instanceof Textbox) as Textbox;
+    expect(tb).toBeDefined();
+    expect(tb.text).toBe("Bullet line 1\nBullet line 2");
+    expect(objects.filter((o) => o instanceof IText)).toHaveLength(0);
+  });
+
+  it("FALLBACK: a table whose cell runs don't resolve renders element-by-element (no regression)", async () => {
+    const canvas = makeCanvas();
+    // The blockGroup references indices no element carries (source_index:null path).
+    await renderElementsOverlay(
+      canvas,
+      [
+        paraRun("a", 100, { index: 1, content: "X" }),
+        paraRun("b", 300, { index: 2, content: "Y", x: 300 }),
+      ],
+      fabricMock,
+      { blockGroups: [tableGroup([[[91], [92]]])] },
+    );
+    const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    // No Textbox folded; both runs stay standalone IText — identical to today.
     expect(objects.filter((o) => o instanceof Textbox)).toHaveLength(0);
     expect(objects.filter((o) => o instanceof IText)).toHaveLength(2);
   });

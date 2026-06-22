@@ -38,7 +38,12 @@
 
 import type { Canvas as FabricCanvas, FabricObject } from "fabric";
 import type * as FabricNamespace from "fabric";
-import type { Element, PageBlockGroup } from "@giga-pdf/types";
+import type {
+  Element,
+  PageBlockGroup,
+  PageBlockTableCell,
+  PageBlockListItem,
+} from "@giga-pdf/types";
 import { clientLogger } from "@/lib/client-logger";
 
 type FabricModule = typeof FabricNamespace;
@@ -592,6 +597,95 @@ export function pageBlockGroupsToParagraphs(
 }
 
 // ---------------------------------------------------------------------------
+// Table / list reconstruction (Word-like editing) — pure helpers
+//
+// A `table` group carries a grid of cells, a `list` group carries ordered items;
+// each cell/item lists the engine `source_index`es of ITS runs (reading order).
+// We resolve those indices against the page's already-parsed text runs and emit
+// a {@link ParagraphGroup} per cell/item that has ≥ 2 resolvable runs — so a
+// multi-line cell/item becomes ONE editable, positioned Textbox flowing through
+// the exact same render + `data.paragraphRuns` lossless decompose-save as a
+// coalesced paragraph. The cell's own grid position needs no extra geometry: the
+// resolved runs already carry their real `bounds`, so the Textbox lands exactly
+// where the cell's text is (union of the runs' bounds, identical to a paragraph).
+//
+// FALLBACK / ZERO-REGRESSION: a cell/item whose runs do NOT resolve (empty
+// `sourceIndices` — the common case, the engine emits `source_index: null` for
+// most table/list runs today), or that resolves to a single run, contributes
+// NOTHING and leaves its runs untouched — they stay flat `TextElement`s rendered
+// element-by-element, byte-identical to today's table/list rendering. The list
+// marker glyph (bullet/number) is itself a flat element rendered as-is; it is
+// never injected into a run's editable text (that would corrupt the lossless
+// `replaceText` round-trip).
+// ---------------------------------------------------------------------------
+
+/**
+ * Reconstruct paragraph groups from the engine's `table` / `list` block groups.
+ * Each cell (table) / item (list) with ≥ 2 resolvable runs becomes one
+ * {@link ParagraphGroup}; cells/items with 0–1 resolvable run are skipped and
+ * their runs left standalone. Pure & deterministic. Reuses the same
+ * index→run resolution as {@link pageBlockGroupsToParagraphs}, including the
+ * defensive guards (missing index, run already consumed by another block,
+ * ungroupable links/RTL/multi-line runs).
+ *
+ * @param elements   The page's flat scene-graph elements (text + others).
+ * @param blockGroups The engine block grouping for the page (any kinds).
+ * @returns Paragraph groups for the table cells / list items + the runs left
+ *          standalone (everything not folded into a cell/item Textbox).
+ */
+export function pageBlockGroupsToTablesAndLists(
+  elements: Element[],
+  blockGroups: PageBlockGroup[],
+): { paragraphs: ParagraphGroup[]; standalone: TextRun[] } {
+  const runByIndex = new Map<number, TextRun>();
+  const allRuns: TextRun[] = [];
+  for (const el of elements) {
+    if (el.type !== "text") continue;
+    const run = el as TextRun;
+    allRuns.push(run);
+    if (typeof run.index === "number" && run.index >= 0) {
+      if (!runByIndex.has(run.index)) runByIndex.set(run.index, run);
+    }
+  }
+
+  const paragraphs: ParagraphGroup[] = [];
+  const consumed = new Set<TextRun>();
+
+  // Resolve one cell/item's source indices into a coalesced ParagraphGroup when
+  // it holds ≥ 2 editable runs; release a sub-2 group so its run(s) stay
+  // standalone (a 1-run cell is already an identically-positioned IText today).
+  const foldUnit = (sourceIndices: number[]): void => {
+    const runs: TextRun[] = [];
+    for (const sourceIndex of sourceIndices) {
+      const run = runByIndex.get(sourceIndex);
+      if (!run || consumed.has(run) || isUngroupableRun(run)) continue;
+      runs.push(run);
+      consumed.add(run);
+    }
+    if (runs.length >= 2) {
+      paragraphs.push({ runs });
+    } else {
+      for (const r of runs) consumed.delete(r);
+    }
+  };
+
+  for (const group of blockGroups) {
+    if (group.kind === "table" && group.table) {
+      for (const cell of group.table.cells as PageBlockTableCell[]) {
+        foldUnit(cell.sourceIndices);
+      }
+    } else if (group.kind === "list" && group.list) {
+      for (const item of group.list.items as PageBlockListItem[]) {
+        foldUnit(item.sourceIndices);
+      }
+    }
+  }
+
+  const standalone = allRuns.filter((r) => !consumed.has(r));
+  return { paragraphs, standalone };
+}
+
+// ---------------------------------------------------------------------------
 // API publique
 // ---------------------------------------------------------------------------
 
@@ -728,8 +822,23 @@ export async function renderElementsOverlay(
     : blockGroups && blockGroups.length > 0
       ? pageBlockGroupsToParagraphs(dedupedElements, blockGroups).paragraphs
       : groupTextRunsIntoParagraphs(dedupedElements).paragraphs;
+
+  // TABLE / LIST reconstruction (Word-like): when the engine supplied block
+  // groups, additionally coalesce each table cell / list item that resolves to
+  // ≥ 2 editable runs into ONE positioned Textbox (same render + lossless
+  // decompose-save as a paragraph). Cells/items with 0–1 resolvable run are NOT
+  // folded — their runs stay flat IText, byte-identical to today (the common
+  // case, since most table/list runs carry no engine `source_index`). These
+  // groups are disjoint from the paragraph/heading groups above (a run belongs
+  // to exactly one block in the engine's reading structure).
+  const tableListGroups =
+    groupParagraphs && blockGroups && blockGroups.length > 0
+      ? pageBlockGroupsToTablesAndLists(dedupedElements, blockGroups).paragraphs
+      : [];
+
+  const allCoalescedGroups = [...paragraphGroups, ...tableListGroups];
   const runsInParagraph = new Set<string>();
-  for (const group of paragraphGroups) {
+  for (const group of allCoalescedGroups) {
     for (const run of group.runs) runsInParagraph.add(run.elementId);
   }
 
@@ -1299,8 +1408,11 @@ export async function renderElementsOverlay(
   //    `data.paragraphRuns` so `fabricObjectToElements` can decompose the block
   //    back into the original runs on save (preserving each run's engine index/
   //    elementId/bounds → lossless `replaceText`). Same typography rules as the
-  //    IText branch (embedded font + neutralised synthetic bold/italic).
-  for (const group of paragraphGroups) {
+  //    IText branch (embedded font + neutralised synthetic bold/italic). This
+  //    covers BOTH paragraph/heading groups AND reconstructed table-cell /
+  //    list-item groups — a cell/item is just a positioned multi-line paragraph,
+  //    so it shares the same render + lossless decompose-save path.
+  for (const group of allCoalescedGroups) {
     const runs = group.runs;
     const first = runs[0]!;
     // Block geometry from the union of the runs' bounds.
