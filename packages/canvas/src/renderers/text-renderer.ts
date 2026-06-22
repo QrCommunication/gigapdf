@@ -7,6 +7,15 @@ import type { TextElement } from "@giga-pdf/types";
 import { PDFText } from "../objects/pdf-text";
 
 /**
+ * Last-resort CSS family for brand-new text when the caller does not supply a
+ * font. Document fonts are surfaced through the editor's font picker and applied
+ * via `options.fontFamily` (the real embedded face name `gigapdf-{docId}-{fontId}`
+ * registered by `useEmbeddedFonts`), so this generic fallback is only hit when no
+ * font has been chosen at all.
+ */
+const DEFAULT_TEXT_FONT_FAMILY = "Arial";
+
+/**
  * Render text elements to canvas
  */
 export class TextRenderer {
@@ -49,14 +58,17 @@ export class TextRenderer {
     y: number,
     options: Partial<fabric.TextboxProps> = {}
   ): PDFText {
+    const { fontFamily, ...rest } = options;
     const textObject = new PDFText(text, {
       left: x,
       top: y,
       width: 200,
       fontSize: 16,
-      fontFamily: "Arial",
+      // Use the caller-supplied font (e.g. the document's loaded face) when
+      // provided; only fall back to the generic family when none was chosen.
+      fontFamily: fontFamily ?? DEFAULT_TEXT_FONT_FAMILY,
       fill: "#000000",
-      ...options,
+      ...rest,
     });
 
     canvas.add(textObject);

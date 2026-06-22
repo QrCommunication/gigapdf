@@ -12,8 +12,9 @@ import type {
   TextStyle,
   TextElement,
 } from "@giga-pdf/types";
-import type { RulerUnit } from "@giga-pdf/editor";
-import { FontPicker } from "@giga-pdf/ui";
+import type { RulerUnit, DocumentFontOption } from "@giga-pdf/editor";
+import { FontPicker, DEFAULT_FONTS } from "@giga-pdf/ui";
+import type { FontOption } from "@giga-pdf/ui";
 import {
   MousePointer2,
   Type,
@@ -210,6 +211,14 @@ export interface EditorToolbarProps {
   selectedTextElements?: TextElement[];
   /** Callback pour mettre a jour le style d'un element */
   onElementStyleChange?: (elementId: string, style: Partial<TextStyle>) => void;
+  /**
+   * Polices RÉELLES du document (faces embarquées chargées par `useEmbeddedFonts`).
+   * Affichées en tête du FontPicker, AVANT le set système de repli. Absent /
+   * vide ⇒ seules les polices système sont proposées (comportement historique).
+   * Choisir une police document applique sa face réelle (`gigapdf-{docId}-{fontId}`)
+   * + son nom d'origine au texte, pour un rendu 1:1 avec le PDF.
+   */
+  documentFonts?: DocumentFontOption[];
   /** Fichier PDF actuellement ouvert (pour les opérations merge/split/encrypt) */
   currentFile?: File | null;
   /** Callback pour afficher/masquer le panneau formulaires */
@@ -536,6 +545,7 @@ export function EditorToolbar({
   selectedElement,
   selectedTextElements,
   onElementStyleChange,
+  documentFonts = [],
   currentFile,
   onToggleFormsPanel,
   onFlattenPdf,
@@ -601,11 +611,35 @@ export function EditorToolbar({
     size: number;
   } | null>(null);
 
-  const derivedFontValue = selectedTextElement
-    ? getFontValueFromFamily(
-        selectedTextElement.style?.fontFamily || "Arial, sans-serif",
-      )
-    : "arial";
+  // FontPicker options = polices RÉELLES du document (faces embarquées) en tête,
+  // puis le set système de repli. Une option document a pour `value` sa face
+  // réelle (`gigapdf-{docId}-{fontId}`) et l'utilise aussi comme `family` pour
+  // que l'aperçu du picker rende la vraie police.
+  const documentFontOptions: FontOption[] = documentFonts.map((font) => ({
+    value: font.faceName,
+    label: font.label,
+    family: font.faceName,
+  }));
+  const pickerFonts: FontOption[] = [...documentFontOptions, ...DEFAULT_FONTS];
+  // Lookup face → option (pour écrire `originalFont` au moment du choix).
+  const documentFontByFace = new Map(
+    documentFonts.map((font) => [font.faceName, font] as const),
+  );
+
+  // Valeur dérivée : si le run porte un `originalFont` correspondant à une
+  // police document chargée, on sélectionne sa face réelle ; sinon on retombe
+  // sur le mapping famille-CSS → valeur système historique.
+  const derivedFontValue = (() => {
+    if (!selectedTextElement) return "arial";
+    const orig = selectedTextElement.style?.originalFont;
+    if (orig) {
+      const docMatch = documentFonts.find((f) => f.originalName === orig);
+      if (docMatch) return docMatch.faceName;
+    }
+    const family = selectedTextElement.style?.fontFamily;
+    if (family && documentFontByFace.has(family)) return family;
+    return getFontValueFromFamily(family || "Arial, sans-serif");
+  })();
   const derivedFontSize = selectedTextElement?.style?.fontSize || 14;
 
   const selectedFontValue =
@@ -1001,14 +1035,23 @@ export function EditorToolbar({
           <div className="flex items-center gap-2">
             <FontPicker
               value={selectedFontValue}
+              fonts={pickerFonts}
               onChange={(font) => {
                 setFontValueOverride({
                   elementId: selectedElement.elementId,
                   value: font.value,
                 });
-                onElementStyleChange(selectedElement.elementId, {
-                  fontFamily: font.family,
-                });
+                // Police document → écrire la face réelle + son nom d'origine
+                // (clé de résolution variant-aware du renderer). Police système
+                // → famille CSS + effacer `originalFont` (sinon le renderer
+                // résoudrait encore la police embarquée précédente).
+                const docFont = documentFontByFace.get(font.value);
+                onElementStyleChange(
+                  selectedElement.elementId,
+                  docFont
+                    ? { fontFamily: docFont.faceName, originalFont: docFont.originalName }
+                    : { fontFamily: font.family, originalFont: null },
+                );
               }}
               className="h-8 w-[160px]"
               placeholder={tProperties("fontFamily")}
