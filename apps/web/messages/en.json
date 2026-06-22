@@ -203,10 +203,10 @@
       "ocr": {
         "label": "OCR",
         "title": "Make your scans searchable",
-        "description": "A scanned PDF is just an image: you can neither search it nor copy its text. Compiled to WebAssembly, the in-house OCR runs right in your browser: it recognizes the characters and adds an invisible text layer over the image, without changing its appearance.",
+        "description": "A scanned PDF is just an image: you can neither search it nor copy its text. The in-house OCR, running server-side on our own infrastructure, recognizes the printed characters and adds an invisible text layer over the image, without changing its appearance.",
         "points": {
           "recognize": "Character recognition directly on scanned pages.",
-          "clientSide": "OCR and text extraction run client-side, in the browser (WebAssembly): your documents' content doesn't need to be sent to a server to be recognized.",
+          "serverSide": "OCR and text extraction are processed server-side, on our own engine: no third-party recognition service is involved.",
           "layer": "Invisible text layer overlaid on the image: the document looks identical to the eye, but becomes searchable.",
           "searchable": "Full-text search and copy-paste on documents that were only images.",
           "preserve": "The original image is fully preserved — OCR never alters the rendering."
@@ -215,11 +215,11 @@
       "privacy": {
         "label": "Sovereignty",
         "title": "Free, open source and privacy-respecting",
-        "description": "Because all processing runs on our own engine, your documents are never sent to a third-party service. OCR and text extraction run client-side, in your browser, and semantic search relies on embeddings computed locally on our servers: no external AI or OCR provider is ever involved.",
+        "description": "Because all processing runs on our own engine, your documents are never sent to a third-party service. OCR, text extraction and semantic search run on our own infrastructure: no external AI or OCR provider is ever involved.",
         "points": {
           "free": "Every engine capability is available in the free plan, with no watermark and no crippled version.",
           "oss": "Source-available code under the PolyForm Noncommercial license: audit it, study it, contribute.",
-          "clientSide": "OCR and text extraction run client-side (WebAssembly): recognition happens in your browser; only the extracted text is then stored, to make your documents searchable.",
+          "serverSide": "OCR and text extraction are processed server-side on our own engine: only the extracted text is then stored, to make your documents searchable.",
           "localAi": "Semantic search powered by fastembed locally: multilingual embeddings computed offline on our own infrastructure, with no third-party AI API.",
           "noThirdParty": "No external AI or OCR provider: processing stays end to end under our in-house engine.",
           "selfHost": "Self-hostable: install GigaPDF on your own servers to keep your documents at home."
@@ -227,80 +227,61 @@
       }
     },
     "ocrSection": {
-      "label": "OCR · Benchmark",
-      "title": "Recognition that's strong on clean print",
-      "description": "Our in-house OCR — a CRNN+CTC network quantized to int8, running client-side in WebAssembly — recognizes both print and handwriting, with no Tesseract binary and no model download at runtime. Measured by CER (Character Error Rate: lower is better), it is strong on clean print and decent on tidy handwriting.",
+      "label": "OCR · Coverage",
+      "title": "Strong recognition across many scripts",
+      "description": "Our in-house OCR is built on the PaddleOCR models (PP-OCRv3/v4) and runs server-side, on our own infrastructure, with no Tesseract binary and no third-party recognition service. It is designed for printed text and is strongest on Latin scripts.",
       "results": {
-        "label": "Measured results",
-        "title": "CER vs Tesseract 5.3.4",
-        "lead": "Character Error Rate on public test sets — the lower the value, the better the recognition.",
+        "label": "Supported scripts",
+        "title": "Scripts we recognize",
+        "lead": "A model family covering the world's major scripts — printed text.",
         "table": {
-          "script": "Script / test set",
-          "gigapdf": "GigaPDF",
-          "tesseract": "Tesseract 5.3.4",
-          "verdict": "Verdict"
+          "script": "Script",
+          "languages": "Languages / examples",
+          "verdict": "Status"
         },
         "rows": {
           "latin": {
-            "script": "Extended Latin + Cyrillic + Greek (print)",
-            "gigapdf": "0.119",
-            "tesseract": "0.258",
-            "verdict": "≈ 2.2× better"
+            "script": "Extended Latin",
+            "languages": "French, English, German, Spanish, Italian, Portuguese…",
+            "verdict": "Strongest"
+          },
+          "cyrillic": {
+            "script": "Cyrillic",
+            "languages": "Russian, Ukrainian…",
+            "verdict": "Supported"
           },
           "rtl": {
             "script": "Arabic / Hebrew (RTL)",
-            "gigapdf": "0.063",
-            "tesseract": "0.349",
-            "verdict": "≈ 5.5× better"
+            "languages": "Arabic; Hebrew (being finalized)",
+            "verdict": "Supported"
           },
-          "tamil": {
-            "script": "Tamil",
-            "gigapdf": "0.077",
-            "tesseract": "0.101",
-            "verdict": "Better"
-          },
-          "devanagari": {
-            "script": "Devanagari (Hindi…)",
-            "gigapdf": "0.078",
-            "tesseract": "0.089",
-            "verdict": "Better"
-          },
-          "bengali": {
-            "script": "Bengali",
-            "gigapdf": "0.097",
-            "tesseract": "0.073",
-            "verdict": "Competitive"
-          },
-          "handwriting": {
-            "script": "Latin handwriting (IAM test)",
-            "gigapdf": "0.309",
-            "tesseract": "0.353",
-            "verdict": "Better"
+          "indic": {
+            "script": "Indic scripts",
+            "languages": "Devanagari (Hindi…), Tamil, Telugu, Kannada",
+            "verdict": "Supported"
           },
           "cjk": {
-            "script": "Chinese (CJK, CASIA handwriting)",
-            "gigapdf": "0.206",
-            "tesseract": "—",
-            "verdict": "Handwriting recognized"
+            "script": "CJK",
+            "languages": "Simplified and Traditional Chinese, Japanese, Korean",
+            "verdict": "Supported"
           }
         },
-        "note": "Honest framing: a dependency-free OCR engine that's strong on clean print and decent on tidy handwriting; Bengali stays competitive. On very degraded, very dense scans, Tesseract's breadth still has the edge."
+        "note": "Honest framing: a dependency-free OCR engine, running server-side, designed for printed text and most accurate on Latin scripts. It does not handle handwriting. On very degraded or very dense scans, Tesseract's breadth can still have the edge."
       },
       "langs": {
         "label": "Language coverage",
         "title": "Supported languages and scripts",
-        "description": "A single model family, from print to handwriting, covering the world's major scripts.",
+        "description": "A single model family covering the world's major scripts, for printed text.",
         "chips": {
           "latin": "Extended Latin",
           "latinLangs": "FR · EN · DE · ES · PT · IT · PL · CS · TR · VI",
           "cyrillic": "Cyrillic (Russian, Ukrainian…)",
-          "greek": "Greek",
+          "rtl": "Arabic + Hebrew (RTL)",
           "tamil": "Tamil",
           "devanagari": "Devanagari (Hindi…)",
-          "bengali": "Bengali",
-          "rtl": "Arabic + Hebrew (RTL)",
-          "cjk": "Chinese (CJK)",
-          "both": "Print AND handwriting"
+          "indic": "Telugu · Kannada",
+          "cjk": "CJK (Simpl./Trad. Chinese, Japanese, Korean)",
+          "print": "Printed text"
         }
       },
       "restore": {
@@ -460,7 +441,7 @@
           "signature": "PKCS#7 digital signature with your P12 certificate — processed in memory, never stored",
           "encryption": "AES-256 encryption for documents, at rest and in transit",
           "pdfa": "PDF/A export for long-term legal archiving",
-          "ocr": "Built-in, fully in-house OCR: your scans — printed or handwritten — become searchable and copyable (Latin languages, accents included)"
+          "ocr": "Built-in, fully in-house OCR: your printed scans become searchable and copyable — Latin (accents included), Cyrillic, Arabic, Hebrew, Indic scripts and CJK"
         }
       },
       "formats": {
@@ -504,7 +485,7 @@
       },
       "ocr": {
         "title": "Searchable OCR",
-        "description": "The scan line turns images — printed or handwritten — into text."
+        "description": "The scan line turns printed images into text."
       },
       "formats": {
         "title": "9 Office formats",
@@ -1515,12 +1496,19 @@
       "modeTextHint": "Shows the recognized text, exportable as .txt",
       "modeSearchable": "Make the PDF searchable (invisible text)",
       "modeSearchableHint": "Adds an invisible text layer over scanned pages: the PDF becomes selectable and searchable",
-      "pagesIgnoredHint": "Page selection is automatic in searchable mode (pages without text)",
+      "modeEditable": "Edit the text (visible text)",
+      "modeEditableHint": "Masks the scanned text and lays real editable text on top: you can correct the recognized text in the editor",
+      "pagesIgnoredHint": "Page selection is automatic (pages without text)",
       "searchableProcessing": "Running OCR and inserting the text layer…",
       "searchableButton": "Make searchable",
       "searchableFailed": "Failed to generate the searchable PDF.",
+      "editableProcessing": "Running OCR, masking the background and inserting the text…",
+      "editableButton": "Make editable",
+      "editableFailed": "Failed to generate the editable PDF.",
       "appliedTitle": "OCR applied",
-      "appliedDescription": "An invisible text layer has been added: the document is now searchable."
+      "appliedDescription": "The recognized text has been added to the document.",
+      "appliedEditableTitle": "Editable OCR text applied",
+      "appliedEditableDescription": "The scanned text has been replaced with editable text: you can now correct it."
     },
     "redact": {
       "apply": "Apply redaction",
@@ -2143,10 +2131,10 @@
       },
       "processing": {
         "title": "Privacy by design",
-        "description": "GigaPDF is built around an in-house PDF engine (Rust compiled to WebAssembly) that runs mostly in your browser. Processing your documents' content is designed to stay local and private.",
+        "description": "GigaPDF is built around an in-house PDF engine that processes your documents on our own infrastructure, without relying on any third-party service. Processing your documents' content is designed to stay private.",
         "clientSide": {
-          "title": "Client-side OCR and text extraction",
-          "description": "Optical character recognition (OCR) and text extraction run directly in your browser via WebAssembly: the image or PDF does not have to be sent to a third-party recognition service. The extracted text is then transmitted and stored to make your documents searchable (full-text and semantic search), with the embeddings computed locally on our infrastructure."
+          "title": "OCR and text extraction on our infrastructure",
+          "description": "Optical character recognition (OCR) and text extraction run server-side, on our own infrastructure: the image or PDF is never sent to a third-party recognition service. The extracted text is then stored to make your documents searchable (full-text and semantic search), with the embeddings computed locally on our infrastructure."
         },
         "localAi": {
           "title": "Local semantic search, no third-party AI",
@@ -2154,7 +2142,7 @@
         },
         "noAiSubprocessor": {
           "title": "No AI or OCR subprocessor",
-          "description": "Because OCR runs client-side and embeddings are computed locally, we use no third-party artificial intelligence or text recognition provider."
+          "description": "Because OCR and embeddings run on our own infrastructure, we use no third-party artificial intelligence or text recognition provider."
         }
       },
       "dataCollected": {
@@ -2217,7 +2205,7 @@
         "description": "We never sell your personal data. We may share it only with:",
         "providers": {
           "title": "Our service providers",
-          "note": "We use no artificial intelligence or OCR provider: those operations stay client-side or local on our own infrastructure.",
+          "note": "We use no artificial intelligence or OCR provider: those operations stay on our own infrastructure.",
           "hosting": "Hosting and file storage (S3, France/EU)",
           "payment": "Payment processing",
           "email": "Transactional email delivery (our SMTP server)",
@@ -2456,7 +2444,7 @@
           "recognition": {
             "title": "OCR & search",
             "items": {
-              "ocr": "Multilingual OCR (Latin, Cyrillic, Greek, Arabic, Hebrew, Devanagari, Bengali, Tamil, Chinese) — in-house engine, no Tesseract",
+              "ocr": "Multilingual OCR (Latin, Cyrillic, Arabic, Hebrew, Devanagari, Tamil, Telugu, Kannada, Chinese, Japanese, Korean) — in-house engine, no Tesseract",
               "searchablePdf": "Make a scan searchable with an invisible text layer",
               "semanticSearch": "Semantic search across your documents, by meaning (embeddings + pgvector)",
               "fullTextSearch": "Full-text search on document name and content"

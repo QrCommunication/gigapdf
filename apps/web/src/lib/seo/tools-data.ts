@@ -384,7 +384,7 @@ export const TOOLS: ToolData[] = [
     h1: "OCR : extraire le texte de vos scans et images",
     intro: [
       "Un document composé uniquement d'images — un PDF scanné, mais aussi une photo de document ou un fichier JPG ou PNG — n'est qu'une suite de photographies de pages : impossible d'y rechercher un mot, de copier un paragraphe ou d'en extraire les montants. Tant que le texte n'est pas reconnu, le fichier reste muet pour vos outils — y compris pour la recherche de votre propre GED. La reconnaissance optique de caractères (OCR) transforme ces images en texte exploitable.",
-      "GigaPDF embarque son propre moteur de reconnaissance optique, qui charge par défaut l'ensemble de ses modèles : il lit non seulement le français, l'anglais, l'allemand, l'espagnol, l'italien, le portugais… mais aussi le cyrillique, le grec, l'arabe, l'hébreu, le tamoul, le devanagari, le bengali et le chinois — accents, cédilles et ligatures compris. Le moteur reste le plus solide sur les écritures latines, tout en prenant en charge les autres alphabets. Il s'applique aussi bien à un PDF scanné qu'à une image seule (JPG, PNG) ou à la photo d'un document : vous lancez l'OCR, le moteur analyse chaque page ou image et restitue le texte reconnu, prêt à être copié, exporté ou indexé.",
+      "GigaPDF embarque son propre moteur de reconnaissance optique, qui charge par défaut l'ensemble de ses modèles : il lit non seulement le français, l'anglais, l'allemand, l'espagnol, l'italien, le portugais… mais aussi le cyrillique, l'arabe, l'hébreu, le tamoul, le devanagari, le télougou, le kannada, le chinois (simplifié et traditionnel), le japonais et le coréen — accents, cédilles et ligatures compris. Le moteur est conçu pour le texte imprimé et reste le plus solide sur les écritures latines, tout en prenant en charge les autres alphabets. Il s'applique aussi bien à un PDF scanné qu'à une image seule (JPG, PNG) ou à la photo d'un document : vous lancez l'OCR, le moteur analyse chaque page ou image et restitue le texte reconnu, prêt à être copié, exporté ou indexé.",
       "L'OCR alimente directement le reste de la plateforme : une fois le document reconnu, la recherche plein texte de la GED le retrouve par son contenu, et l'outil de PDF cherchable peut incruster le texte en calque invisible sous l'image d'origine. Le tout fonctionne dans le plan gratuit, et sur votre propre serveur si vous auto-hébergez — un point décisif quand les documents et images scannés sont confidentiels.",
     ],
     howTo: {
@@ -398,7 +398,7 @@ export const TOOLS: ToolData[] = [
       ],
     },
     capabilities: [
-      "Moteur OCR maison multilingue (latin, cyrillique, grec, arabe, hébreu, écritures indiennes et chinois)",
+      "Moteur OCR maison multilingue (latin, cyrillique, arabe, hébreu, écritures indiennes et CJK)",
       "Prise en charge des PDF scannés comme des images seules (JPG, PNG, photos de documents)",
       "Reconnaissance fidèle des accents et caractères spéciaux du français",
       "Traitement page par page des documents et images multipages",
@@ -410,17 +410,17 @@ export const TOOLS: ToolData[] = [
       {
         question: "Quelles langues l'OCR de GigaPDF reconnaît-il ?",
         answer:
-          "Le moteur OCR charge l'ensemble de ses modèles par défaut : au-delà du français et de l'anglais, il reconnaît de nombreuses écritures — latine (allemand, espagnol, italien, portugais…), cyrillique, grecque, arabe, hébraïque, indiennes (tamoul, devanagari, bengali) et chinoise. Un contrat bilingue ou une facture mêlant plusieurs langues est traité en une seule passe, et les caractères accentués sont correctement restitués. Le moteur reste le plus précis sur les écritures latines.",
+          "Le moteur OCR charge l'ensemble de ses modèles par défaut : au-delà du français et de l'anglais, il reconnaît de nombreuses écritures — latine (allemand, espagnol, italien, portugais…), cyrillique, arabe, hébraïque, indiennes (tamoul, devanagari, télougou, kannada) et CJK (chinois simplifié et traditionnel, japonais, coréen). Un contrat bilingue ou une facture mêlant plusieurs langues est traité en une seule passe, et les caractères accentués sont correctement restitués. Le moteur est conçu pour le texte imprimé et reste le plus précis sur les écritures latines.",
       },
       {
         question: "Quelle qualité de scan ou d'image faut-il pour un bon résultat ?",
         answer:
-          "L'OCR donne d'excellents résultats sur des scans nets à 300 dpi, ou des photos bien éclairées et cadrées, qu'il s'agisse de texte imprimé ou d'écriture manuscrite soignée. Les documents inclinés, les photocopies de photocopies, les clichés flous ou les très petites tailles de caractères dégradent la reconnaissance ; mieux vaut numériser à plat, ou photographier bien à plat et en bonne résolution quand c'est possible.",
+          "L'OCR donne d'excellents résultats sur des scans nets à 300 dpi, ou des photos bien éclairées et cadrées d'un texte imprimé. Les documents inclinés, les photocopies de photocopies, les clichés flous ou les très petites tailles de caractères dégradent la reconnaissance ; mieux vaut numériser à plat, ou photographier bien à plat et en bonne résolution quand c'est possible.",
       },
       {
         question: "L'OCR reconnaît-il l'écriture manuscrite ?",
         answer:
-          "Oui. Le moteur embarque un modèle dédié à l'écriture manuscrite : un OCR sans dépendance tierce, solide sur l'imprimé net et correct sur du manuscrit soigné. La reconnaissance reste plus fiable sur une écriture soignée que sur un tracé très cursif ou négligé, et l'imprimé net donne toujours les meilleurs résultats — mais le manuscrit est bel et bien pris en charge.",
+          "Non. Le moteur est conçu pour le texte imprimé : il reconnaît les caractères dactylographiés sur de nombreuses écritures, mais ne traite pas l'écriture manuscrite. Pour un bon résultat, privilégiez des documents imprimés, scannés nets ou photographiés à plat et en bonne résolution.",
       },
       {
         question: "Que devient le document ou l'image d'origine après l'OCR ?",
@@ -447,7 +447,7 @@ export const TOOLS: ToolData[] = [
     h1: "Rendre un PDF scanné cherchable sans changer son apparence",
     intro: [
       "C'est la technique dite du « PDF sandwich » : l'image numérisée — un scan, mais aussi une photo de document ou une image (JPG, PNG) convertie en PDF — reste affichée telle quelle, et le texte reconnu par OCR est inséré en dessous, dans un calque invisible parfaitement aligné sur les mots de l'image. Visuellement, rien ne change — le tampon, la signature manuscrite et la mise en page d'origine restent intacts. Mais le document répond désormais à Ctrl+F, le texte se sélectionne à la souris et les lecteurs d'écran peuvent le lire.",
-      "GigaPDF construit ce calque à partir de son moteur OCR maison multilingue (latin, cyrillique, grec, arabe, hébreu, écritures indiennes et chinois) : chaque mot reconnu est positionné aux coordonnées exactes où il apparaît dans l'image, si bien qu'une recherche surligne le bon endroit de la page et qu'un copier-coller suit l'ordre de lecture. C'est la différence avec un simple export texte, qui perd toute correspondance avec la page.",
+      "GigaPDF construit ce calque à partir de son moteur OCR maison multilingue (latin, cyrillique, arabe, hébreu, écritures indiennes et CJK) : chaque mot reconnu est positionné aux coordonnées exactes où il apparaît dans l'image, si bien qu'une recherche surligne le bon endroit de la page et qu'un copier-coller suit l'ordre de lecture. C'est la différence avec un simple export texte, qui perd toute correspondance avec la page.",
       "Pour une GED, c'est l'étape qui change tout : un fonds documentaire scanné devient interrogeable en texte intégral. Combinée à la recherche plein texte de GigaPDF, la sandwich-isation transforme des années d'archives papier numérisées en base documentaire réellement consultable — sur le cloud ou sur votre propre serveur en auto-hébergement.",
     ],
     howTo: {
@@ -465,7 +465,7 @@ export const TOOLS: ToolData[] = [
       "Apparence du document strictement inchangée : tampons et signatures visibles conservés",
       "Recherche Ctrl+F fonctionnelle dans toutes les visionneuses PDF",
       "Sélection et copier-coller du texte directement sur le scan",
-      "Reconnaissance OCR maison multilingue (latin, cyrillique, grec, arabe, hébreu, écritures indiennes et chinois)",
+      "Reconnaissance OCR maison multilingue (latin, cyrillique, arabe, hébreu, écritures indiennes et CJK)",
       "Indexation automatique dans la recherche plein texte de la GED GigaPDF",
     ],
     faq: [

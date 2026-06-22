@@ -83,24 +83,20 @@ const SECTIONS: ReadonlyArray<{
   { key: "security", icon: ShieldCheck, points: ["encryption", "signature", "tamper", "archive"] },
   { key: "html", icon: Globe, points: ["css", "fonts", "js", "noThirdParty"] },
   { key: "convert", icon: FileType2, points: ["office", "editable", "web", "fidelity"] },
-  { key: "ocr", icon: ScanText, points: ["recognize", "clientSide", "layer", "searchable", "preserve"] },
-  { key: "privacy", icon: FileSignature, points: ["free", "oss", "clientSide", "localAi", "noThirdParty", "selfHost"] },
+  { key: "ocr", icon: ScanText, points: ["recognize", "serverSide", "layer", "searchable", "preserve"] },
+  { key: "privacy", icon: FileSignature, points: ["free", "oss", "serverSide", "localAi", "noThirdParty", "selfHost"] },
 ] as const;
 
 /**
- * Lignes de la table comparative CER (Character Error Rate, plus bas = mieux)
- * face à Tesseract 5.3.4. L'ordre fait foi : on ouvre sur nos plus larges
- * écarts puis on termine sur les cas honnêtes (compétitif / manuscrit CJK).
- * Chaque clé mappe engine.ocrSection.results.rows.<key>.{script,gigapdf,
- * tesseract,verdict}. `win` pilote l'accent visuel quand GigaPDF l'emporte.
+ * Lignes de la table de couverture des écritures (texte imprimé).
+ * Chaque clé mappe engine.ocrSection.results.rows.<key>.{script,languages,
+ * verdict}. `win` met en avant l'écriture la plus solide (latin).
  */
 const OCR_RESULT_ROWS: ReadonlyArray<{ key: string; win: boolean }> = [
   { key: "latin", win: true },
-  { key: "rtl", win: true },
-  { key: "tamil", win: true },
-  { key: "devanagari", win: true },
-  { key: "bengali", win: false },
-  { key: "handwriting", win: true },
+  { key: "cyrillic", win: false },
+  { key: "rtl", win: false },
+  { key: "indic", win: false },
   { key: "cjk", win: false },
 ] as const;
 
@@ -109,13 +105,12 @@ const OCR_LANG_CHIPS: readonly string[] = [
   "latin",
   "latinLangs",
   "cyrillic",
-  "greek",
+  "rtl",
   "tamil",
   "devanagari",
-  "bengali",
-  "rtl",
+  "indic",
   "cjk",
-  "both",
+  "print",
 ] as const;
 
 /** Étapes du front-end de restauration automatique (engine.ocrSection.restore.steps.<key>). */
@@ -272,11 +267,8 @@ export default async function EnginePage({ params }: EnginePageProps) {
                         <th scope="col" className="p-4 font-semibold">
                           {t("ocrSection.results.table.script")}
                         </th>
-                        <th scope="col" className="p-4 text-right font-semibold text-primary">
-                          {t("ocrSection.results.table.gigapdf")}
-                        </th>
-                        <th scope="col" className="p-4 text-right font-semibold text-muted-foreground">
-                          {t("ocrSection.results.table.tesseract")}
+                        <th scope="col" className="p-4 font-semibold">
+                          {t("ocrSection.results.table.languages")}
                         </th>
                         <th scope="col" className="hidden p-4 font-semibold sm:table-cell">
                           {t("ocrSection.results.table.verdict")}
@@ -288,19 +280,14 @@ export default async function EnginePage({ params }: EnginePageProps) {
                         <tr key={key} className="border-t border-border">
                           <th
                             scope="row"
-                            className="p-4 text-left align-top font-normal leading-relaxed"
-                          >
-                            {t(`ocrSection.results.rows.${key}.script`)}
-                          </th>
-                          <td
-                            className={`p-4 text-right tabular-nums ${
+                            className={`p-4 text-left align-top leading-relaxed ${
                               win ? "font-semibold text-primary" : "font-medium"
                             }`}
                           >
-                            {t(`ocrSection.results.rows.${key}.gigapdf`)}
-                          </td>
-                          <td className="p-4 text-right tabular-nums text-muted-foreground">
-                            {t(`ocrSection.results.rows.${key}.tesseract`)}
+                            {t(`ocrSection.results.rows.${key}.script`)}
+                          </th>
+                          <td className="p-4 align-top leading-relaxed text-muted-foreground">
+                            {t(`ocrSection.results.rows.${key}.languages`)}
                           </td>
                           <td className="hidden p-4 align-top sm:table-cell">
                             <span
