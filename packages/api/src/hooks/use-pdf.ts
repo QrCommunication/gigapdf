@@ -374,6 +374,24 @@ export const useMakeSearchablePdf = () => {
 };
 
 /**
+ * Run OCR and produce an EDITABLE PDF: each scanned text zone is masked with its
+ * local background colour and a real, visible OCR text run is laid on top, so the
+ * recognized text can be edited in the editor. Returns the modified PDF Blob +
+ * pages/words/masks stats.
+ */
+export const useMakeEditableOcrPdf = () => {
+  return useMutation({
+    mutationFn: ({
+      file,
+      options,
+    }: {
+      file: File | Blob;
+      options?: Parameters<typeof pdfService.makeEditableOcrPdf>[1];
+    }) => pdfService.makeEditableOcrPdf(file, options),
+  });
+};
+
+/**
  * Compress a PDF (native normalisation + garbage collection).
  * Resolves with the compressed Blob and the before/after sizes in bytes.
  */

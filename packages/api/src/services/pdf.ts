@@ -944,6 +944,47 @@ export const pdfService = {
   },
 
   /**
+   * Run OCR and produce an EDITABLE PDF (output="editable" on /api/pdf/ocr):
+   * each scanned text zone is masked with its local background colour and a
+   * real, visible OCR text run is laid on top — so the recognized text can be
+   * edited in the editor without the scanned image showing through. Only pages
+   * without extractable text are processed unless force=true.
+   */
+  makeEditableOcrPdf: async (
+    file: File | Blob,
+    options: {
+      lang?: string;
+      dpi?: 144 | 200 | 300;
+      force?: boolean;
+    } = {},
+  ): Promise<EditableOcrPdfResult> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+    form.append('output', 'editable');
+    if (options.lang) form.append('lang', options.lang);
+    if (options.dpi) form.append('dpi', String(options.dpi));
+    if (options.force) form.append('force', 'true');
+
+    const response = await fetch('/api/pdf/ocr', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+
+    const blob = await handleBlobResponse(response);
+    const pagesProcessed = Number(response.headers.get('X-Ocr-Pages-Processed'));
+    const wordsAdded = Number(response.headers.get('X-Ocr-Words-Added'));
+    const masksAdded = Number(response.headers.get('X-Ocr-Masks-Added'));
+
+    return {
+      blob,
+      pagesProcessed: Number.isFinite(pagesProcessed) ? pagesProcessed : 0,
+      wordsAdded: Number.isFinite(wordsAdded) ? wordsAdded : 0,
+      masksAdded: Number.isFinite(masksAdded) ? masksAdded : 0,
+    };
+  },
+
+  /**
    * Convert a PDF to PDF/A (archival format).
    */
   convertToPdfA: async (
@@ -979,6 +1020,18 @@ export interface SearchablePdfResult {
   blob: Blob;
   pagesProcessed: number;
   wordsAdded: number;
+}
+
+/**
+ * Result of makeEditableOcrPdf — PDF whose scanned text zones are masked and
+ * overlaid with real, editable OCR text.
+ */
+export interface EditableOcrPdfResult {
+  blob: Blob;
+  pagesProcessed: number;
+  wordsAdded: number;
+  /** Number of background masks painted (one per recognized line). */
+  masksAdded: number;
 }
 
 /**

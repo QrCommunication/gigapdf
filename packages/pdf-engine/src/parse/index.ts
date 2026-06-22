@@ -30,7 +30,7 @@ export { getMetadataRobust } from './metadata-robust';
 export { ocrPdf, isOcrAvailable, OcrUnavailableError } from './ocr';
 export type { OcrOptions, OcrPageResult, OcrResult } from './ocr';
 
-export { makeSearchablePdf, ocrWordToPdfPlacement } from './ocr-searchable';
+export { makeSearchablePdf, ocrWordToPdfPlacement, ensureOcrModels } from './ocr-searchable';
 export type {
   MakeSearchablePdfOptions,
   MakeSearchablePdfResult,
@@ -38,6 +38,12 @@ export type {
   PdfPlacementContext,
   PdfWordPlacement,
 } from './ocr-searchable';
+
+export { makeEditableOcrPdf, sampleBackgroundColor } from './ocr-editable';
+export type {
+  MakeEditableOcrPdfOptions,
+  MakeEditableOcrPdfResult,
+} from './ocr-editable';
 
 export { extractOcrBlocks, ocrWordToPdfBox, pdfBoxToImageRect } from './ocr-blocks';
 export type {

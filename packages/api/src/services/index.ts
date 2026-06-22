@@ -34,4 +34,5 @@ export type {
   ApplyElementsOperation,
   CompressPdfResult,
   SearchablePdfResult,
+  EditableOcrPdfResult,
 } from './pdf';

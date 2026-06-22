@@ -54,6 +54,7 @@ export type {
   ApplyElementsOperation,
   CompressPdfResult,
   SearchablePdfResult,
+  EditableOcrPdfResult,
 } from './services';
 
 // Hooks
@@ -215,6 +216,7 @@ export {
   useSignPdf,
   useOcrPdf,
   useMakeSearchablePdf,
+  useMakeEditableOcrPdf,
   useCompressPdf,
   useIsOcrAvailable,
   useConvertToPdfA,

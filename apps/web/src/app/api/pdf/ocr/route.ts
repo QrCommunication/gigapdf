@@ -5,7 +5,7 @@
  *
  * Form fields (multipart/form-data):
  *   file       — PDF file (required)
- *   output     — "text" (default) | "searchable"
+ *   output     — "text" (default) | "searchable" | "editable"
  *                "text"       → JSON with the extracted text per page
  *                "searchable" → PDF binary with an INVISIBLE text layer
  *                               drawn over every image-only page (the PDF
@@ -13,6 +13,12 @@
  *                               ignored in this mode — page selection is
  *                               automatic (pages without extractable text,
  *                               or all pages with force=true).
+ *                "editable"   → PDF binary where each scanned text zone is
+ *                               masked with its local background colour and a
+ *                               REAL (visible, editable) OCR text run is laid on
+ *                               top — so the recognized text can be edited in
+ *                               the editor without the scan showing through.
+ *                               `pages` is ignored (automatic selection).
  *   pages      — JSON array of 1-based page numbers (optional, default all;
  *                output="text" only)
  *   lang       — OCR language hint (default "fra+eng"; output="text" only,
@@ -20,7 +26,7 @@
  *   dpi        — 144 | 200 | 300 (default 144)
  *   format     — "text" | "hocr" (default "text"; output="text" only)
  *   force      — "true" to OCR every page even those that already contain
- *                extractable text (output="searchable" only)
+ *                extractable text (output="searchable"/"editable" only)
  *
  * Returns (output="text") JSON:
  *   {
@@ -29,9 +35,10 @@
  *     fullText: string
  *   }
  *
- * Returns (output="searchable") the PDF binary (application/pdf) with:
+ * Returns (output="searchable"|"editable") the PDF binary (application/pdf) with:
  *   X-Ocr-Pages-Processed — number of pages that went through OCR
- *   X-Ocr-Words-Added     — number of invisible words written
+ *   X-Ocr-Words-Added     — number of OCR words written
+ *   X-Ocr-Masks-Added     — number of background masks painted (editable only)
  *
  * Returns 503 if the OCR engine is unavailable.
  */
@@ -40,6 +47,7 @@ import { NextResponse } from 'next/server';
 import {
   ocrPdf,
   makeSearchablePdf,
+  makeEditableOcrPdf,
   OcrUnavailableError,
   isOcrAvailable,
 } from '@giga-pdf/pdf-engine';
@@ -79,10 +87,11 @@ export async function POST(request: Request): Promise<Response> {
 
     const output = ((formData.get('output') as string | null) ?? 'text') as
       | 'text'
-      | 'searchable';
-    if (output !== 'text' && output !== 'searchable') {
+      | 'searchable'
+      | 'editable';
+    if (output !== 'text' && output !== 'searchable' && output !== 'editable') {
       return NextResponse.json(
-        { success: false, error: 'output must be "text" or "searchable".' },
+        { success: false, error: 'output must be "text", "searchable" or "editable".' },
         { status: 400 },
       );
     }
@@ -95,25 +104,30 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    // ─── Searchable output: invisible text layer, PDF binary response ──────
-    if (output === 'searchable') {
+    // ─── Searchable / editable output: PDF binary response ─────────────────
+    //  searchable → invisible text layer (appearance preserved)
+    //  editable   → scan masked + real visible text laid on top (editable)
+    if (output === 'searchable' || output === 'editable') {
       const force = (formData.get('force') as string | null) === 'true';
       const arrayBuffer = await file.arrayBuffer();
-      const result = await makeSearchablePdf(new Uint8Array(arrayBuffer), {
-        dpi: dpi as 144 | 200 | 300,
-        force,
-      });
+      const bytes = new Uint8Array(arrayBuffer);
+      const result =
+        output === 'editable'
+          ? await makeEditableOcrPdf(bytes, { dpi: dpi as 144 | 200 | 300, force })
+          : await makeSearchablePdf(bytes, { dpi: dpi as 144 | 200 | 300, force });
 
-      return new Response(Buffer.from(result.bytes), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/pdf',
-          'Content-Disposition': sanitizeContentDisposition(file.name),
-          'Content-Length': String(result.bytes.byteLength),
-          'X-Ocr-Pages-Processed': String(result.pagesProcessed),
-          'X-Ocr-Words-Added': String(result.wordsAdded),
-        },
-      });
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': sanitizeContentDisposition(file.name),
+        'Content-Length': String(result.bytes.byteLength),
+        'X-Ocr-Pages-Processed': String(result.pagesProcessed),
+        'X-Ocr-Words-Added': String(result.wordsAdded),
+      };
+      if ('masksAdded' in result) {
+        headers['X-Ocr-Masks-Added'] = String(result.masksAdded);
+      }
+
+      return new Response(Buffer.from(result.bytes), { status: 200, headers });
     }
 
     let pages: number[] | undefined;

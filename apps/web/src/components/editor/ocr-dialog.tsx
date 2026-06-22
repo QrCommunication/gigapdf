@@ -6,6 +6,7 @@ import { X, Loader2, ScanText, Download, AlertCircle } from "lucide-react";
 import {
   useOcrPdf,
   useMakeSearchablePdf,
+  useMakeEditableOcrPdf,
   useIsOcrAvailable,
   downloadBlob,
 } from "@giga-pdf/api";
@@ -25,8 +26,12 @@ export interface OcrDialogProps {
 
 type Lang = "fra+eng" | "fra" | "eng";
 type Dpi = 144 | 200 | 300;
-/** "text" extracts plain text; "searchable" bakes an invisible text layer. */
-type OutputMode = "text" | "searchable";
+/**
+ * "text" extracts plain text; "searchable" bakes an invisible text layer
+ * (appearance preserved); "editable" masks the scan and lays REAL editable text
+ * on top so the recognized text can be corrected in the editor.
+ */
+type OutputMode = "text" | "searchable" | "editable";
 
 const LANGS: { value: Lang; label: string }[] = [
   { value: "fra+eng", label: "Français + Anglais" },
@@ -35,11 +40,15 @@ const LANGS: { value: Lang; label: string }[] = [
 ];
 
 /**
- * OcrDialog — run OCR on the current PDF. Two output modes:
+ * OcrDialog — run OCR on the current PDF. Three output modes:
  *   - "text" (historical): extracted text shown inline, downloadable .txt
  *   - "searchable": the OCR words are written back into the PDF as an
  *     INVISIBLE text layer (opacity 0) so scanned pages become selectable
- *     and searchable. The result replaces the live document via onApplied.
+ *     and searchable. The page appearance is preserved.
+ *   - "editable": each scanned text zone is masked with its local background
+ *     colour and a REAL, visible OCR text run is laid on top, so the recognized
+ *     text can be edited in the editor (no scan showing through).
+ * The "searchable"/"editable" results replace the live document via onApplied.
  * Higher DPI (200/300) takes longer but recovers low-resolution scans better.
  */
 export function OcrDialog({
@@ -57,6 +66,7 @@ export function OcrDialog({
 
   const ocr = useOcrPdf();
   const makeSearchable = useMakeSearchablePdf();
+  const makeEditable = useMakeEditableOcrPdf();
   const availabilityCheck = useIsOcrAvailable();
   const [available, setAvailable] = useState<boolean | null>(null);
 
@@ -77,6 +87,7 @@ export function OcrDialog({
     if (!open) {
       ocr.reset();
       makeSearchable.reset();
+      makeEditable.reset();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -97,27 +108,27 @@ export function OcrDialog({
     return out.size > 0 ? Array.from(out).sort((a, b) => a - b) : undefined;
   };
 
-  const busy = ocr.isPending || makeSearchable.isPending;
+  const busy = ocr.isPending || makeSearchable.isPending || makeEditable.isPending;
+  /** Both binary modes (searchable/editable) bake an OCR PDF the editor adopts. */
+  const isBinaryMode = outputMode === "searchable" || outputMode === "editable";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentFile || available === false || busy) return;
 
-    if (outputMode === "searchable") {
-      const result = await makeSearchable.mutateAsync({
-        file: currentFile,
-        options: { lang, dpi },
-      });
+    if (isBinaryMode) {
+      const result =
+        outputMode === "editable"
+          ? await makeEditable.mutateAsync({ file: currentFile, options: { lang, dpi } })
+          : await makeSearchable.mutateAsync({ file: currentFile, options: { lang, dpi } });
       if (onApplied) {
-        // Hand the searchable binary to the editor so it replaces the live
-        // document (and gets persisted), exactly like the watermark flow.
+        // Hand the OCR'd binary to the editor so it replaces the live document
+        // (and gets persisted + re-parsed), exactly like the watermark flow.
         onApplied(result.blob);
         onClose();
       } else {
-        downloadBlob(
-          result.blob,
-          baseFilename.replace(/\.pdf$/i, "") + ".searchable.pdf",
-        );
+        const suffix = outputMode === "editable" ? ".editable.pdf" : ".searchable.pdf";
+        downloadBlob(result.blob, baseFilename.replace(/\.pdf$/i, "") + suffix);
         onClose();
       }
       return;
@@ -203,6 +214,11 @@ export function OcrDialog({
                       label: t("modeSearchable"),
                       hint: t("modeSearchableHint"),
                     },
+                    {
+                      value: "editable",
+                      label: t("modeEditable"),
+                      hint: t("modeEditableHint"),
+                    },
                   ] as const
                 ).map((option) => (
                   <label
@@ -272,10 +288,8 @@ export function OcrDialog({
                 value={pagesInput}
                 onChange={(e) => setPagesInput(e.target.value)}
                 placeholder="1-3, 5"
-                disabled={outputMode === "searchable"}
-                title={
-                  outputMode === "searchable" ? t("pagesIgnoredHint") : undefined
-                }
+                disabled={isBinaryMode}
+                title={isBinaryMode ? t("pagesIgnoredHint") : undefined}
                 className="w-full px-2 py-1.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
               />
             </div>
@@ -283,6 +297,11 @@ export function OcrDialog({
               {makeSearchable.isPending && (
                 <p className="text-xs text-muted-foreground">
                   {t("searchableProcessing")}
+                </p>
+              )}
+              {makeEditable.isPending && (
+                <p className="text-xs text-muted-foreground">
+                  {t("editableProcessing")}
                 </p>
               )}
               <button
@@ -293,7 +312,9 @@ export function OcrDialog({
                 {busy && <Loader2 size={14} className="animate-spin" />}
                 {outputMode === "searchable"
                   ? t("searchableButton")
-                  : "Lancer l'OCR"}
+                  : outputMode === "editable"
+                    ? t("editableButton")
+                    : "Lancer l'OCR"}
               </button>
             </div>
           </form>
@@ -309,6 +330,11 @@ export function OcrDialog({
           {makeSearchable.isError && (
             <p className="text-sm text-destructive">
               {(makeSearchable.error as Error)?.message ?? t("searchableFailed")}
+            </p>
+          )}
+          {makeEditable.isError && (
+            <p className="text-sm text-destructive">
+              {(makeEditable.error as Error)?.message ?? t("editableFailed")}
             </p>
           )}
           {ocr.data && (
