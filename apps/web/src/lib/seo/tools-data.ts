@@ -125,6 +125,7 @@ export const TOOLS: ToolData[] = [
     slug: "fusionner-pdf",
     name: "Fusionner des PDF",
     category: "organize",
+    appHref: "/merge",
     metaTitle: "Fusionner des PDF en ligne gratuitement | GigaPDF",
     metaDescription:
       "Combinez plusieurs PDF en un seul fichier, dans l'ordre de votre choix. Outil gratuit, sans filigrane ajouté, open source et auto-hébergeable.",
@@ -187,6 +188,7 @@ export const TOOLS: ToolData[] = [
     slug: "diviser-pdf",
     name: "Diviser un PDF",
     category: "organize",
+    appHref: "/split",
     metaTitle: "Diviser un PDF : extraire des pages en ligne | GigaPDF",
     metaDescription:
       "Découpez un PDF en plusieurs fichiers ou extrayez les pages utiles. Sélection visuelle par miniatures, gratuit et open source.",
@@ -249,6 +251,7 @@ export const TOOLS: ToolData[] = [
     slug: "compresser-pdf",
     name: "Compresser un PDF",
     category: "edit",
+    appHref: "/compress",
     metaTitle: "Compresser un PDF en ligne gratuitement | GigaPDF",
     metaDescription:
       "Réduisez le poids de vos PDF sans sacrifier la lisibilité : nettoyage de structure et optimisation web par le moteur maison. Gratuit et open source.",
@@ -311,6 +314,7 @@ export const TOOLS: ToolData[] = [
     slug: "signer-pdf",
     name: "Signer un PDF",
     category: "secure",
+    appHref: "/sign",
     metaTitle: "Signature électronique de PDF (PKCS#7) | GigaPDF",
     metaDescription:
       "Signez vos PDF avec un vrai certificat numérique P12/PFX : signature PKCS#7 vérifiable dans Adobe Reader. Gratuit, open source, auto-hébergeable.",
@@ -378,6 +382,7 @@ export const TOOLS: ToolData[] = [
     slug: "ocr-pdf",
     name: "OCR PDF",
     category: "ocr",
+    appHref: "/ocr",
     metaTitle: "OCR en ligne : scans et images vers texte | GigaPDF",
     metaDescription:
       "OCR en ligne sur vos PDF scannés et images : rendez votre contenu cherchable et copiable. Reconnaissance multilingue, gratuite et open source.",
@@ -503,6 +508,7 @@ export const TOOLS: ToolData[] = [
     slug: "proteger-pdf",
     name: "Protéger un PDF",
     category: "secure",
+    appHref: "/protect",
     metaTitle: "Protéger un PDF : mot de passe et chiffrement | GigaPDF",
     metaDescription:
       "Chiffrez vos PDF en AES-256 ou AES-128 et contrôlez impression, copie et modification. Protection par mot de passe gratuite et open source.",
@@ -566,6 +572,7 @@ export const TOOLS: ToolData[] = [
     slug: "filigrane-pdf",
     name: "Filigrane PDF",
     category: "edit",
+    appHref: "/watermark",
     metaTitle: "Ajouter un filigrane à un PDF en ligne | GigaPDF",
     metaDescription:
       "Apposez un filigrane texte ou image (logo) sur toutes les pages d'un PDF : CONFIDENTIEL, BROUILLON, marque… Gratuit et open source.",
@@ -628,6 +635,7 @@ export const TOOLS: ToolData[] = [
     slug: "organiser-pages-pdf",
     name: "Organiser les pages",
     category: "organize",
+    appHref: "/organize-pages",
     metaTitle: "Organiser un PDF : trier et pivoter les pages | GigaPDF",
     metaDescription:
       "Réordonnez, faites pivoter, supprimez ou extrayez les pages d'un PDF par glisser-déposer sur miniatures. Gratuit, open source, auto-hébergeable.",
@@ -876,6 +884,7 @@ export const TOOLS: ToolData[] = [
     slug: "word-vers-pdf",
     name: "Word vers PDF",
     category: "convert",
+    appHref: "/office-to-pdf",
     metaTitle: "Convertir Word en PDF (.doc, .docx, .odt) | GigaPDF",
     metaDescription:
       "Convertissez vos documents Word et ODT en PDF fidèles : .docx, anciens .doc et .odt. Gratuit, open source, sans filigrane.",
@@ -938,6 +947,7 @@ export const TOOLS: ToolData[] = [
     slug: "excel-vers-pdf",
     name: "Excel vers PDF",
     category: "convert",
+    appHref: "/office-to-pdf",
     metaTitle: "Convertir Excel en PDF (.xls, .xlsx, .ods) | GigaPDF",
     metaDescription:
       "Convertissez vos classeurs Excel et ODS en PDF propres et imprimables : .xlsx, anciens .xls et .ods. Gratuit et open source.",
@@ -1000,6 +1010,7 @@ export const TOOLS: ToolData[] = [
     slug: "powerpoint-vers-pdf",
     name: "PowerPoint vers PDF",
     category: "convert",
+    appHref: "/office-to-pdf",
     metaTitle: "Convertir PowerPoint en PDF (.ppt, .pptx, .odp) | GigaPDF",
     metaDescription:
       "Convertissez vos présentations PowerPoint et ODP en PDF fidèles : .pptx, anciens .ppt et .odp. Gratuit, open source, sans filigrane.",
@@ -1062,6 +1073,7 @@ export const TOOLS: ToolData[] = [
     slug: "opendocument-pdf",
     name: "OpenDocument et PDF",
     category: "convert",
+    appHref: "/office-to-pdf",
     metaTitle: "Convertir OpenDocument en PDF (ODT, ODS, ODP) | GigaPDF",
     metaDescription:
       "Convertissez ODT, ODS et ODP en PDF, et repassez du PDF vers ODT ou ODP. Le pont OpenDocument ↔ PDF, gratuit et open source.",
@@ -1248,6 +1260,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-a",
     name: "PDF/A",
     category: "organize",
+    appHref: "/pdf-a",
     metaTitle: "Convertir en PDF/A : archivage conforme | GigaPDF",
     metaDescription:
       "Convertissez vos PDF au format d'archivage PDF/A-1b ou PDF/A-2b, conforme ISO 19005. Outil gratuit, open source et auto-hébergeable.",
@@ -1379,6 +1392,7 @@ export const TOOLS: ToolData[] = [
     slug: "image-vers-pdf",
     name: "Image vers PDF",
     category: "convert",
+    appHref: "/image-to-pdf",
     metaTitle: "Convertir une image en PDF (JPG, PNG, WebP) | GigaPDF",
     metaDescription:
       "Convertissez vos images JPG, PNG, WebP, GIF et AVIF en PDF : une ou plusieurs images réunies en un PDF multipage. Gratuit et open source.",
@@ -1441,6 +1455,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-vers-image",
     name: "PDF vers image",
     category: "convert",
+    appHref: "/pdf-to-image",
     metaTitle: "Convertir un PDF en image (PNG, JPG) | GigaPDF",
     metaDescription:
       "Exportez chaque page d'un PDF en image PNG ou JPG : vignettes, illustrations, aperçus. Conversion gratuite, open source, sans filigrane.",
@@ -1813,6 +1828,7 @@ export const TOOLS: ToolData[] = [
     slug: "deverrouiller-pdf",
     name: "Déverrouiller un PDF",
     category: "secure",
+    appHref: "/unlock",
     metaTitle: "Déverrouiller un PDF : retirer le mot de passe | GigaPDF",
     metaDescription:
       "Retirez le mot de passe d'un PDF que vous connaissez : déchiffrement et suppression de la protection. Gratuit, open source, auto-hébergeable.",
