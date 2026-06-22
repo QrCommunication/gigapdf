@@ -90,6 +90,7 @@ export const TOOLS: ToolData[] = [
     slug: "merge-pdf",
     name: "Merge PDF",
     category: "organize",
+    appHref: "/merge",
     metaTitle: "Merge PDF Files Online Free | GigaPDF",
     metaDescription:
       "Combine several PDFs into one file, in the order you choose. Free, no added watermark, pages copied without recompression. Open source.",
@@ -152,6 +153,7 @@ export const TOOLS: ToolData[] = [
     slug: "split-pdf",
     name: "Split PDF",
     category: "organize",
+    appHref: "/split",
     metaTitle: "Split PDF: Extract Pages Online Free | GigaPDF",
     metaDescription:
       "Cut a PDF into separate files or pull out just the pages you need. Visual thumbnail selection, free and open source.",
@@ -214,6 +216,7 @@ export const TOOLS: ToolData[] = [
     slug: "compress-pdf",
     name: "Compress PDF",
     category: "edit",
+    appHref: "/compress",
     metaTitle: "Compress PDF Online Free — Reduce File Size | GigaPDF",
     metaDescription:
       "Shrink heavy PDFs without wrecking them: the in-house engine strips unused objects and linearizes for fast web viewing. Free and open source.",
@@ -276,6 +279,7 @@ export const TOOLS: ToolData[] = [
     slug: "sign-pdf",
     name: "Sign PDF",
     category: "secure",
+    appHref: "/sign",
     metaTitle: "Sign PDF with Digital Certificate (PKCS#7) | GigaPDF",
     metaDescription:
       "Sign PDFs with a real P12/PFX digital certificate: PKCS#7 signatures verifiable in Adobe Reader. Free, open source, self-hostable.",
@@ -343,6 +347,7 @@ export const TOOLS: ToolData[] = [
     slug: "ocr-pdf",
     name: "OCR PDF",
     category: "ocr",
+    appHref: "/ocr",
     metaTitle: "OCR Online: Scans and Images to Text | GigaPDF",
     metaDescription:
       "Online OCR for scanned PDFs and images: make text searchable and copyable. Multilingual, free, and open-source recognition that keeps your layout.",
@@ -468,6 +473,7 @@ export const TOOLS: ToolData[] = [
     slug: "protect-pdf",
     name: "Protect PDF",
     category: "secure",
+    appHref: "/protect",
     metaTitle: "Password Protect PDF Online (AES-256) | GigaPDF",
     metaDescription:
       "Encrypt PDFs with AES-256 or AES-128 and control printing, copying, and editing. Free password protection, open source.",
@@ -531,6 +537,7 @@ export const TOOLS: ToolData[] = [
     slug: "watermark-pdf",
     name: "Watermark PDF",
     category: "edit",
+    appHref: "/watermark",
     metaTitle: "Add a Watermark to PDF Online Free | GigaPDF",
     metaDescription:
       "Stamp a text or image watermark (CONFIDENTIAL, DRAFT, your logo) on every page of a PDF. Free, open source, no ads on your files.",
@@ -593,6 +600,7 @@ export const TOOLS: ToolData[] = [
     slug: "organize-pdf-pages",
     name: "Organize Pages",
     category: "organize",
+    appHref: "/organize-pages",
     metaTitle: "Organize PDF Pages: Reorder & Rotate Free | GigaPDF",
     metaDescription:
       "Reorder, rotate, delete, or extract PDF pages by dragging thumbnails. Free, open source, and self-hostable.",
@@ -841,6 +849,7 @@ export const TOOLS: ToolData[] = [
     slug: "word-to-pdf",
     name: "Word to PDF",
     category: "convert",
+    appHref: "/office-to-pdf",
     metaTitle: "Convert Word to PDF Online (.doc, .docx) | GigaPDF",
     metaDescription:
       "Convert Word documents to faithful PDFs with the in-house engine: modern .docx and legacy .doc. Free, open source, no watermark.",
@@ -903,6 +912,7 @@ export const TOOLS: ToolData[] = [
     slug: "excel-to-pdf",
     name: "Excel to PDF",
     category: "convert",
+    appHref: "/office-to-pdf",
     metaTitle: "Convert Excel to PDF Online (.xls, .xlsx) | GigaPDF",
     metaDescription:
       "Turn Excel workbooks into clean, printable PDFs with the in-house engine: .xlsx and legacy .xls. Free, open source conversion.",
@@ -965,6 +975,7 @@ export const TOOLS: ToolData[] = [
     slug: "powerpoint-to-pdf",
     name: "PowerPoint to PDF",
     category: "convert",
+    appHref: "/office-to-pdf",
     metaTitle: "Convert PowerPoint to PDF (.ppt, .pptx) | GigaPDF",
     metaDescription:
       "Convert PowerPoint decks to faithful PDFs with the in-house engine: .pptx and legacy .ppt. Free, open source, no watermark.",
@@ -1027,6 +1038,7 @@ export const TOOLS: ToolData[] = [
     slug: "opendocument-pdf",
     name: "OpenDocument & PDF",
     category: "convert",
+    appHref: "/office-to-pdf",
     metaTitle: "Convert OpenDocument to PDF (ODT, ODS, ODP) | GigaPDF",
     metaDescription:
       "Convert ODT, ODS, and ODP to PDF — and go back from PDF to ODT or ODP. The OpenDocument-to-PDF bridge, free and open source.",
@@ -1213,6 +1225,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-a",
     name: "PDF/A",
     category: "organize",
+    appHref: "/pdf-a",
     metaTitle: "Convert PDF to PDF/A for Archiving | GigaPDF",
     metaDescription:
       "Convert PDFs to the PDF/A-1b or PDF/A-2b archival format, ISO 19005 compliant. Free, open source, and self-hostable.",
@@ -1338,6 +1351,7 @@ export const TOOLS: ToolData[] = [
     slug: "image-to-pdf",
     name: "Image to PDF",
     category: "convert",
+    appHref: "/image-to-pdf",
     metaTitle: "Image to PDF: JPG, PNG, WebP to PDF Free | GigaPDF",
     metaDescription:
       "Convert JPG, PNG, WebP, GIF, and AVIF images to PDF — one picture or many into a single multipage file. Free, open source, no watermark.",
@@ -1400,6 +1414,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-to-image",
     name: "PDF to Image",
     category: "convert",
+    appHref: "/pdf-to-image",
     metaTitle: "PDF to Image: Export Pages as PNG or JPG | GigaPDF",
     metaDescription:
       "Export each page of a PDF as a PNG or JPG image. Free, open source, no watermark — turn a document into ready-to-use pictures.",
@@ -1772,6 +1787,7 @@ export const TOOLS: ToolData[] = [
     slug: "unlock-pdf",
     name: "Unlock PDF",
     category: "secure",
+    appHref: "/unlock",
     metaTitle: "Unlock PDF: Remove a Known Password | GigaPDF",
     metaDescription:
       "Remove the password from a PDF you can already open, to get an unencrypted copy. Free, open source — the known-password is required.",
