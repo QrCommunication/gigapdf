@@ -3,8 +3,7 @@
  *
  * Strategy:
  *   - global.fetch is mocked to simulate the Python backend (document download)
- *   - @giga-pdf/pdf-engine and @giga-pdf/pdf-engine/convert are mocked to
- *     simulate LibreOffice conversions without spawning soffice
+ *   - @giga-pdf/pdf-engine is mocked to simulate the conversion engine
  *   - @/lib/auth-helpers is mocked to control authentication
  *   - server-only imports are hoisted before vi.mock() calls
  */
@@ -43,29 +42,21 @@ vi.mock('@/lib/content-disposition', async () => {
   return real;
 });
 
-// pdf-engine barrel — all pdf-engine exports (LibreOffice + xlsx)
+// pdf-engine barrel — all pdf-engine exports used by the route
 const mockConvertPdfToOffice = vi.fn();
 const mockConvertPdfToXlsx = vi.fn();
 
-class LibreOfficeUnavailableErrorMock extends Error {
-  constructor() {
-    super('soffice binary not found');
-    this.name = 'LibreOfficeUnavailableError';
-  }
-}
-
-class LibreOfficeConversionErrorMock extends Error {
+class OfficeConversionErrorMock extends Error {
   constructor(msg: string) {
     super(msg);
-    this.name = 'LibreOfficeConversionError';
+    this.name = 'OfficeConversionError';
   }
 }
 
 vi.mock('@giga-pdf/pdf-engine', () => ({
   convertPdfToOffice: mockConvertPdfToOffice,
   convertPdfToXlsx: mockConvertPdfToXlsx,
-  LibreOfficeUnavailableError: LibreOfficeUnavailableErrorMock,
-  LibreOfficeConversionError: LibreOfficeConversionErrorMock,
+  OfficeConversionError: OfficeConversionErrorMock,
 }));
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -313,22 +304,10 @@ describe('POST /api/office/export', () => {
 
   // ── Conversion errors ──────────────────────────────────────────────────────
 
-  it('returns 503 when LibreOfficeUnavailableError is thrown', async () => {
-    mockPythonSuccess();
-    mockConvertPdfToOffice.mockRejectedValue(new LibreOfficeUnavailableErrorMock());
-
-    const req = buildRequest({ documentId: 'doc-1', format: 'docx' });
-    const res = await POST(req);
-
-    expect(res.status).toBe(503);
-    const json = await res.json();
-    expect(json.error).toContain('unavailable');
-  });
-
-  it('returns 422 when LibreOfficeConversionError is thrown', async () => {
+  it('returns 422 when OfficeConversionError is thrown', async () => {
     mockPythonSuccess();
     mockConvertPdfToOffice.mockRejectedValue(
-      new LibreOfficeConversionErrorMock('soffice exited with code 1'),
+      new OfficeConversionErrorMock('conversion failed'),
     );
 
     const req = buildRequest({ documentId: 'doc-1', format: 'pptx' });

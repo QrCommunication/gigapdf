@@ -2,7 +2,7 @@
  * Tests for POST /api/office/upload
  *
  * Strategy:
- *   - Mock @giga-pdf/pdf-engine to avoid spawning soffice in unit tests
+ *   - Mock @giga-pdf/pdf-engine to avoid running the WASM engine in unit tests
  *   - Mock @/lib/auth-helpers to control auth outcomes
  *   - Mock @/lib/server-logger to silence structured logs
  *   - Directly invoke the POST handler (Next.js App Router style)
@@ -49,24 +49,16 @@ if (!('arrayBuffer' in Blob.prototype)) {
 // ── Mocks (must be declared before imports) ───────────────────────────────────
 
 vi.mock('@giga-pdf/pdf-engine', () => {
-  const LibreOfficeUnavailableError = class LibreOfficeUnavailableError extends Error {
-    constructor() {
-      super('soffice (LibreOffice) binary not found in PATH');
-      this.name = 'LibreOfficeUnavailableError';
-    }
-  };
-
-  const LibreOfficeConversionError = class LibreOfficeConversionError extends Error {
+  const OfficeConversionError = class OfficeConversionError extends Error {
     constructor(message: string) {
       super(message);
-      this.name = 'LibreOfficeConversionError';
+      this.name = 'OfficeConversionError';
     }
   };
 
   return {
     convertOfficeToPdf: vi.fn(),
-    LibreOfficeUnavailableError,
-    LibreOfficeConversionError,
+    OfficeConversionError,
   };
 });
 
@@ -91,8 +83,7 @@ vi.mock('server-only', () => ({}));
 import { POST } from '../upload/route';
 import {
   convertOfficeToPdf,
-  LibreOfficeUnavailableError,
-  LibreOfficeConversionError,
+  OfficeConversionError,
 } from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
 
@@ -468,22 +459,11 @@ describe('POST /api/office/upload', () => {
     );
   });
 
-  // ── LibreOffice errors ────────────────────────────────────────────────────
+  // ── Conversion errors ─────────────────────────────────────────────────────
 
-  it('returns 503 when LibreOfficeUnavailableError is thrown', async () => {
-    vi.mocked(convertOfficeToPdf).mockRejectedValue(new LibreOfficeUnavailableError());
-    const file = makeValidOfficeFile('test.docx');
-    const req = makeRequest(file);
-    const res = await POST(req);
-    expect(res.status).toBe(503);
-    const body = await res.json() as { success: boolean; error: string };
-    expect(body.success).toBe(false);
-    expect(body.error).toMatch(/unavailable/i);
-  });
-
-  it('returns 422 when LibreOfficeConversionError is thrown', async () => {
+  it('returns 422 when OfficeConversionError is thrown', async () => {
     vi.mocked(convertOfficeToPdf).mockRejectedValue(
-      new LibreOfficeConversionError('soffice exited with code 1'),
+      new OfficeConversionError('conversion failed'),
     );
     const file = makeValidOfficeFile('corrupt.docx');
     const req = makeRequest(file);
