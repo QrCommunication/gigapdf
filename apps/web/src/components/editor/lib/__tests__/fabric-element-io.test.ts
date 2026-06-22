@@ -431,3 +431,97 @@ describe("fabricObjectToElements — paragraph decomposition", () => {
     expect(els.every((e) => e.style.originalFont === "ABCDEF+Body")).toBe(true);
   });
 });
+
+describe("fabricObjectToElement — list / indent round-trip", () => {
+  // Mirrors what render-elements.ts stamps: the marker prefix is composed into
+  // the DISPLAYED text (`•\t…`), the original list/indent are stashed on data,
+  // and the box `left` was shifted right by leftIndentOffset(style). The
+  // serialiser must recover a CLEAN content, the ORIGINAL bounds.x, and re-emit
+  // style.list / style.indentLeft.
+  const BULLET_PREFIX = "•\t"; // matches list-format listMarkerPrefix(bullet,0)
+  const STEP = 18; // INDENT_STEP_PT
+
+  it("strips the bullet marker prefix back to the clean content", () => {
+    const obj = fabricStub({
+      type: "i-text",
+      text: `${BULLET_PREFIX}Groceries`,
+      left: STEP, // shifted by one list-level gutter
+      width: 200,
+      data: {
+        elementId: "l1",
+        type: "text",
+        originalFont: "Helvetica",
+        listStyle: { type: "bullet", level: 0 },
+        indentLeft: 0,
+        listMarkerLen: BULLET_PREFIX.length,
+      },
+    });
+    const el = fabricObjectToElement(obj) as TextElement;
+    expect(el.type).toBe("text");
+    expect(el.content).toBe("Groceries"); // marker NOT persisted
+    expect(el.style.list).toEqual({ type: "bullet", level: 0 });
+    // bounds.x recovered (the one-level gutter subtracted) → no rightward drift.
+    expect(el.bounds.x).toBe(0);
+  });
+
+  it("recovers the original bounds.x for an explicit indent (no list)", () => {
+    const obj = fabricStub({
+      type: "i-text",
+      text: "Indented paragraph",
+      left: 60, // = original 24 + indentLeft 36
+      width: 200,
+      data: {
+        elementId: "l2",
+        type: "text",
+        originalFont: "Helvetica",
+        listStyle: null,
+        indentLeft: 36,
+        listMarkerLen: 0,
+      },
+    });
+    const el = fabricObjectToElement(obj) as TextElement;
+    expect(el.content).toBe("Indented paragraph");
+    expect(el.style.indentLeft).toBe(36);
+    expect(el.bounds.x).toBe(24);
+    expect(el.style.list).toBeUndefined();
+  });
+
+  it("recovers bounds.x for a numbered+indented list (gutter + explicit indent)", () => {
+    const NUM_PREFIX = "1.\t";
+    const obj = fabricStub({
+      type: "i-text",
+      text: `${NUM_PREFIX}Step one`,
+      // original x 10, indentLeft 12, list level 1 ⇒ offset = 12 + 2*STEP = 48.
+      left: 10 + 12 + 2 * STEP,
+      width: 200,
+      data: {
+        elementId: "l3",
+        type: "text",
+        originalFont: "Helvetica",
+        listStyle: { type: "number", level: 1 },
+        indentLeft: 12,
+        listMarkerLen: NUM_PREFIX.length,
+      },
+    });
+    const el = fabricObjectToElement(obj) as TextElement;
+    expect(el.content).toBe("Step one");
+    expect(el.style.list).toEqual({ type: "number", level: 1 });
+    expect(el.style.indentLeft).toBe(12);
+    expect(el.bounds.x).toBe(10);
+  });
+
+  it("is byte-identical to legacy for a plain paragraph (no list/indent data)", () => {
+    const obj = fabricStub({
+      type: "i-text",
+      text: "Plain",
+      left: 5,
+      width: 200,
+      data: { elementId: "l4", type: "text", originalFont: "Helvetica" },
+    });
+    const el = fabricObjectToElement(obj) as TextElement;
+    expect(el.content).toBe("Plain");
+    expect(el.bounds.x).toBe(5);
+    expect(el.style.list).toBeUndefined();
+    expect(el.style.indentLeft).toBeUndefined();
+  });
+});

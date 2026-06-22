@@ -22,6 +22,30 @@ export interface ElementBase {
 
 // ============= Text Element =============
 
+/**
+ * Word-like list styling on a text paragraph. Additive and paragraph-level
+ * (lives on {@link TextStyle} alongside `textAlign`/`lineHeight`), so a text
+ * element without `list` behaves exactly as before.
+ *
+ * `type` selects the marker family; `level` is the 0-based nesting depth used
+ * (with `type`) to derive the marker glyph and the indentation step:
+ *   - "bullet"   → •, ◦, ▪ cycling by level
+ *   - "number"   → 1. 2. 3. …
+ *   - "lettered" → a. b. c. …
+ *   - "roman"    → i. ii. iii. …
+ *
+ * The marker is a RENDER-TIME decoration (a visible prefix) — it is never
+ * stored in the element's editable `content`, so the lossless `replaceText`
+ * round-trip stays intact. See `lib/list-format.ts`.
+ */
+export type ListType = "bullet" | "number" | "lettered" | "roman";
+
+export interface TextListStyle {
+  type: ListType;
+  /** 0-based nesting depth; drives marker glyph + indentation step. */
+  level: number;
+}
+
 export interface TextStyle {
   fontFamily: string;
   fontSize: number;
@@ -33,6 +57,19 @@ export interface TextStyle {
   lineHeight: number;
   letterSpacing: number;
   writingMode: "horizontal-tb" | "vertical-rl";
+  /**
+   * Optional Word-like list styling (bullet/number/lettered/roman). Absent ⇒
+   * the paragraph is not a list. Purely additive / backward-compatible: the
+   * marker glyph is rendered as a decorative prefix, never baked into the
+   * editable `content`. See {@link TextListStyle}.
+   */
+  list?: TextListStyle;
+  /**
+   * Optional left indentation of the paragraph, in PDF points. Absent ⇒ 0.
+   * Shifts the rendered text box to the right (and, for a list, positions the
+   * marker in the resulting gutter). Additive / backward-compatible.
+   */
+  indentLeft?: number;
   /**
    * Bidirectional reading direction of the run. Surfaced by the engine
    * (`GigaPdfDoc.textElements().direction`) from the script of the text so the
