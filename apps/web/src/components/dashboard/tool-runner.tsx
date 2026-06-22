@@ -11,13 +11,6 @@ import {
   CardTitle,
   Input,
   Label,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Slider,
-  Switch,
   useToast,
 } from "@giga-pdf/ui";
 import {
@@ -38,7 +31,11 @@ import {
 } from "lucide-react";
 import { triggerBlobDownload } from "./blob-download";
 import { clientLogger } from "@/lib/client-logger";
-import type { ToolConfig, ToolField } from "./tool-runner-types";
+import { getAuthToken } from "@/lib/auth-token";
+import { ToolFieldControl } from "./tool-field-control";
+import { ToolTextRunner } from "./tool-text-runner";
+import { resolveOutputName } from "./tool-runner-shared";
+import type { ToolConfig, ToolTextInput } from "./tool-runner-types";
 
 /**
  * Generic, config-driven PDF tool runner.
@@ -47,6 +44,10 @@ import type { ToolConfig, ToolField } from "./tool-runner-types";
  * {@link ToolConfig}, reusing the existing `/api/pdf/*` and `/api/office/*`
  * endpoints. One component backs every "thin" tool page (split, compress,
  * watermark, protect, …) so there is no per-tool duplication.
+ *
+ * Tools whose primary input is text/HTML or a URL (not a file) declare a
+ * {@link ToolTextInput} via `config.input`; those are delegated to
+ * {@link ToolTextRunner}. Everything below handles the file-upload tools.
  *
  * Every server outcome — success AND failure — is surfaced through the global
  * toaster, as mandated project-wide for any server action.
@@ -86,13 +87,6 @@ function formatBytes(bytes: number): string {
   return `${(kb / 1024).toFixed(1)} MB`;
 }
 
-/** Ensure a filename carries the expected extension (case-insensitive). */
-function withExtension(name: string, ext: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return "";
-  return trimmed.toLowerCase().endsWith(`.${ext}`) ? trimmed : `${trimmed}.${ext}`;
-}
-
 /** Shape of the `splitZip` endpoint payload (parts as base64). */
 interface SplitPartsResponse {
   data?: {
@@ -112,13 +106,30 @@ export interface ToolRunnerProps {
   config: ToolConfig;
 }
 
+/**
+ * Entry point: text/URL tools render the {@link ToolTextRunner}; file tools
+ * render the upload workflow ({@link FileToolRunner}). Splitting on the config
+ * here keeps each runner focused and the historic file tools untouched.
+ */
 export function ToolRunner({ config }: ToolRunnerProps) {
+  if (config.input) {
+    return <ToolTextRunner config={config as ToolConfig & { input: ToolTextInput }} />;
+  }
+  return <FileToolRunner config={config} />;
+}
+
+function FileToolRunner({ config }: ToolRunnerProps) {
   const t = useTranslations(config.namespace);
   const tRunner = useTranslations("toolRunner");
   const { toast } = useToast();
 
   const inputRef = useRef<HTMLInputElement>(null);
   const hintId = useId();
+
+  // File tools always declare these; fall back defensively for the type system.
+  const uploadMode = config.uploadMode ?? "single";
+  const fileFieldName = config.fileFieldName ?? "file";
+  const maxTotalBytes = config.maxTotalBytes ?? Number.POSITIVE_INFINITY;
 
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [outputName, setOutputName] = useState("");
@@ -141,7 +152,7 @@ export function ToolRunner({ config }: ToolRunnerProps) {
   const [isDragging, setIsDragging] = useState(false);
   const dragDepthRef = useRef(0);
 
-  const isMulti = config.uploadMode === "multiple";
+  const isMulti = uploadMode === "multiple";
 
   const resetDrag = useCallback(() => {
     dragDepthRef.current = 0;
@@ -220,7 +231,7 @@ export function ToolRunner({ config }: ToolRunnerProps) {
     () => queue.reduce((sum, q) => sum + q.file.size, 0),
     [queue],
   );
-  const overLimit = totalSize > config.maxTotalBytes;
+  const overLimit = totalSize > maxTotalBytes;
 
   /** A required option is satisfied when it has a non-empty value/file. */
   const missingRequired = useMemo(() => {
@@ -234,32 +245,30 @@ export function ToolRunner({ config }: ToolRunnerProps) {
   const canRun =
     queue.length >= 1 && !running && !overLimit && !missingRequired;
 
-  /** Resolve the download filename from user input, output type, and defaults. */
-  const resolveOutputName = useCallback((): string => {
-    const ext = config.responseKind === "splitZip" ? "zip" : extOf(config);
-    if (config.allowOutputName) {
-      const named = withExtension(outputName, ext);
-      if (named) return named;
-    }
-    return config.defaultOutputName;
-  }, [config, outputName]);
-
   const handleRun = useCallback(async () => {
     if (!canRun) return;
 
-    const finalName = resolveOutputName();
+    const finalName = resolveOutputName(config, outputName);
     setRunning(true);
     try {
+      // PDF → Office: upload the file for a session id, then export as JSON.
+      if (config.request?.kind === "uploadExport") {
+        const blob = await runUploadExport(config, queue[0]?.file);
+        triggerBlobDownload(blob, finalName);
+        toast({ title: t("toastSuccess"), description: finalName });
+        return;
+      }
+
       const form = new FormData();
 
       // Uploaded file(s).
       if (isMulti) {
         for (const { file } of queue) {
-          form.append(config.fileFieldName, file, file.name);
+          form.append(fileFieldName, file, file.name);
         }
       } else {
         const first = queue[0];
-        if (first) form.append(config.fileFieldName, first.file, first.file.name);
+        if (first) form.append(fileFieldName, first.file, first.file.name);
       }
 
       // Constant wire fields.
@@ -311,16 +320,19 @@ export function ToolRunner({ config }: ToolRunnerProps) {
       toast({ title: t("toastSuccess"), description: finalName });
     } catch (err) {
       clientLogger.error(`tool.${config.id}.failed`, err);
-      toast({ variant: "destructive", title: t("toastError") });
+      const description =
+        err instanceof ToolRequestError ? err.message : undefined;
+      toast({ variant: "destructive", title: t("toastError"), description });
     } finally {
       setRunning(false);
     }
   }, [
     canRun,
-    resolveOutputName,
-    isMulti,
-    queue,
     config,
+    outputName,
+    isMulti,
+    fileFieldName,
+    queue,
     fieldFiles,
     fieldValues,
     t,
@@ -499,7 +511,7 @@ export function ToolRunner({ config }: ToolRunnerProps) {
                 {overLimit && (
                   <span>
                     {tRunner("overLimit", {
-                      max: `${Math.round(config.maxTotalBytes / (1024 * 1024))} MB`,
+                      max: `${Math.round(maxTotalBytes / (1024 * 1024))} MB`,
                     })}
                   </span>
                 )}
@@ -572,12 +584,6 @@ export function ToolRunner({ config }: ToolRunnerProps) {
   );
 }
 
-/** Output extension for a non-zip binary response, derived from the endpoint. */
-function extOf(config: ToolConfig): string {
-  const guess = config.defaultOutputName.toLowerCase().split(".").pop();
-  return guess && guess.length <= 5 ? guess : "pdf";
-}
-
 /** Build a single ZIP Blob from a `splitZip` JSON response. */
 async function buildSplitZip(response: Response): Promise<Blob> {
   const json = (await response.json()) as SplitPartsResponse;
@@ -593,146 +599,76 @@ async function buildSplitZip(response: Response): Promise<Blob> {
   return new Blob([new Uint8Array(zipped)], { type: "application/zip" });
 }
 
-interface ToolFieldControlProps {
-  field: ToolField;
-  disabled: boolean;
-  value: string;
-  file: File | null;
-  onValueChange: (name: string, value: string) => void;
-  onFileChange: (name: string, file: File | null) => void;
-  t: (key: string) => string;
+/** Carries a server-supplied message so the toast can surface it to the user. */
+class ToolRequestError extends Error {}
+
+/** Pull the best human-readable error out of a non-OK JSON response. */
+async function errorMessageFrom(response: Response, fallback: string): Promise<string> {
+  try {
+    const data = (await response.json()) as { error?: string; detail?: string };
+    return data.error ?? data.detail ?? fallback;
+  } catch {
+    return fallback;
+  }
 }
 
-/** Render a single option input according to its declared type. */
-function ToolFieldControl({
-  field,
-  disabled,
-  value,
-  file,
-  onValueChange,
-  onFileChange,
-  t,
-}: ToolFieldControlProps) {
-  const id = `tool-field-${field.name}`;
-  const description = field.descriptionKey ? t(field.descriptionKey) : null;
-
-  if (field.type === "switch") {
-    return (
-      <div className="flex items-center justify-between gap-4">
-        <div className="space-y-0.5">
-          <Label htmlFor={id}>{t(field.labelKey)}</Label>
-          {description && (
-            <p className="text-xs text-muted-foreground">{description}</p>
-          )}
-        </div>
-        <Switch
-          id={id}
-          checked={value === "true"}
-          onCheckedChange={(checked) =>
-            onValueChange(field.name, checked ? "true" : "false")
-          }
-          disabled={disabled}
-        />
-      </div>
-    );
+/**
+ * PDF → Office, two-step chain:
+ *   1. Upload the PDF to the session endpoint for a `document_id`.
+ *   2. POST `{ documentId, ...constants }` as JSON to the export endpoint.
+ * Both calls carry the Better Auth Bearer token (the export route forwards it
+ * to the Python backend). Throws {@link ToolRequestError} on failure so the
+ * caller can surface the message.
+ */
+async function runUploadExport(config: ToolConfig, file: File | undefined): Promise<Blob> {
+  const settings = config.request?.uploadExport;
+  if (!settings || !file) {
+    throw new ToolRequestError("Missing file or upload configuration.");
   }
 
-  if (field.type === "select") {
-    return (
-      <div className="space-y-1.5">
-        <Label htmlFor={id}>{t(field.labelKey)}</Label>
-        <Select
-          value={value}
-          onValueChange={(next) => onValueChange(field.name, next)}
-          disabled={disabled}
-        >
-          <SelectTrigger id={id}>
-            <SelectValue placeholder={field.placeholderKey ? t(field.placeholderKey) : undefined} />
-          </SelectTrigger>
-          <SelectContent>
-            {(field.options ?? []).map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {t(option.labelKey)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
-        )}
-      </div>
-    );
+  const token = await getAuthToken();
+  const authHeaders: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
+
+  // Step 1 — upload for a session document id.
+  const uploadForm = new FormData();
+  uploadForm.append(settings.uploadFileField ?? "file", file, file.name);
+
+  const uploadResponse = await fetch(settings.uploadEndpoint, {
+    method: "POST",
+    headers: authHeaders,
+    body: uploadForm,
+    credentials: "include",
+  });
+  if (!uploadResponse.ok) {
+    throw new ToolRequestError(await errorMessageFrom(uploadResponse, "Upload failed."));
+  }
+  const uploaded = (await uploadResponse.json()) as {
+    data?: { document_id?: string };
+    document_id?: string;
+  };
+  const documentId = uploaded.data?.document_id ?? uploaded.document_id;
+  if (!documentId) {
+    throw new ToolRequestError("Upload did not return a document id.");
   }
 
-  if (field.type === "slider") {
-    const min = field.min ?? 0;
-    const max = field.max ?? 100;
-    const step = field.step ?? 1;
-    const numeric = Number(value);
-    const current = Number.isFinite(numeric) ? numeric : min;
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label htmlFor={id}>{t(field.labelKey)}</Label>
-          <span className="text-sm font-medium tabular-nums text-muted-foreground">
-            {current}
-          </span>
-        </div>
-        <Slider
-          id={id}
-          min={min}
-          max={max}
-          step={step}
-          value={[current]}
-          onValueChange={(values) =>
-            onValueChange(field.name, String(values[0] ?? min))
-          }
-          disabled={disabled}
-        />
-        {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
-        )}
-      </div>
-    );
+  // Step 2 — export the uploaded document to the requested Office format.
+  const exportBody: Record<string, unknown> = {
+    [settings.documentIdField ?? "documentId"]: documentId,
+  };
+  for (const constant of config.constants ?? []) {
+    exportBody[constant.name] = constant.value;
   }
 
-  if (field.type === "file") {
-    return (
-      <div className="space-y-1.5">
-        <Label htmlFor={id}>{t(field.labelKey)}</Label>
-        <Input
-          id={id}
-          type="file"
-          accept={field.accept}
-          disabled={disabled}
-          onChange={(e) => onFileChange(field.name, e.target.files?.[0] ?? null)}
-        />
-        {file && (
-          <p className="text-xs text-muted-foreground">{file.name}</p>
-        )}
-        {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
-        )}
-      </div>
-    );
+  const exportResponse = await fetch(config.endpoint, {
+    method: "POST",
+    headers: { ...authHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify(exportBody),
+    credentials: "include",
+  });
+  if (!exportResponse.ok) {
+    throw new ToolRequestError(await errorMessageFrom(exportResponse, "Conversion failed."));
   }
-
-  // text | password
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>{t(field.labelKey)}</Label>
-      <Input
-        id={id}
-        type={field.type === "password" ? "password" : "text"}
-        value={value}
-        onChange={(e) => onValueChange(field.name, e.target.value)}
-        placeholder={field.placeholderKey ? t(field.placeholderKey) : undefined}
-        disabled={disabled}
-        autoComplete={field.type === "password" ? "new-password" : "off"}
-      />
-      {description && (
-        <p className="text-xs text-muted-foreground">{description}</p>
-      )}
-    </div>
-  );
+  return exportResponse.blob();
 }

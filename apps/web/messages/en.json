@@ -2980,7 +2980,8 @@
     "removeFileNamed": "Remove file {name}",
     "outputNameLabel": "Output file name",
     "processing": "Processing…",
-    "processingHint": "Processing your file, this may take a moment…"
+    "processingHint": "Processing your file, this may take a moment…",
+    "overLength": "The text exceeds the {max} character limit."
   },
   "tools": {
     "split": {
@@ -3136,6 +3137,80 @@
       "reasonPlaceholder": "Document approval",
       "locationLabel": "Location",
       "locationPlaceholder": "Paris, France"
+    },
+    "textToPdf": {
+      "title": "Text to PDF",
+      "subtitle": "Turn plain text into a clean, printable PDF.",
+      "actionButton": "Generate PDF",
+      "toastSuccess": "PDF generated",
+      "toastError": "Generation failed",
+      "inputLabel": "Your text",
+      "inputPlaceholder": "Paste or type the text to convert to PDF…",
+      "inputDescription": "Line breaks and indentation are preserved.",
+      "formatLabel": "Page size",
+      "formatA4": "A4",
+      "formatLetter": "Letter",
+      "formatLegal": "Legal",
+      "landscapeLabel": "Landscape orientation",
+      "landscapeDescription": "Rotate the page horizontally.",
+      "marginLabel": "Margins",
+      "marginNone": "None",
+      "marginNarrow": "Narrow",
+      "marginNormal": "Normal",
+      "marginWide": "Wide"
+    },
+    "htmlToPdf": {
+      "title": "HTML to PDF",
+      "subtitle": "Convert HTML/CSS to PDF with the in-house rendering engine.",
+      "actionButton": "Convert to PDF",
+      "toastSuccess": "PDF generated",
+      "toastError": "Conversion failed",
+      "inputLabel": "HTML code",
+      "inputPlaceholder": "<!DOCTYPE html>\n<html>\n  <body>\n    <h1>Hello</h1>\n  </body>\n</html>",
+      "inputDescription": "CSS grid and flexbox, RTL, gradients and dashed borders are supported.",
+      "formatLabel": "Page size",
+      "formatA4": "A4",
+      "formatLetter": "Letter",
+      "formatLegal": "Legal",
+      "landscapeLabel": "Landscape orientation",
+      "landscapeDescription": "Rotate the page horizontally.",
+      "marginLabel": "Margins",
+      "marginNone": "None",
+      "marginNarrow": "Narrow",
+      "marginNormal": "Normal",
+      "marginWide": "Wide"
+    },
+    "pdfToWord": {
+      "title": "PDF to Word",
+      "subtitle": "Convert a PDF to an editable Word (.docx) document.",
+      "formatsHint": "PDF file only.",
+      "actionButton": "Convert to Word",
+      "toastSuccess": "Document converted",
+      "toastError": "Conversion failed"
+    },
+    "pdfToExcel": {
+      "title": "PDF to Excel",
+      "subtitle": "Extract a PDF's text into an Excel (.xlsx) spreadsheet.",
+      "formatsHint": "PDF file only.",
+      "actionButton": "Convert to Excel",
+      "toastSuccess": "Document converted",
+      "toastError": "Conversion failed"
+    },
+    "pdfToPowerpoint": {
+      "title": "PDF to PowerPoint",
+      "subtitle": "Convert a PDF to a PowerPoint (.pptx) presentation.",
+      "formatsHint": "PDF file only.",
+      "actionButton": "Convert to PowerPoint",
+      "toastSuccess": "Document converted",
+      "toastError": "Conversion failed"
+    },
+    "pdfToOdt": {
+      "title": "PDF to ODT",
+      "subtitle": "Convert a PDF to an OpenDocument Text (.odt) file.",
+      "formatsHint": "PDF file only.",
+      "actionButton": "Convert to ODT",
+      "toastSuccess": "Document converted",
+      "toastError": "Conversion failed"
     }
   }
 }

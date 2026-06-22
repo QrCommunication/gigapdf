@@ -822,6 +822,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-vers-word",
     name: "PDF vers Word",
     category: "convert",
+    appHref: "/pdf-to-word",
     metaTitle: "Convertir un PDF en Word (DOCX) en ligne | GigaPDF",
     metaDescription:
       "Transformez vos PDF en documents Word modifiables (.docx), mise en page préservée. Conversion gratuite, open source, sans filigrane.",
@@ -1136,6 +1137,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-vers-odt",
     name: "PDF vers ODT",
     category: "convert",
+    appHref: "/pdf-to-odt",
     metaTitle: "Convertir un PDF en ODT (OpenDocument) | GigaPDF",
     metaDescription:
       "Transformez un PDF en document ODT modifiable dans votre traitement de texte, texte et images repris. Conversion gratuite et open source.",
@@ -1198,6 +1200,7 @@ export const TOOLS: ToolData[] = [
     slug: "html-vers-pdf",
     name: "HTML vers PDF",
     category: "convert",
+    appHref: "/html-to-pdf",
     metaTitle: "Convertir HTML ou une page web en PDF | GigaPDF",
     metaDescription:
       "Transformez du HTML ou une URL en PDF rendu par le moteur maison : CSS moderne, polices web, pages longues. Gratuit, open source, avec API.",
@@ -1518,6 +1521,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-vers-powerpoint",
     name: "PDF vers PowerPoint",
     category: "convert",
+    appHref: "/pdf-to-powerpoint",
     metaTitle: "Convertir un PDF en PowerPoint (PPTX) | GigaPDF",
     metaDescription:
       "Transformez un PDF en présentation PowerPoint modifiable (.pptx), une slide par page. Conversion gratuite, open source, sans filigrane.",
@@ -1580,6 +1584,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-vers-excel",
     name: "PDF vers Excel",
     category: "convert",
+    appHref: "/pdf-to-excel",
     metaTitle: "Convertir un PDF en Excel (XLSX) | GigaPDF",
     metaDescription:
       "Extrayez les tableaux d'un PDF vers un classeur Excel modifiable (.xlsx). Reconstruction des tableaux, gratuit et open source.",
@@ -1704,6 +1709,7 @@ export const TOOLS: ToolData[] = [
     slug: "texte-vers-pdf",
     name: "Texte vers PDF",
     category: "convert",
+    appHref: "/text-to-pdf",
     metaTitle: "Convertir un fichier texte (.txt) en PDF | GigaPDF",
     metaDescription:
       "Transformez un fichier texte brut (.txt) en PDF propre et lisible, pagination soignée. Conversion gratuite, open source, sans filigrane.",
