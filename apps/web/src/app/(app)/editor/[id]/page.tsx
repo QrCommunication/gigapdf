@@ -2737,6 +2737,17 @@ export default function EditorPage() {
     [canvasHandle],
   );
 
+  // Sélectionner sur le canvas tous les membres d'un calque (clic ligne-calque
+  // dans LayersPanel). Route vers la sélection multi du canvas, qui met les
+  // objets en ActiveSelection et synchronise store + panneau propriétés. `[]`
+  // désélectionne. Pas de mutation ni de save — purement une sélection.
+  const handleSelectLayerMembers = useCallback(
+    (elementIds: string[]) => {
+      canvasHandle?.selectElements(elementIds);
+    },
+    [canvasHandle],
+  );
+
   // ── User layers (Phase 2 "Layer Groups") ─────────────────────────────────
   // Editor-only construct: layer membership + visibility/lock live in the
   // scene graph (useDocument), NOT in the PDF (no OCG, no pdf-engine op). The
@@ -3695,6 +3706,7 @@ export default function EditorPage() {
           onElementVisibilityChange={handleElementVisibilityChange}
           onElementLockChange={handleElementLockChange}
           onElementSelect={handleSelectElementFromLayer}
+          onLayerSelectMembers={handleSelectLayerMembers}
           onLayerCreate={handleLayerCreate}
           onLayerDelete={handleLayerDelete}
           onLayerRename={handleLayerRename}
