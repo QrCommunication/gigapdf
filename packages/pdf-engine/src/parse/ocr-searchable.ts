@@ -22,6 +22,8 @@
  *      non-WinAnsi runs), so non-Latin OCR text is searchable too.
  */
 
+import { createRequire } from 'node:module';
+import { readFile } from 'node:fs/promises';
 import type { GigaPdfEngine, OcrScript } from '@qrcommunication/gigapdf-lib';
 import { getEngine } from '../wasm';
 import { engineLogger } from '../utils/logger';
@@ -42,6 +44,16 @@ export interface MakeSearchablePdfOptions {
    * recognized. Restrict it (e.g. `['alpha']`) for speed on known-Latin scans.
    */
   languages?: readonly OcrScript[];
+  /**
+   * On-demand handwriting recognition for **Latin** scripts. When `true`, the
+   * bundled cursive-Latin model (`ocr_alpha_hw.gpocr`) is loaded in addition to
+   * the printed recognizers, so handwritten Latin lines are read. This is the
+   * ONLY handwriting model exposed by the engine — it does not cover non-Latin
+   * scripts — and it is opt-in (never auto-detected). Defaults to `false`
+   * (printed text only). A load failure is non-fatal: recognition stays on the
+   * printed models.
+   */
+  handwriting?: boolean;
 }
 
 export interface MakeSearchablePdfResult {
@@ -159,10 +171,44 @@ let allOcrModelsPromise: Promise<number> | null = null;
 const loadedOcrScripts = new Set<OcrScript>();
 
 /**
+ * The bundled cursive-Latin handwriting model. It is NOT part of the `OcrScript`
+ * enum (so `loadBundledOcrModel` cannot load it); it ships as a raw `.gpocr` blob
+ * under the engine package's `models/` and is host-loaded via `loadOcrModel`.
+ */
+const HANDWRITING_MODEL_SPECIFIER = '@qrcommunication/gigapdf-lib/models/ocr_alpha_hw.gpocr';
+
+// Load-once guard for the handwriting model (engine registry is process-global).
+let handwritingModelLoaded = false;
+let handwritingModelPromise: Promise<boolean> | null = null;
+
+/**
+ * Load the bundled cursive-Latin handwriting model into the engine, once per
+ * process. Resolves the blob through the engine package's `./models/*` export so
+ * it survives bundling, reads the bytes, and registers them via `loadOcrModel`.
+ * Returns `true` once the model is loaded. A failure (blob absent in a future
+ * release, read error) is swallowed by the caller and recognition stays on the
+ * printed models.
+ */
+async function ensureHandwritingModel(engine: GigaPdfEngine): Promise<boolean> {
+  if (handwritingModelLoaded) return true;
+  handwritingModelPromise ??= (async () => {
+    const require = createRequire(import.meta.url);
+    const modelPath = require.resolve(HANDWRITING_MODEL_SPECIFIER);
+    const bytes = await readFile(modelPath);
+    const ok = engine.loadOcrModel(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+    handwritingModelLoaded = ok;
+    return ok;
+  })();
+  return handwritingModelPromise;
+}
+
+/**
  * Ensure the requested OCR models are loaded into the engine (idempotent across
  * calls). With no `languages`, loads every bundled model so the recognizer
- * covers any shipped script (the engine's detector routes each line). Failures
- * are non-fatal: OCR then falls back to the built-in mono-glyph Latin classifier.
+ * covers any shipped script (the engine's detector routes each line). When
+ * `handwriting` is set, additionally loads the cursive-Latin model so
+ * handwritten Latin lines are recognized (opt-in; Latin only). Failures are
+ * non-fatal: OCR then falls back to the built-in mono-glyph Latin classifier.
  *
  * Exported so the editable-OCR pipeline ({@link makeEditableOcrPdf}) shares the
  * same process-global, load-once model registry instead of re-implementing it.
@@ -170,21 +216,30 @@ const loadedOcrScripts = new Set<OcrScript>();
 export async function ensureOcrModels(
   engine: GigaPdfEngine,
   languages?: readonly OcrScript[],
+  handwriting = false,
 ): Promise<void> {
   try {
     if (!languages || languages.length === 0) {
-      if (allOcrModelsLoaded) return;
-      allOcrModelsPromise ??= engine.loadAllBundledOcrModels();
-      const count = await allOcrModelsPromise;
-      allOcrModelsLoaded = true;
-      engineLogger.info('ocr-searchable: loaded all bundled OCR models', { count });
-      return;
+      if (!allOcrModelsLoaded) {
+        allOcrModelsPromise ??= engine.loadAllBundledOcrModels();
+        const count = await allOcrModelsPromise;
+        allOcrModelsLoaded = true;
+        engineLogger.info('ocr-searchable: loaded all bundled OCR models', { count });
+      }
+    } else {
+      const missing = languages.filter((s) => !loadedOcrScripts.has(s));
+      if (missing.length > 0) {
+        const loaded = await engine.loadBundledOcrModels(missing);
+        loaded.forEach((s) => loadedOcrScripts.add(s));
+        engineLogger.info('ocr-searchable: loaded OCR models', { requested: languages, loaded });
+      }
     }
-    const missing = languages.filter((s) => !loadedOcrScripts.has(s));
-    if (missing.length === 0) return;
-    const loaded = await engine.loadBundledOcrModels(missing);
-    loaded.forEach((s) => loadedOcrScripts.add(s));
-    engineLogger.info('ocr-searchable: loaded OCR models', { requested: languages, loaded });
+
+    // On-demand handwriting (Latin only) — loaded on top of the printed models.
+    if (handwriting) {
+      const ok = await ensureHandwritingModel(engine);
+      engineLogger.info('ocr-searchable: handwriting model', { loaded: ok });
+    }
   } catch (err) {
     engineLogger.warn('ocr-searchable: OCR model loading failed — mono-glyph fallback', {
       error: err instanceof Error ? err.message : String(err),
@@ -222,8 +277,9 @@ export async function makeSearchablePdf(
   const scale = dpi / 72;
   const giga = await getEngine();
   // Load per-script recognizers so non-Latin scripts are recognized, not just
-  // the built-in mono-glyph Latin classifier.
-  await ensureOcrModels(giga, options.languages);
+  // the built-in mono-glyph Latin classifier; add the Latin handwriting model
+  // when the caller opts in.
+  await ensureOcrModels(giga, options.languages, options.handwriting);
   const doc = giga.open(pdfBytes);
 
   let pagesProcessed = 0;

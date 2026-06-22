@@ -98,6 +98,9 @@ export function OcrDialog({
   const [dpi, setDpi] = useState<Dpi>(144);
   const [pagesInput, setPagesInput] = useState("");
   const [outputMode, setOutputMode] = useState<OutputMode>("text");
+  // Opt-in handwriting recognition. The engine ships a single cursive model,
+  // Latin only, so the option is offered only for the Latin writing system.
+  const [handwriting, setHandwriting] = useState(false);
 
   const ocr = useOcrPdf();
   const makeSearchable = useMakeSearchablePdf();
@@ -154,10 +157,18 @@ export function OcrDialog({
     if (isBinaryMode) {
       // Restrict the OCR engine to the chosen writing system's bundled model(s).
       const scripts = SCRIPTS_FOR_CHOICE[script];
+      // Handwriting recognition is Latin-only — never send it for other scripts.
+      const useHandwriting = handwriting && script === "latin";
       const result =
         outputMode === "editable"
-          ? await makeEditable.mutateAsync({ file: currentFile, options: { dpi, scripts } })
-          : await makeSearchable.mutateAsync({ file: currentFile, options: { dpi, scripts } });
+          ? await makeEditable.mutateAsync({
+              file: currentFile,
+              options: { dpi, scripts, handwriting: useHandwriting },
+            })
+          : await makeSearchable.mutateAsync({
+              file: currentFile,
+              options: { dpi, scripts, handwriting: useHandwriting },
+            });
       if (onApplied) {
         // Hand the OCR'd binary to the editor so it replaces the live document
         // (and gets persisted + re-parsed), exactly like the watermark flow.
@@ -310,6 +321,36 @@ export function OcrDialog({
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="col-span-3">
+              <label
+                className={`flex items-start gap-2 text-xs ${
+                  isBinaryMode && script === "latin"
+                    ? "text-foreground cursor-pointer"
+                    : "text-muted-foreground cursor-not-allowed opacity-60"
+                }`}
+                title={
+                  !isBinaryMode
+                    ? t("scriptTextHint")
+                    : script !== "latin"
+                      ? t("handwritingLatinOnlyHint")
+                      : undefined
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={handwriting && script === "latin"}
+                  disabled={!isBinaryMode || script !== "latin"}
+                  onChange={(e) => setHandwriting(e.target.checked)}
+                  className="mt-0.5 accent-primary"
+                />
+                <span className="min-w-0">
+                  <span className="block font-medium">{t("handwritingLabel")}</span>
+                  <span className="block text-muted-foreground">
+                    {t("handwritingHint")}
+                  </span>
+                </span>
+              </label>
             </div>
             <div>
               <label className="block text-xs font-medium text-foreground mb-1">
