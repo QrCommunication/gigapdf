@@ -163,8 +163,11 @@ const loadedOcrScripts = new Set<OcrScript>();
  * calls). With no `languages`, loads every bundled model so the recognizer
  * covers any shipped script (the engine's detector routes each line). Failures
  * are non-fatal: OCR then falls back to the built-in mono-glyph Latin classifier.
+ *
+ * Exported so the editable-OCR pipeline ({@link makeEditableOcrPdf}) shares the
+ * same process-global, load-once model registry instead of re-implementing it.
  */
-async function ensureOcrModels(
+export async function ensureOcrModels(
   engine: GigaPdfEngine,
   languages?: readonly OcrScript[],
 ): Promise<void> {
