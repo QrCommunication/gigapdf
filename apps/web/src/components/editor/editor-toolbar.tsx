@@ -234,6 +234,11 @@ export interface EditorToolbarProps {
   documentFonts?: DocumentFontOption[];
   /** Fichier PDF actuellement ouvert (pour les opérations merge/split/encrypt) */
   currentFile?: File | null;
+  /**
+   * Numéro (1-based) de la page actuellement active dans l'éditeur. Alimente le
+   * scope « page courante uniquement » de l'OCR. Défaut 1 si absent.
+   */
+  currentPageNumber?: number;
   /** Callback pour afficher/masquer le panneau formulaires */
   onToggleFormsPanel?: () => void;
   /** Callback pour aplatir le PDF courant */
@@ -562,6 +567,7 @@ export function EditorToolbar({
   applyTextSelectionStyle,
   documentFonts = [],
   currentFile,
+  currentPageNumber,
   onToggleFormsPanel,
   onFlattenPdf,
   isContentEditActive,
@@ -1492,6 +1498,7 @@ export function EditorToolbar({
         onClose={() => setShowOcrDialog(false)}
         currentFile={currentFile ?? null}
         baseFilename={currentFile?.name}
+        currentPageNumber={currentPageNumber}
         onApplied={onOcrApplied}
       />
       <PdfADialog

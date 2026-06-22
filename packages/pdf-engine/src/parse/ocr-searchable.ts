@@ -54,6 +54,32 @@ export interface MakeSearchablePdfOptions {
    * printed models.
    */
   handwriting?: boolean;
+  /**
+   * Restrict OCR to a contiguous 1-based page range (inclusive) — e.g.
+   * `{ from: 3, to: 3 }` to OCR only page 3 ("current page only"). Omit to
+   * process the whole document (historical default). The range further narrows
+   * the automatic selection (and `force`), so a page with extractable text is
+   * still skipped unless `force` is set; it never widens it. Out-of-bounds or
+   * inverted ranges are clamped, yielding zero pages (the original bytes are
+   * returned untouched).
+   */
+  pageRange?: { from: number; to: number };
+}
+
+/**
+ * Narrow a list of candidate 1-based page numbers to those inside an optional
+ * inclusive `pageRange`. Returns the list unchanged when no range is given
+ * (whole-document default). Shared by the searchable and editable pipelines so
+ * the "current page only" scope behaves identically in both. Pure.
+ */
+export function filterPagesByRange(
+  pages: number[],
+  range?: { from: number; to: number },
+): number[] {
+  if (!range) return pages;
+  const lo = Math.min(range.from, range.to);
+  const hi = Math.max(range.from, range.to);
+  return pages.filter((p) => p >= lo && p <= hi);
 }
 
 export interface MakeSearchablePdfResult {
@@ -261,11 +287,15 @@ export async function makeSearchablePdf(
 ): Promise<MakeSearchablePdfResult> {
   const { dpi = 144, force = false } = options;
 
-  // 1. Page selection — only pages without extractable text, unless forced.
+  // 1. Page selection — only pages without extractable text, unless forced,
+  //    then narrowed to the optional page range ("current page only" scope).
   const pageTexts = await extractPlainText(pdfBytes);
-  const targetPages = (
-    force ? pageTexts : pageTexts.filter((p) => p.text.trim().length === 0)
-  ).map((p) => p.pageNumber);
+  const targetPages = filterPagesByRange(
+    (force ? pageTexts : pageTexts.filter((p) => p.text.trim().length === 0)).map(
+      (p) => p.pageNumber,
+    ),
+    options.pageRange,
+  );
 
   if (targetPages.length === 0) {
     return { bytes: pdfBytes, pagesProcessed: 0, wordsAdded: 0 };

@@ -3582,6 +3582,7 @@ export default function EditorPage() {
         onWatermarkApplied={handleWatermarkApplied}
         onCompressApplied={handleCompressApplied}
         onOcrApplied={handleOcrApplied}
+        currentPageNumber={effectivePageIndex + 1}
         onIndexOcr={handleIndexOcr}
         indexOcrBusy={indexOcrBusy}
         onSignApplied={handleSignApplied}
