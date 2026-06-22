@@ -28,6 +28,8 @@ interface DocumentInfoSidebarProps {
   onElementLockChange?: (elementId: string, locked: boolean) => void;
   /** Sélectionner un élément en cliquant sa ligne dans le panneau calques. */
   onElementSelect?: (elementId: string) => void;
+  /** Sélectionner sur le canvas tous les membres d'un calque (clic ligne-calque). */
+  onLayerSelectMembers?: (elementIds: string[]) => void;
   // User-layer actions (Phase 2) forwardés au LayersPanel.
   onLayerCreate?: () => void;
   onLayerDelete?: (layerId: string) => void;
@@ -56,6 +58,7 @@ export function DocumentInfoSidebar({
   onElementVisibilityChange,
   onElementLockChange,
   onElementSelect,
+  onLayerSelectMembers,
   onLayerCreate,
   onLayerDelete,
   onLayerRename,
@@ -133,6 +136,7 @@ export function DocumentInfoSidebar({
             onElementVisibilityChange={onElementVisibilityChange}
             onElementLockChange={onElementLockChange}
             onElementSelect={onElementSelect}
+            onLayerSelectMembers={onLayerSelectMembers}
             onLayerCreate={onLayerCreate}
             onLayerDelete={onLayerDelete}
             onLayerRename={onLayerRename}

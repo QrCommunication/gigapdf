@@ -51,6 +51,12 @@ interface LayersPanelProps {
    * canvas et ouvre ses propriétés (comportement design-tool standard).
    */
   onElementSelect?: (elementId: string) => void;
+  /**
+   * Sélectionner sur le canvas tous les membres d'un calque (clic sur une
+   * ligne-calque). Reçoit les `elementId` des éléments dont `layerId` vaut ce
+   * calque ; tableau vide ⇒ aucun membre (no-op côté canvas).
+   */
+  onLayerSelectMembers?: (elementIds: string[]) => void;
   // --- User-layer actions (Phase 2). Absents ⇒ section "User Layers" masquée. ---
   onLayerCreate?: () => void;
   onLayerDelete?: (layerId: string) => void;
@@ -109,6 +115,7 @@ export function LayersPanel({
   onElementVisibilityChange,
   onElementLockChange,
   onElementSelect,
+  onLayerSelectMembers,
   onLayerCreate,
   onLayerDelete,
   onLayerRename,
@@ -138,6 +145,16 @@ export function LayersPanel({
     // `nearest` n'arrache pas la position si la ligne est déjà visible.
     selectedRowRef.current?.scrollIntoView({ block: "nearest" });
   }, [firstSelectedId]);
+
+  // Calque de l'élément sélectionné sur le canvas (Direction canvas → liste) :
+  // surligne la ligne du calque qui contient l'élément actif. Distinct de
+  // `activeLayerId` (filtre local au clic d'une ligne) — les deux pilotent
+  // ensemble la surbrillance d'une ligne-calque (:row className).
+  const selectedLayerId =
+    firstSelectedId === null
+      ? null
+      : (elements.find((el) => el.elementId === firstSelectedId)?.layerId ??
+        null);
 
   // La section "User Layers" est disponible dès qu'une action d'édition de
   // calque est fournie (le bouton "+" reste utile même sans calque existant).
@@ -199,6 +216,20 @@ export function LayersPanel({
     onLayerCreate?.();
   };
 
+  // Clic sur une ligne-calque : (1) bascule le filtre de la liste d'éléments,
+  // (2) sélectionne sur le canvas tous les membres du calque (Direction
+  // liste → canvas). Désélectionne (tableau vide) quand on retire le filtre.
+  const handleLayerRowActivate = (layer: LayerObject) => {
+    const wasFilterActive = activeLayerId === layer.layerId;
+    setActiveLayerId(wasFilterActive ? null : layer.layerId);
+    const memberIds = wasFilterActive
+      ? []
+      : elements
+          .filter((el) => el.layerId === layer.layerId)
+          .map((el) => el.elementId);
+    onLayerSelectMembers?.(memberIds);
+  };
+
   return (
     <div className={cn("border-b", className)}>
       <button
@@ -247,21 +278,24 @@ export function LayersPanel({
               )}
 
               {sortedUserLayers.map((layer, index) => {
-                const selected = activeLayerId === layer.layerId;
+                // `selected` (surbrillance) = ligne filtrée (clic) OU calque de
+                // l'élément actif sur le canvas. `isFilterActive` reste l'état
+                // de filtre seul, pour piloter le toggle au clic/Enter.
+                const isFilterActive = activeLayerId === layer.layerId;
+                const selected =
+                  isFilterActive || selectedLayerId === layer.layerId;
                 const isRenaming = renamingLayerId === layer.layerId;
                 return (
                   <div
                     key={layer.layerId}
                     role="button"
                     tabIndex={0}
-                    onClick={() =>
-                      setActiveLayerId(selected ? null : layer.layerId)
-                    }
+                    onClick={() => handleLayerRowActivate(layer)}
                     onDoubleClick={() => startRename(layer)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setActiveLayerId(selected ? null : layer.layerId);
+                        handleLayerRowActivate(layer);
                       }
                     }}
                     className={cn(

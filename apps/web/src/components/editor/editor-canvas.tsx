@@ -150,6 +150,15 @@ export interface EditorCanvasHandle {
    */
   selectElement: (elementId: string) => void;
   /**
+   * Sélectionner plusieurs éléments par leurs ids (clic sur une ligne-calque :
+   * met en évidence tous les membres du calque). Miroir multi de
+   * `selectElement` : un seul objet trouvé → objet actif simple ; plusieurs →
+   * `ActiveSelection`. Forwarde au store les ids RÉELLEMENT trouvés sur la page
+   * affichée (les membres d'autres pages sont ignorés). `[]` ou aucun membre
+   * trouvé ⇒ désélection.
+   */
+  selectElements: (elementIds: string[]) => void;
+  /**
    * Collect the redaction zones drawn on the currently-displayed page, in web
    * coordinates (origin top-left, Y-down, in PDF points at scale 1 — the same
    * space as `page.dimensions`). These are transient marker rects
@@ -2867,6 +2876,53 @@ export function EditorCanvas({
         canvas.setActiveObject(target);
         canvas.requestRenderAll();
         onSelectionChangedRef.current?.([elementId]);
+      },
+      selectElements: (elementIds: string[]) => {
+        const canvas = fabricRef.current;
+        if (!canvas) return;
+        // Résout chaque id en son objet Fabric (hors masques de masquage).
+        // Garde l'ordre des ids fournis et ignore ceux absents de la page.
+        const targets = elementIds
+          .map((id) =>
+            canvas
+              .getObjects()
+              .find(
+                (o) =>
+                  (o as FabricObjectWithData).data?.elementId === id &&
+                  (o as FabricObjectWithData).data?.isHideMask !== true,
+              ),
+          )
+          .filter((o): o is FabricObject => Boolean(o));
+        const foundIds = targets.map(
+          (o) => (o as FabricObjectWithData).data!.elementId as string,
+        );
+
+        if (targets.length === 0) {
+          // Aucun membre rendu sur la page : désélection nette.
+          canvas.discardActiveObject();
+          canvas.requestRenderAll();
+          onSelectionChangedRef.current?.([]);
+          return;
+        }
+        if (targets.length === 1) {
+          canvas.setActiveObject(targets[0]!);
+          canvas.requestRenderAll();
+          onSelectionChangedRef.current?.(foundIds);
+          return;
+        }
+        // Multi-sélection : ActiveSelection (même primitive que la restauration
+        // multi de applyLocalElementUpdate). fabric est importé dynamiquement
+        // comme dans les autres méthodes du handle. Le setActiveObject
+        // programmatique ne fire pas selection:created → on forwarde nous-mêmes.
+        void import("fabric").then((fabricModule) => {
+          const live = fabricRef.current;
+          if (!live) return;
+          live.setActiveObject(
+            new fabricModule.ActiveSelection(targets, { canvas: live }),
+          );
+          live.requestRenderAll();
+          onSelectionChangedRef.current?.(foundIds);
+        });
       },
       getRedactionMarks: () => {
         const canvas = fabricRef.current;
