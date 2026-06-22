@@ -144,6 +144,7 @@ export type { ConvertOptions, UrlToPDFSafeOptions } from './convert';
 // Image / text / RTF → PDF + universal merge (heterogeneous files → one PDF)
 export { imageToPdf } from './convert/image-to-pdf';
 export { textToPdf, rtfToPdf } from './convert/text-to-pdf';
+export { convertMarkdownToPdf, convertCsvToPdf } from './convert/text-model-to-pdf';
 export { mergeUniversal } from './convert/merge-universal';
 export type { UniversalMergeInput } from './convert/merge-universal';
 

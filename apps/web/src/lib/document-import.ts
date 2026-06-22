@@ -101,6 +101,29 @@ export function isOfficeFile(file: { name: string }): boolean {
   return OFFICE_CONVERT_EXTENSIONS.has(getFileExtension(file.name));
 }
 
+/**
+ * Text-model import formats convertible to an editable PDF on upload.
+ *
+ * Markdown (`md`/`markdown`) and CSV are plain UTF-8 text files (no binary
+ * container). On upload they are lowered into the engine's unified document
+ * model and raised to a PDF (`mdToModel`/`csvToModel` → `modelToPdf`) so they
+ * open as editable pages in the editor instead of failing to parse as a PDF.
+ *
+ * The conversion route (`/api/convert/text-format`) is the type-checked gate
+ * against the engine's `convertMarkdownToPdf`/`convertCsvToPdf`; this list only
+ * decides client-side routing.
+ */
+const TEXT_MODEL_CONVERT_EXTENSIONS = new Set(['md', 'markdown', 'csv']);
+
+/**
+ * True when the file is a Markdown or CSV document that should be converted to
+ * PDF on upload (so it becomes editable in the editor). Detected by extension
+ * only; the conversion route re-validates server-side.
+ */
+export function isTextModelFile(file: { name: string }): boolean {
+  return TEXT_MODEL_CONVERT_EXTENSIONS.has(getFileExtension(file.name));
+}
+
 /** Strip a single trailing extension from a file name for the stored title. */
 export function stripExtension(fileName: string): string {
   const ext = getFileExtension(fileName);
