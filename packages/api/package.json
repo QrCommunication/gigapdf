@@ -22,7 +22,7 @@
   "dependencies": {
     "@giga-pdf/types": "workspace:*",
     "@tanstack/react-query": "^5.101.0",
-    "axios": "^1.17.0",
+    "axios": "^1.18.0",
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
