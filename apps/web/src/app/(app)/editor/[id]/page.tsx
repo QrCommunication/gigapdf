@@ -65,7 +65,7 @@ import { useDocument } from "@/hooks/use-document";
 import { useDocumentSave } from "@/hooks/use-document-save";
 import { useCollaboration } from "@/hooks/use-collaboration";
 import { usePageThumbnails } from "@/hooks/use-page-thumbnails";
-import { useEmbeddedFonts } from "@giga-pdf/editor";
+import { useEmbeddedFonts, buildDocumentFontOptions } from "@giga-pdf/editor";
 import { getAuthToken } from "@/lib/api";
 import { api, type ElementCreateRequest } from "@/lib/api";
 import {
@@ -630,11 +630,16 @@ export default function EditorPage() {
   // Dynamically load embedded PDF fonts via FontFace API (backed by IndexedDB cache).
   // Maps originalFont names (like "g_d0_f1") to real CSS font-family names,
   // so Fabric can render text with the SAME font as the PDF background.
-  const { getFontFaceName } = useEmbeddedFonts({
+  const { getFontFaceName, fonts: embeddedFonts } = useEmbeddedFonts({
     documentId: documentId || "",
     enabled: Boolean(documentId),
     getAuthToken,
   });
+  // Real document fonts for the picker (so typed/edited text matches the PDF).
+  const documentFontOptions = useMemo(
+    () => buildDocumentFontOptions(embeddedFonts),
+    [embeddedFonts],
+  );
 
   // Fetch the actual PDF binary when document loads. Skipped when a flattened
   // file is present (the flatten-adopt effect below adopts those canonical
@@ -3466,6 +3471,7 @@ export default function EditorPage() {
 
       {/* Toolbar */}
       <EditorToolbar
+        documentFonts={documentFontOptions}
         activeTool={activeTool}
         onToolChange={setActiveTool}
         zoom={zoom}
@@ -3684,6 +3690,7 @@ export default function EditorPage() {
 
         {/* Properties panel */}
         <PropertiesPanel
+          documentFonts={documentFontOptions}
           selectedElements={selectedElements}
           onElementUpdate={handleElementUpdate}
           pageInfo={pageInfo}
