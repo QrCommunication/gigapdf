@@ -385,6 +385,13 @@ export default function EditorPage() {
   // Canvas handle (via callback) — kept local: transient imperative handle
   const [canvasHandle, setCanvasHandle] = useState<EditorCanvasHandle | null>(null);
 
+  // Word-like partial formatting: live style of the character sub-selection
+  // inside the text element being inline-edited. `null` when no text is being
+  // edited (or only a caret is placed). Drives the formatting toolbar's active
+  // state and tells it to route style edits to the selection vs the element.
+  const [textSelectionStyle, setTextSelectionStyle] =
+    useState<Partial<TextStyle> | null>(null);
+
   // --- Formulaires : mode Concevoir / Remplir -----------------------------
   // Concevoir = placer/éditer des champs (comportement historique).
   // Remplir = les champs EXISTANTS du PDF sont listés (FormsPanel) ET
@@ -1554,6 +1561,33 @@ export default function EditorPage() {
       }
     },
     [currentPage, selectElements, clearSelection]
+  );
+
+  // Word-like partial formatting: the canvas reports the live style of the
+  // character sub-selection being edited (or null on caret-only / edit exit).
+  const handleTextSelectionStyleChanged = useCallback(
+    (style: Partial<TextStyle> | null) => {
+      setTextSelectionStyle(style);
+    },
+    [],
+  );
+
+  // Apply a style patch to the active text edit SUB-SELECTION (Word-like
+  // partial formatting). Returns true when a sub-range was styled (the toolbar
+  // then skips the whole-element path); false when no text is being edited with
+  // a selection, so the caller falls back to `handleTextStyleChange`.
+  const applyTextSelectionStyle = useCallback(
+    (patch: Partial<TextStyle>): boolean => {
+      const applied = canvasHandle?.applySelectionStyle(patch) ?? false;
+      if (applied) {
+        setDirty(true);
+        // Partial restyle bakes via the element's `runs` on edit-exit forward,
+        // same debounced save path as the whole-element style change.
+        saveWithPriority("debounced");
+      }
+      return applied;
+    },
+    [canvasHandle, setDirty, saveWithPriority],
   );
 
   const handleElementUpdate = useCallback(
@@ -3485,6 +3519,8 @@ export default function EditorPage() {
         selectedElement={selectedElements.length === 1 ? selectedElements[0] : null}
         selectedTextElements={selectedTextElements}
         onElementStyleChange={handleTextStyleChange}
+        textSelectionStyle={textSelectionStyle}
+        applyTextSelectionStyle={applyTextSelectionStyle}
         shapeType={shapeType}
         onShapeTypeChange={setShapeType}
         annotationType={annotationType}
@@ -3626,6 +3662,7 @@ export default function EditorPage() {
               onElementReordered={handleElementReordered}
               onElementRemoved={handleElementRemoved}
               onSelectionChanged={handleSelectionChanged}
+              onTextSelectionStyleChanged={handleTextSelectionStyleChanged}
               onCanvasReady={setCanvasHandle}
             />
           ) : (
@@ -3649,6 +3686,7 @@ export default function EditorPage() {
                 onElementReordered={handleElementReordered}
                 onElementRemoved={handleElementRemoved}
                 onSelectionChanged={handleSelectionChanged}
+                onTextSelectionStyleChanged={handleTextSelectionStyleChanged}
                 onZoomChanged={handleManualZoomChange}
                 onCanvasReady={setCanvasHandle}
                 onHyperlinkClick={handleHyperlinkClick}

@@ -14,6 +14,15 @@
  * style (e.g. bold when fontWeight === "bold"). On multi-select the edit
  * fans out to every selected text element; the displayed state follows the
  * first one.
+ *
+ * WORD-LIKE PARTIAL FORMATTING. When a text element is in inline-edit mode with
+ * a character SUB-SELECTION, the canvas reports that range's live style via
+ * `textSelectionStyle` (non-null) and exposes `applyTextSelectionStyle`. In
+ * that mode every control applies to JUST the selected characters (Fabric
+ * `setSelectionStyles`, persisted as `TextElement.runs`) and its active state
+ * reflects the selection — falling back to the whole-element flow when there is
+ * no sub-selection (caret only / not editing). Fully backward-compatible: with
+ * no edit selection the behaviour is exactly the previous whole-element one.
  */
 
 "use client";
@@ -53,6 +62,19 @@ export interface FormattingToolbarProps {
     elementId: string,
     style: Partial<TextStyle>,
   ) => void;
+  /**
+   * Word-like PARTIAL formatting. Live style of the character sub-selection
+   * inside the text element being inline-edited, or `null` when none. When
+   * non-null AND {@link applyTextSelectionStyle} is provided, controls target
+   * the SELECTION and their active state reflects it.
+   */
+  textSelectionStyle?: Partial<TextStyle> | null;
+  /**
+   * Apply a style patch to the active text edit SUB-SELECTION. Returns `true`
+   * when a sub-range was styled; `false` when no text is being edited with a
+   * selection — the control then falls back to the whole-element flow.
+   */
+  applyTextSelectionStyle?: (patch: Partial<TextStyle>) => boolean;
 }
 
 interface FormatButtonProps {
@@ -88,6 +110,8 @@ function Separator() {
 export function FormattingToolbar({
   selectedTextElements,
   onElementStyleChange,
+  textSelectionStyle = null,
+  applyTextSelectionStyle,
 }: FormattingToolbarProps) {
   const t = useTranslations("editor.toolbar");
   const [showSpacing, setShowSpacing] = useState(false);
@@ -113,16 +137,45 @@ export function FormattingToolbar({
   if (!primary) return null;
   const style = primary.style;
 
-  const isBold = style?.fontWeight === "bold";
-  const isItalic = style?.fontStyle === "italic";
-  const isUnderline = style?.underline === true;
-  const isStrike = style?.strikethrough === true;
+  // Word-like PARTIAL mode is active when the canvas reports a live character
+  // sub-selection AND the selection-style applier is wired. In that mode the
+  // *character-level* fields (B/I/U/S, colour, size, font) reflect the
+  // selection; paragraph-level fields (alignment, line spacing) stay element-
+  // scoped (Fabric has no per-character alignment).
+  const selectionMode = textSelectionStyle !== null && !!applyTextSelectionStyle;
+  // For active-state of a per-character field: in selection mode read it from
+  // the selection style (absent = mixed/none ⇒ inactive); otherwise from the
+  // element. A consistent bold selection ⇒ Bold lit; a mixed one ⇒ Bold off.
+  const charField = <K extends keyof TextStyle>(key: K): TextStyle[K] | undefined =>
+    selectionMode ? textSelectionStyle?.[key] : style?.[key];
+
+  const isBold = charField("fontWeight") === "bold";
+  const isItalic = charField("fontStyle") === "italic";
+  const isUnderline = charField("underline") === true;
+  const isStrike = charField("strikethrough") === true;
+  // Alignment / highlight stay element-scoped (paragraph-level).
   const align: TextAlignValue = style?.textAlign ?? "left";
   const hasHighlight = !!style?.backgroundColor;
-  const color = style?.color || "#000000";
+  const color = (charField("color") as string | undefined) || style?.color || "#000000";
   const highlight = style?.backgroundColor || DEFAULT_HIGHLIGHT;
 
-  /** Fan a style patch out to every selected text element. */
+  /**
+   * Apply a CHARACTER-LEVEL style patch. In partial mode it targets the live
+   * text sub-selection (persisted as `runs`); if that reports "no selection"
+   * (returns false) or partial mode is off, it falls back to fanning the patch
+   * out to every selected text element (whole-element, legacy behaviour).
+   */
+  const patchChars = (patch: Partial<TextStyle>) => {
+    if (applyTextSelectionStyle && applyTextSelectionStyle(patch)) return;
+    for (const el of selectedTextElements) {
+      onElementStyleChange(el.elementId, patch);
+    }
+  };
+
+  /**
+   * Apply a PARAGRAPH/element-level style patch (alignment, line spacing,
+   * highlight). Always whole-element — these have no per-character meaning.
+   */
   const patchAll = (patch: Partial<TextStyle>) => {
     for (const el of selectedTextElements) {
       onElementStyleChange(el.elementId, patch);
@@ -137,7 +190,7 @@ export function FormattingToolbar({
         label={t("bold")}
         isActive={isBold}
         onClick={() =>
-          patchAll({ fontWeight: isBold ? "normal" : "bold" })
+          patchChars({ fontWeight: isBold ? "normal" : "bold" })
         }
       />
       <FormatButton
@@ -145,20 +198,20 @@ export function FormattingToolbar({
         label={t("italic")}
         isActive={isItalic}
         onClick={() =>
-          patchAll({ fontStyle: isItalic ? "normal" : "italic" })
+          patchChars({ fontStyle: isItalic ? "normal" : "italic" })
         }
       />
       <FormatButton
         icon={<Underline size={20} />}
         label={t("underline")}
         isActive={isUnderline}
-        onClick={() => patchAll({ underline: !isUnderline })}
+        onClick={() => patchChars({ underline: !isUnderline })}
       />
       <FormatButton
         icon={<Strikethrough size={20} />}
         label={t("strikethrough")}
         isActive={isStrike}
-        onClick={() => patchAll({ strikethrough: !isStrike })}
+        onClick={() => patchChars({ strikethrough: !isStrike })}
       />
 
       <Separator />
@@ -178,7 +231,7 @@ export function FormattingToolbar({
         <input
           type="color"
           value={color}
-          onChange={(e) => patchAll({ color: e.target.value })}
+          onChange={(e) => patchChars({ color: e.target.value })}
           className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         />
       </label>

@@ -212,6 +212,19 @@ export interface EditorToolbarProps {
   /** Callback pour mettre a jour le style d'un element */
   onElementStyleChange?: (elementId: string, style: Partial<TextStyle>) => void;
   /**
+   * Word-like PARTIAL formatting (character runs). Live style of the character
+   * sub-selection inside the text element being inline-edited (or `null` when
+   * none) — lets the formatting cluster reflect the right active state for a
+   * sub-selection. Forwarded to {@link FormattingToolbar}.
+   */
+  textSelectionStyle?: Partial<TextStyle> | null;
+  /**
+   * Apply a style patch to the active text edit SUB-SELECTION. Returns `true`
+   * when a sub-range was styled; `false` when no text is being edited with a
+   * selection (the cluster then falls back to the whole-element style path).
+   */
+  applyTextSelectionStyle?: (patch: Partial<TextStyle>) => boolean;
+  /**
    * Polices RÉELLES du document (faces embarquées chargées par `useEmbeddedFonts`).
    * Affichées en tête du FontPicker, AVANT le set système de repli. Absent /
    * vide ⇒ seules les polices système sont proposées (comportement historique).
@@ -545,6 +558,8 @@ export function EditorToolbar({
   selectedElement,
   selectedTextElements,
   onElementStyleChange,
+  textSelectionStyle,
+  applyTextSelectionStyle,
   documentFonts = [],
   currentFile,
   onToggleFormsPanel,
@@ -1046,12 +1061,16 @@ export function EditorToolbar({
                 // → famille CSS + effacer `originalFont` (sinon le renderer
                 // résoudrait encore la police embarquée précédente).
                 const docFont = documentFontByFace.get(font.value);
-                onElementStyleChange(
-                  selectedElement.elementId,
-                  docFont
-                    ? { fontFamily: docFont.faceName, originalFont: docFont.originalName }
-                    : { fontFamily: font.family, originalFont: null },
-                );
+                const patch = docFont
+                  ? { fontFamily: docFont.faceName, originalFont: docFont.originalName }
+                  : { fontFamily: font.family, originalFont: null };
+                // Word-like partial formatting: apply the font to the live text
+                // sub-selection first (persisted as a per-character run); fall
+                // back to the whole element when there is no sub-selection.
+                if (applyTextSelectionStyle && applyTextSelectionStyle(patch)) {
+                  return;
+                }
+                onElementStyleChange(selectedElement.elementId, patch);
               }}
               className="h-8 w-[160px]"
               placeholder={tProperties("fontFamily")}
@@ -1064,6 +1083,14 @@ export function EditorToolbar({
                   elementId: selectedElement.elementId,
                   size,
                 });
+                // Word-like partial formatting: size the live sub-selection
+                // first (per-character run); fall back to the whole element.
+                if (
+                  applyTextSelectionStyle &&
+                  applyTextSelectionStyle({ fontSize: size })
+                ) {
+                  return;
+                }
                 onElementStyleChange(selectedElement.elementId, {
                   fontSize: size,
                 });
@@ -1091,6 +1118,8 @@ export function EditorToolbar({
         <FormattingToolbar
           selectedTextElements={selectedTextElements}
           onElementStyleChange={onElementStyleChange}
+          textSelectionStyle={textSelectionStyle ?? null}
+          {...(applyTextSelectionStyle ? { applyTextSelectionStyle } : {})}
         />
       ) : (
         /* Fallback: legacy canvas-only quick format (no active state) used when

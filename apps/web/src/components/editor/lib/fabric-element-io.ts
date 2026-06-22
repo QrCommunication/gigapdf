@@ -27,6 +27,9 @@ import type {
   TextElement,
   TextStyle,
 } from "@giga-pdf/types";
+// Shared run<->Fabric-styles mapping (single source of truth with
+// render-elements.ts) so character-level styling round-trips identically.
+import { fabricStylesToRuns, type FabricStylesMap } from "./text-runs";
 
 /** Fabric object carrying our custom `.data` metadata. */
 export interface FabricObjectWithData extends FabricObject {
@@ -189,9 +192,17 @@ export function fabricObjectToElement(
       underline?: boolean;
       linethrough?: boolean;
       textBackgroundColor?: string;
+      styles?: FabricStylesMap;
     };
     const data = (obj as FabricObjectWithData).data;
     const fontSize = textObj.fontSize || 16;
+    // Word-like partial formatting: read Fabric's native per-character styles
+    // map back into our flat, coalesced model runs. `undefined` when the text
+    // is uniformly styled — the `runs` field is then omitted (legacy shape).
+    const styleRuns = fabricStylesToRuns(
+      textObj.text || "",
+      textObjWithStyles.styles,
+    );
 
     // Inverse of the renderer transform: Fabric IText was created with
     //   top = bounds.y + fontSize + descenderOffset, originY = 'bottom'
@@ -225,6 +236,10 @@ export function fabricObjectToElement(
       },
       type: "text" as const,
       content: textObj.text || "",
+      // Character-level style runs (Word-like partial formatting). Omitted
+      // (spread of {}) when the text is uniformly styled, so the serialised
+      // shape is byte-identical to the legacy one for unstyled runs.
+      ...(styleRuns ? { runs: styleRuns } : {}),
       style: {
         fontFamily: fontFamilyForRoundTrip,
         fontSize,
