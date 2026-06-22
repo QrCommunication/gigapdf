@@ -116,3 +116,55 @@ export function pickBundledStyle(
   if (isItalic) return 'italic';
   return 'regular';
 }
+
+/**
+ * Map a font name + weight/style to its base-14 PostScript name, or `null` if the
+ * font is not one of the five base-14 standard families.
+ *
+ * When non-null, the caller should reference the standard font (the engine emits a
+ * nude `/Type1` dict with **no** `FontFile`) instead of embedding a substitute —
+ * Adobe and the engine's own rasteriser both draw the base-14 set natively, so a
+ * base-14 family renders identically at ~1 KB instead of ~57 KB per added font.
+ *
+ * Only the standard families qualify (Helvetica/Arial, Times, Courier, Symbol,
+ * ZapfDingbats). Arbitrary fonts return `null` and keep the bundled Liberation
+ * embed, which has better metrics than Standard-14 for a non-exact substitution.
+ * OCR/Pitch Courier variants are excluded (they map to the specialised bundled
+ * CourierPrime, not base-14 Courier).
+ */
+export function base14NameFor(
+  fontName: string | null | undefined,
+  weight: string | undefined,
+  style: string | undefined,
+): string | null {
+  const name = (fontName ?? '').toLowerCase();
+  const isBold = weight === 'bold' || /\bbold\b|heavy|black|extrabold/.test(name);
+  const isItalic = style === 'italic' || /italic|oblique/.test(name);
+
+  // Symbol / ZapfDingbats have no style variants.
+  if (/zapf|dingbat/.test(name)) return 'ZapfDingbats';
+  if (/\bsymbol\b/.test(name)) return 'Symbol';
+
+  // Helvetica / Arial → Helvetica family (sans).
+  if (/helvetica|arial/.test(name)) {
+    if (isBold && isItalic) return 'Helvetica-BoldOblique';
+    if (isBold) return 'Helvetica-Bold';
+    if (isItalic) return 'Helvetica-Oblique';
+    return 'Helvetica';
+  }
+  // Times / Times New Roman → Times family (serif).
+  if (/times/.test(name)) {
+    if (isBold && isItalic) return 'Times-BoldItalic';
+    if (isBold) return 'Times-Bold';
+    if (isItalic) return 'Times-Italic';
+    return 'Times-Roman';
+  }
+  // Courier → Courier family (mono). Exclude OCR/Pitch (specialised bundled).
+  if (/courier/.test(name) && !/ocr|pitch/.test(name)) {
+    if (isBold && isItalic) return 'Courier-BoldOblique';
+    if (isBold) return 'Courier-Bold';
+    if (isItalic) return 'Courier-Oblique';
+    return 'Courier';
+  }
+  return null;
+}

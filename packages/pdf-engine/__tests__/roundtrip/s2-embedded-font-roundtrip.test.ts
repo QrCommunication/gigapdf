@@ -270,22 +270,18 @@ describe('S2 — Round-trip: PDF avec police custom embarquée', () => {
     const saved = await saveDocument(handle, { garbage: 0 });
 
     // assertRoundTripFidelity effectue ses propres assertions internes. addText
-    // avec une police base-14 ('helvetica') EMBARQUE un sous-ensemble de la police
-    // substitut pour le texte ajouté. Mesuré (open+addText+save) : fixture ~7,5 Ko
-    // -> ~66 Ko sauvée, soit ~8,8× (le save SANS édition reste à ~1,15× : aucune
-    // perte de police). Deux inefficacités CONNUES (suivis documentés dans
-    // tech_debt.md, PAS des régressions) gonflent ce ratio sur une fixture minuscule :
-    //  1. addText pour du texte base-14 devrait RÉFÉRENCER la police standard
-    //     (/Helvetica, 0 octet embarqué), comme le fait déjà la régénération /AP des
-    //     formulaires (lib 0.60.0) — au lieu d'embarquer un substitut.
-    //  2. Les sous-ensembles ne sont pas compactés en GID (loca/hmtx dimensionnés
-    //     par le GID max), gonflant chaque police embarquée.
-    // Un vrai document amortit (la police est partagée par tout le texte). Le seuil
-    // (10×) reste un garde-fou anti-explosion : une police complète NON subsettée
-    // (~411 Ko) donnerait ~55× et échouerait toujours.
+    // avec une police base-14 ('helvetica') RÉFÉRENCE désormais la police standard
+    // (/Type1 nu, zéro FontFile — lib 0.63+ + resolveFont stratégie 3.6) au lieu
+    // d'embarquer un substitut Liberation, exactement comme la régénération /AP des
+    // formulaires. Mesuré (open+addText+save) : fixture ~7,5 Ko -> ~9,5 Ko sauvée,
+    // soit ~1,26× (était ~8,8× quand le texte base-14 ajouté embarquait Liberation).
+    // Le seuil (3×) attrape une régression vers l'ancien comportement d'embarquement
+    // (~8,8×). Les vraies polices custom ajoutées restent subsettées+embarquées
+    // (cf. S2-CORE). Suivi restant : compaction GID des sous-ensembles custom
+    // (loca/hmtx dimensionnés au GID max) — n'affecte plus ce test base-14.
     await assertRoundTripFidelity(source, saved, {
       mustReopenClean: true,
-      maxSizeRatio: 10.0,
+      maxSizeRatio: 3.0,
       checkTexts: ['Round-trip validation'],
     });
   });

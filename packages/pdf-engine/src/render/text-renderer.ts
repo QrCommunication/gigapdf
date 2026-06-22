@@ -4,6 +4,7 @@ import type { TextElement } from '@giga-pdf/types';
 import { hexToPackedRgb } from '../utils/color';
 import { webToPdf } from '../utils/coordinates';
 import {
+  base14NameFor,
   loadBundledFontBytes,
   pickBundledFamily,
   pickBundledStyle,
@@ -47,9 +48,12 @@ export function clearFontCache(documentId: string): void {
  *     - cff (Type1C) → embed natif (bare-CFF enrobé en OpenType) ; type1/PFB
  *       brut non supporté nativement → fallback Google/OFL
  *  3. FontCachePort branché → résolution Google Fonts (téléchargement + cache)
- *  4. Fallback bundled OFL (Liberation/Courier Prime) — couvre aussi les
- *     familles standard (Arial→sans, Times→serif, Courier→mono) via
- *     pickBundledFamily, avec de vrais TTF (meilleures métriques que Standard-14).
+ *  3.6 Famille base-14 standard (Helvetica/Arial, Times, Courier, Symbol,
+ *     ZapfDingbats) → RÉFÉRENCE la police standard (lib 0.63+ : /Type1 nu, zéro
+ *     FontFile, ~50× plus léger), rendue nativement par Adobe + le rasteriseur.
+ *  4. Fallback bundled OFL (Liberation/Courier Prime) — couvre les polices
+ *     arbitraires non-base-14 via pickBundledFamily, avec de vrais TTF
+ *     (meilleures métriques que Standard-14 pour une substitution non-exacte).
  */
 async function resolveFont(
   handle: PDFDocumentHandle,
@@ -154,6 +158,33 @@ async function resolveFont(
         documentId: handle.id,
         error: message,
       });
+    }
+  }
+
+  // Stratégie 3.6 : famille base-14 standard → RÉFÉRENCE la police standard
+  // (/Type1 nu, zéro FontFile) au lieu d'embarquer un substitut. ~50× plus léger
+  // (≈1 Ko vs ≈57 Ko) et rendu nativement par Adobe + le rasteriseur moteur.
+  // Réservé aux 5 familles standard ; les polices arbitraires gardent le bundled
+  // OFL ci-dessous. Bytes vides : la lib 0.63+ détecte la base-14 par le NOM et
+  // ignore les bytes ; sur une lib antérieure embedFont retourne 0 → fallback sûr.
+  const base14 = base14NameFor(
+    originalFont ?? fontFamily,
+    element.style.fontWeight,
+    element.style.fontStyle,
+  );
+  if (base14) {
+    const base14Key = `${handle.id}::base14::${base14}`;
+    const cachedBase14 = embeddedFontCache.get(base14Key);
+    if (cachedBase14 !== undefined) return cachedBase14;
+    const obj = doc.embedFont(base14, new Uint8Array(0));
+    if (obj !== 0) {
+      embeddedFontCache.set(base14Key, obj);
+      engineLogger.info('Police base-14 référencée (zéro FontFile)', {
+        requested: originalFont ?? fontFamily,
+        base14,
+        documentId: handle.id,
+      });
+      return obj;
     }
   }
 

@@ -601,8 +601,8 @@ importers:
         specifier: workspace:*
         version: link:../types
       '@qrcommunication/gigapdf-lib':
-        specifier: ^0.62.0
-        version: 0.62.0
+        specifier: ^0.63.0
+        version: 0.63.0
       fabric:
         specifier: ^7.4.0
         version: 7.4.0
@@ -766,8 +766,8 @@ importers:
         specifier: workspace:*
         version: link:../types
       '@qrcommunication/gigapdf-lib':
-        specifier: ^0.62.0
-        version: 0.62.0
+        specifier: ^0.63.0
+        version: 0.63.0
     devDependencies:
       '@giga-pdf/eslint-config':
         specifier: workspace:*
@@ -2632,8 +2632,8 @@ packages:
       react: 19.2.7
       react-dom: 19.2.7
 
-  '@qrcommunication/gigapdf-lib@0.62.0':
-    resolution: {integrity: sha512-8FznJM/Vc2unxqOGpw+hGzwfZRGDun1MHYLO57vT+GHh5oipAIZtrHZb82DqxvbuodckASutJzXyl7MvT0uFSw==}
+  '@qrcommunication/gigapdf-lib@0.63.0':
+    resolution: {integrity: sha512-L/6pfqwHmb4AvsOyTLELBCIw2D8UwiP9KTkqKCkhlF6P2E6pal5ZuIKCO8Hpc9RpCEuL/aOZthQHZcsuhsFRGQ==}
     engines: {node: '>=18.17.0'}
 
   '@radix-ui/number@1.1.2':
@@ -10875,7 +10875,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react-dom'
 
-  '@qrcommunication/gigapdf-lib@0.62.0': {}
+  '@qrcommunication/gigapdf-lib@0.63.0': {}
 
   '@radix-ui/number@1.1.2': {}
 
@@ -11579,9 +11579,7 @@ snapshots:
       metro-runtime: 0.84.4
     transitivePeerDependencies:
       - '@babel/core'
-      - bufferutil
       - supports-color
-      - utf-8-validate
 
   '@react-native/normalize-color@2.1.0': {}
 
