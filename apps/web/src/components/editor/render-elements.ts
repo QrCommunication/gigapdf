@@ -38,7 +38,7 @@
 
 import type { Canvas as FabricCanvas, FabricObject } from "fabric";
 import type * as FabricNamespace from "fabric";
-import type { Element } from "@giga-pdf/types";
+import type { Element, PageBlockGroup } from "@giga-pdf/types";
 import { clientLogger } from "@/lib/client-logger";
 
 type FabricModule = typeof FabricNamespace;
@@ -117,6 +117,19 @@ export interface RenderElementsOptions {
    * `IText` séparé (cf. {@link groupTextRunsIntoParagraphs}).
    */
   groupParagraphs?: boolean;
+  /**
+   * Regroupement STRUCTUREL fourni par le moteur natif (`pageBlocks`) : la lib
+   * est la source de vérité de la structure de lecture. Quand fourni (et
+   * `groupParagraphs` non désactivé), les paragraphes/titres sont coalescés à
+   * partir de CE découpage — chaque groupe liste les `source_index` (= l'index
+   * moteur d'un run, identique à `TextElement.index`) de ses runs en ordre de
+   * lecture — au lieu de l'heuristique positionnelle {@link
+   * groupTextRunsIntoParagraphs}. Les runs sont résolus contre les `elements`
+   * déjà parsés par leur `index` (bounds/style/police embarquée corrects), donc
+   * le chemin de sauvegarde lossless (`data.paragraphRuns` → `replaceText`) est
+   * réutilisé tel quel. Absent ⇒ repli sur l'heuristique (aucune régression).
+   */
+  blockGroups?: PageBlockGroup[];
 }
 
 // ---------------------------------------------------------------------------
@@ -414,6 +427,74 @@ export function groupTextRunsIntoParagraphs(elements: Element[]): {
   return { paragraphs, standalone };
 }
 
+/**
+ * Coalesce paragraphs/headings from the native engine's STRUCTURAL grouping
+ * (the lib is the source of reading structure) instead of the positional
+ * heuristic. Each {@link PageBlockGroup} lists the engine `source_index`es of a
+ * paragraph/heading block's runs in reading order; those map 1:1 onto
+ * `TextElement.index`, so we resolve each run from the page's ALREADY-PARSED
+ * text elements (keeping their exact bounds, style and embedded-font identity)
+ * and assemble a {@link ParagraphGroup}. The resulting groups feed the same
+ * Textbox render + `data.paragraphRuns` lossless decompose-save path as the
+ * heuristic — the lib only decides WHICH runs group together.
+ *
+ * Pure & deterministic. Robust to drift between the lib grouping and the parsed
+ * elements: an index with no matching text run (or already consumed) is skipped,
+ * and a group that ends up with < 2 resolvable runs is dropped (its lone run, if
+ * any, stays a standalone IText — identical to the no-grouping behaviour).
+ *
+ * @param elements   The page's flat scene-graph elements (text + others).
+ * @param blockGroups The engine block grouping for the page.
+ * @returns Detected paragraph groups (≥ 2 runs) + the text runs left standalone.
+ */
+export function pageBlockGroupsToParagraphs(
+  elements: Element[],
+  blockGroups: PageBlockGroup[],
+): { paragraphs: ParagraphGroup[]; standalone: TextRun[] } {
+  // Index the page's text runs by their engine index for O(1) lookup. A run
+  // without an `index` (newly added, or non-editable form-XObject sentinel) is
+  // not addressable by the lib grouping and stays standalone.
+  const runByIndex = new Map<number, TextRun>();
+  const allRuns: TextRun[] = [];
+  for (const el of elements) {
+    if (el.type !== "text") continue;
+    const run = el as TextRun;
+    allRuns.push(run);
+    if (typeof run.index === "number" && run.index >= 0) {
+      // First run wins for a given index (indices are unique per page in
+      // practice; this guards against any accidental duplicate).
+      if (!runByIndex.has(run.index)) runByIndex.set(run.index, run);
+    }
+  }
+
+  const paragraphs: ParagraphGroup[] = [];
+  const consumed = new Set<TextRun>();
+
+  for (const group of blockGroups) {
+    if (group.kind !== "paragraph" && group.kind !== "heading") continue;
+    const runs: TextRun[] = [];
+    for (const sourceIndex of group.sourceIndices) {
+      const run = runByIndex.get(sourceIndex);
+      // Skip a missing index, an already-consumed run (defensive against a run
+      // claimed by two blocks), and ungroupable runs (links/RTL/multi-line) so
+      // they keep their dedicated standalone rendering.
+      if (!run || consumed.has(run) || isUngroupableRun(run)) continue;
+      runs.push(run);
+      consumed.add(run);
+    }
+    if (runs.length >= 2) {
+      paragraphs.push({ runs });
+    } else {
+      // A block that resolved to a single run is not worth a Textbox — release
+      // its run so it renders as a standalone IText below.
+      for (const r of runs) consumed.delete(r);
+    }
+  }
+
+  const standalone = allRuns.filter((r) => !consumed.has(r));
+  return { paragraphs, standalone };
+}
+
 // ---------------------------------------------------------------------------
 // API publique
 // ---------------------------------------------------------------------------
@@ -436,6 +517,7 @@ export async function renderElementsOverlay(
     resolveImageUrl = defaultResolveImageUrl,
     applyHideMask,
     groupParagraphs = true,
+    blockGroups,
   } = options;
   // Géométrie en points natifs : le zoom est géré par canvas.setZoom().
   void scale;
@@ -535,16 +617,21 @@ export async function renderElementsOverlay(
     return true;
   });
 
-  // 3. GROUP TEXT RUNS INTO PARAGRAPHS (Word-like editing). Consecutive
-  //    same-style, regularly-spaced, left-aligned runs are coalesced into one
-  //    multi-line `Textbox` (like Adobe grouping an intro paragraph into one
-  //    editable block) instead of N IText. The runs folded into a paragraph are
+  // 3. GROUP TEXT RUNS INTO PARAGRAPHS (Word-like editing). Consecutive runs of
+  //    a paragraph/heading are coalesced into one multi-line `Textbox` (like
+  //    Adobe grouping an intro paragraph into one editable block) instead of N
+  //    IText. The grouping comes from the native engine's `pageBlocks` when the
+  //    caller supplies `blockGroups` (the lib = source of structure); otherwise
+  //    it falls back to the positional heuristic. Either way the folded runs are
   //    excluded from the per-line IText loop below (tracked by elementId) and
-  //    rendered as Textboxes afterwards. Conservative — a title / label / table
-  //    cell / column / link stays its own IText (see groupTextRunsIntoParagraphs).
-  const paragraphGroups = groupParagraphs
-    ? groupTextRunsIntoParagraphs(dedupedElements).paragraphs
-    : [];
+  //    rendered as Textboxes afterwards, and both paths produce the SAME
+  //    ParagraphGroup shape → identical lossless decompose-save. Conservative —
+  //    a title / label / table cell / column / link stays its own IText.
+  const paragraphGroups = !groupParagraphs
+    ? []
+    : blockGroups && blockGroups.length > 0
+      ? pageBlockGroupsToParagraphs(dedupedElements, blockGroups).paragraphs
+      : groupTextRunsIntoParagraphs(dedupedElements).paragraphs;
   const runsInParagraph = new Set<string>();
   for (const group of paragraphGroups) {
     for (const run of group.runs) runsInParagraph.add(run.elementId);

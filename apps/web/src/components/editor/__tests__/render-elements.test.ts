@@ -12,10 +12,11 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import type { Element } from "@giga-pdf/types";
+import type { Element, PageBlockGroup } from "@giga-pdf/types";
 import {
   renderElementsOverlay,
   groupTextRunsIntoParagraphs,
+  pageBlockGroupsToParagraphs,
 } from "../render-elements";
 
 // --- Minimal Fabric mock: each shape records its constructor options. --------
@@ -805,5 +806,154 @@ describe("renderElementsOverlay — paragraph rendering", () => {
     const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
     expect(objects.filter((o) => o instanceof Textbox)).toHaveLength(0);
     expect(objects.filter((o) => o instanceof IText)).toHaveLength(1);
+  });
+});
+
+// --- Engine block grouping (lib = source of structure) -----------------------
+
+describe("pageBlockGroupsToParagraphs (pure)", () => {
+  it("coalesces a paragraph block by matching source_index → element.index", () => {
+    // Runs deliberately NOT positioned like a heuristic paragraph (varying x,
+    // irregular gaps): only the engine grouping ties them together.
+    const elements = [
+      paraRun("a", 100, { index: 11, x: 40 }),
+      paraRun("b", 400, { index: 12, x: 220 }),
+      paraRun("c", 105, { index: 13, x: 80 }),
+    ];
+    const blockGroups: PageBlockGroup[] = [
+      { kind: "paragraph", sourceIndices: [11, 12, 13] },
+    ];
+    const { paragraphs, standalone } = pageBlockGroupsToParagraphs(
+      elements,
+      blockGroups,
+    );
+    expect(paragraphs).toHaveLength(1);
+    // Reading order follows the engine sourceIndices order, not the geometry.
+    expect(paragraphs[0]!.runs.map((r) => r.elementId)).toEqual(["a", "b", "c"]);
+    expect(standalone).toHaveLength(0);
+  });
+
+  it("treats a heading block (≥2 runs) as a group too", () => {
+    const elements = [
+      paraRun("h1", 50, { index: 1 }),
+      paraRun("h2", 64, { index: 2 }),
+    ];
+    const { paragraphs } = pageBlockGroupsToParagraphs(elements, [
+      { kind: "heading", sourceIndices: [1, 2] },
+    ]);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]!.runs.map((r) => r.elementId)).toEqual(["h1", "h2"]);
+  });
+
+  it("skips a missing source_index and drops a group left with <2 runs", () => {
+    const elements = [paraRun("a", 100, { index: 5 })];
+    const { paragraphs, standalone } = pageBlockGroupsToParagraphs(elements, [
+      { kind: "paragraph", sourceIndices: [5, 999] }, // 999 has no element
+    ]);
+    // Only one run resolved → not worth a Textbox → released to standalone.
+    expect(paragraphs).toHaveLength(0);
+    expect(standalone.map((r) => r.elementId)).toEqual(["a"]);
+  });
+
+  it("never claims the same run for two blocks", () => {
+    const elements = [
+      paraRun("a", 100, { index: 1 }),
+      paraRun("b", 114, { index: 2 }),
+      paraRun("c", 128, { index: 3 }),
+    ];
+    const { paragraphs } = pageBlockGroupsToParagraphs(elements, [
+      { kind: "paragraph", sourceIndices: [1, 2] },
+      { kind: "paragraph", sourceIndices: [2, 3] }, // 2 already consumed
+    ]);
+    // First block keeps [1,2]; second resolves only [3] → dropped.
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]!.runs.map((r) => r.elementId)).toEqual(["a", "b"]);
+  });
+
+  it("ignores non-paragraph/heading kinds (tables/lists keep element render)", () => {
+    const elements = [
+      paraRun("a", 100, { index: 1 }),
+      paraRun("b", 114, { index: 2 }),
+    ];
+    const { paragraphs, standalone } = pageBlockGroupsToParagraphs(elements, [
+      { kind: "table", sourceIndices: [1, 2] },
+    ]);
+    expect(paragraphs).toHaveLength(0);
+    expect(standalone.map((r) => r.elementId)).toEqual(["a", "b"]);
+  });
+
+  it("leaves a run without an index standalone (not addressable by the lib)", () => {
+    const withIdx = paraRun("a", 100, { index: 1 });
+    const noIdx = paraRun("b", 114); // no index
+    const { paragraphs, standalone } = pageBlockGroupsToParagraphs(
+      [withIdx, noIdx],
+      [{ kind: "paragraph", sourceIndices: [1] }],
+    );
+    expect(paragraphs).toHaveLength(0);
+    expect(standalone.map((r) => r.elementId)).toEqual(["a", "b"]);
+  });
+
+  it("does NOT fold a hyperlink run even if the block lists it", () => {
+    const elements = [
+      paraRun("a", 100, { index: 1 }),
+      paraRun("link", 114, { index: 2, linkUrl: "https://example.com" }),
+      paraRun("c", 128, { index: 3 }),
+    ];
+    const { paragraphs, standalone } = pageBlockGroupsToParagraphs(elements, [
+      { kind: "paragraph", sourceIndices: [1, 2, 3] },
+    ]);
+    // The link is ungroupable → excluded; the remaining two still form a block.
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]!.runs.map((r) => r.elementId)).toEqual(["a", "c"]);
+    expect(standalone.map((r) => r.elementId)).toEqual(["link"]);
+  });
+});
+
+describe("renderElementsOverlay — engine blockGroups drive paragraph render", () => {
+  it("uses blockGroups over the positional heuristic and round-trips source indices", async () => {
+    const canvas = makeCanvas();
+    // Geometry that the heuristic would NOT group (far-apart rows), so a Textbox
+    // can only appear if the engine blockGroups are honoured.
+    await renderElementsOverlay(
+      canvas,
+      [
+        paraRun("a", 100, { index: 21, content: "Intro line one" }),
+        paraRun("b", 480, { index: 22, content: "Intro line two", x: 300 }),
+      ],
+      fabricMock,
+      { blockGroups: [{ kind: "paragraph", sourceIndices: [21, 22] }] },
+    );
+    const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    const tb = objects.find((o) => o instanceof Textbox) as Textbox | undefined;
+    expect(tb).toBeDefined();
+    expect(tb!.text).toBe("Intro line one\nIntro line two");
+    const data = tb!.data as Record<string, unknown>;
+    expect(data.isParagraph).toBe(true);
+    const stashed = data.paragraphRuns as Array<{
+      elementId: string;
+      index?: number;
+    }>;
+    expect(stashed.map((r) => r.elementId)).toEqual(["a", "b"]);
+    // Engine source indices preserved → lossless replaceText on save.
+    expect(stashed.map((r) => r.index)).toEqual([21, 22]);
+    // No standalone IText for the folded runs.
+    expect(objects.filter((o) => o instanceof IText)).toHaveLength(0);
+  });
+
+  it("falls back to the heuristic when no blockGroups are provided", async () => {
+    const canvas = makeCanvas();
+    // Same far-apart geometry, but WITHOUT blockGroups → heuristic keeps them
+    // standalone (different rows, no regular gap).
+    await renderElementsOverlay(
+      canvas,
+      [
+        paraRun("a", 100, { index: 21, content: "L1" }),
+        paraRun("b", 480, { index: 22, content: "L2", x: 300 }),
+      ],
+      fabricMock,
+    );
+    const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    expect(objects.filter((o) => o instanceof Textbox)).toHaveLength(0);
+    expect(objects.filter((o) => o instanceof IText)).toHaveLength(2);
   });
 });

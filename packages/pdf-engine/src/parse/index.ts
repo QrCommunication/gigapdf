@@ -1,6 +1,14 @@
 export { parseDocument, parsePage, parseMetadata, parseBookmarks } from './parser';
 export type { ParseOptions, ParsePageOptions } from './parser';
 
+// Structural block grouping (native engine `pageBlocks` → editor coalescing).
+export {
+  extractPageBlockGroups,
+  extractPageBlockGroupsByPage,
+  gigaBlocksToPageBlockGroups,
+} from './block-extractor';
+export type { PageBlockGroup } from './block-extractor';
+
 // Engine-powered extractors (structured text, search, robust metadata, OCR)
 export {
   extractStructuredText,

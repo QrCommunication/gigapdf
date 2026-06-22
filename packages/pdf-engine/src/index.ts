@@ -85,6 +85,9 @@ export {
   extractOcrBlocks,
   ocrWordToPdfBox,
   pdfBoxToImageRect,
+  extractPageBlockGroups,
+  extractPageBlockGroupsByPage,
+  gigaBlocksToPageBlockGroups,
 } from './parse';
 export type {
   StructuredChar,
@@ -106,6 +109,7 @@ export type {
   OcrBlock,
   ExtractOcrBlocksOptions,
   ExtractOcrBlocksResult,
+  PageBlockGroup,
 } from './parse';
 
 // Merge/Split
