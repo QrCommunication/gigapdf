@@ -1029,7 +1029,11 @@
       "errorTooLarge": "Fichier trop volumineux (max 250 Mo)",
       "summaryAllSuccess": "{count, plural, one {# fichier importé avec succès} other {# fichiers importés avec succès}}",
       "summaryPartial": "{success, plural, one {# fichier importé} other {# fichiers importés}}, {failed, plural, one {# échec} other {# échecs}}",
-      "summaryAllFailed": "{count, plural, one {Échec de l'import du fichier} other {Échec de l'import des # fichiers}}"
+      "summaryAllFailed": "{count, plural, one {Échec de l'import du fichier} other {Échec de l'import des # fichiers}}",
+      "office": {
+        "conversionFailed": "Impossible de convertir ce document Office en PDF",
+        "unavailable": "La conversion Office est temporairement indisponible"
+      }
     },
     "office": {
       "import": "Importer Office",

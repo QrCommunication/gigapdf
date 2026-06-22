@@ -68,6 +68,39 @@ export function isPdfFile(file: { name: string; type?: string }): boolean {
   return getFileExtension(file.name) === "pdf" || file.type === "application/pdf";
 }
 
+/**
+ * Office import formats convertible to an editable PDF on upload.
+ *
+ * MIRRORS `OFFICE_IMPORT_FORMATS` from `@giga-pdf/pdf-engine`
+ * (`convert/office-headless.ts`) — kept as a local literal so this module stays
+ * pure (no WASM engine import, which would break the jsdom unit test). The
+ * conversion route (`/api/office/upload`) is the type-checked gate against the
+ * engine's `OfficeImportFormat`; this list only decides client-side routing.
+ *
+ * NOTE: `rtf` is intentionally absent — the engine does not convert it and the
+ * route would reject it (400), so we leave RTF on the as-is store path.
+ */
+const OFFICE_CONVERT_EXTENSIONS = new Set([
+  "docx",
+  "xlsx",
+  "pptx",
+  "doc",
+  "xls",
+  "ppt",
+  "odt",
+  "ods",
+  "odp",
+]);
+
+/**
+ * True when the file is an Office document that should be converted to PDF on
+ * upload (so it becomes editable in the editor). Detected by extension only;
+ * the conversion route re-validates the container magic bytes server-side.
+ */
+export function isOfficeFile(file: { name: string }): boolean {
+  return OFFICE_CONVERT_EXTENSIONS.has(getFileExtension(file.name));
+}
+
 /** Strip a single trailing extension from a file name for the stored title. */
 export function stripExtension(fileName: string): string {
   const ext = getFileExtension(fileName);

@@ -1029,7 +1029,11 @@
       "errorTooLarge": "File too large (max 250 MB)",
       "summaryAllSuccess": "{count, plural, one {# file imported successfully} other {# files imported successfully}}",
       "summaryPartial": "{success, plural, one {# file imported} other {# files imported}}, {failed, plural, one {# failed} other {# failed}}",
-      "summaryAllFailed": "{count, plural, one {Failed to import the file} other {Failed to import # files}}"
+      "summaryAllFailed": "{count, plural, one {Failed to import the file} other {Failed to import # files}}",
+      "office": {
+        "conversionFailed": "Could not convert this Office document to PDF",
+        "unavailable": "Office conversion is temporarily unavailable"
+      }
     },
     "office": {
       "import": "Import Office",
