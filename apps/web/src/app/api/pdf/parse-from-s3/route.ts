@@ -31,7 +31,11 @@ import 'server-only';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { parseDocument, flattenFormXObjects } from '@giga-pdf/pdf-engine';
+import {
+  parseDocument,
+  flattenFormXObjects,
+  extractPageBlockGroupsByPage,
+} from '@giga-pdf/pdf-engine';
 import {
   PDFParseError,
   PDFCorruptedError,
@@ -259,6 +263,31 @@ export async function POST(request: NextRequest): Promise<Response> {
       documentId,
       pageCount: documentObject.pages?.length ?? 0,
     });
+
+    // Editor load (`flatten` set): attach the native engine's STRUCTURAL block
+    // grouping per page so the editor coalesces paragraphs/headings from the
+    // lib (the source of structure) instead of its positional heuristic. The
+    // grouping is expressed as engine `source_index`es that map 1:1 onto the
+    // parsed `TextElement.index`, so the lossless in-place edit path is reused
+    // unchanged. Best-effort: a failure leaves `blockGroups` unset and the
+    // editor degrades to its heuristic grouping. Read-only viewers omit
+    // `flatten`, so their response shape is byte-identical to before.
+    if (flatten && Array.isArray(documentObject.pages)) {
+      try {
+        const blockGroupsByPage = await extractPageBlockGroupsByPage(bytesToParse);
+        if (blockGroupsByPage.size > 0) {
+          for (const page of documentObject.pages) {
+            const groups = blockGroupsByPage.get(page.pageNumber);
+            if (groups && groups.length > 0) page.blockGroups = groups;
+          }
+        }
+      } catch (err) {
+        serverLogger.warn('[api/pdf/parse-from-s3] pageBlocks grouping failed — heuristic fallback', {
+          documentId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
 
     // Only attach flatten fields when something was actually inlined, so the
     // form-less response shape is unchanged from before.

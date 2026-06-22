@@ -1990,15 +1990,19 @@ export function EditorCanvas({
       canvas: FabricCanvas,
       elements: Element[],
       fabricModule: typeof import("fabric"),
+      blockGroups?: PageObject["blockGroups"],
     ): Promise<void> => {
       // Delegate to the single canonical overlay renderer (render-elements.ts).
       // The continuous view (PageCanvasHost) calls the SAME function, so both
       // surfaces build the Fabric overlay identically (invisible 1:1-fidelity
       // hit-targets). We inject the single-page editor's embedded-font resolver
-      // and edit-time hide-mask; everything else lives in one place.
+      // and edit-time hide-mask; and the native engine's structural `blockGroups`
+      // (when the page carries them) so paragraphs/headings coalesce from the lib
+      // instead of the positional heuristic. Everything else lives in one place.
       await renderElementsOverlayShared(canvas, elements, fabricModule, {
         applyHideMask,
         ...(getFontFaceName ? { getFontFaceName } : {}),
+        ...(blockGroups && blockGroups.length > 0 ? { blockGroups } : {}),
       });
     },
     [getFontFaceName, applyHideMask],
@@ -2083,7 +2087,12 @@ export function EditorCanvas({
             lastKnownBoundsRef.current.set(el.elementId, el.bounds);
           }
         }
-        await renderElementsOverlay(canvas, pageData.elements, fabricModule);
+        await renderElementsOverlay(
+          canvas,
+          pageData.elements,
+          fabricModule,
+          pageData.blockGroups,
+        );
       } else {
         canvas.renderAll();
       }
