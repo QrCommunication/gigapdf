@@ -26,6 +26,7 @@ import {
   MAX_IMPORT_FILE_SIZE_BYTES,
   isOfficeFile,
   isPdfFile,
+  isTextModelFile,
   runWithConcurrency,
   stripExtension,
   summarizeOutcomes,
@@ -267,6 +268,48 @@ async function convertOfficeFileToPdf(file: File): Promise<File> {
   return new File([pdfBlob], `${baseName}.pdf`, { type: "application/pdf" });
 }
 
+/**
+ * Convert a Markdown/CSV document to an editable PDF via
+ * POST /api/convert/text-format (server-side extension validation + native WASM
+ * `mdToModel`/`csvToModel` → `modelToPdf`). The returned PDF is wrapped as a
+ * `<base>.pdf` File (application/pdf) so the rest of the import pipeline treats
+ * it exactly like an uploaded PDF — and the editor opens it as editable pages.
+ *
+ * Reuses {@link OfficeConversionError} for a consistent per-file failure shape
+ * (a 422 here = an empty/malformed text file → "conversion"; everything else is
+ * also a content/conversion failure from the user's perspective).
+ *
+ * @throws {OfficeConversionError} on any non-2xx response (precise per-file reason)
+ */
+async function convertTextModelFileToPdf(file: File): Promise<File> {
+  const baseName = stripExtension(file.name) || file.name;
+  const form = new FormData();
+  form.append("file", file);
+
+  let res: Response;
+  try {
+    res = await fetch("/api/convert/text-format", {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+  } catch (err) {
+    clientLogger.warn("documents.text-format-convert-network-failed", err);
+    throw new OfficeConversionError("text-format conversion network error", "unavailable");
+  }
+
+  if (!res.ok) {
+    clientLogger.warn("documents.text-format-convert-failed", res.status);
+    throw new OfficeConversionError(
+      `text-format conversion failed (${res.status})`,
+      res.status === 503 ? "unavailable" : "conversion",
+    );
+  }
+
+  const pdfBlob = await res.blob();
+  return new File([pdfBlob], `${baseName}.pdf`, { type: "application/pdf" });
+}
+
 /** Build the /documents URL preserving folder and tag query params. */
 function buildDocumentsUrl(folderId: string | null, tag: string | null): string {
   const params = new URLSearchParams();
@@ -473,10 +516,12 @@ export default function DocumentsPage() {
         };
       }
 
-      // Office → editable PDF. On failure we abort THIS file with a precise
-      // reason (never store broken/un-openable Office bytes silently).
+      // Office / text-model (Markdown, CSV) → editable PDF. On failure we abort
+      // THIS file with a precise reason (never store broken/un-openable bytes
+      // silently). A given file matches at most one of these branches.
       let fileToStore = file;
       const office = isOfficeFile(file);
+      const textModel = isTextModelFile(file);
       if (office) {
         try {
           fileToStore = await convertOfficeFileToPdf(file);
@@ -490,6 +535,21 @@ export default function DocumentsPage() {
               kind === "unavailable"
                 ? t("import.office.unavailable")
                 : t("import.office.conversionFailed"),
+          };
+        }
+      } else if (textModel) {
+        try {
+          fileToStore = await convertTextModelFileToPdf(file);
+        } catch (err) {
+          const kind =
+            err instanceof OfficeConversionError ? err.kind : "conversion";
+          return {
+            ok: false,
+            name: file.name,
+            reason:
+              kind === "unavailable"
+                ? t("import.textFormat.unavailable")
+                : t("import.textFormat.conversionFailed"),
           };
         }
       }

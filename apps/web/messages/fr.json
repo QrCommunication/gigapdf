@@ -1033,6 +1033,10 @@
       "office": {
         "conversionFailed": "Impossible de convertir ce document Office en PDF",
         "unavailable": "La conversion Office est temporairement indisponible"
+      },
+      "textFormat": {
+        "conversionFailed": "Impossible de convertir ce fichier Markdown/CSV en PDF",
+        "unavailable": "La conversion Markdown/CSV est temporairement indisponible"
       }
     },
     "office": {

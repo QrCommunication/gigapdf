@@ -5,6 +5,7 @@ import {
   getFileExtension,
   isOfficeFile,
   isPdfFile,
+  isTextModelFile,
   runWithConcurrency,
   stripExtension,
   summarizeOutcomes,
@@ -105,6 +106,32 @@ describe("isOfficeFile", () => {
 
   it("does NOT treat rtf as convertible (engine/route reject it → stored as-is)", () => {
     expect(isOfficeFile({ name: "letter.rtf" })).toBe(false);
+  });
+});
+
+describe("isTextModelFile", () => {
+  it("detects Markdown and CSV (case-insensitive)", () => {
+    for (const ext of ["md", "markdown", "csv"]) {
+      expect(isTextModelFile({ name: `notes.${ext}` })).toBe(true);
+      expect(isTextModelFile({ name: `notes.${ext.toUpperCase()}` })).toBe(true);
+    }
+  });
+
+  it("returns false for PDFs, Office docs, images and other formats", () => {
+    expect(isTextModelFile({ name: "doc.pdf" })).toBe(false);
+    expect(isTextModelFile({ name: "report.docx" })).toBe(false);
+    expect(isTextModelFile({ name: "sheet.xlsx" })).toBe(false);
+    expect(isTextModelFile({ name: "image.png" })).toBe(false);
+    expect(isTextModelFile({ name: "letter.rtf" })).toBe(false);
+    expect(isTextModelFile({ name: "plain.txt" })).toBe(false);
+    expect(isTextModelFile({ name: "NOEXT" })).toBe(false);
+  });
+
+  it("is disjoint from isOfficeFile (a file matches at most one branch)", () => {
+    for (const name of ["notes.md", "data.csv", "readme.markdown"]) {
+      expect(isTextModelFile({ name })).toBe(true);
+      expect(isOfficeFile({ name })).toBe(false);
+    }
   });
 });
 
