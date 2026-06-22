@@ -117,10 +117,40 @@ export interface UseEmbeddedFontsResult {
    * registered with the FontFace API (embedded bytes or Google substitute).
    * Returns null when the font failed to load (neither embedded bytes nor
    * a Google Fonts substitute were available).
+   *
+   * `wantVariant` is the weight/style INTENT of the run being rendered. A PDF
+   * routinely embeds many subsets of the SAME family (Times New Roman regular,
+   * bold, italic, bold-italic — Ameli/admin forms have 20-40), and the scene
+   * graph collapses each run's family to a bare name ("Times New Roman"). Passed
+   * a variant, the resolver first looks for the subset whose own (weight-bearing)
+   * name matches that bold/italic intent, so a regular run no longer resolves to
+   * the first-loaded BOLD subset (the "gras parasite" / wrong-metrics bug). When
+   * omitted, or when no variant-exact subset exists, it falls back to the loose
+   * family match (previous behaviour — no regression for single-variant fonts).
    */
-  getFontFaceName: (originalName: string) => string | null;
+  getFontFaceName: (
+    originalName: string,
+    wantVariant?: { bold?: boolean; italic?: boolean },
+  ) => string | null;
   /** Retry a failed font load by fontId. Clears the cache entry first. */
   retry: (fontId: string) => Promise<void>;
+}
+
+/**
+ * Detect the weight/style a font NAME advertises (subset PostScript / base name),
+ * e.g. "AAAAAB+TimesNewRomanPS-BoldMT" → bold, "…,Italic" → italic,
+ * "…-BoldItalicMT" → both. Medium weights ("SemiBold"/"DemiBold") are treated as
+ * NOT bold (they are not the bold variant). Pure, used to pick the subset that
+ * matches a run's render-time weight/style intent.
+ */
+function fontNameVariant(name: string): { bold: boolean; italic: boolean } {
+  const isBold =
+    /(?:^|[^a-z])(?:bold|heavy|black|extrabold)(?![a-z])/i.test(name) ||
+    /[,\-](?:bold|heavy|black|extrabold)/i.test(name) ||
+    /ps-?bold/i.test(name);
+  const isSemi = /semi-?bold|demi-?bold/i.test(name);
+  const isItalic = /italic|oblique/i.test(name);
+  return { bold: isBold && !isSemi, italic: isItalic };
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -648,25 +678,61 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
   }
 
   const getFontFaceName = useCallback(
-    (originalName: string): string | null => {
+    (
+      originalName: string,
+      wantVariant?: { bold?: boolean; italic?: boolean },
+    ): string | null => {
       if (!originalName) return null;
       const target = normaliseFontName(originalName);
       if (!target) return null;
-      const found = fonts.find((f) => {
-        if (f.status !== 'loaded') return false;
+
+      const loaded = fonts.filter((f) => f.status === 'loaded');
+      // Family name (loose) match against a candidate's normalised name.
+      const familyHit = (candidate: string): boolean => {
+        const norm = normaliseFontName(candidate);
+        if (!norm) return false;
+        return norm === target || norm.includes(target) || target.includes(norm);
+      };
+
+      // VARIANT-EXACT mode: when the caller passes the run's weight/style intent,
+      // resolve ONLY the subset whose OWN name advertises that same bold/italic,
+      // and return null otherwise. The renderer then falls back to the loose
+      // 1-arg call for the closest subset AND re-applies a synthetic weight/style,
+      // so a missing variant is approximated instead of silently mis-rendered.
+      //
+      // Crucially the family is matched on the WEIGHT-BEARING names (originalName /
+      // postscriptName) only — NOT the backend-collapsed `fontFamily`
+      // ("Times New Roman"), which is identical for every subset and short-circuits
+      // to the first-loaded one. That collapse is exactly why a regular run used to
+      // resolve to the first BOLD subset (the "gras parasite" + wrong-metrics bug).
+      if (wantVariant) {
+        const wantBold = wantVariant.bold === true;
+        const wantItalic = wantVariant.italic === true;
+        const exact = loaded.find((f) => {
+          const weightNames = [f.metadata.originalName, f.metadata.postscriptName].filter(
+            (s): s is string => Boolean(s),
+          );
+          for (const name of weightNames) {
+            if (!familyHit(name)) continue;
+            const v = fontNameVariant(name);
+            if (v.bold === wantBold && v.italic === wantItalic) return true;
+          }
+          return false;
+        });
+        return exact?.fontFaceName ?? null;
+      }
+
+      // LOOSE family match (original behaviour) — used for the 1-arg call (no
+      // variant requested) and as the renderer's fallback when no variant-exact
+      // subset exists. Matches on every candidate name including the collapsed
+      // `fontFamily`, returning the first loaded subset of the family.
+      const found = loaded.find((f) => {
         const candidates = [
           f.metadata.originalName,
           f.metadata.postscriptName,
           f.metadata.fontFamily,
         ].filter((s): s is string => Boolean(s));
-        for (const candidate of candidates) {
-          const norm = normaliseFontName(candidate);
-          if (!norm) continue;
-          if (norm === target || norm.includes(target) || target.includes(norm)) {
-            return true;
-          }
-        }
-        return false;
+        return candidates.some((c) => familyHit(c));
       });
       return found?.fontFaceName ?? null;
     },

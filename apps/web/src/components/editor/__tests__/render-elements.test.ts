@@ -156,8 +156,89 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
       (o) => o instanceof IText,
     ) as IText;
-    expect(getFontFaceName).toHaveBeenCalledWith("KWVFOU+TimesNewRoman,Bold");
+    // Now resolved WEIGHT/STYLE-AWARE: the run carries no explicit weight/style,
+    // so the variant intent is regular (bold:false, italic:false).
+    expect(getFontFaceName).toHaveBeenCalledWith("KWVFOU+TimesNewRoman,Bold", {
+      bold: false,
+      italic: false,
+    });
     expect(it_.opts.fontFamily).toBe("gigapdf-doc-font-abc");
+  });
+
+  it("resolves the embedded subset matching the run's weight/style variant", async () => {
+    // A PDF embeds many subsets of the same family. The resolver is asked first
+    // for the variant-EXACT subset (Pass 1, weight-bearing names); only if that
+    // misses does the renderer fall back to the loose 1-arg call. Here the run is
+    // BOLD ITALIC, so the variant query must carry { bold: true, italic: true }
+    // and its result is used as-is (no synthetic bold/italic on top).
+    const canvas = makeCanvas();
+    const getFontFaceName = vi.fn((_name: string, variant?: { bold?: boolean; italic?: boolean }) =>
+      variant?.bold && variant?.italic ? "gigapdf-doc-bolditalic" : null,
+    );
+    const run = textElement({
+      style: {
+        fontSize: 12,
+        color: "#000000",
+        fontFamily: "Times New Roman",
+        fontWeight: "bold",
+        fontStyle: "italic",
+        // Bare family name — exactly what the SDK collapses a run's font to.
+        originalFont: "Times New Roman",
+      },
+    });
+    await renderElementsOverlay(canvas, [run], fabricMock, { getFontFaceName });
+
+    const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof IText,
+    ) as IText;
+    expect(getFontFaceName).toHaveBeenCalledWith("Times New Roman", {
+      bold: true,
+      italic: true,
+    });
+    expect(it_.opts.fontFamily).toBe("gigapdf-doc-bolditalic");
+    // Variant-exact subset already encodes the weight/style → no synthetic.
+    expect(it_.opts.fontWeight).toBe("normal");
+    expect(it_.opts.fontStyle).toBe("normal");
+    expect((it_.data as Record<string, unknown>).usingEmbeddedFont).toBe(true);
+  });
+
+  it("falls back to the loose subset + synthetic weight when the exact variant is not embedded", async () => {
+    // The PDF embeds the family but NOT this run's variant: the variant-exact
+    // query (Pass 1) returns null, so the renderer uses the loose 1-arg match for
+    // the closest subset AND re-applies the parsed weight/style synthetically to
+    // approximate the missing variant (instead of silently rendering it regular).
+    const canvas = makeCanvas();
+    const getFontFaceName = vi.fn(
+      (_name: string, variant?: { bold?: boolean; italic?: boolean }) =>
+        // Variant-exact miss (null); loose 1-arg call (no variant) → closest subset.
+        variant === undefined ? "gigapdf-doc-regular" : null,
+    );
+    const run = textElement({
+      style: {
+        fontSize: 12,
+        color: "#000000",
+        fontFamily: "Times New Roman",
+        fontWeight: "bold",
+        fontStyle: "normal",
+        originalFont: "Times New Roman",
+      },
+    });
+    await renderElementsOverlay(canvas, [run], fabricMock, { getFontFaceName });
+
+    const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof IText,
+    ) as IText;
+    // Both calls happened: variant-exact (missed) then loose (hit).
+    expect(getFontFaceName).toHaveBeenCalledWith("Times New Roman", {
+      bold: true,
+      italic: false,
+    });
+    expect(getFontFaceName).toHaveBeenCalledWith("Times New Roman");
+    expect(it_.opts.fontFamily).toBe("gigapdf-doc-regular");
+    // Closest subset is not the bold variant → synthesise bold so it still reads bold.
+    expect(it_.opts.fontWeight).toBe("bold");
+    expect(it_.opts.fontStyle).toBe("normal");
+    expect((it_.data as Record<string, unknown>).usingEmbeddedFont).toBe(false);
   });
 
   it("NEUTRALISES synthetic bold/italic when the embedded font is used", async () => {
