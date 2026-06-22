@@ -45,6 +45,9 @@ import type {
   PageBlockListItem,
 } from "@giga-pdf/types";
 import { clientLogger } from "@/lib/client-logger";
+// Shared run<->Fabric-styles mapping (single source of truth with
+// fabric-element-io.ts) so character-level styling round-trips identically.
+import { runsToFabricStyles } from "./lib/text-runs";
 
 type FabricModule = typeof FabricNamespace;
 
@@ -965,6 +968,17 @@ export async function renderElementsOverlay(
           linkUrl: textElement.linkUrl,
           linkPage: textElement.linkPage,
         };
+        // Word-like partial formatting: project the model's character-level
+        // runs onto Fabric's native per-character `styles` map. Absent/empty
+        // runs ⇒ {} ⇒ Fabric renders the run uniformly via the object-level
+        // fontWeight/fill/… set above (legacy behaviour, no per-char styling).
+        const _charStyles = runsToFabricStyles(
+          textElement.content || "",
+          textElement.runs,
+        );
+        if (Object.keys(_charStyles).length > 0) {
+          textObj.set("styles", _charStyles);
+        }
         // Style hyperlinks
         if (
           (textElement.linkUrl || textElement.linkPage) &&

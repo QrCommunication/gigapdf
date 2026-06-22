@@ -12,6 +12,7 @@ import type {
   FieldCreationKind,
   FormFieldElement,
   Bounds,
+  TextStyle,
 } from "@giga-pdf/types";
 import type { Canvas as FabricCanvas, FabricObject } from "fabric";
 import { clientLogger } from "@/lib/client-logger";
@@ -33,6 +34,14 @@ import {
   fabricObjectToElements as fabricObjectToElementsImpl,
   sampleBackgroundUnder as sampleBackgroundUnderImpl,
 } from "./lib/fabric-element-io";
+// Word-like partial formatting: shared char-style mappers (model <-> Fabric)
+// reused so setSelectionStyles / selection-style aggregation map fields the
+// same way the renderer and serialiser do.
+import {
+  modelStyleToFabricChar,
+  fabricCharToModelStyle,
+  type FabricCharStyle,
+} from "./lib/text-runs";
 
 /** Zoom hard bounds (10% – 800%) shared by wheel, toolbar and fit modes. */
 const MIN_ZOOM = 0.1;
@@ -46,6 +55,62 @@ const FIELD_SNAP_DISTANCE = 4;
 
 function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+}
+
+/**
+ * A Fabric IText in inline-edit mode, narrowed to the per-character selection
+ * surface used by the Word-like partial-formatting bridge.
+ */
+type EditableTextObject = FabricObject & {
+  isEditing?: boolean;
+  selectionStart?: number;
+  selectionEnd?: number;
+  setSelectionStyles?: (
+    styles: object,
+    startIndex?: number,
+    endIndex?: number,
+  ) => void;
+  getSelectionStyles?: (
+    startIndex?: number,
+    endIndex?: number,
+    complete?: boolean,
+  ) => FabricCharStyle[];
+};
+
+/**
+ * Aggregate the style of an editing IText's current character sub-selection
+ * into a model `Partial<TextStyle>`, keeping only fields CONSISTENT across the
+ * whole range (mixed ⇒ field dropped). Returns `null` when the object is not
+ * editing or the selection is empty (caret only). Pure — shared by the handle
+ * method and the live `text:selection:changed` emitter so both agree.
+ */
+function aggregateSelectionStyle(
+  obj: EditableTextObject | null | undefined,
+): Partial<TextStyle> | null {
+  if (
+    !obj ||
+    obj.isEditing !== true ||
+    typeof obj.selectionStart !== "number" ||
+    typeof obj.selectionEnd !== "number" ||
+    obj.selectionStart >= obj.selectionEnd ||
+    typeof obj.getSelectionStyles !== "function"
+  ) {
+    return null;
+  }
+  const perChar = obj.getSelectionStyles(
+    obj.selectionStart,
+    obj.selectionEnd,
+    true,
+  );
+  if (!perChar || perChar.length === 0) return null;
+  const consistent: Partial<TextStyle> = { ...fabricCharToModelStyle(perChar[0] ?? {}) };
+  for (let i = 1; i < perChar.length; i++) {
+    const cur = fabricCharToModelStyle(perChar[i] ?? {});
+    (Object.keys(consistent) as (keyof TextStyle)[]).forEach((key) => {
+      if (consistent[key] !== cur[key]) delete consistent[key];
+    });
+  }
+  return consistent;
 }
 
 /** Actions de formatage applicables aux textes sélectionnés depuis la toolbar */
@@ -169,6 +234,25 @@ export interface EditorCanvasHandle {
   getRedactionMarks: () => { x: number; y: number; width: number; height: number }[];
   /** Remove every redaction marker rect from the canvas (e.g. after applying). */
   clearRedactionMarks: () => void;
+  /**
+   * Word-like PARTIAL formatting. When a text element is in inline-edit mode
+   * with a non-empty character sub-selection, apply `patch` (bold/italic/
+   * underline/strikethrough/colour/size/font) to JUST that range via Fabric's
+   * `setSelectionStyles` and return `true`. Returns `false` when no text is in
+   * edit mode, or the selection is empty (caret only) — the caller then falls
+   * back to its whole-element style path. The character-level styles are
+   * persisted as `TextElement.runs` when the edit session ends (or eagerly via
+   * `flushSelectionStyle`).
+   */
+  applySelectionStyle: (patch: Partial<TextStyle>) => boolean;
+  /**
+   * The aggregated style of the current text edit sub-selection, or `null` when
+   * no text is being edited / no sub-range is selected. Lets the toolbar show
+   * the right active state (e.g. Bold lit when the whole selection is bold). A
+   * field is present only when it is CONSISTENT across the whole selection
+   * (mixed ⇒ field omitted).
+   */
+  getActiveTextSelectionStyle: () => Partial<TextStyle> | null;
 }
 
 export interface EditorCanvasProps {
@@ -251,6 +335,16 @@ export interface EditorCanvasProps {
   onElementRemoved?: (elementId: string) => void;
   /** Callback quand la sélection change */
   onSelectionChanged?: (elementIds: string[]) => void;
+  /**
+   * Word-like partial formatting: fired when the character sub-selection
+   * INSIDE a text element being inline-edited changes (Fabric
+   * `text:selection:changed`), and on edit enter/exit. Carries the aggregated
+   * style of the selected range (fields consistent across it), or `null` when
+   * no text is being edited / the selection is empty. Lets the formatting
+   * toolbar reflect the right active state live and route style edits to the
+   * selection instead of the whole element.
+   */
+  onTextSelectionStyleChanged?: (style: Partial<TextStyle> | null) => void;
   /** Callback pour changement de zoom */
   onZoomChanged?: (zoom: number) => void;
   /** Callback appelé lorsque le canvas est prêt avec les méthodes exposées */
@@ -411,6 +505,7 @@ export function EditorCanvas({
   onElementReordered,
   onElementRemoved,
   onSelectionChanged,
+  onTextSelectionStyleChanged,
   onZoomChanged,
   onCanvasReady,
   onHyperlinkClick,
@@ -443,6 +538,7 @@ export function EditorCanvas({
   const onElementReorderedRef = useRef(onElementReordered);
   const onElementRemovedRef = useRef(onElementRemoved);
   const onSelectionChangedRef = useRef(onSelectionChanged);
+  const onTextSelectionStyleChangedRef = useRef(onTextSelectionStyleChanged);
   const onZoomChangedRef = useRef(onZoomChanged);
   const onHyperlinkClickRef = useRef(onHyperlinkClick);
   const onRedactionMarksChangedRef = useRef(onRedactionMarksChanged);
@@ -517,6 +613,7 @@ export function EditorCanvas({
     onElementReorderedRef.current = onElementReordered;
     onElementRemovedRef.current = onElementRemoved;
     onSelectionChangedRef.current = onSelectionChanged;
+    onTextSelectionStyleChangedRef.current = onTextSelectionStyleChanged;
     onZoomChangedRef.current = onZoomChanged;
     onHyperlinkClickRef.current = onHyperlinkClick;
     onRedactionMarksChangedRef.current = onRedactionMarksChanged;
@@ -706,6 +803,16 @@ export function EditorCanvas({
   // on les passe au callback onElementModified pour qu'apply-elements
   // ait la bonne zone à effacer.
   const lastKnownBoundsRef = useRef<Map<string, Bounds>>(new Map());
+  // The IText currently in inline-edit mode (set on text:editing:entered,
+  // cleared on exit). Word-like partial formatting targets THIS object's live
+  // character selection (`selectionStart`/`selectionEnd`) so the toolbar can
+  // apply bold/italic/colour/… to a SUB-RANGE instead of the whole element.
+  const editingTextRef = useRef<FabricObjectWithData | null>(null);
+  // elementIds whose per-character `styles` map was mutated during the current
+  // edit session (via applySelectionStyle). Drained on text:editing:exited so
+  // the style change is forwarded for the PDF bake even when `content` is
+  // unchanged. A Set keyed by elementId (idempotent — one forward per element).
+  const selectionStyleDirtyRef = useRef<Set<string>>(new Set());
 
   // Sauvegarder l'état dans l'historique
   // Utilise historyIndexRef pour éviter une closure stale (sinon saveHistory est
@@ -985,6 +1092,13 @@ export function EditorCanvas({
     if (elementId) {
       originalContentRef.current.set(elementId, currentText);
     }
+    // Track the live editing object so the formatting toolbar can style its
+    // current character sub-selection (Word-like partial formatting). Emit the
+    // (initially caret-only ⇒ null) selection style so the toolbar resets.
+    editingTextRef.current = obj;
+    onTextSelectionStyleChangedRef.current?.(
+      aggregateSelectionStyle(obj as EditableTextObject),
+    );
     const setObj = (obj as FabricObject & { set: (...args: unknown[]) => void })
       .set;
     setObj.call(obj, { borderColor: "rgba(0, 100, 200, 0.6)" });
@@ -1025,6 +1139,21 @@ export function EditorCanvas({
     clientLogger.debug("[EditorCanvas] Text changed in real-time:", elementId, `"${currentText}"`);
   }, []);
 
+  // Word-like partial formatting: the IText caret/selection moved while editing
+  // (Fabric `text:selection:changed`) — push the aggregated style of the new
+  // range up so the formatting toolbar reflects the right active state. `null`
+  // (no edit / caret-only) tells the toolbar to fall back to the element style.
+  const handleTextSelectionChanged = useCallback(
+    (e: { target?: FabricObject }) => {
+      if (!onTextSelectionStyleChangedRef.current) return;
+      const obj = (e.target ?? editingTextRef.current) as
+        | EditableTextObject
+        | null;
+      onTextSelectionStyleChangedRef.current(aggregateSelectionStyle(obj));
+    },
+    [],
+  );
+
   // Handler appele quand un texte sort du mode edition.
   // 1:1 mode: revert overlay back to invisible IF the user did not change
   // the content. If they DID change it, keep the new text visible (with
@@ -1039,10 +1168,23 @@ export function EditorCanvas({
   const handleTextEditingExited = useCallback((e: { target?: FabricObject }) => {
     if (!e.target) return;
     const obj = e.target as FabricObjectWithData;
+    // No longer the live edit target — clear the toolbar's live selection style
+    // so it reverts to the whole-element state.
+    if (editingTextRef.current === obj) editingTextRef.current = null;
+    onTextSelectionStyleChangedRef.current?.(null);
     const elementId = obj.data?.elementId;
     const currentText = (obj as FabricObjectWithData & { text?: string }).text || "";
     const originalText = elementId ? originalContentRef.current.get(elementId) : undefined;
     const contentChanged = originalText !== undefined && originalText !== currentText;
+    // A pure character-level style change (bold/colour on a sub-selection)
+    // leaves `content` untouched but mutates Fabric's per-character `styles`
+    // map, which `selectionStyleDirtyRef` flags. Forward those edits too so the
+    // new `runs` reach the scene graph + apply payload (otherwise a partial
+    // restyle would be silently lost on reload — same class of bug as inline
+    // text edits, which Fabric also reports only via text:editing:exited).
+    const styleChanged =
+      elementId !== undefined &&
+      selectionStyleDirtyRef.current.delete(elementId);
 
     // DIRECT-TEXT model: the text stays VISIBLE in its real colour whether or
     // not it changed (no mask, never invisible — the raster under it has no
@@ -1071,10 +1213,12 @@ export function EditorCanvas({
     // (Fabric only fires `text:editing:exited`), and the change vanishes on
     // reload. We pass the OLD bounds tracked since the last render so the
     // bake can clear the original glyph zone before painting the new text.
-    if (contentChanged && elementId) {
+    if ((contentChanged || styleChanged) && elementId) {
       // Forward the edit (a coalesced paragraph Textbox decomposes into its
       // line runs here — each with its own tracked oldBounds). Tracking is
-      // refreshed per element inside forwardElementModified.
+      // refreshed per element inside forwardElementModified. Covers both a
+      // text change AND a pure per-character style change (the serialised
+      // element now carries `runs` from the Fabric `styles` map).
       const forwarded = forwardElementModified(obj);
       if (forwarded.length > 0) {
         // Mark this elementId so the object:modified that Fabric fires
@@ -1241,6 +1385,7 @@ export function EditorCanvas({
     canvas.off("text:editing:entered");
     canvas.off("text:changed");
     canvas.off("text:editing:exited");
+    canvas.off("text:selection:changed");
 
     // Re-attach updated handlers
     canvas.on("selection:created", handleSelectionChange);
@@ -1253,7 +1398,9 @@ export function EditorCanvas({
     canvas.on("text:editing:entered", handleTextEditingEntered as (e: unknown) => void);
     canvas.on("text:changed", handleTextChanged as (e: unknown) => void);
     canvas.on("text:editing:exited", handleTextEditingExited as (e: unknown) => void);
-  }, [handleSelectionChange, handleObjectModified, handleObjectAdded, handleObjectRemoved, handleTextEditingEntered, handleTextChanged, handleTextEditingExited]);
+    // Word-like partial formatting: live character-selection style → toolbar.
+    canvas.on("text:selection:changed", handleTextSelectionChanged as (e: unknown) => void);
+  }, [handleSelectionChange, handleObjectModified, handleObjectAdded, handleObjectRemoved, handleTextEditingEntered, handleTextChanged, handleTextEditingExited, handleTextSelectionChanged]);
 
   // Initialiser Fabric.js
   useEffect(() => {
@@ -1315,6 +1462,8 @@ export function EditorCanvas({
       canvas.on("text:editing:entered", handleTextEditingEntered as (e: unknown) => void);
       canvas.on("text:changed", handleTextChanged as (e: unknown) => void);
       canvas.on("text:editing:exited", handleTextEditingExited as (e: unknown) => void);
+      // Word-like partial formatting: live character-selection style → toolbar.
+      canvas.on("text:selection:changed", handleTextSelectionChanged as (e: unknown) => void);
 
       // Mouse down for creating objects - using refs to get current values
       canvas.on("mouse:down", (e) => {
@@ -2476,6 +2625,45 @@ export function EditorCanvas({
         }
         saveHistory(canvas);
       },
+
+      applySelectionStyle: (patch: Partial<TextStyle>): boolean => {
+        const editing = editingTextRef.current as EditableTextObject | null;
+        // Only act when a text object is in inline-edit mode with a real
+        // (non-empty) character sub-selection. Caret-only or no-edit ⇒ defer to
+        // the whole-element style path.
+        if (
+          !editing ||
+          editing.isEditing !== true ||
+          typeof editing.selectionStart !== "number" ||
+          typeof editing.selectionEnd !== "number" ||
+          editing.selectionStart >= editing.selectionEnd ||
+          typeof editing.setSelectionStyles !== "function"
+        ) {
+          return false;
+        }
+        const fabricStyle = modelStyleToFabricChar(patch);
+        if (Object.keys(fabricStyle).length === 0) return false;
+        editing.setSelectionStyles(
+          fabricStyle,
+          editing.selectionStart,
+          editing.selectionEnd,
+        );
+        const elementId = (editing as FabricObjectWithData).data?.elementId;
+        if (elementId) selectionStyleDirtyRef.current.add(elementId);
+        fabricRef.current?.requestRenderAll();
+        // Reflect the new selection style in the toolbar immediately (the
+        // selection range itself is unchanged, so Fabric fires no
+        // text:selection:changed here).
+        onTextSelectionStyleChangedRef.current?.(
+          aggregateSelectionStyle(editing),
+        );
+        return true;
+      },
+
+      getActiveTextSelectionStyle: (): Partial<TextStyle> | null =>
+        aggregateSelectionStyle(
+          editingTextRef.current as EditableTextObject | null,
+        ),
 
       // --- Application des événements de collaboration distants ---
       // Ces trois méthodes reproduisent l'effet d'une action utilisateur SANS

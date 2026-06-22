@@ -49,10 +49,44 @@ export interface TextStyle {
   originalFont: string | null;
 }
 
+/**
+ * A run of *character-level* style overrides spanning `[start, end)` of the
+ * element's `content` (UTF-16 code-unit indices, the same indexing Fabric's
+ * IText selection uses). Enables Word-like partial formatting: bold/italic/
+ * underline/colour/size/font applied to a SELECTION inside a text element,
+ * not just the element as a whole.
+ *
+ * Each run carries only the fields that DIFFER from the element's base
+ * `style` (a `Partial<TextStyle>`); unspecified fields inherit the base. Runs
+ * are non-overlapping and sorted by `start`. Absent (`runs` undefined or empty)
+ * ⇒ the element is uniformly styled by `style` exactly as before — this field
+ * is purely additive and backward-compatible.
+ *
+ * Surfaced from / consumed by Fabric's per-character `styles` map in the
+ * editor (see `lib/text-runs.ts`). NOTE: the PDF *bake* (`addText`/
+ * `replaceText`) is currently one-style-per-run, so mixed runs are preserved
+ * in the editable scene graph and round-trip through the apply payload, but
+ * are not yet materialised glyph-by-glyph into the PDF binary — that requires
+ * the engine model-ops path (`restyleRun` on the GigaDocument block tree).
+ */
+export interface TextStyleRun {
+  /** Inclusive start char index into `content` (UTF-16 code units). */
+  start: number;
+  /** Exclusive end char index into `content`. `end > start`. */
+  end: number;
+  /** Style fields overriding the base `style` for this character range. */
+  style: Partial<TextStyle>;
+}
+
 export interface TextElement extends ElementBase {
   type: "text";
   content: string;
   style: TextStyle;
+  /**
+   * Optional character-level style runs (Word-like partial formatting).
+   * Absent ⇒ uniform `style` (legacy behaviour). See {@link TextStyleRun}.
+   */
+  runs?: TextStyleRun[];
   ocrConfidence: number | null;
   // Link support for clickable text
   linkUrl: string | null;

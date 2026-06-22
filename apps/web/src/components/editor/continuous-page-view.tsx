@@ -39,7 +39,7 @@ import React, {
   useState,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { PageObject, Element, Bounds, Tool } from "@giga-pdf/types";
+import type { PageObject, Element, Bounds, Tool, TextStyle } from "@giga-pdf/types";
 import { useViewStore } from "@giga-pdf/editor";
 import { clientLogger } from "@/lib/client-logger";
 import { PageSlot } from "./page-slot";
@@ -118,6 +118,11 @@ export interface ContinuousPageViewProps {
   /** Selection changed on the ACTIVE page (drives the page-scoped panels). */
   onSelectionChanged?: (elementIds: string[]) => void;
   /**
+   * Live character-selection style on the ACTIVE page (Word-like partial
+   * formatting) — drives the formatting toolbar's active state.
+   */
+  onTextSelectionStyleChanged?: (style: Partial<TextStyle> | null) => void;
+  /**
    * The ACTIVE page's imperative handle. Routing this to page.tsx's
    * `setCanvasHandle` makes the toolbar (delete/undo/redo/duplicate/format/
    * addImage) drive the ACTIVE page automatically — the same handle the
@@ -148,6 +153,7 @@ function ContinuousPageViewImpl(
     onElementReordered,
     onElementRemoved,
     onSelectionChanged,
+    onTextSelectionStyleChanged,
     onCanvasReady,
   }: ContinuousPageViewProps,
   ref: React.ForwardedRef<ContinuousPageViewHandle>,
@@ -506,6 +512,9 @@ function ContinuousPageViewImpl(
                     : {})}
                   {...(isActive && onSelectionChanged
                     ? { onSelectionChanged }
+                    : {})}
+                  {...(isActive && onTextSelectionStyleChanged
+                    ? { onTextSelectionStyleChanged }
                     : {})}
                   {...(isActive && onCanvasReady ? { onCanvasReady } : {})}
                   onActivate={onActivatePage}

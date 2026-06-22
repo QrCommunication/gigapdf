@@ -23,7 +23,7 @@
  */
 
 import React from "react";
-import type { PageObject, Element, Bounds, Tool } from "@giga-pdf/types";
+import type { PageObject, Element, Bounds, Tool, TextStyle } from "@giga-pdf/types";
 import { PageChrome } from "./page-chrome";
 import { PageCanvasHost } from "./page-canvas-host";
 import { EditorCanvas, type EditorCanvasHandle } from "./editor-canvas";
@@ -84,6 +84,11 @@ export interface PageSlotProps {
   /** Forwarded to the active page's EditorCanvas: selection changed. */
   onSelectionChanged?: (elementIds: string[]) => void;
   /**
+   * Forwarded to the active page's EditorCanvas: live character-selection style
+   * (Word-like partial formatting) → drives the formatting toolbar state.
+   */
+  onTextSelectionStyleChanged?: (style: Partial<TextStyle> | null) => void;
+  /**
    * Forwarded to the active page's EditorCanvas: the imperative handle. Routing
    * this to page.tsx's `setCanvasHandle` makes the toolbar (delete/undo/redo/
    * duplicate/format/addImage) drive the ACTIVE page automatically.
@@ -121,6 +126,7 @@ function PageSlotImpl({
   onElementReordered,
   onElementRemoved,
   onSelectionChanged,
+  onTextSelectionStyleChanged,
   onCanvasReady,
   onReady,
   onDispose,
@@ -170,6 +176,9 @@ function PageSlotImpl({
             {...(onElementReordered ? { onElementReordered } : {})}
             {...(onElementRemoved ? { onElementRemoved } : {})}
             {...(onSelectionChanged ? { onSelectionChanged } : {})}
+            {...(onTextSelectionStyleChanged
+              ? { onTextSelectionStyleChanged }
+              : {})}
             {...(onCanvasReady ? { onCanvasReady } : {})}
           />
         ) : isVisible ? (
