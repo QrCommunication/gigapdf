@@ -48,6 +48,11 @@ import { clientLogger } from "@/lib/client-logger";
 // Shared run<->Fabric-styles mapping (single source of truth with
 // fabric-element-io.ts) so character-level styling round-trips identically.
 import { runsToFabricStyles } from "./lib/text-runs";
+import {
+  composeDisplayText,
+  leftIndentOffset,
+  shiftStylesForMarker,
+} from "./lib/list-format";
 
 type FabricModule = typeof FabricNamespace;
 
@@ -902,8 +907,17 @@ export async function renderElementsOverlay(
         const _font = resolveTextFont(textElement.style, getFontFaceName);
         const _usingEmbeddedFont = _font.usingEmbeddedFont;
         const _resolvedFontFamily = _font.fontFamily;
-        const textObj = new IText(textElement.content || "", {
+        // Word-like list + paragraph indentation. The marker glyph is a
+        // DECORATION composed into the DISPLAYED text only (the model `content`
+        // stays clean — the serialiser strips it back). The box is shifted right
+        // by the combined indent so the marker sits in a gutter. Absent
+        // list/indentLeft ⇒ offset 0, display === content (legacy behaviour).
+        const _indentOffset = leftIndentOffset(textElement.style);
+        const { display: _displayText, prefixLen: _markerLen } =
+          composeDisplayText(textElement.content || "", textElement.style);
+        const textObj = new IText(_displayText, {
           ...baseOptions,
+          left: baseOptions.left + _indentOffset,
           top: _baselineY + _descenderOffset,
           originY: "bottom" as const,
           width: textElement.bounds.width,
@@ -967,14 +981,23 @@ export async function renderElementsOverlay(
           originalBgColor: textElement.style.backgroundColor || "",
           linkUrl: textElement.linkUrl,
           linkPage: textElement.linkPage,
+          // Length of the decorative list-marker prefix prepended to the
+          // displayed text (0 when not a list). The serialiser strips exactly
+          // this many leading chars to recover the clean `content`, and the
+          // list style itself is re-read from `data.listStyle`/`data.indentLeft`.
+          listMarkerLen: _markerLen,
+          listStyle: textElement.style.list ?? null,
+          indentLeft: textElement.style.indentLeft ?? 0,
         };
         // Word-like partial formatting: project the model's character-level
         // runs onto Fabric's native per-character `styles` map. Absent/empty
         // runs ⇒ {} ⇒ Fabric renders the run uniformly via the object-level
         // fontWeight/fill/… set above (legacy behaviour, no per-char styling).
-        const _charStyles = runsToFabricStyles(
-          textElement.content || "",
-          textElement.runs,
+        // When a list marker prefixes line 0, shift the map right by its length
+        // so per-char styling stays aligned with the (unstyled) marker present.
+        const _charStyles = shiftStylesForMarker(
+          runsToFabricStyles(textElement.content || "", textElement.runs),
+          _markerLen,
         );
         if (Object.keys(_charStyles).length > 0) {
           textObj.set("styles", _charStyles);

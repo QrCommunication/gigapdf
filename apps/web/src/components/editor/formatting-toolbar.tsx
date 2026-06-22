@@ -40,14 +40,21 @@ import {
   AlignJustify,
   Baseline,
   ChevronDown,
+  List,
+  ListOrdered,
+  IndentIncrease,
+  IndentDecrease,
 } from "lucide-react";
-import type { TextElement, TextStyle } from "@giga-pdf/types";
+import type { TextElement, TextListStyle, TextStyle } from "@giga-pdf/types";
 
 /** Line-spacing presets surfaced by the quick menu (Word's common values). */
 const LINE_SPACING_PRESETS: readonly number[] = [1, 1.15, 1.5, 2, 2.5, 3];
 
 /** Default highlight colour applied when toggling highlight on with no value. */
 const DEFAULT_HIGHLIGHT = "#ffff00";
+
+/** Indentation step (PDF points) per click of the indent buttons. Word's 0.25in. */
+const INDENT_STEP_PT = 18;
 
 type TextAlignValue = NonNullable<TextStyle["textAlign"]>;
 
@@ -81,21 +88,32 @@ interface FormatButtonProps {
   icon: React.ReactNode;
   label: string;
   isActive?: boolean;
+  /** When true the button is non-interactive and visually dimmed. */
+  disabled?: boolean;
   onClick: () => void;
 }
 
 /** A toolbar toggle button matching the editor toolbar's ToolButton styling. */
-function FormatButton({ icon, label, isActive, onClick }: FormatButtonProps) {
+function FormatButton({
+  icon,
+  label,
+  isActive,
+  disabled,
+  onClick,
+}: FormatButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       title={label}
       aria-pressed={isActive ?? false}
-      className={`p-2 rounded-lg transition-colors flex items-center gap-0.5 cursor-pointer ${
-        isActive
-          ? "bg-primary text-primary-foreground"
-          : "hover:bg-muted text-muted-foreground hover:text-foreground"
+      className={`p-2 rounded-lg transition-colors flex items-center gap-0.5 ${
+        disabled
+          ? "opacity-40 cursor-not-allowed text-muted-foreground"
+          : isActive
+            ? "bg-primary text-primary-foreground cursor-pointer"
+            : "hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
       }`}
     >
       {icon}
@@ -153,11 +171,16 @@ export function FormattingToolbar({
   const isItalic = charField("fontStyle") === "italic";
   const isUnderline = charField("underline") === true;
   const isStrike = charField("strikethrough") === true;
-  // Alignment / highlight stay element-scoped (paragraph-level).
+  // Alignment / highlight / list / indent stay element-scoped (paragraph-level).
   const align: TextAlignValue = style?.textAlign ?? "left";
   const hasHighlight = !!style?.backgroundColor;
   const color = (charField("color") as string | undefined) || style?.color || "#000000";
   const highlight = style?.backgroundColor || DEFAULT_HIGHLIGHT;
+  // List state of the primary selection (absent ⇒ not a list). The toolbar
+  // buttons light up when the primary is that list family.
+  const listType = style?.list?.type;
+  const listLevel = style?.list?.level ?? 0;
+  const indentLeft = style?.indentLeft ?? 0;
 
   /**
    * Apply a CHARACTER-LEVEL style patch. In partial mode it targets the live
@@ -181,6 +204,51 @@ export function FormattingToolbar({
       onElementStyleChange(el.elementId, patch);
     }
   };
+
+  /**
+   * Toggle a list FAMILY on the selection. Per-element so a heterogeneous
+   * selection toggles consistently: an element already in `type` is turned OFF
+   * (list removed, level reset); any other element is turned ON at `type` —
+   * preserving its current nesting `level`. Whole-element (paragraph-level).
+   */
+  const toggleList = (type: TextListStyle["type"]) => {
+    for (const el of selectedTextElements) {
+      const current = el.style?.list;
+      const next: TextListStyle | undefined =
+        current?.type === type
+          ? undefined
+          : { type, level: current?.level ?? 0 };
+      onElementStyleChange(el.elementId, { list: next });
+    }
+  };
+
+  /**
+   * Adjust the left indentation of the selection by `delta` (one step). For a
+   * list element, a positive delta also DEEPENS the nesting level (and a
+   * negative one shallows it) so the marker glyph follows the indent — Word-
+   * like behaviour. `indentLeft` never goes negative.
+   */
+  const adjustIndent = (delta: number) => {
+    for (const el of selectedTextElements) {
+      const curIndent = el.style?.indentLeft ?? 0;
+      const nextIndent = Math.max(0, curIndent + delta);
+      const patch: Partial<TextStyle> = { indentLeft: nextIndent };
+      const curList = el.style?.list;
+      if (curList) {
+        const nextLevel = Math.max(
+          0,
+          curList.level + (delta > 0 ? 1 : -1),
+        );
+        patch.list = { type: curList.type, level: nextLevel };
+      }
+      onElementStyleChange(el.elementId, patch);
+    }
+  };
+
+  // The indent buttons are always usable (they also drive list nesting). The
+  // "decrease" button is disabled only when nothing is indented AND no list is
+  // nested, so it never produces a no-op.
+  const canDecreaseIndent = indentLeft > 0 || listLevel > 0;
 
   return (
     <>
@@ -298,6 +366,33 @@ export function FormattingToolbar({
         label={t("alignJustify")}
         isActive={align === "justify"}
         onClick={() => patchAll({ textAlign: "justify" })}
+      />
+
+      <Separator />
+
+      {/* Lists — bullet / numbered (toggle), and paragraph indent +/- */}
+      <FormatButton
+        icon={<List size={20} />}
+        label={t("listBullet")}
+        isActive={listType === "bullet"}
+        onClick={() => toggleList("bullet")}
+      />
+      <FormatButton
+        icon={<ListOrdered size={20} />}
+        label={t("listNumbered")}
+        isActive={listType === "number"}
+        onClick={() => toggleList("number")}
+      />
+      <FormatButton
+        icon={<IndentDecrease size={20} />}
+        label={t("indentDecrease")}
+        disabled={!canDecreaseIndent}
+        onClick={() => adjustIndent(-INDENT_STEP_PT)}
+      />
+      <FormatButton
+        icon={<IndentIncrease size={20} />}
+        label={t("indentIncrease")}
+        onClick={() => adjustIndent(INDENT_STEP_PT)}
       />
 
       <Separator />

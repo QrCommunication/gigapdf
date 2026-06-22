@@ -25,11 +25,20 @@ import type {
   AnnotationElement,
   FormFieldElement,
   TextElement,
+  TextListStyle,
   TextStyle,
 } from "@giga-pdf/types";
 // Shared run<->Fabric-styles mapping (single source of truth with
 // render-elements.ts) so character-level styling round-trips identically.
 import { fabricStylesToRuns, type FabricStylesMap } from "./text-runs";
+// Shared list/indent marker composition (single source of truth with
+// render-elements.ts) so the decorative marker prefix is stripped back off
+// IDENTICALLY to how it was prepended.
+import {
+  leftIndentOffset,
+  stripDisplayText,
+  unshiftStylesForMarker,
+} from "./list-format";
 
 /** Fabric object carrying our custom `.data` metadata. */
 export interface FabricObjectWithData extends FabricObject {
@@ -196,12 +205,26 @@ export function fabricObjectToElement(
     };
     const data = (obj as FabricObjectWithData).data;
     const fontSize = textObj.fontSize || 16;
+    // Word-like list/indent: recover the paragraph's list style + left indent
+    // stashed by the renderer. The displayed text carries a decorative marker
+    // prefix (`listMarkerLen` chars) that is NOT part of the model `content` —
+    // strip it back off here so persistence stays clean and `replaceText`
+    // round-trips losslessly. Absent ⇒ no list, `markerLen` 0, content as-is.
+    const listStyle =
+      (data?.listStyle as TextListStyle | null | undefined) ?? null;
+    const indentLeft = (data?.indentLeft as number | undefined) ?? 0;
+    const { content: cleanContent, prefixLen: strippedLen } = stripDisplayText(
+      textObj.text || "",
+      { list: listStyle ?? undefined },
+    );
     // Word-like partial formatting: read Fabric's native per-character styles
     // map back into our flat, coalesced model runs. `undefined` when the text
     // is uniformly styled — the `runs` field is then omitted (legacy shape).
+    // Unshift the styles map by the (actually-stripped) marker length so the
+    // run indices realign with the clean `content` (marker styling is dropped).
     const styleRuns = fabricStylesToRuns(
-      textObj.text || "",
-      textObjWithStyles.styles,
+      cleanContent,
+      unshiftStylesForMarker(textObjWithStyles.styles ?? {}, strippedLen),
     );
 
     // Inverse of the renderer transform: Fabric IText was created with
@@ -212,6 +235,15 @@ export function fabricObjectToElement(
     const isOriginYBottom = textObj.originY === "bottom";
     const descenderOffset = isOriginYBottom ? fontSize * 0.22 : 0;
     const topOfGlyphY = (obj.top || 0) - descenderOffset - fontSize;
+    // The renderer shifted `left` right by the combined indent (explicit
+    // indentLeft + one step per list level). Recover the original bounds.x by
+    // subtracting the SAME offset, so a list/indented run keeps its in-place
+    // identity (no creeping rightward drift on each save round-trip).
+    const indentOffsetX = leftIndentOffset({
+      indentLeft,
+      list: listStyle ?? undefined,
+    });
+    const originLeftX = (obj.left || 0) - indentOffsetX;
 
     // Preserve the parser-extracted PDF font name so the bake side
     // (apply-elements -> updateText -> font lookup) can re-use the
@@ -229,13 +261,13 @@ export function fabricObjectToElement(
       // covers approximately ascender+descender — close enough to mask the
       // glyph cleanly without bleeding into the line above/below.
       bounds: {
-        x: obj.left || 0,
+        x: originLeftX,
         y: topOfGlyphY,
         width: (obj.width || 100) * scaleX,
         height: fontSize,
       },
       type: "text" as const,
-      content: textObj.text || "",
+      content: cleanContent,
       // Character-level style runs (Word-like partial formatting). Omitted
       // (spread of {}) when the text is uniformly styled, so the serialised
       // shape is byte-identical to the legacy one for unstyled runs.
@@ -260,6 +292,11 @@ export function fabricObjectToElement(
         backgroundColor: textObjWithStyles.textBackgroundColor || null,
         verticalAlign: "baseline" as const,
         originalFont,
+        // Word-like list / indentation (additive). Omitted (spread of {}) when
+        // not a list / no indent, so the serialised shape stays byte-identical
+        // to the legacy one for plain paragraphs.
+        ...(listStyle ? { list: listStyle } : {}),
+        ...(indentLeft > 0 ? { indentLeft } : {}),
       },
       ocrConfidence: null,
       linkUrl: (data?.linkUrl as string) || null,
