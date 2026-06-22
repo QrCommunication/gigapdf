@@ -50,8 +50,34 @@ import {
   makeEditableOcrPdf,
   OcrUnavailableError,
   isOcrAvailable,
+  ALL_OCR_SCRIPTS,
 } from '@giga-pdf/pdf-engine';
+import type { OcrScript } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError } from '@giga-pdf/pdf-engine';
+
+/**
+ * Parse + validate the optional `scripts` form field: a JSON array of bundled
+ * OCR script identifiers (writing systems) to load before recognition, e.g.
+ * `["alpha"]` (Latin/Cyrillic) or `["cjk"]` (Chinese). Unknown values are
+ * dropped. Returns `undefined` when the field is absent or yields no valid
+ * script — in which case the engine loads every bundled model (auto-detect),
+ * preserving the historical behaviour.
+ */
+function parseScripts(raw: string | null): OcrScript[] | undefined {
+  if (!raw) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  if (!Array.isArray(parsed)) return undefined;
+  const allowed = new Set<string>(ALL_OCR_SCRIPTS as readonly string[]);
+  const scripts = parsed.filter(
+    (s): s is OcrScript => typeof s === 'string' && allowed.has(s),
+  );
+  return scripts.length > 0 ? scripts : undefined;
+}
 import { requireSession } from '@/lib/auth-helpers';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
 import { serverLogger } from '@/lib/server-logger';
@@ -109,12 +135,15 @@ export async function POST(request: Request): Promise<Response> {
     //  editable   → scan masked + real visible text laid on top (editable)
     if (output === 'searchable' || output === 'editable') {
       const force = (formData.get('force') as string | null) === 'true';
+      // Restrict OCR to the chosen writing systems when provided; otherwise the
+      // engine loads every bundled model and auto-detects (default behaviour).
+      const languages = parseScripts(formData.get('scripts') as string | null);
       const arrayBuffer = await file.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
       const result =
         output === 'editable'
-          ? await makeEditableOcrPdf(bytes, { dpi: dpi as 144 | 200 | 300, force })
-          : await makeSearchablePdf(bytes, { dpi: dpi as 144 | 200 | 300, force });
+          ? await makeEditableOcrPdf(bytes, { dpi: dpi as 144 | 200 | 300, force, languages })
+          : await makeSearchablePdf(bytes, { dpi: dpi as 144 | 200 | 300, force, languages });
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/pdf',

@@ -24,7 +24,6 @@ export interface OcrDialogProps {
   onApplied?: (blob: Blob) => void;
 }
 
-type Lang = "fra+eng" | "fra" | "eng";
 type Dpi = 144 | 200 | 300;
 /**
  * "text" extracts plain text; "searchable" bakes an invisible text layer
@@ -33,11 +32,47 @@ type Dpi = 144 | 200 | 300;
  */
 type OutputMode = "text" | "searchable" | "editable";
 
-const LANGS: { value: Lang; label: string }[] = [
-  { value: "fra+eng", label: "Français + Anglais" },
-  { value: "fra", label: "Français" },
-  { value: "eng", label: "Anglais" },
+/**
+ * The 12 writing systems offered in the UI. Several distinct user choices share
+ * a single bundled OCR model (Latin and Cyrillic both use "alpha"; Arabic and
+ * Hebrew both use "arabic"; Chinese simplified and traditional both use "cjk"),
+ * so each choice maps to the concrete OcrScript identifiers the engine loads.
+ * `scripts` is threaded through to makeSearchablePdf / makeEditableOcrPdf so the
+ * engine only loads the relevant model(s) instead of every bundled one.
+ */
+type ScriptChoice =
+  | "latin"
+  | "cyrillic"
+  | "arabic"
+  | "hebrew"
+  | "devanagari"
+  | "tamil"
+  | "telugu"
+  | "kannada"
+  | "chinese_simplified"
+  | "chinese_traditional"
+  | "japanese"
+  | "korean";
+
+/** UI choice → bundled OcrScript identifier(s) understood by the engine. */
+const SCRIPT_CHOICES: { value: ScriptChoice; scripts: string[] }[] = [
+  { value: "latin", scripts: ["alpha"] },
+  { value: "cyrillic", scripts: ["alpha"] },
+  { value: "arabic", scripts: ["arabic"] },
+  { value: "hebrew", scripts: ["arabic"] },
+  { value: "devanagari", scripts: ["devanagari"] },
+  { value: "tamil", scripts: ["tamil"] },
+  { value: "telugu", scripts: ["telugu"] },
+  { value: "kannada", scripts: ["kannada"] },
+  { value: "chinese_simplified", scripts: ["cjk"] },
+  { value: "chinese_traditional", scripts: ["cjk"] },
+  { value: "japanese", scripts: ["japanese"] },
+  { value: "korean", scripts: ["korean"] },
 ];
+
+const SCRIPTS_FOR_CHOICE: Record<ScriptChoice, string[]> = Object.fromEntries(
+  SCRIPT_CHOICES.map((c) => [c.value, c.scripts]),
+) as Record<ScriptChoice, string[]>;
 
 /**
  * OcrDialog — run OCR on the current PDF. Three output modes:
@@ -59,7 +94,7 @@ export function OcrDialog({
   onApplied,
 }: OcrDialogProps) {
   const t = useTranslations("editor.ocr");
-  const [lang, setLang] = useState<Lang>("fra+eng");
+  const [script, setScript] = useState<ScriptChoice>("latin");
   const [dpi, setDpi] = useState<Dpi>(144);
   const [pagesInput, setPagesInput] = useState("");
   const [outputMode, setOutputMode] = useState<OutputMode>("text");
@@ -117,10 +152,12 @@ export function OcrDialog({
     if (!currentFile || available === false || busy) return;
 
     if (isBinaryMode) {
+      // Restrict the OCR engine to the chosen writing system's bundled model(s).
+      const scripts = SCRIPTS_FOR_CHOICE[script];
       const result =
         outputMode === "editable"
-          ? await makeEditable.mutateAsync({ file: currentFile, options: { lang, dpi } })
-          : await makeSearchable.mutateAsync({ file: currentFile, options: { lang, dpi } });
+          ? await makeEditable.mutateAsync({ file: currentFile, options: { dpi, scripts } })
+          : await makeSearchable.mutateAsync({ file: currentFile, options: { dpi, scripts } });
       if (onApplied) {
         // Hand the OCR'd binary to the editor so it replaces the live document
         // (and gets persisted + re-parsed), exactly like the watermark flow.
@@ -137,7 +174,9 @@ export function OcrDialog({
     await ocr.mutateAsync({
       file: currentFile,
       options: {
-        lang,
+        // The plain-text extractor is script-agnostic (the engine loads every
+        // bundled model); `lang` is kept only to satisfy the route contract.
+        lang: "fra+eng",
         dpi,
         format: "text",
         pages: parsePages(pagesInput),
@@ -251,17 +290,23 @@ export function OcrDialog({
             </fieldset>
 
             <div>
-              <label className="block text-xs font-medium text-foreground mb-1">
-                Langue(s)
+              <label
+                htmlFor="ocr-script"
+                className="block text-xs font-medium text-foreground mb-1"
+              >
+                {t("scriptLabel")}
               </label>
               <select
-                value={lang}
-                onChange={(e) => setLang(e.target.value as Lang)}
-                className="w-full px-2 py-1.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                id="ocr-script"
+                value={script}
+                onChange={(e) => setScript(e.target.value as ScriptChoice)}
+                disabled={!isBinaryMode}
+                title={!isBinaryMode ? t("scriptTextHint") : undefined}
+                className="w-full px-2 py-1.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
               >
-                {LANGS.map((l) => (
-                  <option key={l.value} value={l.value}>
-                    {l.label}
+                {SCRIPT_CHOICES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {t(`lang.${c.value}`)}
                   </option>
                 ))}
               </select>

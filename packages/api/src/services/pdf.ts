@@ -917,6 +917,12 @@ export const pdfService = {
       lang?: string;
       dpi?: 144 | 200 | 300;
       force?: boolean;
+      /**
+       * Bundled OCR scripts (writing systems) to load, e.g. ['alpha'] for
+       * Latin/Cyrillic or ['cjk'] for Chinese. Omit to load every bundled
+       * model (auto-detection). See OcrScript in @giga-pdf/pdf-engine.
+       */
+      scripts?: string[];
     } = {},
   ): Promise<SearchablePdfResult> => {
     const form = new FormData();
@@ -925,6 +931,9 @@ export const pdfService = {
     if (options.lang) form.append('lang', options.lang);
     if (options.dpi) form.append('dpi', String(options.dpi));
     if (options.force) form.append('force', 'true');
+    if (options.scripts && options.scripts.length > 0) {
+      form.append('scripts', JSON.stringify(options.scripts));
+    }
 
     const response = await fetch('/api/pdf/ocr', {
       method: 'POST',
@@ -956,6 +965,12 @@ export const pdfService = {
       lang?: string;
       dpi?: 144 | 200 | 300;
       force?: boolean;
+      /**
+       * Bundled OCR scripts (writing systems) to load, e.g. ['alpha'] for
+       * Latin/Cyrillic or ['cjk'] for Chinese. Omit to load every bundled
+       * model (auto-detection). See OcrScript in @giga-pdf/pdf-engine.
+       */
+      scripts?: string[];
     } = {},
   ): Promise<EditableOcrPdfResult> => {
     const form = new FormData();
@@ -964,6 +979,9 @@ export const pdfService = {
     if (options.lang) form.append('lang', options.lang);
     if (options.dpi) form.append('dpi', String(options.dpi));
     if (options.force) form.append('force', 'true');
+    if (options.scripts && options.scripts.length > 0) {
+      form.append('scripts', JSON.stringify(options.scripts));
+    }
 
     const response = await fetch('/api/pdf/ocr', {
       method: 'POST',
