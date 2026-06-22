@@ -367,6 +367,74 @@ describe('useEmbeddedFonts', () => {
     expect(resolved).toBeNull();
   });
 
+  // ── Variant-aware resolution (gras parasite / wrong-metrics fix) ─────────
+
+  it('variant-aware: resolves the subset matching the requested bold/italic, not the first-loaded one', async () => {
+    // A PDF embeds four Times New Roman subsets. The backend collapses each
+    // subset's `fontFamily` to the bare "Times New Roman" (real behaviour), so a
+    // loose match on family would always return the FIRST subset (here the BOLD
+    // one) whatever the run's weight — the "gras parasite" + wrong-metrics bug.
+    // Passing the run's variant must pick the subset whose weight-bearing name
+    // matches that intent.
+    const subsets = [
+      { fontId: 'f-bold', originalName: 'AAAAAB+TimesNewRomanPS-BoldMT' },
+      { fontId: 'f-regular', originalName: 'AAAAAC+TimesNewRomanPSMT' },
+      { fontId: 'f-italic', originalName: 'AAAAAP+TimesNewRoman,Italic' },
+      { fontId: 'f-bolditalic', originalName: 'AAAAAQ+TimesNewRoman,BoldItalic' },
+    ].map((s) => ({
+      fontId: s.fontId,
+      originalName: s.originalName,
+      // Distinct PostScript name carries the weight/style; family is collapsed.
+      postscriptName: s.originalName.replace(/^[A-Z]{6}\+/, ''),
+      fontFamily: 'Times New Roman',
+      subtype: 'CIDFontType0',
+      isEmbedded: true,
+      isSubset: true,
+      format: 'cff' as const,
+      sizeBytes: 12345,
+    }));
+
+    const fetchFontList = vi.fn().mockResolvedValue({ fonts: subsets });
+    const fetchFontData = vi.fn().mockResolvedValue({
+      dataBase64: bufferToBase64(makeFakeBuffer()),
+      format: 'cff' as const,
+      mimeType: 'font/otf',
+    });
+    const cache = makeEmptyCache();
+
+    const { result } = renderHook(() =>
+      useEmbeddedFonts({ documentId: DOCUMENT_ID, fetchFontList, fetchFontData, cache }),
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() =>
+      expect(result.current.fonts.every((f) => f.status === 'loaded')).toBe(true),
+    );
+
+    const name = (id: string) => `gigapdf-${DOCUMENT_ID}-${id}`;
+    // Each weight/style intent resolves to its OWN subset.
+    expect(result.current.getFontFaceName('Times New Roman', { bold: false, italic: false })).toBe(
+      name('f-regular'),
+    );
+    expect(result.current.getFontFaceName('Times New Roman', { bold: true, italic: false })).toBe(
+      name('f-bold'),
+    );
+    expect(result.current.getFontFaceName('Times New Roman', { bold: false, italic: true })).toBe(
+      name('f-italic'),
+    );
+    expect(result.current.getFontFaceName('Times New Roman', { bold: true, italic: true })).toBe(
+      name('f-bolditalic'),
+    );
+    // No variant → loose first-subset (unchanged legacy behaviour).
+    expect(result.current.getFontFaceName('Times New Roman')).toBe(name('f-bold'));
+    // A requested family/variant with no matching subset → null (the caller then
+    // falls back to its loose 1-arg call + synthetic weight). "Helvetica Bold" is
+    // not among the embedded Times subsets.
+    expect(
+      result.current.getFontFaceName('Helvetica', { bold: true, italic: false }),
+    ).toBeNull();
+  });
+
   // ── Google Fonts fallback ────────────────────────────────────────────────
 
   it('google_fallback: loads a non-embedded font from the Google Fonts proxy', async () => {

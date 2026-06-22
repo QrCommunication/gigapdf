@@ -97,10 +97,21 @@ export interface RenderElementsOptions {
   onElementSelected?: (elementId: string) => void;
   /**
    * Résout le nom de FontFace enregistré pour une police embarquée du PDF.
-   * Injecté par l'appelant (hook `useEmbeddedFonts`). Sans lui, on retombe sur
-   * `style.fontFamily` — sans incidence visuelle puisque l'overlay est invisible.
+   * Injecté par l'appelant (hook `useEmbeddedFonts`).
+   *
+   * Le 2e argument optionnel porte l'INTENTION de graisse/style du run. Un PDF
+   * embarque couramment plusieurs sous-ensembles de la MÊME famille (Times New
+   * Roman regular/bold/italic/bold-italic), mais le scene-graph réduit la police
+   * d'un run à un nom nu ("Times New Roman"). Avec la variante, le résolveur
+   * choisit le sous-ensemble dont le NOM porte ce bold/italic (sinon `null`) :
+   * un run regular ne tombe plus sur le premier sous-ensemble GRAS chargé (bug du
+   * « gras parasite » + métriques fausses → chevauchement). Appelé sans variante,
+   * il retombe sur la correspondance floue (1er sous-ensemble de la famille).
    */
-  getFontFaceName?: (originalName: string) => string | null;
+  getFontFaceName?: (
+    originalName: string,
+    wantVariant?: { bold?: boolean; italic?: boolean },
+  ) => string | null;
   /** Résout une URL d'image relative en URL absolue (défaut : API base URL). */
   resolveImageUrl?: (url: string) => string;
   /**
@@ -180,6 +191,91 @@ function colorWithAlpha(color: string, alpha: number): string {
     return hex.replace(/^rgb\(/, "rgba(").replace(/\)$/, `, ${a})`);
   }
   return color;
+}
+
+/** Resolution of a run's render font: the CSS family to use + whether the
+ *  parsed weight/style must still be applied synthetically. */
+interface ResolvedTextFont {
+  /** FontFace name (embedded subset) or CSS fallback family. */
+  fontFamily: string;
+  /** True when the resolved font already encodes the run's weight/style, so a
+   *  synthetic bold/italic must NOT be applied (double-bolding widens glyphs). */
+  usingEmbeddedFont: boolean;
+  /** Effective fontWeight to set on the Fabric object ("normal" | "bold"). */
+  fontWeight: "normal" | "bold";
+  /** Effective fontStyle to set on the Fabric object ("normal" | "italic"). */
+  fontStyle: "normal" | "italic";
+}
+
+/**
+ * Resolve the font for a text run, weight/style-aware.
+ *
+ * A PDF embeds many subsets of the same family (Times New Roman regular / bold /
+ * italic / bold-italic); the scene graph only carries a bare `originalFont`
+ * ("Times New Roman"). Resolving by the bare name alone returns the FIRST loaded
+ * subset whatever its weight — so a regular run rendered with the BOLD subset
+ * (the "gras parasite") and with the wrong glyph metrics (overlap/overflow).
+ *
+ * Strategy (in order):
+ *   1. VARIANT-EXACT — ask the resolver for the subset matching this run's
+ *      bold/italic intent. Found ⇒ the FontFace already IS the right variant, so
+ *      NO synthetic weight/style (applying it on top would double-bold/skew and
+ *      widen the glyphs). This is the common, correct case.
+ *   2. LOOSE — no variant-exact subset (font embeds only some variants): fall
+ *      back to the closest loaded subset of the family AND apply the parsed
+ *      weight/style synthetically to approximate the missing variant.
+ *   3. CSS FALLBACK — no embedded match at all: use the mapped CSS family and
+ *      apply the parsed weight/style (the generic family has no built-in variant).
+ */
+function resolveTextFont(
+  style: {
+    fontFamily?: string;
+    originalFont?: string | null;
+    fontWeight?: "normal" | "bold";
+    fontStyle?: "normal" | "italic";
+  },
+  getFontFaceName?: (
+    originalName: string,
+    wantVariant?: { bold?: boolean; italic?: boolean },
+  ) => string | null,
+): ResolvedTextFont {
+  const parsedWeight: "normal" | "bold" = style.fontWeight === "bold" ? "bold" : "normal";
+  const parsedStyle: "normal" | "italic" = style.fontStyle === "italic" ? "italic" : "normal";
+  const wantBold = parsedWeight === "bold";
+  const wantItalic = parsedStyle === "italic";
+  const orig = style.originalFont;
+
+  if (orig && getFontFaceName) {
+    // 1. Variant-exact embedded subset → trust its built-in weight/style.
+    const exact = getFontFaceName(orig, { bold: wantBold, italic: wantItalic });
+    if (exact) {
+      return {
+        fontFamily: exact,
+        usingEmbeddedFont: true,
+        fontWeight: "normal",
+        fontStyle: "normal",
+      };
+    }
+    // 2. Loose embedded subset (closest of the family) + synthetic weight/style
+    //    to approximate the variant this PDF did not embed.
+    const loose = getFontFaceName(orig);
+    if (loose) {
+      return {
+        fontFamily: loose,
+        usingEmbeddedFont: false,
+        fontWeight: parsedWeight,
+        fontStyle: parsedStyle,
+      };
+    }
+  }
+
+  // 3. Generic CSS family → honour the parsed weight/style.
+  return {
+    fontFamily: style.fontFamily ?? "Helvetica",
+    usingEmbeddedFont: false,
+    fontWeight: parsedWeight,
+    fontStyle: parsedStyle,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -685,24 +781,15 @@ export async function renderElementsOverlay(
         const _fontSize = textElement.style.fontSize ?? 12;
         const _descenderOffset = _fontSize * 0.22;
         const _baselineY = textElement.bounds.y + _fontSize;
-        // Resolve the embedded PDF font first. When it resolves, the registered
-        // FontFace already IS the correct weight/style variant of the subset, so
-        // applying a synthetic bold/italic ON TOP widens the glyphs and the text
-        // overflows / collides with its neighbours. We therefore neutralise the
-        // synthetic weight/style whenever the embedded font is used, and only
-        // honour the parsed weight/style for the generic CSS fallback (where the
-        // family carries no built-in variant).
-        const _embeddedFontName = (() => {
-          const orig = textElement.style.originalFont;
-          if (orig && getFontFaceName) {
-            const registered = getFontFaceName(orig);
-            if (registered) return registered;
-          }
-          return null;
-        })();
-        const _usingEmbeddedFont = _embeddedFontName !== null;
-        const _resolvedFontFamily =
-          _embeddedFontName ?? textElement.style.fontFamily ?? "Helvetica";
+        // Resolve the embedded PDF font WEIGHT/STYLE-AWARE: pick the subset that
+        // matches this run's bold/italic so a regular run never lands on the
+        // first-loaded BOLD subset (the "gras parasite" + wrong-metrics overlap).
+        // When the exact variant is embedded, its FontFace already IS the right
+        // weight/style → no synthetic bold/italic (which would double-bold and
+        // widen glyphs). Otherwise the parsed weight/style is applied synthetically.
+        const _font = resolveTextFont(textElement.style, getFontFaceName);
+        const _usingEmbeddedFont = _font.usingEmbeddedFont;
+        const _resolvedFontFamily = _font.fontFamily;
         const textObj = new IText(textElement.content || "", {
           ...baseOptions,
           top: _baselineY + _descenderOffset,
@@ -710,13 +797,10 @@ export async function renderElementsOverlay(
           width: textElement.bounds.width,
           fontSize: _fontSize,
           fontFamily: _resolvedFontFamily,
-          // Embedded subset = already the right variant → no synthetic bold/italic.
-          fontWeight: _usingEmbeddedFont
-            ? "normal"
-            : textElement.style.fontWeight || "normal",
-          fontStyle: _usingEmbeddedFont
-            ? "normal"
-            : textElement.style.fontStyle || "normal",
+          // Variant-exact embedded subset → no synthetic bold/italic; loose/CSS
+          // fallback → honour the parsed weight/style (see resolveTextFont).
+          fontWeight: _font.fontWeight,
+          fontStyle: _font.fontStyle,
           // DIRECT-TEXT model: the page background is rasterised WITHOUT text
           // (engine `renderPageNoText`), so this overlay IS the visible text —
           // rendered in its REAL colour and embedded font. No colour mask is
@@ -1227,17 +1311,12 @@ export async function renderElementsOverlay(
 
     const fontSize = first.style.fontSize ?? 12;
     const textColour = first.style.color || "#000000";
-    const embeddedFontName = (() => {
-      const orig = first.style.originalFont;
-      if (orig && getFontFaceName) {
-        const registered = getFontFaceName(orig);
-        if (registered) return registered;
-      }
-      return null;
-    })();
-    const usingEmbeddedFont = embeddedFontName !== null;
-    const resolvedFontFamily =
-      embeddedFontName ?? first.style.fontFamily ?? "Helvetica";
+    // Same weight/style-aware resolution as the per-run IText branch: pick the
+    // subset matching the paragraph's bold/italic (no "gras parasite"), and only
+    // synthesise weight/style when the exact variant is not embedded.
+    const paraFont = resolveTextFont(first.style, getFontFaceName);
+    const usingEmbeddedFont = paraFont.usingEmbeddedFont;
+    const resolvedFontFamily = paraFont.fontFamily;
     const content = runs.map((r) => r.content).join("\n");
 
     const tb = new Textbox(content, {
@@ -1252,12 +1331,8 @@ export async function renderElementsOverlay(
       visible: first.visible,
       fontSize,
       fontFamily: resolvedFontFamily,
-      fontWeight: usingEmbeddedFont
-        ? "normal"
-        : first.style.fontWeight || "normal",
-      fontStyle: usingEmbeddedFont
-        ? "normal"
-        : first.style.fontStyle || "normal",
+      fontWeight: paraFont.fontWeight,
+      fontStyle: paraFont.fontStyle,
       fill: textColour,
       opacity: first.style.opacity ?? 1,
       textAlign: first.style.textAlign || "left",
