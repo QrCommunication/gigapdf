@@ -38,6 +38,7 @@ import { engineLogger } from '../utils/logger';
 import { extractPlainText } from './structured-text';
 import {
   ensureOcrModels,
+  filterPagesByRange,
   ocrWordToPdfPlacement,
   type MakeSearchablePdfOptions,
   type OcrWordBox,
@@ -202,11 +203,15 @@ export async function makeEditableOcrPdf(
 ): Promise<MakeEditableOcrPdfResult> {
   const { dpi = 144, force = false } = options;
 
-  // 1. Page selection — only pages without extractable text, unless forced.
+  // 1. Page selection — only pages without extractable text, unless forced,
+  //    then narrowed to the optional page range ("current page only" scope).
   const pageTexts = await extractPlainText(pdfBytes);
-  const targetPages = (
-    force ? pageTexts : pageTexts.filter((p) => p.text.trim().length === 0)
-  ).map((p) => p.pageNumber);
+  const targetPages = filterPagesByRange(
+    (force ? pageTexts : pageTexts.filter((p) => p.text.trim().length === 0)).map(
+      (p) => p.pageNumber,
+    ),
+    options.pageRange,
+  );
 
   if (targetPages.length === 0) {
     return { bytes: pdfBytes, pagesProcessed: 0, wordsAdded: 0, masksAdded: 0 };

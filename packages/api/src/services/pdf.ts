@@ -929,6 +929,12 @@ export const pdfService = {
        * auto-detected. Defaults to printed text.
        */
       handwriting?: boolean;
+      /**
+       * Restrict OCR to a contiguous 1-based page range (inclusive), e.g.
+       * `{ from: 3, to: 3 }` for the "current page only" scope. Omit to OCR the
+       * whole document (default).
+       */
+      pageRange?: { from: number; to: number };
     } = {},
   ): Promise<SearchablePdfResult> => {
     const form = new FormData();
@@ -941,6 +947,7 @@ export const pdfService = {
       form.append('scripts', JSON.stringify(options.scripts));
     }
     if (options.handwriting) form.append('handwriting', 'true');
+    if (options.pageRange) form.append('pageRange', JSON.stringify(options.pageRange));
 
     const response = await fetch('/api/pdf/ocr', {
       method: 'POST',
@@ -984,6 +991,12 @@ export const pdfService = {
        * auto-detected. Defaults to printed text.
        */
       handwriting?: boolean;
+      /**
+       * Restrict OCR to a contiguous 1-based page range (inclusive), e.g.
+       * `{ from: 3, to: 3 }` for the "current page only" scope. Omit to OCR the
+       * whole document (default).
+       */
+      pageRange?: { from: number; to: number };
     } = {},
   ): Promise<EditableOcrPdfResult> => {
     const form = new FormData();
@@ -996,6 +1009,7 @@ export const pdfService = {
       form.append('scripts', JSON.stringify(options.scripts));
     }
     if (options.handwriting) form.append('handwriting', 'true');
+    if (options.pageRange) form.append('pageRange', JSON.stringify(options.pageRange));
 
     const response = await fetch('/api/pdf/ocr', {
       method: 'POST',

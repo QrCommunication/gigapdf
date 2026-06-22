@@ -30,6 +30,10 @@
  *   handwriting — "true" to also recognize HANDWRITTEN Latin text on demand
  *                (output="searchable"/"editable" only). Latin scripts only;
  *                never auto-detected. Defaults to printed text.
+ *   pageRange  — JSON {"from":N,"to":M} (1-based, inclusive) to restrict OCR to
+ *                a contiguous page range, e.g. {"from":3,"to":3} for "current
+ *                page only" (output="searchable"/"editable" only). Omit to
+ *                process the whole document (default).
  *
  * Returns (output="text") JSON:
  *   {
@@ -80,6 +84,35 @@ function parseScripts(raw: string | null): OcrScript[] | undefined {
     (s): s is OcrScript => typeof s === 'string' && allowed.has(s),
   );
   return scripts.length > 0 ? scripts : undefined;
+}
+
+/**
+ * Parse the optional `pageRange` form field used by the searchable/editable
+ * modes to restrict OCR to a contiguous 1-based page range (inclusive) — e.g.
+ * `{"from":3,"to":3}` for the "current page only" scope. Returns `undefined`
+ * (whole-document default) when the field is absent or malformed. The engine
+ * clamps the range against the document, so bounds are only sanity-checked here
+ * (positive integers); `from`/`to` order is normalised downstream.
+ */
+function parsePageRange(raw: string | null): { from: number; to: number } | undefined {
+  if (!raw) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return undefined;
+  const { from, to } = parsed as { from?: unknown; to?: unknown };
+  if (
+    !Number.isInteger(from) ||
+    !Number.isInteger(to) ||
+    (from as number) < 1 ||
+    (to as number) < 1
+  ) {
+    return undefined;
+  }
+  return { from: from as number, to: to as number };
 }
 import { requireSession } from '@/lib/auth-helpers';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
@@ -143,12 +176,14 @@ export async function POST(request: Request): Promise<Response> {
       const languages = parseScripts(formData.get('scripts') as string | null);
       // Opt-in Latin handwriting recognition (printed text only by default).
       const handwriting = (formData.get('handwriting') as string | null) === 'true';
+      // Optional "current page only" scope: restrict OCR to a 1-based page range.
+      const pageRange = parsePageRange(formData.get('pageRange') as string | null);
       const arrayBuffer = await file.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
       const result =
         output === 'editable'
-          ? await makeEditableOcrPdf(bytes, { dpi: dpi as 144 | 200 | 300, force, languages, handwriting })
-          : await makeSearchablePdf(bytes, { dpi: dpi as 144 | 200 | 300, force, languages, handwriting });
+          ? await makeEditableOcrPdf(bytes, { dpi: dpi as 144 | 200 | 300, force, languages, handwriting, pageRange })
+          : await makeSearchablePdf(bytes, { dpi: dpi as 144 | 200 | 300, force, languages, handwriting, pageRange });
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/pdf',

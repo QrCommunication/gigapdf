@@ -17,6 +17,12 @@ export interface OcrDialogProps {
   currentFile: File | null;
   baseFilename?: string;
   /**
+   * 1-based number of the page currently focused in the editor. Drives the
+   * "current page only" scope for the searchable/editable modes. Defaults to 1
+   * when omitted (e.g. a non-editor caller).
+   */
+  currentPageNumber?: number;
+  /**
    * Called with the searchable PDF (invisible OCR text layer baked in) when
    * the user picks the "searchable" output mode. When omitted, the dialog
    * falls back to downloading the searchable copy.
@@ -31,6 +37,12 @@ type Dpi = 144 | 200 | 300;
  * on top so the recognized text can be corrected in the editor.
  */
 type OutputMode = "text" | "searchable" | "editable";
+
+/**
+ * OCR scope for the binary (searchable/editable) modes: the whole document
+ * (historical default) or only the page currently focused in the editor.
+ */
+type OcrScope = "document" | "currentPage";
 
 /**
  * The 12 writing systems offered in the UI. Several distinct user choices share
@@ -91,6 +103,7 @@ export function OcrDialog({
   onClose,
   currentFile,
   baseFilename = "document",
+  currentPageNumber = 1,
   onApplied,
 }: OcrDialogProps) {
   const t = useTranslations("editor.ocr");
@@ -98,6 +111,9 @@ export function OcrDialog({
   const [dpi, setDpi] = useState<Dpi>(144);
   const [pagesInput, setPagesInput] = useState("");
   const [outputMode, setOutputMode] = useState<OutputMode>("text");
+  // Binary-mode scope: OCR the whole document (default) or just the page the
+  // user is currently on. Threaded to the engine as a 1-page `pageRange`.
+  const [scope, setScope] = useState<OcrScope>("document");
   // Opt-in handwriting recognition. The engine ships a single cursive model,
   // Latin only, so the option is offered only for the Latin writing system.
   const [handwriting, setHandwriting] = useState(false);
@@ -149,6 +165,8 @@ export function OcrDialog({
   const busy = ocr.isPending || makeSearchable.isPending || makeEditable.isPending;
   /** Both binary modes (searchable/editable) bake an OCR PDF the editor adopts. */
   const isBinaryMode = outputMode === "searchable" || outputMode === "editable";
+  /** 1-based page the "current page only" scope targets (always ≥ 1). */
+  const targetPage = Math.max(1, Math.floor(currentPageNumber));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,15 +177,21 @@ export function OcrDialog({
       const scripts = SCRIPTS_FOR_CHOICE[script];
       // Handwriting recognition is Latin-only — never send it for other scripts.
       const useHandwriting = handwriting && script === "latin";
+      // "Current page only" scope → a single-page range; "document" → undefined
+      // (whole document, historical default). The page is clamped to ≥ 1.
+      const pageRange =
+        scope === "currentPage"
+          ? { from: targetPage, to: targetPage }
+          : undefined;
       const result =
         outputMode === "editable"
           ? await makeEditable.mutateAsync({
               file: currentFile,
-              options: { dpi, scripts, handwriting: useHandwriting },
+              options: { dpi, scripts, handwriting: useHandwriting, pageRange },
             })
           : await makeSearchable.mutateAsync({
               file: currentFile,
-              options: { dpi, scripts, handwriting: useHandwriting },
+              options: { dpi, scripts, handwriting: useHandwriting, pageRange },
             });
       if (onApplied) {
         // Hand the OCR'd binary to the editor so it replaces the live document
@@ -295,6 +319,47 @@ export function OcrDialog({
                         {option.hint}
                       </span>
                     </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            {/* OCR scope (binary modes only): whole document or current page. */}
+            <fieldset className="col-span-3">
+              <legend className="block text-xs font-medium text-foreground mb-1">
+                {t("scopeLabel")}
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { value: "document", label: t("scopeDocument") },
+                    {
+                      value: "currentPage",
+                      label: t("scopeCurrentPage", { page: targetPage }),
+                    },
+                  ] as const
+                ).map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition-colors ${
+                      !isBinaryMode
+                        ? "border-input opacity-60 cursor-not-allowed"
+                        : scope === option.value
+                          ? "border-primary bg-primary/5 cursor-pointer"
+                          : "border-input hover:bg-muted cursor-pointer"
+                    }`}
+                    title={!isBinaryMode ? t("scopeTextHint") : undefined}
+                  >
+                    <input
+                      type="radio"
+                      name="ocr-scope"
+                      value={option.value}
+                      checked={scope === option.value}
+                      disabled={!isBinaryMode}
+                      onChange={() => setScope(option.value)}
+                      className="accent-primary"
+                    />
+                    <span className="text-foreground">{option.label}</span>
                   </label>
                 ))}
               </div>

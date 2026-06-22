@@ -13,6 +13,7 @@ import { getEngine } from '../../src/wasm';
 import {
   ocrWordToPdfPlacement,
   makeSearchablePdf,
+  filterPagesByRange,
   type PdfPlacementContext,
 } from '../../src/parse/ocr-searchable';
 import { extractPlainText } from '../../src/parse/structured-text';
@@ -82,6 +83,37 @@ describe('ocrWordToPdfPlacement', () => {
     expect(p.x).toBeCloseTo(500 - (200 + 20) * 0.5); // 390
     expect(p.y).toBeCloseTo(700 - 100 * 0.5); // 650
     expect(p.rotation).toBe(270);
+  });
+});
+
+// ── filterPagesByRange (pure) ────────────────────────────────────────────────
+
+describe('filterPagesByRange', () => {
+  const pages = [1, 2, 3, 4, 5];
+
+  it('returns the list unchanged when no range is given (whole document)', () => {
+    expect(filterPagesByRange(pages)).toEqual(pages);
+  });
+
+  it('keeps only the single targeted page ("current page only")', () => {
+    expect(filterPagesByRange(pages, { from: 3, to: 3 })).toEqual([3]);
+  });
+
+  it('keeps the inclusive contiguous range', () => {
+    expect(filterPagesByRange(pages, { from: 2, to: 4 })).toEqual([2, 3, 4]);
+  });
+
+  it('normalises an inverted range (from > to)', () => {
+    expect(filterPagesByRange(pages, { from: 4, to: 2 })).toEqual([2, 3, 4]);
+  });
+
+  it('drops pages outside the document, yielding an empty list', () => {
+    expect(filterPagesByRange(pages, { from: 9, to: 9 })).toEqual([]);
+  });
+
+  it('only narrows: a range never adds pages absent from the candidate list', () => {
+    // Page 2 already has text (not a candidate); the range must not resurrect it.
+    expect(filterPagesByRange([1, 3], { from: 1, to: 3 })).toEqual([1, 3]);
   });
 });
 
