@@ -49,6 +49,14 @@ import {
   Hash,
   BookOpen,
   ScanText,
+  Presentation,
+  Wrench,
+  Minimize2,
+  Lock,
+  PenLine,
+  Droplet,
+  FileCheck2,
+  Scissors,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { DragItem } from "./document-explorer";
@@ -64,6 +72,10 @@ import {
 import { TagChips } from "./tag-input";
 import { ManageTagsDialog } from "./manage-tags-dialog";
 import { GedOcrDialog } from "./ged-ocr-dialog";
+import {
+  GedTransformDialog,
+  type GedTransform,
+} from "./ged-transform-dialog";
 
 interface DocumentCardProps {
   id: string;
@@ -118,6 +130,10 @@ export function DocumentCard({
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [tagsDialogOpen, setTagsDialogOpen] = useState(false);
   const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
+  // Active PDF→PDF transform; non-null opens the transform dialog.
+  const [activeTransform, setActiveTransform] = useState<GedTransform | null>(
+    null,
+  );
 
   // Loading states
   const [deleting, setDeleting] = useState(false);
@@ -381,6 +397,26 @@ export function DocumentCard({
                     <FileSpreadsheet className="mr-2 h-4 w-4" />
                     {t("menu.exportExcel")}
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("pptx")}>
+                    <Presentation className="mr-2 h-4 w-4" />
+                    {t("menu.exportPowerPoint")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("odt")}>
+                    <FileType className="mr-2 h-4 w-4" />
+                    {t("menu.exportOdt")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("ods")}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    {t("menu.exportOds")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("odp")}>
+                    <Presentation className="mr-2 h-4 w-4" />
+                    {t("menu.exportOdp")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("rtf")}>
+                    <FileType className="mr-2 h-4 w-4" />
+                    {t("menu.exportRtf")}
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleExport("png")}>
                     <Image className="mr-2 h-4 w-4" />
                     {t("menu.exportImages")}
@@ -412,6 +448,38 @@ export function DocumentCard({
                   <DropdownMenuItem onClick={() => handleExport("epub")}>
                     <BookOpen className="mr-2 h-4 w-4" />
                     {t("menu.exportEpub")}
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Wrench className="mr-2 h-4 w-4" />
+                  {t("menu.transform")}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={() => setActiveTransform("compress")}>
+                    <Minimize2 className="mr-2 h-4 w-4" />
+                    {t("menu.transformCompress")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setActiveTransform("protect")}>
+                    <Lock className="mr-2 h-4 w-4" />
+                    {t("menu.transformProtect")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setActiveTransform("sign")}>
+                    <PenLine className="mr-2 h-4 w-4" />
+                    {t("menu.transformSign")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setActiveTransform("watermark")}>
+                    <Droplet className="mr-2 h-4 w-4" />
+                    {t("menu.transformWatermark")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setActiveTransform("pdfa")}>
+                    <FileCheck2 className="mr-2 h-4 w-4" />
+                    {t("menu.transformPdfa")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setActiveTransform("split")}>
+                    <Scissors className="mr-2 h-4 w-4" />
+                    {t("menu.transformSplit")}
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
@@ -574,6 +642,17 @@ export function DocumentCard({
         documentName={documentName}
         onReplaced={() => onChanged?.()}
       />
+
+      {activeTransform && (
+        <GedTransformDialog
+          open={activeTransform !== null}
+          onOpenChange={(next) => !next && setActiveTransform(null)}
+          transform={activeTransform}
+          documentId={id}
+          documentName={documentName}
+          onReplaced={() => onChanged?.()}
+        />
+      )}
 
       {/* Export Progress Dialog */}
       <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
