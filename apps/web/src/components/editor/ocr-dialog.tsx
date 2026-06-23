@@ -10,6 +10,7 @@ import {
   useIsOcrAvailable,
   downloadBlob,
 } from "@giga-pdf/api";
+import type { DocumentLanguageInfo } from "@giga-pdf/types";
 
 export interface OcrDialogProps {
   open: boolean;
@@ -22,6 +23,12 @@ export interface OcrDialogProps {
    * when omitted (e.g. a non-editor caller).
    */
   currentPageNumber?: number;
+  /**
+   * Detected document language. When its dominant script maps to one of the OCR
+   * writing systems, the script selector is pre-filled with it (the user can
+   * still change it). Absent / unmapped ⇒ the historical Latin default.
+   */
+  documentLanguage?: DocumentLanguageInfo;
   /**
    * Called with the searchable PDF (invisible OCR text layer baked in) when
    * the user picks the "searchable" output mode. When omitted, the dialog
@@ -87,6 +94,36 @@ const SCRIPTS_FOR_CHOICE: Record<ScriptChoice, string[]> = Object.fromEntries(
 ) as Record<ScriptChoice, string[]>;
 
 /**
+ * Map a detected `DocumentLanguage.script` (engine taxonomy) to the OCR writing
+ * system choice to pre-select. Returns `null` when the script doesn't pin a
+ * single choice (e.g. `"cjk"`/`"other"` are ambiguous), so the caller keeps the
+ * Latin default. `lang` refines CJK to Japanese/Korean when available.
+ */
+function scriptToChoice(
+  info: DocumentLanguageInfo | undefined,
+): ScriptChoice | null {
+  if (!info) return null;
+  switch (info.script) {
+    case "latin":
+      return "latin";
+    case "cyrillic":
+      return "cyrillic";
+    case "arabic":
+      return "arabic";
+    case "hebrew":
+      return "hebrew";
+    case "cjk":
+      // The bundled models distinguish Japanese/Korean; refine via the ISO code
+      // when present, otherwise leave the default (Chinese variants share "cjk").
+      if (info.lang === "ja") return "japanese";
+      if (info.lang === "ko") return "korean";
+      return null;
+    default:
+      return null;
+  }
+}
+
+/**
  * OcrDialog — run OCR on the current PDF. Three output modes:
  *   - "text" (historical): extracted text shown inline, downloadable .txt
  *   - "searchable": the OCR words are written back into the PDF as an
@@ -104,10 +141,15 @@ export function OcrDialog({
   currentFile,
   baseFilename = "document",
   currentPageNumber = 1,
+  documentLanguage,
   onApplied,
 }: OcrDialogProps) {
   const t = useTranslations("editor.ocr");
-  const [script, setScript] = useState<ScriptChoice>("latin");
+  // Pre-select the detected writing system (falls back to Latin when the script
+  // is absent/ambiguous). Lazy init so the detection drives the very first render.
+  const [script, setScript] = useState<ScriptChoice>(
+    () => scriptToChoice(documentLanguage) ?? "latin",
+  );
   const [dpi, setDpi] = useState<Dpi>(144);
   const [pagesInput, setPagesInput] = useState("");
   const [outputMode, setOutputMode] = useState<OutputMode>("text");
@@ -136,6 +178,15 @@ export function OcrDialog({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // On (re)open, pre-select the detected writing system so reopening on another
+  // document reflects ITS language (the user can still override afterwards).
+  useEffect(() => {
+    if (!open) return;
+    const detected = scriptToChoice(documentLanguage);
+    if (detected) setScript(detected);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, documentLanguage?.script, documentLanguage?.lang]);
 
   useEffect(() => {
     if (!open) {

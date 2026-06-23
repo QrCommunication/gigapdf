@@ -111,6 +111,7 @@ import {
   usePdfPageOperation,
   downloadBlob,
   useApplyElements,
+  useApplyOcgLayers,
   useApplyModelOps,
   useTableStructure,
   useElementUpdates,
@@ -521,6 +522,7 @@ export default function EditorPage() {
     replacePages,
     setName,
     outlines,
+    documentLanguage,
     layers,
     userLayers,
     createLayer,
@@ -743,6 +745,11 @@ export default function EditorPage() {
   const flattenPdf = useFlattenPdf();
   const pageOperation = usePdfPageOperation();
   const applyElements = useApplyElements();
+  // Native OCG (PDF "layers") mutations — toggle visibility/lock, remove — baked
+  // by id into the binary then re-parsed. `ocgBusyIds` disables a row's controls
+  // while its bake is in flight (one OCG op per click, serialised by the queue).
+  const applyOcgLayers = useApplyOcgLayers();
+  const [ocgBusyIds, setOcgBusyIds] = useState<number[]>([]);
   // Native paragraph-style bake (alignment/indents/spacing) via the engine's
   // unified model — keyed by the editor's flat run index (`TextElement.index`),
   // resolved to a `[section, page, index]` block address server-side. Distinct
@@ -3435,6 +3442,80 @@ export default function EditorPage() {
     [assignElementToLayer, emitElementUpdate, setDirty, saveWithPriority],
   );
 
+  // ── Native OCG (PDF "layers") mutations ───────────────────────────────────
+  // Unlike user layers (scene-graph only), OCG groups live in the PDF binary.
+  // We bake the mutation via /api/pdf/ocg then re-parse so the `layers` list +
+  // page rendering reflect the new state. Serialised + guarded by `ocgBusyIds`.
+  const runOcgOperation = useCallback(
+    async (
+      ocgId: number,
+      operation: {
+        action: "visibility" | "locked" | "remove";
+        value?: boolean;
+      },
+    ) => {
+      const file = currentPdfFileRef.current;
+      if (!file) return;
+      setOcgBusyIds((prev) => (prev.includes(ocgId) ? prev : [...prev, ocgId]));
+      try {
+        const blob = await applyOcgLayers.mutateAsync({
+          file,
+          operations: [{ ocgId, ...operation }],
+        });
+        // Re-parse so the OCG list + page appearance match the new binary.
+        adoptModifiedPdf(blob, { reparse: true });
+      } catch (error) {
+        clientLogger.error("[editor] OCG operation failed", error);
+      } finally {
+        setOcgBusyIds((prev) => prev.filter((id) => id !== ocgId));
+      }
+    },
+    [applyOcgLayers, adoptModifiedPdf],
+  );
+
+  const handleOcgVisibilityChange = useCallback(
+    (ocgId: number, visible: boolean) => {
+      void runOcgOperation(ocgId, { action: "visibility", value: visible });
+    },
+    [runOcgOperation],
+  );
+
+  const handleOcgLockChange = useCallback(
+    (ocgId: number, locked: boolean) => {
+      void runOcgOperation(ocgId, { action: "locked", value: locked });
+    },
+    [runOcgOperation],
+  );
+
+  const handleOcgRemove = useCallback(
+    (ocgId: number) => {
+      void runOcgOperation(ocgId, { action: "remove" });
+    },
+    [runOcgOperation],
+  );
+
+  // Delete an existing PDF annotation from the Annotations panel. Reuses the
+  // editor's single-element removal flow (scene-graph + canvas + bake), so the
+  // annotation is physically removed (redact/in-place) on the next save.
+  const handleAnnotationDelete = useCallback(
+    (elementId: string) => {
+      // Reuse the canonical canvas delete path: select the targeted annotation
+      // then `deleteSelected()`. That removes the Fabric object, records undo,
+      // and fires onElementRemoved → handleElementRemoved (scene-graph shrink +
+      // backend delete + PDF bake) — identical to pressing Delete on it.
+      if (canvasHandle) {
+        canvasHandle.selectElement(elementId);
+        canvasHandle.deleteSelected();
+        setDirty(true);
+        saveWithPriority("immediate");
+      } else {
+        // No live canvas (defensive): fall back to the direct removal flow.
+        void handleElementRemoved(elementId);
+      }
+    },
+    [canvasHandle, handleElementRemoved, setDirty, saveWithPriority],
+  );
+
   // Handler pour le téléchargement de fichiers embarqués
   const handleDownloadFile = useCallback((file: { dataUrl: string; name: string }) => {
     const link = document.createElement("a");
@@ -4133,6 +4214,7 @@ export default function EditorPage() {
         onCompressApplied={handleCompressApplied}
         onOcrApplied={handleOcrApplied}
         currentPageNumber={effectivePageIndex + 1}
+        documentLanguage={documentLanguage}
         onIndexOcr={handleIndexOcr}
         indexOcrBusy={indexOcrBusy}
         onSignApplied={handleSignApplied}
@@ -4313,6 +4395,7 @@ export default function EditorPage() {
         <DocumentInfoSidebar
           outlines={outlines}
           layers={layers}
+          documentLanguage={documentLanguage}
           userLayers={userLayers}
           elements={effectivePage?.elements ?? []}
           selectedElementIds={selectedElementIds}
@@ -4321,6 +4404,7 @@ export default function EditorPage() {
           onElementVisibilityChange={handleElementVisibilityChange}
           onElementLockChange={handleElementLockChange}
           onElementSelect={handleSelectElementFromLayer}
+          onAnnotationDelete={handleAnnotationDelete}
           onLayerSelectMembers={handleSelectLayerMembers}
           onLayerCreate={handleLayerCreate}
           onLayerDelete={handleLayerDelete}
@@ -4329,6 +4413,10 @@ export default function EditorPage() {
           onLayerVisibilityChange={handleLayerVisibilityChange}
           onLayerLockChange={handleLayerLockChange}
           onAssignElementToLayer={handleAssignElementToLayer}
+          onOcgVisibilityChange={handleOcgVisibilityChange}
+          onOcgLockChange={handleOcgLockChange}
+          onOcgRemove={handleOcgRemove}
+          ocgBusyIds={ocgBusyIds}
           onDownloadFile={handleDownloadFile}
           currentPageIndex={effectivePageIndex}
           onApplyOutline={handleApplyOutline}

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { clientLogger } from "@/lib/client-logger";
-import type { DocumentObject, PageObject, BookmarkObject, LayerObject, EmbeddedFileObject, Element } from "@giga-pdf/types";
+import type { DocumentObject, DocumentLanguageInfo, PageObject, BookmarkObject, LayerObject, EmbeddedFileObject, Element } from "@giga-pdf/types";
 
 // Tolerance for "same position" heuristic when matching parsed PDF elements
 // against Redis elements that have a different elementId (post-bake case).
@@ -134,6 +134,11 @@ export interface UseDocumentReturn {
   setName: (name: string) => void;
   /** Table des matières (signets) */
   outlines: BookmarkObject[];
+  /**
+   * Direction de lecture / écriture dominante détectée (badge informatif +
+   * pré-sélection de l'écriture OCR). Absent quand indétectable.
+   */
+  documentLanguage?: DocumentLanguageInfo;
   /** Calques OCG du document (lecture seule) */
   layers: LayerObject[];
   /**
@@ -342,6 +347,12 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       // Extract embedded files
       const embeddedFiles = (rawData.embeddedFiles || rawData.embedded_files || []) as EmbeddedFileObject[];
 
+      // Detected reading direction / dominant script (optional — omitted by the
+      // parser when undecidable). Surfaced read-only in the editor + used to
+      // pre-select the OCR writing system.
+      const documentLanguage =
+        (rawData.documentLanguage as DocumentLanguageInfo | undefined) ?? undefined;
+
       // Filter out placeholder values that some PDF libraries (e.g., ReportLab)
       // inject when no metadata was provided: "(anonymous)", "(unspecified)", etc.
       const isPlaceholderMetadata = (v: unknown): boolean => {
@@ -383,6 +394,7 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
         namedDestinations: {},
         embeddedFiles: embeddedFiles,
         layers: layers,
+        ...(documentLanguage ? { documentLanguage } : {}),
       };
 
       setDocument(doc);
@@ -821,6 +833,7 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
   // Outlines, layers, embedded files
   const outlines = document?.outlines || [];
   const layers = document?.layers || [];
+  const documentLanguage = document?.documentLanguage;
   const embeddedFiles = document?.embeddedFiles || [];
 
   return {
@@ -847,6 +860,7 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     replacePages,
     setName,
     outlines,
+    documentLanguage,
     layers,
     userLayers,
     createLayer,

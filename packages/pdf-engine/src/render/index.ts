@@ -23,6 +23,11 @@ export type {
   NativeAnnotationSpec,
   AddNativeAnnotationsResult,
 } from './native-annotations';
+export { applyOcgOperations } from './ocg-layers';
+export type {
+  OcgLayerOperation,
+  ApplyOcgOperationsResult,
+} from './ocg-layers';
 export {
   renderPages as engineRenderPages,
   renderPage as engineRenderPage,

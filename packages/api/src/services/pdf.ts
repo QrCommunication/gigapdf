@@ -674,6 +674,32 @@ export const pdfService = {
   },
 
   /**
+   * Mutate native PDF Optional Content Group (OCG / "layers") state — toggle
+   * visibility/lock or remove a layer by its numeric OCG id — and return the
+   * modified PDF binary. Thin native path (no element redact+add pipeline).
+   */
+  applyOcgLayers: async (
+    file: File | Blob,
+    operations: Array<{
+      action: 'visibility' | 'locked' | 'remove';
+      ocgId: number;
+      value?: boolean;
+    }>,
+  ): Promise<Blob> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+    form.append('operations', JSON.stringify(operations));
+
+    const response = await fetch('/api/pdf/ocg', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+
+    return handleBlobResponse(response);
+  },
+
+  /**
    * Bake native paragraph-style / list-level formatting AND/OR table structural
    * edits (add/remove row or column) into a PDF and return the modified binary.
    * Paragraph/list edits are keyed by the editor's flat engine run index

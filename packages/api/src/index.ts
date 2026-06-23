@@ -223,6 +223,7 @@ export {
   useFlattenPdf,
   useConvertToPdf,
   useApplyElements,
+  useApplyOcgLayers,
   useApplyModelOps,
   useTableStructure,
   useSearchPdf,
@@ -238,6 +239,7 @@ export {
   downloadBlob,
   pdfKeys,
 } from './hooks';
+export type { OcgLayerOp } from './hooks';
 
 // WebSocket
 export {

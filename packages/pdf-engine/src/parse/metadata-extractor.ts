@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  DocumentLanguageInfo,
   DocumentMetadata,
   DocumentPermissions,
   EmbeddedFileObject,
@@ -88,6 +89,8 @@ export async function extractLayers(
     const giga = await getEngine();
     const doc = giga.open(toBytes(pdfBytes));
     try {
+      // `layer.id` is the native OCG id — preserved as `ocgId` so the editor can
+      // drive the native OCG mutators (visibility/lock/remove) by that id.
       return doc.layers().map((layer, index) => ({
         layerId: randomUUID(),
         name: layer.name || `Layer ${index + 1}`,
@@ -96,12 +99,41 @@ export async function extractLayers(
         opacity: 1,
         print: true,
         order: index,
+        ocgId: layer.id,
       }));
     } finally {
       doc.close();
     }
   } catch {
     return [];
+  }
+}
+
+/**
+ * Detect the document's dominant reading direction / script from its parsed
+ * glyphs via the native engine. Returns `undefined` on failure or when the
+ * engine cannot decide (e.g. an image-only / empty document), so callers can
+ * omit the field rather than surface a misleading default.
+ */
+export async function extractDocumentLanguage(
+  pdfBytes: Buffer | ArrayBuffer | Uint8Array,
+): Promise<DocumentLanguageInfo | undefined> {
+  try {
+    const giga = await getEngine();
+    const doc = giga.open(toBytes(pdfBytes));
+    try {
+      const raw = doc.documentLanguage();
+      const info: DocumentLanguageInfo = {
+        direction: raw.direction,
+        script: raw.script,
+      };
+      if (raw.lang) info.lang = raw.lang;
+      return info;
+    } finally {
+      doc.close();
+    }
+  } catch {
+    return undefined;
   }
 }
 
