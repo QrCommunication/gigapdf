@@ -844,6 +844,44 @@ export const pdfService = {
   },
 
   /**
+   * Stamp a raster image watermark (PNG/JPEG/WebP/GIF/AVIF) on every page
+   * (or selected pages) of a PDF. Hits the same `/api/pdf/watermark` endpoint
+   * in `mode=image`.
+   */
+  addImageWatermark: async (
+    file: File | Blob,
+    image: File | Blob,
+    options: {
+      anchor?: 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+      pages?: number[];
+      width?: number;
+      height?: number;
+      rotation?: number;
+      opacity?: number;
+      tile?: boolean;
+    } = {},
+  ): Promise<Blob> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+    form.append('mode', 'image');
+    form.append('image', image, image instanceof File ? image.name : 'watermark');
+    if (options.anchor) form.append('anchor', options.anchor);
+    if (options.pages) form.append('pages', JSON.stringify(options.pages));
+    if (options.width !== undefined) form.append('width', String(options.width));
+    if (options.height !== undefined) form.append('height', String(options.height));
+    if (options.rotation !== undefined) form.append('rotation', String(options.rotation));
+    if (options.opacity !== undefined) form.append('opacity', String(options.opacity));
+    if (options.tile !== undefined) form.append('tile', options.tile ? 'true' : 'false');
+
+    const response = await fetch('/api/pdf/watermark', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+    return handleBlobResponse(response);
+  },
+
+  /**
    * Sign a PDF with a PKCS#7 detached signature (adbe.pkcs7.detached) using
    * a user-provided PKCS#12 (.p12/.pfx) certificate.
    *

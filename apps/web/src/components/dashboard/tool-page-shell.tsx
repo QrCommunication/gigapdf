@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { ToolIcon } from "@/components/seo/tool-icon";
 import { ToolRunner } from "./tool-runner";
+import { WatermarkRunner } from "./watermark-runner";
 import { getToolConfig, type ToolKey } from "./tools-config";
 
 /**
@@ -12,6 +13,11 @@ import { getToolConfig, type ToolKey } from "./tools-config";
  *
  * `title`/`subtitle` are resolved from the tool's own next-intl namespace
  * (`tools.<id>.title` / `.subtitle`).
+ *
+ * Most tools are pure config (the generic {@link ToolRunner}). The watermark
+ * tool needs a Text | Image mode toggle — two mutually-exclusive option sets
+ * the config model can't express — so it renders the bespoke
+ * {@link WatermarkRunner} instead. The header stays config-driven.
  */
 export function ToolPageShell({ toolKey }: { toolKey: ToolKey }) {
   const config = getToolConfig(toolKey);
@@ -27,7 +33,11 @@ export function ToolPageShell({ toolKey }: { toolKey: ToolKey }) {
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
 
-      <ToolRunner config={config} />
+      {toolKey === "watermark" ? (
+        <WatermarkRunner />
+      ) : (
+        <ToolRunner config={config} />
+      )}
     </div>
   );
 }

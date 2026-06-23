@@ -360,6 +360,21 @@ export const useAddWatermark = () => {
   });
 };
 
+/** Stamp a raster image watermark on every page (or selected pages). */
+export const useAddImageWatermark = () => {
+  return useMutation({
+    mutationFn: ({
+      file,
+      image,
+      options,
+    }: {
+      file: File | Blob;
+      image: File | Blob;
+      options?: Parameters<typeof pdfService.addImageWatermark>[2];
+    }) => pdfService.addImageWatermark(file, image, options),
+  });
+};
+
 /**
  * Sign a PDF with a PKCS#7 detached signature using a user-provided
  * P12/PFX certificate. The certificate and passphrase only transit in the

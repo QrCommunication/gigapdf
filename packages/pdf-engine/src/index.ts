@@ -49,6 +49,7 @@ export {
   engineRenderPage,
   engineRenderPages,
   addWatermark,
+  addImageWatermark,
 } from './render';
 export type {
   RedactionTarget,
@@ -69,6 +70,9 @@ export type {
   WatermarkOptions,
   WatermarkPosition,
   WatermarkResult,
+  ImageWatermarkOptions,
+  ImageWatermarkAnchor,
+  ImageWatermarkResult,
 } from './render';
 
 // Parse — native engine extractors
