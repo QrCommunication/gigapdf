@@ -3,6 +3,7 @@ import {
   IMPORT_CONCURRENCY,
   MAX_IMPORT_FILE_SIZE_BYTES,
   getFileExtension,
+  isImageFile,
   isOfficeFile,
   isPdfFile,
   isTextModelFile,
@@ -104,8 +105,36 @@ describe("isOfficeFile", () => {
     expect(isOfficeFile({ name: "NOEXT" })).toBe(false);
   });
 
-  it("does NOT treat rtf as convertible (engine/route reject it → stored as-is)", () => {
-    expect(isOfficeFile({ name: "letter.rtf" })).toBe(false);
+  it("treats rtf as convertible (the Office route renders it via rtfToPdf)", () => {
+    expect(isOfficeFile({ name: "letter.rtf" })).toBe(true);
+    expect(isOfficeFile({ name: "LETTER.RTF" })).toBe(true);
+  });
+});
+
+describe("isImageFile", () => {
+  it("detects every supported raster image format (case-insensitive)", () => {
+    for (const ext of ["png", "jpg", "jpeg", "gif", "webp", "avif"]) {
+      expect(isImageFile({ name: `photo.${ext}` })).toBe(true);
+      expect(isImageFile({ name: `photo.${ext.toUpperCase()}` })).toBe(true);
+    }
+  });
+
+  it("returns false for PDFs, Office docs, text and other formats", () => {
+    expect(isImageFile({ name: "doc.pdf" })).toBe(false);
+    expect(isImageFile({ name: "report.docx" })).toBe(false);
+    expect(isImageFile({ name: "letter.rtf" })).toBe(false);
+    expect(isImageFile({ name: "notes.md" })).toBe(false);
+    expect(isImageFile({ name: "image.svg" })).toBe(false); // vector, not raster
+    expect(isImageFile({ name: "image.bmp" })).toBe(false); // unsupported by engine
+    expect(isImageFile({ name: "NOEXT" })).toBe(false);
+  });
+
+  it("is disjoint from the Office and text-model branches", () => {
+    for (const name of ["photo.png", "scan.jpeg", "anim.gif", "shot.webp"]) {
+      expect(isImageFile({ name })).toBe(true);
+      expect(isOfficeFile({ name })).toBe(false);
+      expect(isTextModelFile({ name })).toBe(false);
+    }
   });
 });
 

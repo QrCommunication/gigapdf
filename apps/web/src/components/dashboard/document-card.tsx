@@ -48,6 +48,7 @@ import {
   Tags,
   Hash,
   BookOpen,
+  ScanText,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { DragItem } from "./document-explorer";
@@ -62,6 +63,7 @@ import {
 } from "./download-document-bytes";
 import { TagChips } from "./tag-input";
 import { ManageTagsDialog } from "./manage-tags-dialog";
+import { GedOcrDialog } from "./ged-ocr-dialog";
 
 interface DocumentCardProps {
   id: string;
@@ -115,6 +117,7 @@ export function DocumentCard({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [tagsDialogOpen, setTagsDialogOpen] = useState(false);
+  const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
 
   // Loading states
   const [deleting, setDeleting] = useState(false);
@@ -355,6 +358,10 @@ export function DocumentCard({
                 <Tags className="mr-2 h-4 w-4" />
                 {t("menu.manageTags")}
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setOcrDialogOpen(true)}>
+                <ScanText className="mr-2 h-4 w-4" />
+                {t("menu.makeSearchable")}
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleShare}>
                 <Share2 className="mr-2 h-4 w-4" />
                 {t("menu.share")}
@@ -557,6 +564,15 @@ export function DocumentCard({
         documentName={documentName}
         initialTags={tags}
         onSaved={() => onChanged?.()}
+      />
+
+      {/* OCR (make searchable) Dialog */}
+      <GedOcrDialog
+        open={ocrDialogOpen}
+        onOpenChange={setOcrDialogOpen}
+        documentId={id}
+        documentName={documentName}
+        onReplaced={() => onChanged?.()}
       />
 
       {/* Export Progress Dialog */}

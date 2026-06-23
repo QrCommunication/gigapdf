@@ -843,6 +843,7 @@
         "exportEpub": "EPUB (.epub)",
         "duplicate": "Duplicate",
         "manageTags": "Manage tags",
+        "makeSearchable": "Make searchable (OCR)",
         "delete": "Move to trash"
       },
       "deleteDialog": {
@@ -1038,6 +1039,46 @@
       "textFormat": {
         "conversionFailed": "Could not convert this Markdown/CSV file to PDF",
         "unavailable": "Markdown/CSV conversion is temporarily unavailable"
+      },
+      "image": {
+        "conversionFailed": "Could not convert this image to PDF",
+        "unavailable": "Image conversion is temporarily unavailable"
+      }
+    },
+    "ocr": {
+      "title": "Make searchable (OCR)",
+      "description": "Recognizes the text in “{name}” and adds an invisible text layer: the scanned document becomes selectable and searchable while its appearance is preserved.",
+      "scriptLabel": "Writing system",
+      "dpiLabel": "Quality (DPI)",
+      "dpiFast": "144 (fast)",
+      "dpiBalanced": "200 (balanced)",
+      "dpiHigh": "300 (high quality)",
+      "outputLabel": "Output",
+      "outputReplace": "Replace the document",
+      "outputReplaceHint": "Saves a new searchable version in place of the original.",
+      "outputDownload": "Download a copy",
+      "outputDownloadHint": "Downloads the searchable version without changing the stored document.",
+      "run": "Run OCR",
+      "processing": "Recognizing text…",
+      "cancel": "Cancel",
+      "unavailable": "The OCR engine is unavailable. Try again later or contact the administrator.",
+      "replacedTitle": "Document made searchable",
+      "replacedDescription": "“{name}” was replaced with its searchable version.",
+      "downloadedTitle": "Searchable copy downloaded",
+      "failed": "Text recognition failed.",
+      "lang": {
+        "latin": "Latin",
+        "cyrillic": "Cyrillic",
+        "arabic": "Arabic",
+        "hebrew": "Hebrew",
+        "devanagari": "Devanagari",
+        "tamil": "Tamil",
+        "telugu": "Telugu",
+        "kannada": "Kannada",
+        "chinese_simplified": "Chinese (Simplified)",
+        "chinese_traditional": "Chinese (Traditional)",
+        "japanese": "Japanese",
+        "korean": "Korean"
       }
     },
     "office": {

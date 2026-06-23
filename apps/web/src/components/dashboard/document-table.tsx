@@ -53,6 +53,7 @@ import {
   Tags,
   Hash,
   BookOpen,
+  ScanText,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { DragItem, FolderStats, SelectionItem } from "./document-explorer";
@@ -66,6 +67,7 @@ import {
   type DashboardExportFormat,
 } from "./download-document-bytes";
 import { ManageTagsDialog } from "./manage-tags-dialog";
+import { GedOcrDialog } from "./ged-ocr-dialog";
 
 export type SortField = "name" | "size" | "createdAt" | "updatedAt";
 export type SortDirection = "asc" | "desc";
@@ -153,6 +155,7 @@ export function DocumentTable({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [tagsDialogOpen, setTagsDialogOpen] = useState(false);
+  const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
 
   // Folder dialog states
   const [folderToDelete, setFolderToDelete] = useState<FolderItem | null>(null);
@@ -251,6 +254,11 @@ export function DocumentTable({
   const openTagsDialog = (doc: Document) => {
     setSelectedDoc(doc);
     setTagsDialogOpen(true);
+  };
+
+  const openOcrDialog = (doc: Document) => {
+    setSelectedDoc(doc);
+    setOcrDialogOpen(true);
   };
 
   const handleRename = async () => {
@@ -639,6 +647,10 @@ export function DocumentTable({
                         <Tags className="mr-2 h-4 w-4" />
                         {tCard("menu.manageTags")}
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openOcrDialog(doc)}>
+                        <ScanText className="mr-2 h-4 w-4" />
+                        {tCard("menu.makeSearchable")}
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleShare(doc)}>
                         <Share2 className="mr-2 h-4 w-4" />
                         {tCard("menu.share")}
@@ -849,6 +861,17 @@ export function DocumentTable({
           documentName={selectedDoc.name}
           initialTags={selectedDoc.tags ?? []}
           onSaved={() => onChanged?.()}
+        />
+      )}
+
+      {/* OCR (make searchable) Dialog */}
+      {selectedDoc && (
+        <GedOcrDialog
+          open={ocrDialogOpen}
+          onOpenChange={setOcrDialogOpen}
+          documentId={selectedDoc.id}
+          documentName={selectedDoc.name}
+          onReplaced={() => onChanged?.()}
         />
       )}
 
