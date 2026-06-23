@@ -130,6 +130,7 @@ export {
   applyModelOps,
   applyParagraphOps,
   buildSourceIndexAddrMap,
+  buildListAddrMap,
 } from './model-ops';
 export type {
   ParagraphStyleEdit,

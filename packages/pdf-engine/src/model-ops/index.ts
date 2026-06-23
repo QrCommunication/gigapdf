@@ -34,6 +34,7 @@ import type {
   GigaBlockAddr,
   GigaDocument,
   GigaInline,
+  GigaListItem,
   GigaListMarker,
   GigaParaPatch,
   ModelOp,
@@ -98,6 +99,40 @@ function headingRuns(block: GigaBlock): GigaInline[] {
   return Array.isArray(runs) ? (runs as GigaInline[]) : [];
 }
 
+/** Read the `{ items }` of a list block defensively (typed + runtime). */
+function listItems(block: GigaBlock): GigaListItem[] {
+  const v = block.kind?.v as { items?: unknown } | undefined;
+  const items = v?.items;
+  return Array.isArray(items) ? (items as GigaListItem[]) : [];
+}
+
+/** Read the nested `{ blocks }` of one list item defensively. */
+function listItemBlocks(item: GigaListItem): GigaBlock[] {
+  const blocks = (item as { blocks?: unknown }).blocks;
+  return Array.isArray(blocks) ? (blocks as GigaBlock[]) : [];
+}
+
+/**
+ * Collect every `source_index` reachable from a paragraph/heading block (and,
+ * recursively, the nested paragraph/heading blocks of a list block). Used to
+ * record which runs belong to a given LIST block so a list-level edit keyed by
+ * a run's flat `source_index` resolves to the address of its enclosing list.
+ */
+function collectBlockSourceIndices(block: GigaBlock, out: number[]): void {
+  const kind = block.kind?.t;
+  if (kind === 'paragraph') {
+    collectRunSourceIndices(paragraphRuns(block), out);
+  } else if (kind === 'heading') {
+    collectRunSourceIndices(headingRuns(block), out);
+  } else if (kind === 'list') {
+    for (const item of listItems(block)) {
+      for (const nested of listItemBlocks(item)) {
+        collectBlockSourceIndices(nested, out);
+      }
+    }
+  }
+}
+
 /**
  * Pull the `source_index`es out of an inline run list, reading BOTH the typed
  * flat shape `{ t:'run', source_index }` and the runtime-wrapped shape
@@ -127,12 +162,29 @@ function collectRunSourceIndices(runs: GigaInline[], out: number[]): void {
   }
 }
 
+/** Record `indices` against `addr` in `map`, first-writer-wins. */
+function recordIndices(
+  indices: number[],
+  addr: GigaBlockAddr,
+  map: Map<number, GigaBlockAddr>,
+): void {
+  for (const idx of indices) {
+    // First writer wins — `source_index`es are unique per document in practice;
+    // this guards against any accidental duplicate so the address stays stable.
+    if (!map.has(idx)) map.set(idx, addr);
+  }
+}
+
 /**
- * Record every `source_index` of the paragraph/heading `block` against `addr`
- * in `map`. Only paragraph and heading blocks accept `setParagraphStyle`; other
- * kinds (table/list/image/shape/...) are addressed differently and are skipped
- * here (their nested paragraphs are not individually addressable as top-level
- * blocks, which is consistent with the editor's run-level grouping).
+ * Record every `source_index` of the `block` against the address that accepts a
+ * `setParagraphStyle` op for it. Paragraph and heading blocks map directly; a
+ * LIST block is recursed so each nested paragraph's runs map to the nested
+ * paragraph's own address (`[s, p, i, item, j]` if the engine addresses that
+ * deeply — currently top-level only, so list-item paragraphs are addressed by
+ * the list's `[s, p, i]` for paragraph ops, matching how the engine resolves
+ * `setParagraphStyle` on a list). Other kinds (table/image/shape/...) are
+ * addressed differently and skipped — consistent with the editor's run-level
+ * grouping.
  */
 function indexBlock(
   block: GigaBlock,
@@ -140,18 +192,42 @@ function indexBlock(
   map: Map<number, GigaBlockAddr>,
 ): void {
   const kind = block.kind?.t;
-  let runs: GigaInline[] | null = null;
-  if (kind === 'paragraph') runs = paragraphRuns(block);
-  else if (kind === 'heading') runs = headingRuns(block);
-  if (!runs) return;
-
-  const indices: number[] = [];
-  collectRunSourceIndices(runs, indices);
-  for (const idx of indices) {
-    // First writer wins — `source_index`es are unique per document in practice;
-    // this guards against any accidental duplicate so the address stays stable.
-    if (!map.has(idx)) map.set(idx, addr);
+  if (kind === 'paragraph') {
+    const indices: number[] = [];
+    collectRunSourceIndices(paragraphRuns(block), indices);
+    recordIndices(indices, addr, map);
+  } else if (kind === 'heading') {
+    const indices: number[] = [];
+    collectRunSourceIndices(headingRuns(block), indices);
+    recordIndices(indices, addr, map);
+  } else if (kind === 'list') {
+    // A list-item paragraph isn't a separately-addressable top-level block, so
+    // map its runs to the list block's address: `setParagraphStyle` applied to
+    // a list block restyles its item paragraphs. Keeps list-item paragraph
+    // formatting (align/indent/spacing/line-height) addressable from the flat
+    // `source_index` the editor already holds.
+    const indices: number[] = [];
+    collectBlockSourceIndices(block, indices);
+    recordIndices(indices, addr, map);
   }
+}
+
+/**
+ * Record every `source_index` that belongs to a LIST block against that list
+ * block's address — the seam for list-level edits (`setListLevel`/
+ * `setListMarker`/`setListOrdered`), which address the list block itself, not
+ * the nested item paragraph. A run inside a list item therefore resolves to its
+ * enclosing list; a run in a plain paragraph is absent (not a list).
+ */
+function indexListBlock(
+  block: GigaBlock,
+  addr: GigaBlockAddr,
+  map: Map<number, GigaBlockAddr>,
+): void {
+  if (block.kind?.t !== 'list') return;
+  const indices: number[] = [];
+  collectBlockSourceIndices(block, indices);
+  recordIndices(indices, addr, map);
 }
 
 /**
@@ -178,6 +254,36 @@ export function buildSourceIndexAddrMap(
       for (let i = 0; i < blocks.length; i++) {
         const block = blocks[i];
         if (block) indexBlock(block, [s, p, i], map);
+      }
+    }
+  }
+  return map;
+}
+
+/**
+ * Build the `source_index → GigaBlockAddr` map for LIST blocks only.
+ *
+ * Walks `sections[s].pages[p].blocks[i]`; for each `list` block, every run
+ * `source_index` reachable through its items maps to `[s, p, i]` (the list
+ * block's own address). This is the seam for list-level edits — `setListLevel`/
+ * `setListMarker`/`setListOrdered` target the list block, while the run the
+ * editor selected lives in a nested item paragraph. Pure & deterministic; a run
+ * outside any list is simply absent from the map.
+ */
+export function buildListAddrMap(
+  model: GigaDocument,
+): Map<number, GigaBlockAddr> {
+  const map = new Map<number, GigaBlockAddr>();
+  const sections = Array.isArray(model.sections) ? model.sections : [];
+  for (let s = 0; s < sections.length; s++) {
+    const section = sections[s];
+    const pages = Array.isArray(section?.pages) ? section.pages : [];
+    for (let p = 0; p < pages.length; p++) {
+      const page = pages[p];
+      const blocks = Array.isArray(page?.blocks) ? page.blocks : [];
+      for (let i = 0; i < blocks.length; i++) {
+        const block = blocks[i];
+        if (block) indexListBlock(block, [s, p, i], map);
       }
     }
   }
@@ -237,7 +343,12 @@ export async function applyParagraphOps(
   const doc = engine.open(data);
   try {
     const model = doc.toModel();
+    // Paragraph ops resolve against paragraph/heading (and list-item paragraph)
+    // blocks; list-level ops resolve against the ENCLOSING list block. Two maps,
+    // one `toModel()` — addresses and the edited model stay consistent.
     const addrMap = buildSourceIndexAddrMap(model);
+    const listAddrMap =
+      listEdits.length > 0 ? buildListAddrMap(model) : null;
 
     const ops: ModelOp[] = [];
     const unresolved: number[] = [];
@@ -266,7 +377,9 @@ export async function applyParagraphOps(
     }
 
     for (const edit of listEdits) {
-      const addr = addrMap.get(edit.sourceIndex);
+      // List-level ops target the list block (via listAddrMap), not the
+      // paragraph block — a run in a list item resolves to its enclosing list.
+      const addr = listAddrMap?.get(edit.sourceIndex);
       if (!addr) {
         unresolved.push(edit.sourceIndex);
         continue;
