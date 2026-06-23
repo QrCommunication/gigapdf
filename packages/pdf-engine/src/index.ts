@@ -122,6 +122,26 @@ export type {
 export { ALL_OCR_SCRIPTS } from 'gigapdf-lib-ocr';
 export type { OcrScript } from 'gigapdf-lib-ocr';
 
+// Model ops — native paragraph/list formatting bake via the unified model
+// (`toModel` → `applyModelOps` → `modelToPdf`). The flat-index ↔ BlockAddr
+// bridge: edits keyed by the editor's `source_index` resolve to a positional
+// `[section, page, index]` address, then bake structurally into the PDF.
+export {
+  applyModelOps,
+  applyParagraphOps,
+  buildSourceIndexAddrMap,
+} from './model-ops';
+export type {
+  ParagraphStyleEdit,
+  ListEdit,
+  ApplyParagraphOpsResult,
+  GigaBlockAddr,
+  GigaDocument,
+  GigaListMarker,
+  GigaParaPatch,
+  ModelOp,
+} from './model-ops';
+
 // Merge/Split
 export { mergePDFs, splitPDF, splitAt } from './merge-split';
 export type { MergeOptions, SplitOptions } from './merge-split';

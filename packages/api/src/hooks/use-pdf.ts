@@ -16,6 +16,8 @@ import type {
   MetadataResult,
   FlattenOptions,
   ApplyElementsOperation,
+  ParagraphStyleEdit,
+  ListEdit,
 } from '../services/pdf';
 import type { DocumentMetadata, FormFieldElement } from '@giga-pdf/types';
 
@@ -290,6 +292,23 @@ export const useApplyElements = () => {
       file: File | Blob;
       operations: ApplyElementsOperation[];
     }) => pdfService.applyElements(file, operations),
+  });
+};
+
+/**
+ * Hook to bake native paragraph-style / list-level formatting into a PDF via
+ * the engine's unified model (`setParagraphStyle` / `setList*` model ops keyed
+ * by the editor's flat run index). Returns the modified PDF as a Blob.
+ */
+export const useApplyModelOps = () => {
+  return useMutation({
+    mutationFn: ({
+      file,
+      edits,
+    }: {
+      file: File | Blob;
+      edits: { paragraphs?: ParagraphStyleEdit[]; lists?: ListEdit[] };
+    }) => pdfService.applyModelOps(file, edits),
   });
 };
 
