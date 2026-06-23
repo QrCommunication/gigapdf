@@ -13,6 +13,10 @@
  *     ownerPassword      — string
  *     algorithm          — "AES-128" | "AES-256" (default: "AES-256")
  *     permissions        — JSON DocumentPermissions object (optional, default: all allowed)
+ *     print, modify, copy, annotate, fillForms, extract, assemble,
+ *     printHighQuality   — individual "true"/"false" boolean fields (optional; the
+ *                          /protect UI switches). They override matching keys of
+ *                          the `permissions` JSON; any omitted flag stays granted.
  *
  *   For "decrypt":
  *     password           — string (required)
@@ -50,10 +54,45 @@ import {
   PDFEncryptedError,
 } from '@giga-pdf/pdf-engine';
 import type { EncryptionAlgorithm } from '@giga-pdf/pdf-engine';
+import type { DocumentPermissions } from '@giga-pdf/types';
 import { requireSession } from '@/lib/auth-helpers';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
 import { serverLogger } from '@/lib/server-logger';
 import { validatePdfFile } from '@/lib/request-validation';
+
+/**
+ * The eight ISO 32000-1 (Table 22) access-permission form fields accepted on
+ * `encrypt`. Each maps 1:1 to a {@link DocumentPermissions} key. The /protect
+ * UI sends them as individual `"true"`/`"false"` switches.
+ */
+const PERMISSION_FIELDS = [
+  'print',
+  'modify',
+  'copy',
+  'annotate',
+  'fillForms',
+  'extract',
+  'assemble',
+  'printHighQuality',
+] as const satisfies readonly (keyof DocumentPermissions)[];
+
+/**
+ * Read the individual permission switches from the form. Returns the subset of
+ * flags that were explicitly provided (`"true"`/`"false"`), or `undefined` when
+ * none were sent so callers leave the existing/default permissions untouched.
+ * Backward compatible: omitting every flag yields `undefined` ⇒ all granted.
+ */
+function collectPermissionFlags(
+  formData: FormData,
+): Partial<DocumentPermissions> | undefined {
+  let flags: Partial<DocumentPermissions> | undefined;
+  for (const key of PERMISSION_FIELDS) {
+    const raw = formData.get(key);
+    if (typeof raw !== 'string') continue;
+    flags = { ...flags, [key]: raw === 'true' };
+  }
+  return flags;
+}
 
 export async function POST(request: Request): Promise<Response> {
   const authResult = await requireSession();
@@ -112,17 +151,26 @@ export async function POST(request: Request): Promise<Response> {
         );
       }
 
+      // Permissions can arrive two ways (precedence: individual flags win):
+      //   1. A single `permissions` JSON object (legacy / programmatic callers).
+      //   2. Individual boolean form fields (the /protect UI switches), one per
+      //      ISO 32000-1 access permission. Any flag left unset stays granted.
       const permissionsRaw = formData.get('permissions') as string | null;
-      let permissions: Record<string, boolean> | undefined;
+      let permissions: Partial<DocumentPermissions> | undefined;
       if (permissionsRaw) {
         try {
-          permissions = JSON.parse(permissionsRaw) as Record<string, boolean>;
+          permissions = JSON.parse(permissionsRaw) as Partial<DocumentPermissions>;
         } catch {
           return NextResponse.json(
             { success: false, error: 'permissions must be valid JSON.' },
             { status: 400 },
           );
         }
+      }
+
+      const flagFields = collectPermissionFlags(formData);
+      if (flagFields) {
+        permissions = { ...permissions, ...flagFields };
       }
 
       const encryptedBuffer = await encryptPDF(buffer, {
