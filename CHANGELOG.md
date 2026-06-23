@@ -5,6 +5,21 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-06-23
+
+### Added
+- **Long-term signature validation (PAdES-B-LT)** — extend a digital signature
+  with embedded revocation data (OCSP/CRL) so it stays verifiable for years,
+  even after the signing certificate expires (builds on the B-T timestamping
+  added in 1.11.0).
+- **Editor — native layers (OCG)**: show and toggle a PDF's optional-content
+  layers, with a dedicated annotations panel and a document-language badge.
+- **Document library — organize pages**: reorder, rotate and delete the pages of
+  a stored document from a visual grid, without opening the editor.
+- **Document library — export to 12 formats and PDF→PDF transforms**: convert or
+  transform a stored document in place (Office, OpenDocument, image, Markdown,
+  CSV, EPUB, HTML, RTF and text).
+
 ## [1.11.0] - 2026-06-23
 
 ### Added
