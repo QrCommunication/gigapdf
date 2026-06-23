@@ -218,9 +218,15 @@ export interface EditorCanvasHandle {
    * sélection. Le `setActiveObject` programmatique de Fabric ne déclenche PAS
    * `selection:created` — on forwarde donc explicitement à `onSelectionChanged`
    * pour synchroniser le store + le panneau propriétés (même chemin que la
-   * sélection souris). No-op si l'élément n'est pas rendu sur la page affichée.
+   * sélection souris).
+   *
+   * Retourne `true` si l'élément a été trouvé et sélectionné sur la page
+   * affichée, `false` sinon (élément non rendu ici — cas du mode continu où ce
+   * handle ne pilote QUE la page active : l'appelant doit alors activer la page
+   * propriétaire puis re-tenter). Le booléen permet ce ré-essai déterministe
+   * plutôt qu'un no-op silencieux.
    */
-  selectElement: (elementId: string) => void;
+  selectElement: (elementId: string) => boolean;
   /**
    * Sélectionner plusieurs éléments par leurs ids (clic sur une ligne-calque :
    * met en évidence tous les membres du calque). Miroir multi de
@@ -3152,9 +3158,9 @@ export function EditorCanvas({
           endProgrammaticApply();
         }
       },
-      selectElement: (elementId: string) => {
+      selectElement: (elementId: string): boolean => {
         const canvas = fabricRef.current;
-        if (!canvas) return;
+        if (!canvas) return false;
         const target = canvas
           .getObjects()
           .find(
@@ -3162,7 +3168,10 @@ export function EditorCanvas({
               (o as FabricObjectWithData).data?.elementId === elementId &&
               (o as FabricObjectWithData).data?.isHideMask !== true,
           );
-        if (!target) return;
+        // Élément absent de CETTE page (mode continu : ce handle ne pilote que la
+        // page active). On le signale au lieu d'un no-op silencieux pour que
+        // l'appelant active la page propriétaire puis re-tente.
+        if (!target) return false;
         // Rendre l'objet actif puis forwarder l'id : le setActiveObject
         // programmatique de Fabric ne fire pas selection:created, donc on
         // notifie onSelectionChanged nous-mêmes (même chemin que la souris)
@@ -3172,6 +3181,7 @@ export function EditorCanvas({
         canvas.setActiveObject(target);
         canvas.requestRenderAll();
         onSelectionChangedRef.current?.([elementId]);
+        return true;
       },
       selectElements: (elementIds: string[]) => {
         const canvas = fabricRef.current;
