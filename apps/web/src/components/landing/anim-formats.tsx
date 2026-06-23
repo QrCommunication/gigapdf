@@ -1,6 +1,6 @@
 "use client";
 
-/** Les 9 formats Office/OpenDocument importés + sorties principales. */
+/** Formats pris en charge (import Office/OpenDocument/texte/web/image + sorties). */
 const FORMATS = [
   ".docx",
   ".odt",
@@ -9,8 +9,11 @@ const FORMATS = [
   ".pptx",
   ".odp",
   ".rtf",
-  ".txt",
+  ".md",
+  ".csv",
   ".html",
+  ".epub",
+  ".txt",
   ".pdf/a",
   ".png",
   ".jpeg",

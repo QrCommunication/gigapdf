@@ -11,7 +11,7 @@
 
 export type SeoLocale = "fr" | "en";
 
-/** Tool slugs, FR → EN (20 entries, complete bijection). */
+/** Tool slugs, FR → EN (29 entries, complete bijection). */
 export const toolSlugMap: Record<string, string> = {
   "editer-pdf": "edit-pdf",
   "fusionner-pdf": "merge-pdf",
@@ -33,6 +33,22 @@ export const toolSlugMap: Record<string, string> = {
   "pdf-vers-odt": "pdf-to-odt",
   "html-vers-pdf": "html-to-pdf",
   "pdf-a": "pdf-a",
+  "fusion-universelle": "universal-merge",
+  "image-vers-pdf": "image-to-pdf",
+  "pdf-vers-image": "pdf-to-image",
+  "pdf-vers-powerpoint": "pdf-to-powerpoint",
+  "pdf-vers-excel": "pdf-to-excel",
+  "rtf-pdf": "rtf-pdf",
+  "texte-vers-pdf": "text-to-pdf",
+  "caviarder-pdf": "redact-pdf",
+  "deverrouiller-pdf": "unlock-pdf",
+  "markdown-vers-pdf": "markdown-to-pdf",
+  "csv-vers-pdf": "csv-to-pdf",
+  "pdf-vers-markdown": "pdf-to-markdown",
+  "pdf-vers-epub": "pdf-to-epub",
+  "pdf-vers-rtf": "pdf-to-rtf",
+  "pdf-vers-html": "pdf-to-html",
+  "pdf-vers-texte": "pdf-to-text",
 };
 
 /** Solution slugs, FR → EN (10 entries, complete bijection). */

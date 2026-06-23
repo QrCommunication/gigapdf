@@ -42,6 +42,8 @@ export const TOOLS: ToolData[] = [
       "Move, resize, delete, and duplicate any element in place — losslessly",
       "Original fonts detected, fetched from Google Fonts, and embedded on save",
       "Restyle vector shapes: fill, stroke color, stroke width, and dash pattern",
+      "Table editing: insert or delete rows and columns, merge cells, adjust borders and shading",
+      "Bulleted and numbered lists, with indent levels and markers",
       "Element opacity and transparency, baked into the PDF",
       "Stacking order — bring to front or send to back, saved in the PDF itself",
       "Persistent layers: create, rename, lock, and hide, kept across sessions",
@@ -354,7 +356,7 @@ export const TOOLS: ToolData[] = [
     h1: "OCR: pull the text out of your scans and images",
     intro: [
       "A document made only of images — a scanned PDF, but also a photo of a document or a JPG or PNG file — is just a stack of page photographs: you can't search for a word, copy a paragraph, or pull out the figures. Until the text is recognized, the file stays mute for every tool you own — including your own document manager's search. Optical character recognition (OCR) turns those images into text you can actually use.",
-      "GigaPDF ships with its own optical character recognition engine, which loads its full set of models by default: it reads not only French, English, German, Spanish, Italian, Portuguese… but also Cyrillic, Arabic, Hebrew, Tamil, Devanagari, Telugu, Kannada, Chinese (Simplified and Traditional), Japanese, and Korean — accents, cedillas, and ligatures included. The engine is designed for printed text and remains strongest on Latin scripts while still supporting the other writing systems. It works equally on a scanned PDF, a standalone image (JPG, PNG), or a photo of a document: you launch OCR, the engine reads every page or image, and the recognized text comes back ready to copy, export, or index.",
+      "GigaPDF ships with its own optical character recognition engine, which loads its full set of models by default: it reads not only French, English, German, Spanish, Italian, Portuguese… but also Cyrillic, Arabic, Hebrew, Tamil, Devanagari, Telugu, Kannada, Chinese (Simplified and Traditional), Japanese, and Korean — accents, cedillas, and ligatures included. Built on the state-of-the-art PaddleOCR models running on our own infrastructure, it is designed first for printed text and also reads, on demand, Latin (including French), Cyrillic, and Greek handwriting. It works equally on a scanned PDF, a standalone image (JPG, PNG), or a photo of a document: you launch OCR, the engine reads every page or image, and the recognized text comes back ready to copy, export, or index.",
       "OCR feeds the rest of the platform directly: once a document is recognized, full-text search finds it by its content, and the searchable-PDF tool can lay the text as an invisible layer under the original image. Everything works on the free plan — and on your own server if you self-host, which matters when the scans and images are confidential.",
     ],
     howTo: {
@@ -380,7 +382,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Which languages does GigaPDF's OCR recognize?",
         answer:
-          "The OCR engine loads its full set of models by default: beyond French and English, it recognizes many scripts — Latin (German, Spanish, Italian, Portuguese…), Cyrillic, Arabic, Hebrew, Indic (Tamil, Devanagari, Telugu, Kannada), and CJK (Simplified and Traditional Chinese, Japanese, Korean). A bilingual contract or an invoice mixing several languages is handled in a single pass, and accented characters come through correctly. The engine is designed for printed text and stays most accurate on Latin scripts.",
+          "The OCR engine loads its full set of models by default: beyond French and English, it recognizes many scripts — Latin (German, Spanish, Italian, Portuguese…), Cyrillic, Arabic, Hebrew, Indic (Tamil, Devanagari, Telugu, Kannada), and CJK (Simplified and Traditional Chinese, Japanese, Korean). A bilingual contract or an invoice mixing several languages is handled in a single pass, and accented characters come through correctly. Built on the state-of-the-art PaddleOCR models, the engine is designed first for printed text and also reads, on demand, Latin (French included), Cyrillic, and Greek handwriting.",
       },
       {
         question: "What scan or image quality do I need for good results?",
@@ -390,7 +392,7 @@ export const TOOLS: ToolData[] = [
       {
         question: "Does OCR read handwriting?",
         answer:
-          "Yes, for Latin scripts and on demand. The engine is built first for printed text, but an opt-in setting also recognizes Latin handwriting; this mode is never triggered automatically, and non-Latin scripts stay limited to printed text. For best results, use documents scanned cleanly or photographed flat at a decent resolution.",
+          "Yes, on demand. The engine is built first for printed text, but an opt-in setting also recognizes Latin (French included), Cyrillic, and Greek handwriting, through models we trained ourselves; this mode is never triggered automatically, and other scripts stay limited to printed text. For best results, use documents scanned cleanly or photographed flat at a decent resolution.",
       },
       {
         question: "What happens to the original document or image after OCR?",
@@ -1851,6 +1853,433 @@ export const TOOLS: ToolData[] = [
     relatedTools: ["protect-pdf", "sign-pdf", "redact-pdf"],
     relatedSolutions: ["accountants", "human-resources", "freelancers"],
     icon: "unlock",
+  },
+  {
+    slug: "markdown-to-pdf",
+    name: "Markdown to PDF",
+    category: "convert",
+    metaTitle: "Convert a Markdown file (.md) to PDF | GigaPDF",
+    metaDescription:
+      "Turn your Markdown (.md) files into a laid-out PDF: headings, lists, tables, code and links rendered cleanly. Free, open source, no watermark.",
+    h1: "Convert a Markdown file (.md) into a laid-out PDF",
+    intro: [
+      "Markdown is the format of notes, READMEs, documentation and plain-written content. Great to write, it stays unreadable to share as-is: a raw .md file shows its hashes, asterisks and table pipes. To share, print or archive, you need a PDF that renders the formatting — heading hierarchy, lists, tables, code blocks and links.",
+      "GigaPDF converts Markdown to PDF server-side with its in-house layout engine: CommonMark syntax and GFM tables are parsed and rendered into a clean, paginated document. The result is a faithful PDF, ready to file in your document manager or chain with merging, protection or PDF/A archiving — no watermark, on the free plan.",
+      "Beyond sharing, freezing Markdown as PDF guarantees that your headings, lists and code blocks look the same on every machine, regardless of which Markdown viewer the reader happens to use. The produced document lands in your GigaPDF workspace, where it can be tagged, searched and combined with other files. Like the rest of the platform, the tool is open source and self-hostable: on your own server, your content reaches no outside service at all.",
+    ],
+    howTo: {
+      title: "How to convert Markdown to PDF",
+      steps: [
+        "Upload your .md file to your GigaPDF workspace.",
+        "Start the conversion to PDF from the actions menu.",
+        "The engine parses the Markdown syntax (headings, lists, tables, code) and lays it out.",
+        "Check the result in the built-in viewer.",
+        "Download the PDF, share it via link or file it in your document manager.",
+      ],
+    },
+    capabilities: [
+      "CommonMark syntax: headings, paragraphs, bold, italic, lists, blockquotes",
+      "Markdown (GFM) tables converted into real paginated tables",
+      "Code blocks and inline code rendered in a monospace font",
+      "Links preserved and stable layout, identical on every screen",
+      "Server-side conversion, no install, no watermark",
+    ],
+    faq: [
+      {
+        question: "Which Markdown syntax is supported?",
+        answer:
+          "The engine follows CommonMark — headings, paragraphs, emphasis, bulleted and numbered lists, blockquotes, code blocks, links — and GitHub-style tables (GFM). These are the elements of everyday Markdown used for documentation and notes.",
+      },
+      {
+        question: "Will my Markdown tables be real tables in the PDF?",
+        answer:
+          "Yes: a table written with pipes and dashes is parsed as a grid and rendered as a paginated table in the PDF, with its rows and columns — not just a line of text with bars.",
+      },
+      {
+        question: "Is there a watermark on the produced PDF?",
+        answer:
+          "None. Markdown to PDF conversion is a full feature of the free plan, with no watermark. The produced file is yours.",
+      },
+      {
+        question: "Can I convert several Markdown files at once?",
+        answer:
+          "Yes: upload your .md files to your workspace and convert them one after another. Each produced PDF joins your document manager like any other file, ready to be merged, protected or archived as PDF/A.",
+      },
+    ],
+    useCases: [
+      "Ship technical documentation written in Markdown as a readable PDF",
+      "Freeze a README or meeting notes into a clean, paginated document",
+      "Archive Markdown content in a stable, editor-independent format",
+    ],
+    relatedTools: ["text-to-pdf", "html-to-pdf", "rtf-pdf"],
+    relatedSolutions: ["freelancers", "students", "nonprofits"],
+    icon: "file-input",
+  },
+  {
+    slug: "csv-to-pdf",
+    name: "CSV to PDF",
+    category: "convert",
+    metaTitle: "Convert a CSV file to PDF (table) | GigaPDF",
+    metaDescription:
+      "Turn a CSV file into a PDF: the data is rendered as a clean, paginated table, ready to print or share. Free, open source, no watermark.",
+    h1: "Convert a CSV file to PDF as a table",
+    intro: [
+      "A CSV is perfect to exchange data between programs but dreadful to read: opened in a text editor it is just comma-separated values; opened in a spreadsheet the rendering depends on everyone's settings. To share a data extract, print it or archive it, a PDF that lays everything out as a clean table is far more telling.",
+      "GigaPDF converts a CSV to PDF server-side: rows and columns are rebuilt into a real table, laid out and paginated. The produced document is stable, readable and ready to file in your document manager or chain with the other tools — no watermark, on the free plan.",
+      "Beyond readability, turning a CSV into a PDF guarantees that your figures display the same way everywhere, with no risk of a spreadsheet reinterpreting a date or a large number along the way. The produced document joins your GigaPDF workspace, where it is filed, tagged and found again through full-text search. As with everything on the platform, the tool is open source and self-hostable: on your own server, your data sets travel through no external service whatsoever, which matters when the numbers are confidential.",
+    ],
+    howTo: {
+      title: "How to convert a CSV to PDF",
+      steps: [
+        "Upload your .csv file to your GigaPDF workspace.",
+        "Start the conversion to PDF from the actions menu.",
+        "The engine rebuilds the rows and columns into a paginated table.",
+        "Check the result in the built-in viewer.",
+        "Download the PDF, share it via link or file it in your document manager.",
+      ],
+    },
+    capabilities: [
+      "Rebuilds the CSV's rows and columns into a paginated table",
+      "Stable layout, identical on every screen",
+      "Automatic pagination of large data sets",
+      "Server-side conversion, no local install",
+      "No watermark added to the produced document",
+    ],
+    faq: [
+      {
+        question: "Are large CSV files paginated?",
+        answer:
+          "Yes: a long CSV is spread over as many pages as needed, with clean pagination, rather than a table that overflows. The document stays readable whatever the number of rows.",
+      },
+      {
+        question: "Is the separator (comma, semicolon) handled?",
+        answer:
+          "The engine interprets the usual CSV conventions to rebuild the grid. The result is a structured table, independent of the original separator.",
+      },
+      {
+        question: "Is there a watermark on the produced PDF?",
+        answer:
+          "None. CSV to PDF conversion is part of the free plan, with no watermark. The produced file is yours.",
+      },
+      {
+        question: "Does the produced PDF join my document manager?",
+        answer:
+          "Yes: like any document produced by GigaPDF, the PDF from your CSV is filed in your workspace, where it can be renamed, tagged, merged with other files or archived as PDF/A.",
+      },
+    ],
+    useCases: [
+      "Present a data export as a clean, printable PDF table",
+      "Send a database or spreadsheet extract to recipients without a spreadsheet app",
+      "Archive a data set in a stable, readable format",
+    ],
+    relatedTools: ["excel-to-pdf", "text-to-pdf", "merge-pdf"],
+    relatedSolutions: ["accountants", "freelancers", "nonprofits"],
+    icon: "file-spreadsheet",
+  },
+  {
+    slug: "pdf-to-markdown",
+    name: "PDF to Markdown",
+    category: "convert",
+    metaTitle: "Convert a PDF to Markdown (.md) | GigaPDF",
+    metaDescription:
+      "Turn a PDF into clean Markdown: headings, lists, tables and links rebuilt as structured text, reusable in docs or a site. Free, open source.",
+    h1: "Convert a PDF into reusable Markdown",
+    intro: [
+      "Reusing a PDF's content in documentation, a wiki or a Git repository calls for structured text, not a copy-paste that loses the formatting. Markdown is that pivot format: lightweight, readable, versionable, accepted by every site and docs generator.",
+      "From the PDF, GigaPDF rebuilds structured Markdown: headings become hierarchy levels, lists and tables recover their syntax, links are preserved. The in-house engine analyses the document's structure rather than flattening the page, producing a clean .md ready to edit and commit — no watermark, on the free plan.",
+      "This structured reconstruction saves real time for anyone maintaining a knowledge base: there is no longer any need to retype a PDF's content into a wiki by hand. The resulting Markdown can be reread, corrected and versioned before publication, in the editor of your choice. And because the whole platform is open source and self-hostable, sensitive documents can be converted on your own infrastructure, where they never reach a third-party service — decisive for confidential material.",
+    ],
+    howTo: {
+      title: "How to convert a PDF to Markdown",
+      steps: [
+        "Upload the PDF to your GigaPDF workspace.",
+        "If it is a scan, run OCR first to recognize the text.",
+        "Choose the Markdown export in the conversion menu.",
+        "The engine rebuilds headings, lists, tables and links as Markdown.",
+        "Download the .md, ready to drop into your documentation or repository.",
+      ],
+    },
+    capabilities: [
+      "Headings rebuilt into Markdown hierarchy levels",
+      "Lists, blockquotes and links preserved in Markdown syntax",
+      "PDF tables converted into Markdown (GFM) tables",
+      "Scan → in-house OCR → Markdown chain for scanned documents",
+      "No watermark on the produced file",
+    ],
+    faq: [
+      {
+        question: "Why export to Markdown rather than plain text?",
+        answer:
+          "Plain text loses all structure: headings, lists and tables become indistinct paragraphs. Markdown keeps the hierarchy and formatting in a lightweight syntax, directly reusable in documentation, a static site or a Git repository.",
+      },
+      {
+        question: "Are tables preserved?",
+        answer:
+          "Yes: a table detected in the PDF is exported as a Markdown (GitHub) table, with its rows and columns. A very graphic document may still need a few touch-ups, as with any conversion from PDF.",
+      },
+      {
+        question: "Can I convert a scanned PDF to Markdown?",
+        answer:
+          "Yes, by chaining OCR then the Markdown export: OCR first recognizes the scan's text, the export then structures it into Markdown. Without the OCR step, a scan has no text to convert.",
+      },
+      {
+        question: "Does the content stay private?",
+        answer:
+          "Yes: conversion runs on our own infrastructure, with no third-party service. When self-hosted, your documents never leave your server — decisive for sensitive content.",
+      },
+    ],
+    useCases: [
+      "Bring a PDF's content back into documentation or a wiki",
+      "Version a PDF document's text in Git",
+      "Feed a static site from old PDF deliverables",
+    ],
+    relatedTools: ["pdf-to-word", "pdf-to-odt", "ocr-pdf"],
+    relatedSolutions: ["freelancers", "students", "nonprofits"],
+    icon: "file-output",
+  },
+  {
+    slug: "pdf-to-epub",
+    name: "PDF to EPUB",
+    category: "convert",
+    metaTitle: "Convert a PDF to EPUB (e-book) | GigaPDF",
+    metaDescription:
+      "Turn a PDF into an EPUB readable on e-readers and phones: reflowable text, chapters and images carried over. Free, open source, no watermark.",
+    h1: "Convert a PDF to EPUB for e-readers and phones",
+    intro: [
+      "A PDF is fixed to its page size: on an e-reader or a phone it forces you to zoom and pan, line after line. EPUB is the e-book format: its text reflows to fit the screen, the chosen font size and reading comfort. Converting a PDF to EPUB makes a document genuinely readable on the move.",
+      "From the PDF, GigaPDF rebuilds a structured EPUB: the text becomes reflowable content, chapters are reconstructed and images carried over. The produced file opens in every compatible e-reader and reading app — no watermark, on the free plan.",
+      "Beyond comfort, an EPUB respects the reader's choices: font, size, line spacing and even night mode are theirs to set, where a PDF imposes its fixed page. That flexibility is exactly what makes long-form reading bearable on a phone during a commute. As with the rest of GigaPDF, the conversion is free and can run on your own server, so your library stays entirely under your control.",
+    ],
+    howTo: {
+      title: "How to convert a PDF to EPUB",
+      steps: [
+        "Upload the PDF to your GigaPDF workspace.",
+        "If it is a scan, run OCR first to recognize the text.",
+        "Choose the EPUB export in the conversion menu.",
+        "The engine rebuilds reflowable text, chapters and images.",
+        "Download the EPUB and open it on your e-reader or reading app.",
+      ],
+    },
+    capabilities: [
+      "Reflowable text adapted to e-readers, tablets and phones",
+      "Chapters reconstructed and images carried over from the PDF",
+      "Standard EPUB file, read by compatible e-readers and apps",
+      "Scan → in-house OCR → EPUB chain for scanned documents",
+      "No watermark on the produced file",
+    ],
+    faq: [
+      {
+        question: "Why convert a PDF to EPUB?",
+        answer:
+          "A PDF's text is fixed to the page size: on a small screen you have to zoom and scroll horizontally. EPUB reflows the text to the screen and the chosen font size, for comfortable reading on e-readers and phones.",
+      },
+      {
+        question: "Is the original layout preserved?",
+        answer:
+          "EPUB favours reading comfort over layout fidelity: the text reflows and is no longer fixed. A novel or a report converts very well; a very graphic document (magazine, brochure) is still better served by PDF.",
+      },
+      {
+        question: "Can I convert a scanned PDF to EPUB?",
+        answer:
+          "Yes, by chaining OCR then the EPUB export: OCR first recognizes the scan's text, which then becomes reflowable content. Without OCR, a scan has no text to reflow.",
+      },
+      {
+        question: "Does the EPUB work on all e-readers?",
+        answer:
+          "The export follows the standard EPUB format, read by compatible e-readers and reading apps. The reflowable text adapts to the screen and font size for comfortable reading on most devices.",
+      },
+    ],
+    useCases: [
+      "Comfortably read a long PDF report on an e-reader",
+      "Distribute a book or guide in the format of digital libraries",
+      "Convert old PDF documents into reflowable e-books",
+    ],
+    relatedTools: ["pdf-to-word", "pdf-to-markdown", "ocr-pdf"],
+    relatedSolutions: ["students", "teachers-trainers", "nonprofits"],
+    icon: "book-open",
+  },
+  {
+    slug: "pdf-to-rtf",
+    name: "PDF to RTF",
+    category: "convert",
+    metaTitle: "Convert a PDF to RTF (rich text) | GigaPDF",
+    metaDescription:
+      "Turn a PDF into editable RTF, opened by every word processor, formatting carried over. Free, open source, no watermark.",
+    h1: "Convert a PDF to editable RTF",
+    intro: [
+      "RTF (Rich Text Format) is the universal interchange format of word processors: opened by Word, Writer, TextEdit and most editors, with no dependency on a particular suite. Converting a PDF to RTF means getting editable rich text that works everywhere, without imposing a proprietary format on your recipients.",
+      "From the PDF, GigaPDF rebuilds an RTF document: the text becomes editable again with its essential formatting, ready to reuse in any word processor. For scanned PDFs, the in-house OCR provides the text first, the conversion does the rest — no watermark, on the free plan.",
+      "A pivot format par excellence, RTF outlasts both eras and software: a file produced today will still open in ten years, on an editor nobody has imagined yet. That durability is what makes it a sound interchange choice when you don't know which word processor the recipient will use, or whether they run a full office suite at all. The tool stays, like the rest of GigaPDF, free and hostable on your own machine, with nothing sent to an outside service along the way.",
+    ],
+    howTo: {
+      title: "How to convert a PDF to RTF",
+      steps: [
+        "Upload the PDF to your GigaPDF workspace.",
+        "If it is a scan, run OCR first to recognize the text.",
+        "Choose the RTF export in the conversion menu.",
+        "The engine rebuilds the editable rich text.",
+        "Open the .rtf in your word processor and pick up the writing.",
+      ],
+    },
+    capabilities: [
+      "RTF export opened by every word processor, no proprietary format",
+      "Text editable again with its essential formatting",
+      "Scan → in-house OCR → RTF chain for scanned documents",
+      "Maximum compatibility: Word, Writer, TextEdit and simple editors",
+      "No watermark on the converted document",
+    ],
+    faq: [
+      {
+        question: "What's the difference between RTF and DOCX as output?",
+        answer:
+          "DOCX is richer but tied to the Word ecosystem; RTF is simpler and readable by virtually every editor, including very light ones. Pick RTF for maximum compatibility, DOCX for fuller formatting.",
+      },
+      {
+        question: "Is the formatting preserved?",
+        answer:
+          "The text comes back with its essential attributes — size, weight, basic styles. A very graphic document may need touch-ups; a letter, a report or a contract usually picks up directly.",
+      },
+      {
+        question: "Can I convert a scan to RTF?",
+        answer:
+          "Yes, by chaining OCR then the RTF export: OCR recognizes the scan's text, the export structures it as rich text. Without OCR, a scan has no text to convert.",
+      },
+      {
+        question: "Does the content stay private?",
+        answer:
+          "Yes: conversion runs on our own infrastructure, with no third-party service. When self-hosted, your documents never leave your server.",
+      },
+    ],
+    useCases: [
+      "Pick up in a lightweight editor a text distributed as a PDF",
+      "Exchange editable content without imposing Word on your recipients",
+      "Convert scanned letters into rich text via the built-in OCR",
+    ],
+    relatedTools: ["pdf-to-word", "pdf-to-odt", "rtf-pdf"],
+    relatedSolutions: ["human-resources", "freelancers", "nonprofits"],
+    icon: "file-output",
+  },
+  {
+    slug: "pdf-to-html",
+    name: "PDF to HTML",
+    category: "convert",
+    metaTitle: "Convert a PDF to HTML (web page) | GigaPDF",
+    metaDescription:
+      "Turn a PDF into HTML: positioned text and images carried over to reuse the content on the web. Free, open source, no watermark.",
+    h1: "Convert a PDF to HTML for the web",
+    intro: [
+      "Republishing a PDF's content on a site, in an email or in a content management system calls for HTML, not a file to download. HTML makes text selectable, indexable by search engines and readable on any screen, where a PDF stays a document apart.",
+      "From the PDF, GigaPDF rebuilds HTML in which the text is positioned and the images carried over, faithful to the page's arrangement. The in-house engine produces clean markup, ready to embed or rework — no watermark, on the free plan.",
+      "Turning a PDF into a web page also makes it accessible: HTML content can be read by a screen reader, adapts to a phone and translates on the fly, where a PDF stays a frozen block. The produced markup is a starting point that you then style to your own brand. And since the whole platform is open source and self-hostable, the conversion can run entirely on your infrastructure, with your content never leaving your servers.",
+    ],
+    howTo: {
+      title: "How to convert a PDF to HTML",
+      steps: [
+        "Upload the PDF to your GigaPDF workspace.",
+        "If it is a scan, run OCR first to recognize the text.",
+        "Choose the HTML export in the conversion menu.",
+        "The engine rebuilds the page's positioned text and images.",
+        "Download the HTML, ready to embed on your site or in your CMS.",
+      ],
+    },
+    capabilities: [
+      "Positioned text and images carried over, faithful to the page layout",
+      "Selectable and indexable content, unlike a PDF",
+      "Clean markup, ready to embed or rework",
+      "Scan → in-house OCR → HTML chain for scanned documents",
+      "No watermark on the produced file",
+    ],
+    faq: [
+      {
+        question: "Is the produced HTML directly usable on a site?",
+        answer:
+          "It provides structured content, text and images, that you embed as-is or rework to your style guide. As with any conversion from PDF, a very graphic page may need styling adjustments.",
+      },
+      {
+        question: "What's the difference with the HTML to PDF tool?",
+        answer:
+          "They are the two directions of one chain: HTML to PDF freezes a web page into a document, PDF to HTML frees a PDF's content to republish it on the web. Both rely on GigaPDF's in-house HTML engine.",
+      },
+      {
+        question: "Can I convert a scanned PDF to HTML?",
+        answer:
+          "Yes, by chaining OCR then the HTML export: OCR first recognizes the scan's text, the export renders it as web markup. Without OCR, a scan has no text to export.",
+      },
+      {
+        question: "Is there a watermark on the result?",
+        answer:
+          "None. PDF to HTML conversion is part of the free plan, with no watermark. The produced content is yours, ready to publish.",
+      },
+    ],
+    useCases: [
+      "Republish a PDF's content on a site or in a CMS",
+      "Make a PDF-distributed document indexable by search engines",
+      "Reuse a PDF's text and images in a web page or an email",
+    ],
+    relatedTools: ["html-to-pdf", "pdf-to-markdown", "ocr-pdf"],
+    relatedSolutions: ["freelancers", "nonprofits", "students"],
+    icon: "file-output",
+  },
+  {
+    slug: "pdf-to-text",
+    name: "PDF to text",
+    category: "convert",
+    metaTitle: "Convert a PDF to text (.txt) | GigaPDF",
+    metaDescription:
+      "Extract a PDF's text into a clean .txt file, ready to reuse or index. Built-in OCR for scans. Free, open source, no watermark.",
+    h1: "Convert a PDF to a text file (.txt)",
+    intro: [
+      "Reusing a PDF's content in a script, a database, a search engine or another program calls for plain text, stripped of any layout. The .txt export extracts that text faithfully, in reading order, ready to be processed automatically.",
+      "GigaPDF extracts a PDF's text server-side, in reading order and respecting the encoding — accents and special characters included. For scanned PDFs, the in-house OCR recognizes the text first. The produced file is a clean .txt, no watermark, on the free plan.",
+      "Reducing a PDF to its bare text is often the first step of an automated pipeline: analysis, classification, feeding a search engine or a language model. By focusing on the content and the reading order, the .txt export delivers clean material, free of the noise of layout, fonts and positioning. That makes it the natural companion of scripts and data jobs that only care about the words. The operation is free and runs on our own infrastructure; when self-hosted, nothing ever leaves your servers, which keeps even the most sensitive archives fully under your control.",
+    ],
+    howTo: {
+      title: "How to convert a PDF to text",
+      steps: [
+        "Upload the PDF to your GigaPDF workspace.",
+        "If it is a scan, run OCR first to recognize the text.",
+        "Choose the text (.txt) export in the conversion menu.",
+        "The engine extracts the text in reading order, encoding preserved.",
+        "Download the .txt, ready to reuse, index or process automatically.",
+      ],
+    },
+    capabilities: [
+      "Text extraction in reading order, encoding preserved",
+      "Accents and special characters restored faithfully",
+      "Scan → in-house OCR → text chain for scanned documents",
+      "Raw file ready for automated processing, indexing or reuse",
+      "No watermark added",
+    ],
+    faq: [
+      {
+        question: "Does the text come out in the right order?",
+        answer:
+          "Yes: the engine returns the text in the document's reading order, not in the arbitrary order of the page's objects. The result is usable as-is for indexing or automated processing.",
+      },
+      {
+        question: "What if my PDF is a scan with no text?",
+        answer:
+          "Run OCR first: it recognizes the image's text, which then becomes extractable as .txt. Without this step, a scan only contains pixels, with no text to export.",
+      },
+      {
+        question: "Are accents correct?",
+        answer:
+          "Yes: extraction respects the encoding, so accents, cedillas and special characters are restored faithfully in the text file.",
+      },
+      {
+        question: "Is there a size limit?",
+        answer:
+          "Conversion accepts documents up to your workspace's import limit. A long PDF is extracted into a single text file, in reading order, ready to process.",
+      },
+    ],
+    useCases: [
+      "Feed a script or a database with a PDF's content",
+      "Index a document's text for full-text search",
+      "Quickly grab a PDF's raw content to reuse elsewhere",
+    ],
+    relatedTools: ["text-to-pdf", "ocr-pdf", "pdf-to-markdown"],
+    relatedSolutions: ["accountants", "freelancers", "students"],
+    icon: "file-output",
   },
 ];
 
