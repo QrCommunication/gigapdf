@@ -70,10 +70,10 @@
       "default": "GigaPDF — Edit your PDFs like a Word document. Open source.",
       "template": "%s | GigaPDF"
     },
-    "description": "Open-source PDF editor with real-time collaboration: edit text, images and shapes with the original fonts, sign (PKCS#7), OCR your scans, convert 9 Office formats. Self-hostable, AES-256 encrypted, GDPR compliant.",
+    "description": "Open-source PDF editor with real-time collaboration: edit text, images and shapes with the original fonts, sign (PKCS#7), OCR your scans, convert many Office and OpenDocument formats. Self-hostable, AES-256 encrypted, GDPR compliant.",
     "keywords": "open source PDF editor, edit PDF online, free PDF editor, edit PDF text, edit PDF images, edit PDF shapes, PDF layers, PDF shape styling, sign PDF PKCS#7, searchable OCR PDF, convert Word to PDF, convert PDF to Word, real-time collaborative PDF, self-hosted PDF, open source DMS, PDF compression, PDF/A, GigaPDF",
     "ogTitle": "GigaPDF — Edit your PDFs like a Word document. Really.",
-    "ogDescription": "Open-source PDF editor: editable text, images and shapes with faithful fonts, live collaboration, PKCS#7 signature, OCR, 9 Office formats. Self-hostable.",
+    "ogDescription": "Open-source PDF editor: editable text, images and shapes with faithful fonts, live collaboration, PKCS#7 signature, OCR, many Office formats. Self-hostable.",
     "twitterTitle": "GigaPDF — The open-source PDF editor",
     "twitterDescription": "Edit your PDFs like a Word document: faithful fonts, live collaboration, signing, OCR. Open source, self-hostable."
   },
@@ -464,10 +464,10 @@
       "formats": {
         "label": "Formats",
         "title": "Everything in. Everything out.",
-        "description": "Word, Excel, PowerPoint, OpenDocument: 9 formats import to PDF — and the way back works too.",
+        "description": "Word, Excel, PowerPoint, OpenDocument: many formats import to PDF — and the way back works too.",
         "points": {
           "imports": "Import Office and OpenDocument formats (DOCX, XLSX, PPTX, ODT, ODS, ODP), plus RTF, TXT, HTML, Markdown, CSV and images",
-          "exports": "Export to DOCX, XLSX, PPTX, ODT, ODP — plus PNG, JPEG, HTML",
+          "exports": "Export to DOCX, XLSX, PPTX, ODT, ODP, RTF, Markdown, EPUB — plus PNG, JPEG, HTML, text",
           "compression": "Smart compression: lighter files with no visible quality loss"
         }
       },
@@ -505,7 +505,7 @@
         "description": "The scan line turns printed images into text."
       },
       "formats": {
-        "title": "9 Office formats",
+        "title": "Office, text and more",
         "description": "Imports and exports on a loop."
       },
       "compression": {
@@ -527,7 +527,7 @@
         "signature": "PKCS#7 signature",
         "ocr": "Searchable OCR",
         "collaboration": "Live collaboration",
-        "tools": "29 PDF tools",
+        "tools": "36 PDF tools",
         "office": "9-format Office import"
       },
       "mostPopular": "Popular",
@@ -1746,6 +1746,12 @@
         "dimensions": "Dimensions",
         "opacity": "Opacity"
       },
+      "annotation": {
+        "type": "Type",
+        "content": "Content",
+        "color": "Color",
+        "opacity": "Opacity"
+      },
       "formField": {
         "fieldType": "Field type",
         "name": "Field name",
@@ -1988,7 +1994,7 @@
         "toolsTitle": "Popular PDF tools",
         "toolsSubtitle": "Free, no watermark, self-hostable.",
         "solutionsTitle": "Solutions for your profession",
-        "viewAllTools": "View all 29 tools",
+        "viewAllTools": "View all 36 tools",
         "viewAllSolutions": "View all solutions",
         "registerCta": "Start working on your PDFs right now"
       },
@@ -2548,8 +2554,8 @@
             "title": "Productivity",
             "items": {
               "palette": "Global command palette (Ctrl/Cmd+K)",
-              "megaMenu": "Mega menu listing the 29 tools by category",
-              "tools": "29 dedicated PDF tools with help pages",
+              "megaMenu": "Mega menu listing the 36 tools by category",
+              "tools": "36 dedicated PDF tools with help pages",
               "editor": "Visual editor: zoom, pan, continuous page view"
             }
           },
@@ -2959,7 +2965,7 @@
   },
   "toolsMenu": {
     "allTools": "All tools",
-    "viewAll": "View all 29 tools",
+    "viewAll": "View all 36 tools",
     "categories": {
       "organize": "Organize",
       "convert": "Convert",
@@ -2979,6 +2985,40 @@
     "noResults": "No results",
     "recent": "Recent searches",
     "toggleHint": "to search"
+  },
+  "organizePages": {
+    "title": "Organize pages",
+    "subtitle": "Reorder, rotate, and delete the pages of a PDF, then apply everything in one pass.",
+    "dropzoneLabel": "Drag and drop your PDF here",
+    "dropNow": "Drop to open",
+    "formatsHint": "PDF file only (250 MB max).",
+    "addFile": "Browse files",
+    "loadingHint": "Reading the document…",
+    "emptyState": "No document yet. Open a PDF to organize its pages.",
+    "pageListTitle": "{count, plural, one {# page} other {# pages}}",
+    "orderHint": "The list order is the page order. Reorder with the arrows, rotate, or delete each page.",
+    "clearAll": "Start over",
+    "totalSize": "Size: {size}",
+    "overLimit": "The file exceeds the {max} limit.",
+    "pageLabel": "Page {number}",
+    "rotationBadge": "Rotation: {degrees}°",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "moveUpPage": "Move page {number} up",
+    "moveDownPage": "Move page {number} down",
+    "rotatePage": "Rotate 90°",
+    "rotatePageNumbered": "Rotate page {number} by 90°",
+    "deletePage": "Delete",
+    "deletePageNumbered": "Delete page {number}",
+    "allDeletedError": "Keep at least one page before applying.",
+    "outputNameLabel": "Output file name",
+    "outputNamePlaceholder": "organized-pages.pdf",
+    "applyButton": "Apply and download",
+    "applying": "Applying…",
+    "applyingHint": "Reordering, rotating, and deleting pages…",
+    "loadError": "Could not open this PDF.",
+    "toastSuccess": "PDF reorganized",
+    "toastError": "Reorganization failed"
   },
   "universalMerge": {
     "title": "Universal merge",
@@ -3148,6 +3188,14 @@
       "formatsHint": "Word, Excel, PowerPoint and OpenDocument (.docx, .xlsx, .pptx, .odt, .ods, .odp…) accepted.",
       "actionButton": "Convert to PDF",
       "toastSuccess": "Document converted",
+      "toastError": "Conversion failed"
+    },
+    "rtfToPdf": {
+      "title": "RTF to PDF",
+      "subtitle": "Convert an RTF (Rich Text Format) file to PDF, with formatting preserved.",
+      "formatsHint": "RTF files (.rtf) only.",
+      "actionButton": "Convert to PDF",
+      "toastSuccess": "RTF converted",
       "toastError": "Conversion failed"
     },
     "ocr": {
