@@ -21,6 +21,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { Button } from "@giga-pdf/ui";
+import { GithubIcon as Github } from "@/components/icons/github-icon";
 import { Link } from "@/i18n/navigation";
 import { publicPageAlternates } from "@/lib/seo/hreflang";
 import { Header } from "@/components/header";
@@ -411,6 +412,20 @@ export default async function EnginePage({ params }: EnginePageProps) {
                     {t("cta.ctaTools")}
                   </Button>
                 </Link>
+                <a
+                  href="https://github.com/QrCommunication/gigapdf-lib"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button
+                    size="lg"
+                    variant="ghost"
+                    className="lp-press w-full gap-2 px-7 text-base sm:w-auto"
+                  >
+                    <Github className="h-4 w-4" />
+                    {t("cta.ctaGithub")}
+                  </Button>
+                </a>
               </div>
             </Reveal>
           </div>

@@ -33,6 +33,8 @@ import { Button } from "@giga-pdf/ui";
 
 const REPO_URL = "https://github.com/QrCommunication/gigapdf";
 const LICENSE_URL = "https://github.com/QrCommunication/gigapdf/blob/main/LICENSE";
+const LIB_REPO_URL = "https://github.com/QrCommunication/gigapdf-lib";
+const LIB_NPM_URL = "https://www.npmjs.com/package/@qrcommunication/gigapdf-lib";
 
 /**
  * Features grouped by category. Each category renders its title (icon +
@@ -528,6 +530,40 @@ export default function DocsContent() {
             <span className="text-terminal-cyan">curl</span> -X POST {apiBaseUrl}/api/v1/documents/upload \{"\n"}
             {"  "}-H <span className="text-terminal-green">&quot;Authorization: Bearer $TOKEN&quot;</span> \{"\n"}
             {"  "}-F <span className="text-terminal-amber">&quot;file=@document.pdf&quot;</span>
+          </div>
+        </div>
+
+        {/* Engine SDK — the standalone npm library (@qrcommunication/gigapdf-lib).
+            Documents how to install & use the WASM engine directly, with links to
+            the lib's GitHub repo and npm package. */}
+        <div className="rounded-xl border border-border bg-card/50 p-6 mt-6 not-prose">
+          <div className="flex items-center gap-2 mb-2">
+            <Cpu className="h-5 w-5 text-terminal-purple" />
+            <h3 className="font-semibold text-lg">{t("api.sdkTitle")}</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4 max-w-3xl">
+            {t("api.sdkDescription")}
+          </p>
+          <div className="font-mono text-sm bg-muted/50 rounded-lg p-4 overflow-x-auto whitespace-pre mb-4">
+            <span className="text-terminal-green">$</span> pnpm add @qrcommunication/gigapdf-lib{"\n"}
+            <span className="text-muted-foreground"># or: npm i @qrcommunication/gigapdf-lib</span>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4 max-w-3xl">
+            {t("api.sdkInstallNote")}
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <a href={LIB_REPO_URL} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" className="gap-2">
+                <Github className="h-4 w-4" />
+                {t("api.sdkGithub")}
+              </Button>
+            </a>
+            <a href={LIB_NPM_URL} target="_blank" rel="noopener noreferrer">
+              <Button variant="ghost" className="gap-2">
+                <Download className="h-4 w-4" />
+                {t("api.sdkNpm")}
+              </Button>
+            </a>
           </div>
         </div>
       </section>

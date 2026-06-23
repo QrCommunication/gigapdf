@@ -318,7 +318,8 @@
       "title": "Put the engine to the test",
       "description": "Edit, sign and convert your PDFs right now, or explore every tool this engine makes possible.",
       "ctaTry": "Try for free",
-      "ctaTools": "Discover the tools"
+      "ctaTools": "Discover the tools",
+      "ctaGithub": "View the engine on GitHub"
     }
   },
   "openSource": {
@@ -2956,7 +2957,12 @@
         "openapi": "OpenAPI specification — generate clients in any language or import into Postman.",
         "exampleTitle": "Example request",
         "exampleDescription": "Upload a PDF document with your API key or token.",
-        "download": "Download JSON"
+        "download": "Download JSON",
+        "sdkTitle": "Engine SDK (npm)",
+        "sdkDescription": "Beyond the REST API, the PDF engine itself is published as a standalone TypeScript library, @qrcommunication/gigapdf-lib. Zero-dependency (Rust → WebAssembly), it reads, edits, renders, signs (PKCS#12 · PAdES-B-T · PAdES-LTV), encrypts, OCRs and converts your PDFs ↔ Office/HTML/RTF/Markdown/CSV right inside your own Node or browser app — no GigaPDF server required.",
+        "sdkInstallNote": "The .wasm ships inside the package and is loaded via GigaPdfEngine.loadDefault(). In Next.js standalone, add the package to serverExternalPackages and trace the .wasm with outputFileTracingIncludes. Installation, the full API and examples are documented in the SDK README.",
+        "sdkGithub": "Source code (GitHub)",
+        "sdkNpm": "npm package"
       },
       "embedSdk": {
         "title": "Embed SDK",

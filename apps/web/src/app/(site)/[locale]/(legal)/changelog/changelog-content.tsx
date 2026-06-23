@@ -30,7 +30,7 @@ const changelog: ChangelogEntry[] = [
     date: "2026-06-23",
     type: "minor",
     changes: [
-      { type: "improvement", description: "Faithful document conversion (in-house engine 0.69): import Word, Excel, PowerPoint and OpenDocument (.docx, .xlsx, .pptx, .odt, .ods, .odp) keeping images, links, styles, formulas and tables; HTML to PDF with full CSS; images in WebP, AVIF, SVG and GIF; and OpenType text shaping" },
+      { type: "improvement", description: "Faithful document conversion (in-house engine 0.71.1): import Word, Excel, PowerPoint and OpenDocument (.docx, .xlsx, .pptx, .odt, .ods, .odp) keeping images, links, styles, formulas and tables; HTML to PDF with full CSS; images in WebP, AVIF, SVG and GIF; and OpenType text shaping" },
       { type: "feature", description: "Export to Markdown, CSV and EPUB — straight from the editor and your document library, alongside the existing Office and image formats" },
       { type: "feature", description: "Ten new conversion tools: PDF to ODS, ODP, HTML, RTF, text, Markdown, CSV and EPUB, plus CSV to PDF and Markdown to PDF" },
       { type: "feature", description: "Editor: edit the table of contents (outline) — add, rename, reorder and remove bookmarks, written back into the PDF" },
