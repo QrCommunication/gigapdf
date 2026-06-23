@@ -1,23 +1,26 @@
 /**
- * Office → PDF Conversion Route
+ * Office / RTF → PDF Conversion Route
  *
  * POST /api/office/upload
- * Converts an Office document to PDF via the WASM conversion engine.
+ * Converts an Office document (or Rich Text Format file) to PDF via the
+ * in-house WASM engine.
  *
  * Accepted formats:
  *   - OOXML        : .docx, .xlsx, .pptx          (ZIP container)
  *   - Office 97-2003: .doc, .xls, .ppt            (OLE2 container)
  *   - OpenDocument : .odt, .ods, .odp             (ZIP container)
+ *   - Rich Text    : .rtf                         (RTF control words, `{\rtf`)
  *
  * Request: multipart/form-data
- *   file — the binary Office document
+ *   file — the binary document
  *
  * Validation:
  *   - File required (400)
  *   - Extension must be one of the accepted formats, case-insensitive (400)
- *   - Magic bytes must match the container family of the extension (400):
+ *   - Magic bytes must match the family of the extension (400):
  *       ZIP  (PK\x03\x04)                          → docx/xlsx/pptx/odt/ods/odp
  *       OLE2 (\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1)    → doc/xls/ppt
+ *       RTF  ({\rtf)                               → rtf
  *   - Size limit: 250 MB (413)
  *
  * Returns: application/pdf binary (pure conversion — caller uploads to storage)
@@ -25,7 +28,7 @@
  * Errors:
  *   400 — missing/invalid file
  *   413 — file too large
- *   422 — Office conversion failure
+ *   422 — conversion failure (Office engine or RTF parser)
  *   500 — unhandled error
  */
 
@@ -33,6 +36,8 @@ import { NextResponse } from 'next/server';
 import {
   convertOfficeToPdf,
   OfficeConversionError,
+  PDFEngineError,
+  rtfToPdf,
 } from '@giga-pdf/pdf-engine';
 // Type-only import: erased at runtime, keeps unit-test mocks of the engine simple
 // while letting tsc enforce route ⊆ engine format compatibility.
@@ -51,10 +56,15 @@ const ZIP_MAGIC = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
 /** OLE2 / Compound File magic bytes shared by legacy Office (doc/xls/ppt). */
 const OLE2_MAGIC = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
 
+/** RTF magic bytes (`{\rtf`) — Rich Text Format is plain control words, not a container. */
+const RTF_MAGIC = new Uint8Array([0x7b, 0x5c, 0x72, 0x74, 0x66]);
+
 /**
- * Expected container magic per accepted extension.
+ * Expected container magic per accepted Office extension.
  * Record<OfficeImportFormat, …> keeps this table exhaustive: adding a format
- * to the engine without mapping its magic here fails type-check.
+ * to the engine without mapping its magic here fails type-check. RTF is handled
+ * separately (it is not an {@link OfficeImportFormat} — the engine renders it
+ * through {@link rtfToPdf}, not {@link convertOfficeToPdf}).
  */
 const MAGIC_BY_FORMAT: Record<OfficeImportFormat, Uint8Array> = {
   docx: ZIP_MAGIC,
@@ -68,8 +78,11 @@ const MAGIC_BY_FORMAT: Record<OfficeImportFormat, Uint8Array> = {
   odp: ZIP_MAGIC,
 };
 
+/** The RTF extension, handled by {@link rtfToPdf} rather than the Office engine. */
+const RTF_EXTENSION = 'rtf';
+
 const ALLOWED_EXTENSIONS_LABEL =
-  '.doc, .docx, .xls, .xlsx, .ppt, .pptx, .odt, .ods, .odp';
+  '.doc, .docx, .xls, .xlsx, .ppt, .pptx, .odt, .ods, .odp, .rtf';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -156,8 +169,9 @@ export async function POST(request: Request): Promise<Response> {
     // ── Extension validation ────────────────────────────────────────────────
     const filename = file.name ?? '';
     const ext = extractExtension(filename);
+    const isRtf = ext === RTF_EXTENSION;
 
-    if (!isAllowedFormat(ext)) {
+    if (!isRtf && !isAllowedFormat(ext)) {
       return NextResponse.json(
         {
           success: false,
@@ -167,33 +181,40 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    // ── Read buffer and validate magic bytes (per container family) ─────────
+    // ── Read buffer and validate magic bytes (per family) ───────────────────
     const arrayBuffer = await file.arrayBuffer();
     const buffer = new Uint8Array(arrayBuffer);
 
-    if (!hasMagic(buffer, MAGIC_BY_FORMAT[ext])) {
+    // RTF is plain control words (`{\rtf`), not a ZIP/OLE2 container; it is
+    // rendered by the engine's dedicated RTF parser, not the Office converter.
+    const expectedMagic = isRtf ? RTF_MAGIC : MAGIC_BY_FORMAT[ext as OfficeImportFormat];
+    if (!hasMagic(buffer, expectedMagic)) {
       return NextResponse.json(
         {
           success: false,
-          error: 'File does not appear to be a valid Office document (invalid magic bytes).',
+          error: isRtf
+            ? 'File does not appear to be a valid RTF document (invalid magic bytes).'
+            : 'File does not appear to be a valid Office document (invalid magic bytes).',
         },
         { status: 400 },
       );
     }
 
-    const sourceFormat: OfficeImportFormat = ext;
     const baseName = basenameWithoutExt(filename);
     const outputFilename = `${baseName}.pdf`;
 
-    serverLogger.info('[api/office/upload] Starting Office→PDF conversion', {
+    serverLogger.info('[api/office/upload] Starting document → PDF conversion', {
       userId,
       filename,
-      sourceFormat,
+      sourceFormat: isRtf ? RTF_EXTENSION : ext,
       sizeBytes: file.size,
     });
 
     // ── Conversion ──────────────────────────────────────────────────────────
-    const pdfBytes = await convertOfficeToPdf(buffer, sourceFormat);
+    // RTF → in-house RTF parser; everything else → the Office WASM engine.
+    const pdfBytes = isRtf
+      ? await rtfToPdf(buffer)
+      : await convertOfficeToPdf(buffer, ext as OfficeImportFormat);
 
     serverLogger.info('[api/office/upload] Conversion successful', {
       userId,
@@ -220,6 +241,18 @@ export async function POST(request: Request): Promise<Response> {
       });
       return NextResponse.json(
         { success: false, error: 'Failed to convert Office document to PDF.' },
+        { status: 422 },
+      );
+    }
+
+    // RTF parse failures surface as PDFEngineError (e.g. PDF_RTF_CONVERT_FAILED) —
+    // a bad input, not a server fault. Map to 422 like Office conversion errors.
+    if (error instanceof PDFEngineError) {
+      serverLogger.warn('[api/office/upload] Document conversion failed', {
+        error,
+      });
+      return NextResponse.json(
+        { success: false, error: 'Failed to convert the document to PDF.' },
         { status: 422 },
       );
     }

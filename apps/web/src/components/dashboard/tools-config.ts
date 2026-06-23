@@ -23,6 +23,8 @@ const ACCEPT_IMAGES = ".png,.jpg,.jpeg,.gif,.webp,.avif,image/*";
 /** Accept hint for office documents (office-to-pdf). */
 const ACCEPT_OFFICE =
   ".doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp";
+/** Accept hint for Rich Text Format files (rtf-to-pdf). */
+const ACCEPT_RTF = ".rtf,application/rtf,text/rtf";
 
 /** Session-upload endpoint that returns `{ data: { document_id } }`. */
 const UPLOAD_ENDPOINT = "/api/v1/documents/upload";
@@ -419,6 +421,24 @@ export const TOOL_CONFIGS = {
     endpoint: "/api/office/upload",
     uploadMode: "single",
     accept: ACCEPT_OFFICE,
+    fileFieldName: "file",
+    responseKind: "binary",
+    defaultOutputName: "converted.pdf",
+    allowOutputName: false,
+    maxTotalBytes: MAX_250MB,
+    fields: [],
+  },
+
+  // RTF → PDF: the same /api/office/upload endpoint accepts Rich Text Format
+  // and renders it through the engine's dedicated RTF parser (rtfToPdf), not
+  // the Office converter. Backs the SEO "/rtf-pdf" tool page.
+  "rtf-to-pdf": {
+    id: "rtf-to-pdf",
+    namespace: "tools.rtfToPdf",
+    icon: "file-type",
+    endpoint: "/api/office/upload",
+    uploadMode: "single",
+    accept: ACCEPT_RTF,
     fileFieldName: "file",
     responseKind: "binary",
     defaultOutputName: "converted.pdf",
