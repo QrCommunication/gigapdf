@@ -674,18 +674,22 @@ export const pdfService = {
   },
 
   /**
-   * Bake native paragraph-style / list-level formatting into a PDF and return
-   * the modified binary. Edits are keyed by the editor's flat engine run index
-   * (`TextElement.index`); the engine resolves each to a structural block
-   * address and applies the matching model op (`setParagraphStyle` /
-   * `setList*`) on the unified document model — a true structural bake, not an
-   * overlay. At least one of `paragraphs` / `lists` must be non-empty.
+   * Bake native paragraph-style / list-level formatting AND/OR table structural
+   * edits (add/remove row or column) into a PDF and return the modified binary.
+   * Paragraph/list edits are keyed by the editor's flat engine run index
+   * (`TextElement.index`); table edits are keyed by a positional table handle
+   * (`pageNumber` + `tableIndexOnPage`) because table cell runs carry no
+   * `source_index`. The engine resolves each to a structural block address and
+   * applies the matching model op on the unified document model — a true
+   * structural bake, not an overlay. At least one of `paragraphs` / `lists` /
+   * `tableOps` must be non-empty.
    */
   applyModelOps: async (
     file: File | Blob,
     edits: {
       paragraphs?: ParagraphStyleEdit[];
       lists?: ListEdit[];
+      tableOps?: TableEdit[];
     },
   ): Promise<Blob> => {
     const form = new FormData();
@@ -696,6 +700,9 @@ export const pdfService = {
     if (edits.lists && edits.lists.length > 0) {
       form.append('lists', JSON.stringify(edits.lists));
     }
+    if (edits.tableOps && edits.tableOps.length > 0) {
+      form.append('tableOps', JSON.stringify(edits.tableOps));
+    }
 
     const response = await fetch('/api/pdf/apply-model-ops', {
       method: 'POST',
@@ -704,6 +711,33 @@ export const pdfService = {
     });
 
     return handleBlobResponse(response);
+  },
+
+  /**
+   * Enumerate the document's tables for the editor's table-edit overlay. Returns
+   * each table's positional handle (`pageNumber` + `tableIndexOnPage`), grid size
+   * and placement frame in PDF user-space (origin bottom-left), or `null` frame
+   * when the engine carried none. The handle is what `applyModelOps`'s `tableOps`
+   * address — a stable identity independent of `source_index`.
+   */
+  tableStructure: async (file: File | Blob): Promise<TableStructureResult> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+
+    const response = await fetch('/api/pdf/table-structure', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+
+    if (!response.ok) {
+      const message = await response
+        .json()
+        .then((b) => (b as { error?: string }).error)
+        .catch(() => undefined);
+      throw new Error(message ?? 'Failed to read table structure.');
+    }
+    return response.json() as Promise<TableStructureResult>;
   },
 
   /**
@@ -1167,6 +1201,73 @@ export type ListEdit =
   | { sourceIndex: number; kind: 'level'; level: number }
   | { sourceIndex: number; kind: 'marker'; marker: ListMarkerSpec }
   | { sourceIndex: number; kind: 'ordered'; ordered: boolean };
+
+/**
+ * A table structural edit keyed by a POSITIONAL handle (`pageNumber` 1-based +
+ * `tableIndexOnPage` 0-based) — table cell runs carry no `source_index`, so a
+ * table is addressed by its position, not by a flat run index. `insert*`/
+ * `delete*` act at a 0-based grid `at`; `setCellSpan` retargets a cell's span.
+ */
+export type TableEdit =
+  | {
+      pageNumber: number;
+      tableIndexOnPage: number;
+      kind: 'insertRow' | 'deleteRow' | 'insertColumn' | 'deleteColumn';
+      at: number;
+    }
+  | {
+      pageNumber: number;
+      tableIndexOnPage: number;
+      kind: 'setCellSpan';
+      row: number;
+      col: number;
+      colSpan: number;
+      rowSpan: number;
+    };
+
+/** A table placement rectangle in PDF user-space (origin bottom-left), points. */
+export interface TableRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * One cell of a table surfaced by `tableStructure`: its 0-based grid position
+ * (`col` = leftmost spanned column), spans, and the `source_index`es of its runs
+ * (= `TextElement.index`). The editor maps a clicked text element to its cell via
+ * `sourceIndices`, then targets a row/column insert at `row`/`col`.
+ */
+export interface TableCellInfo {
+  row: number;
+  col: number;
+  colSpan: number;
+  rowSpan: number;
+  sourceIndices: number[];
+}
+
+/** One table surfaced by `tableStructure` — its handle, grid size, frame, cells. */
+export interface TableStructureInfo {
+  /** 1-based page number (matches `TextElement` pages). */
+  pageNumber: number;
+  /** 0-based index among the tables on its page. */
+  tableIndexOnPage: number;
+  /** Number of grid rows. */
+  rowCount: number;
+  /** Number of grid columns. */
+  colCount: number;
+  /** Placement frame (PDF points, origin bottom-left), or `null` when unknown. */
+  frame: TableRect | null;
+  /** Cells in row-major order (grid position + spans + run indices). */
+  cells: TableCellInfo[];
+}
+
+/** The `tableStructure` response: every table in the document. */
+export interface TableStructureResult {
+  success: boolean;
+  tables: TableStructureInfo[];
+}
 
 // Re-export types for consumers
 export type {

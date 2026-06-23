@@ -37,6 +37,7 @@ import type {
   GigaListItem,
   GigaListMarker,
   GigaParaPatch,
+  GigaRect,
   ModelOp,
 } from '@qrcommunication/gigapdf-lib';
 import { getEngine } from '../wasm';
@@ -49,6 +50,7 @@ export type {
   GigaDocument,
   GigaListMarker,
   GigaParaPatch,
+  GigaRect,
   ModelOp,
 } from '@qrcommunication/gigapdf-lib';
 
@@ -399,6 +401,351 @@ export async function applyParagraphOps(
       // receives valid bytes (cheap, and keeps the contract uniform).
       engineLogger.debug('applyParagraphOps: no edits resolved to a block address', {
         unresolved,
+      });
+    }
+
+    const edited = resolved > 0 ? engine.applyModelOps(model, ops) : model;
+    const out = engine.modelToPdf(edited);
+    return { bytes: out, resolved, unresolved };
+  } finally {
+    doc.close();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Table structure bridge — add/remove rows & columns, addressed two ways
+//
+// A table is addressed POSITIONALLY by a stable `(pageNumber, tableIndexOnPage)`
+// pair — the Nth `table` block on a page — which `listTablesInModel` enumerates
+// (with the table's `GigaBlockAddr`, geometry, AND its cells). `applyTableOps`
+// resolves that pair back to the table's `[section, page, index]` address and
+// emits the matching structural {@link ModelOp}, then re-renders the model to PDF
+// — a real "fat-library" bake + reload, identical in spirit to
+// {@link applyParagraphOps}.
+//
+// CELL ADDRESSING via `source_index`. The engine now propagates each cell's first
+// content-stream run index onto the cell's run (`GigaInlineRun.source_index`), so
+// every non-empty cell is also reachable from a host's flat `source_index` space:
+// `listTablesInModel` records each cell's `sourceIndices`, which the editor maps
+// back to `(tableIndexOnPage, row, col)` — letting a CLICK on a cell select its
+// table and target an insert/delete at that exact grid index, not just the edges.
+// Empty cells carry no run index (addressable only by grid position).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Read the `{ rows, col_widths }` body of a `table` block defensively. */
+function tableBody(
+  block: GigaBlock,
+): { rows: unknown[]; colWidths: number[] } | null {
+  if (block.kind?.t !== 'table') return null;
+  const v = block.kind.v as { rows?: unknown; col_widths?: unknown } | undefined;
+  const rows = v?.rows;
+  if (!Array.isArray(rows)) return null;
+  const colWidths = Array.isArray(v?.col_widths)
+    ? (v!.col_widths as unknown[]).map((n) => (typeof n === 'number' ? n : 0))
+    : [];
+  return { rows, colWidths };
+}
+
+/**
+ * Collect the `source_index`es of the runs inside a table cell's blocks. A cell
+ * holds `blocks: GigaBlock[]` (typically one paragraph); each paragraph run that
+ * carries a non-negative `source_index` contributes. Reads BOTH the flat
+ * (`{t:'run', source_index}`) and runtime-wrapped (`{t:'run', v:{source_index}}`)
+ * run shapes, mirroring {@link collectRunSourceIndices}. Empty / nested-only
+ * cells yield `[]`.
+ */
+function cellSourceIndices(cellBlocks: unknown): number[] {
+  const out: number[] = [];
+  if (!Array.isArray(cellBlocks)) return out;
+  for (const block of cellBlocks as GigaBlock[]) {
+    const kind = block?.kind?.t;
+    if (kind === 'paragraph') {
+      collectRunSourceIndices(paragraphRuns(block), out);
+    } else if (kind === 'heading') {
+      collectRunSourceIndices(headingRuns(block), out);
+    }
+  }
+  return out;
+}
+
+/**
+ * One cell of a table, in row-major reading order: its 0-based grid position
+ * (`row`, and `col` = the leftmost spanned grid column), its spans, and the
+ * `source_index`es of its editable runs (empty for an empty cell). The editor
+ * uses `sourceIndices` to resolve a clicked `TextElement.index` to this cell, and
+ * `row`/`col` to target a row/column insert/delete at that exact grid index.
+ */
+export interface TableCellInfo {
+  /** 0-based row index in the grid. */
+  row: number;
+  /** 0-based leftmost grid column the cell occupies (accounts for prior spans). */
+  col: number;
+  /** Columns this cell spans (≥ 1). */
+  colSpan: number;
+  /** Rows this cell spans (≥ 1). */
+  rowSpan: number;
+  /** Engine run indices of the cell's editable runs, in reading order. */
+  sourceIndices: number[];
+}
+
+/**
+ * Read a table block's cells into {@link TableCellInfo}[] (row-major). The grid
+ * `col` of each cell is the running sum of prior cells' `col_span` in its row —
+ * the same accumulation {@link tableColCount} uses — so a merged cell reports its
+ * true leftmost column. Pure & defensive.
+ */
+function tableCells(rows: unknown[]): TableCellInfo[] {
+  const cells: TableCellInfo[] = [];
+  rows.forEach((rowRaw, rowIndex) => {
+    const rowCells = (rowRaw as { cells?: unknown })?.cells;
+    if (!Array.isArray(rowCells)) return;
+    let col = 0;
+    for (const cellRaw of rowCells as unknown[]) {
+      const cell = cellRaw as {
+        blocks?: unknown;
+        col_span?: unknown;
+        row_span?: unknown;
+      };
+      const colSpan =
+        typeof cell.col_span === 'number' && cell.col_span >= 1
+          ? cell.col_span
+          : 1;
+      const rowSpan =
+        typeof cell.row_span === 'number' && cell.row_span >= 1
+          ? cell.row_span
+          : 1;
+      cells.push({
+        row: rowIndex,
+        col,
+        colSpan,
+        rowSpan,
+        sourceIndices: cellSourceIndices(cell.blocks),
+      });
+      col += colSpan;
+    }
+  });
+  return cells;
+}
+
+/**
+ * The number of grid columns a table spans, computed from the widest row's
+ * cumulative `col_span` (falling back to `col_widths.length`). Mirrors the
+ * editor's `tableStructure` so the reported `colCount` matches the renderer.
+ */
+function tableColCount(rows: unknown[], colWidths: number[]): number {
+  let colCount = colWidths.length;
+  for (const rowRaw of rows) {
+    const cells = (rowRaw as { cells?: unknown })?.cells;
+    if (!Array.isArray(cells)) continue;
+    let col = 0;
+    for (const cellRaw of cells) {
+      const span = (cellRaw as { col_span?: unknown })?.col_span;
+      col += typeof span === 'number' && span >= 1 ? span : 1;
+    }
+    colCount = Math.max(colCount, col);
+  }
+  return colCount;
+}
+
+/**
+ * A table located in the unified model: its positional handle
+ * (`pageNumber` + `tableIndexOnPage`), its resolved block address, the grid
+ * dimensions and (when the engine provided one) its placement frame in PDF
+ * user-space (origin bottom-left). The editor uses `frame` to draw a selectable
+ * overlay and `pageNumber` + `tableIndexOnPage` to address an edit; the address
+ * is included so the same enumeration powers both surfacing and baking.
+ */
+export interface TableInfo {
+  /** 1-based page number (flattened page sequence, matching `TextElement` pages). */
+  pageNumber: number;
+  /** 0-based index of this table among the `table` blocks on its page. */
+  tableIndexOnPage: number;
+  /** Positional block address `[section, page, index]` of the table block. */
+  addr: GigaBlockAddr;
+  /** Number of grid rows. */
+  rowCount: number;
+  /** Number of grid columns (widest row's cumulative span). */
+  colCount: number;
+  /** Placement frame in PDF points (origin bottom-left), or `null` when the
+   *  engine carried no frame for the block (the editor then has no overlay box). */
+  frame: GigaRect | null;
+  /** The cells in row-major order, each with its grid position, spans and the
+   *  `source_index`es of its runs — for cell-level selection + precise insertion. */
+  cells: TableCellInfo[];
+}
+
+/**
+ * Enumerate every `table` block in the model, in page + reading order.
+ *
+ * Walks `sections[s].pages[p].blocks[i]` exactly like {@link buildSourceIndexAddrMap}
+ * (so block addresses are consistent across both), counting the running page
+ * number across sections (a section may hold many pages) so `pageNumber` matches
+ * the 1-based page the editor's `TextElement`s use. Pure & deterministic.
+ */
+export function listTablesInModel(model: GigaDocument): TableInfo[] {
+  const tables: TableInfo[] = [];
+  const sections = Array.isArray(model.sections) ? model.sections : [];
+  let pageNumber = 0; // 1-based, incremented as we cross every page in order
+  for (let s = 0; s < sections.length; s++) {
+    const section = sections[s];
+    const pages = Array.isArray(section?.pages) ? section.pages : [];
+    for (let p = 0; p < pages.length; p++) {
+      pageNumber += 1;
+      const page = pages[p];
+      const blocks = Array.isArray(page?.blocks) ? page.blocks : [];
+      let tableIndexOnPage = 0;
+      for (let i = 0; i < blocks.length; i++) {
+        const block = blocks[i];
+        const body = block ? tableBody(block) : null;
+        if (!body) continue;
+        const frame =
+          block!.frame && typeof block!.frame === 'object'
+            ? (block!.frame as GigaRect)
+            : null;
+        tables.push({
+          pageNumber,
+          tableIndexOnPage,
+          addr: [s, p, i],
+          rowCount: body.rows.length,
+          colCount: tableColCount(body.rows, body.colWidths),
+          frame,
+          cells: tableCells(body.rows),
+        });
+        tableIndexOnPage += 1;
+      }
+    }
+  }
+  return tables;
+}
+
+/**
+ * Open a PDF and enumerate its tables ({@link listTablesInModel}) — the editor's
+ * read path for surfacing selectable table overlays. Opens the document, lowers
+ * it to the unified model, and returns the table list (positional handles +
+ * addresses + grid sizes + frames). Never mutates the PDF.
+ */
+export async function listPdfTables(
+  bytes: Buffer | Uint8Array | ArrayBuffer,
+): Promise<TableInfo[]> {
+  const engine = await getEngine();
+  const data =
+    bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes as ArrayBuffer);
+  const doc = engine.open(data);
+  try {
+    return listTablesInModel(doc.toModel());
+  } finally {
+    doc.close();
+  }
+}
+
+/** A single table structural edit keyed by the table's positional handle. */
+export type TableEdit =
+  | {
+      pageNumber: number;
+      tableIndexOnPage: number;
+      kind: 'insertRow' | 'deleteRow' | 'insertColumn' | 'deleteColumn';
+      /** Grid position the op acts at (0-based; clamped engine-side). */
+      at: number;
+    }
+  | {
+      pageNumber: number;
+      tableIndexOnPage: number;
+      kind: 'setCellSpan';
+      /** Row index in `rows`. */
+      row: number;
+      /** Cell index in `rows[row].cells` (not a grid column). */
+      col: number;
+      /** Columns the cell spans (clamped ≥ 1 engine-side). */
+      colSpan: number;
+      /** Rows the cell spans (clamped ≥ 1 engine-side). */
+      rowSpan: number;
+    };
+
+export interface ApplyTableOpsResult {
+  /** PDF bytes re-rendered from the edited model. */
+  bytes: Uint8Array;
+  /** How many edits resolved to a table address and produced an op. */
+  resolved: number;
+  /** Edits whose `(pageNumber, tableIndexOnPage)` matched no table block. */
+  unresolved: TableEdit[];
+}
+
+/** Map an enumerated table to a lookup key for `(page, tableIndexOnPage)`. */
+type TableKey = `${number}:${number}`;
+const tableKey = (pageNumber: number, tableIndexOnPage: number): TableKey =>
+  `${pageNumber}:${tableIndexOnPage}`;
+
+/** Translate a {@link TableEdit} + resolved address into a structural ModelOp. */
+function tableEditToOp(edit: TableEdit, addr: GigaBlockAddr): ModelOp {
+  switch (edit.kind) {
+    case 'insertRow':
+      return { op: 'insertTableRow', addr, at: edit.at };
+    case 'deleteRow':
+      return { op: 'deleteTableRow', addr, at: edit.at };
+    case 'insertColumn':
+      return { op: 'insertTableColumn', addr, at: edit.at };
+    case 'deleteColumn':
+      return { op: 'deleteTableColumn', addr, at: edit.at };
+    case 'setCellSpan':
+      return {
+        op: 'setCellSpan',
+        addr,
+        row: edit.row,
+        col: edit.col,
+        col_span: edit.colSpan,
+        row_span: edit.rowSpan,
+      };
+  }
+}
+
+/**
+ * Bake table structural edits (add/remove row or column, set a cell span) keyed
+ * by a table's positional handle `(pageNumber, tableIndexOnPage)`.
+ *
+ * End-to-end native edit: open → toModel → enumerate tables ({@link listTablesInModel})
+ * → resolve each edit's `(pageNumber, tableIndexOnPage)` to the table's
+ * {@link GigaBlockAddr} → emit `insertTableRow` / `deleteTableRow` /
+ * `insertTableColumn` / `deleteTableColumn` / `setCellSpan` {@link ModelOp}s →
+ * applyModelOps → modelToPdf. A single `toModel()` powers both the address
+ * resolution AND the op application, so addresses and the edited model stay
+ * consistent. Edits whose handle matches no table are reported in `unresolved`
+ * and skipped (never throw).
+ */
+export async function applyTableOps(
+  bytes: Buffer | Uint8Array | ArrayBuffer,
+  edits: TableEdit[],
+): Promise<ApplyTableOpsResult> {
+  const engine = await getEngine();
+  const data =
+    bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes as ArrayBuffer);
+  const doc = engine.open(data);
+  try {
+    const model = doc.toModel();
+    const tablesByKey = new Map<TableKey, GigaBlockAddr>();
+    for (const table of listTablesInModel(model)) {
+      // First-writer-wins guards against an unexpected duplicate handle so the
+      // resolved address stays stable (handles are unique per page in practice).
+      const key = tableKey(table.pageNumber, table.tableIndexOnPage);
+      if (!tablesByKey.has(key)) tablesByKey.set(key, table.addr);
+    }
+
+    const ops: ModelOp[] = [];
+    const unresolved: TableEdit[] = [];
+    for (const edit of edits) {
+      const addr = tablesByKey.get(
+        tableKey(edit.pageNumber, edit.tableIndexOnPage),
+      );
+      if (!addr) {
+        unresolved.push(edit);
+        continue;
+      }
+      ops.push(tableEditToOp(edit, addr));
+    }
+
+    const resolved = ops.length;
+    if (resolved === 0) {
+      engineLogger.debug('applyTableOps: no edits resolved to a table address', {
+        unresolved: unresolved.length,
       });
     }
 

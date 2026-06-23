@@ -92,6 +92,12 @@ import {
   type LoadedFormField,
 } from "@/components/editor/forms-panel";
 import { FormFillOverlay } from "@/components/editor/form-fill-overlay";
+import { TableEditOverlay } from "@/components/editor/table-edit-overlay";
+import type { TableEditAction } from "@/components/editor/table-edit-overlay";
+import {
+  actionToTableEdit,
+  buildSourceIndexToCellMap,
+} from "@/components/editor/lib/table-edit";
 import { ShareDialog } from "@/components/sharing/share-dialog";
 import {
   useFlattenPdf,
@@ -99,6 +105,7 @@ import {
   downloadBlob,
   useApplyElements,
   useApplyModelOps,
+  useTableStructure,
   useElementUpdates,
   useDocumentLayers,
   useSaveDocumentLayers,
@@ -106,6 +113,7 @@ import {
   type SocketEventData,
   type ParagraphStyleEdit,
   type ListEdit,
+  type TableStructureInfo,
 } from "@giga-pdf/api";
 import { ContentEditLayer, type ElementModification } from "@/components/editor/content-edit-layer";
 import {
@@ -727,6 +735,19 @@ export default function EditorPage() {
   // from `applyElements` (flat redact+add): this writes formatting structurally
   // into the document model, so a reload reflects it.
   const applyModelOps = useApplyModelOps();
+  // Table-structure read path: enumerates the document's reconstructed tables
+  // (positional handle + grid size + PDF-space frame) so the table-edit overlay
+  // can draw a selectable box per table. Tables are addressed positionally
+  // (`pageNumber` + `tableIndexOnPage`) — cell runs carry no `source_index`.
+  const tableStructure = useTableStructure();
+  // The tables detected in the current binary (refreshed after every adopt), the
+  // table-edit overlay toggle, the selected table, and a bake-in-flight guard.
+  const [documentTables, setDocumentTables] = useState<TableStructureInfo[]>([]);
+  const [showTableEdit, setShowTableEdit] = useState(false);
+  const [selectedTableIndex, setSelectedTableIndex] = useState<number | null>(
+    null,
+  );
+  const [tableEditBusy, setTableEditBusy] = useState(false);
 
   // currentPdfFile is the single source of truth for the PDF binary. It
   // receives every local mutation (rotate/extract/element add/modify/delete
@@ -2325,6 +2346,189 @@ export default function EditorPage() {
     bakeParagraphStyleRef.current = bakeParagraphStyle;
   }, [bakeParagraphStyle]);
 
+  // ── Table editing (add/remove rows & columns via the engine's model ops) ──
+  //
+  // The engine reconstructs tables into the unified model and surfaces them with
+  // a positional handle (`pageNumber` + `tableIndexOnPage`) + grid size + frame.
+  // The overlay draws a selectable box per table; an action resolves to a
+  // structural model op and bakes through `applyModelOps` (tableOps), then the
+  // page re-parses — a real model edit + reload. Tables are addressed
+  // positionally because table CELL runs carry no `source_index` (so the flat
+  // run-index path the text editor uses cannot reach them).
+  const refreshTableStructure = useCallback(
+    async (file: File | Blob | null) => {
+      if (!file) {
+        setDocumentTables([]);
+        return;
+      }
+      try {
+        const result = await tableStructure.mutateAsync({ file });
+        setDocumentTables(result.tables);
+      } catch (err) {
+        // Non-fatal: the overlay simply shows no tables. Never blocks editing.
+        clientLogger.error("[editor] table structure read failed:", err);
+        setDocumentTables([]);
+      }
+    },
+    [tableStructure],
+  );
+
+  // Refresh the detected tables whenever the binary changes (initial load + each
+  // adopt). Keyed by the File identity so it re-runs on every swap; the async
+  // refresh also clears the list when there is no file (no synchronous setState
+  // in the effect body).
+  useEffect(() => {
+    void refreshTableStructure(currentPdfFile);
+    // refreshTableStructure is stable for a given mutation hook instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPdfFile]);
+
+  // Toggle the table-edit overlay; clear any selection when hiding it.
+  const handleToggleTableEdit = useCallback(() => {
+    setShowTableEdit((prev) => {
+      if (prev) setSelectedTableIndex(null);
+      return !prev;
+    });
+  }, []);
+
+  // Tables on the active page, with their on-page index preserved for addressing.
+  const currentPageTables = useMemo(() => {
+    const pageNumber = effectivePageIndex + 1;
+    return documentTables.filter((tbl) => tbl.pageNumber === pageNumber);
+  }, [documentTables, effectivePageIndex]);
+
+  // Map each cell run index (= TextElement.index) on the active page to its cell
+  // location, so a clicked cell's text element resolves to (table, row, col).
+  const sourceIndexToCell = useMemo(
+    () => buildSourceIndexToCellMap(currentPageTables),
+    [currentPageTables],
+  );
+
+  // The active cell = the cell of the single selected text element, when its
+  // engine run index is a known table cell. Derived (no effect): drives precise
+  // insertion + the table auto-selection below.
+  const activeTableCell = useMemo(() => {
+    if (!showTableEdit || selectedElements.length !== 1) return null;
+    const el = selectedElements[0];
+    if (!el || el.type !== "text") return null;
+    const idx = (el as TextElement).index;
+    if (typeof idx !== "number" || idx < 0) return null;
+    return sourceIndexToCell.get(idx) ?? null;
+  }, [showTableEdit, selectedElements, sourceIndexToCell]);
+
+  // Clicking a cell's text auto-selects its table (so the toolbar appears) —
+  // unless the user has explicitly selected a different table by its frame.
+  useEffect(() => {
+    if (activeTableCell && selectedTableIndex === null) {
+      setSelectedTableIndex(activeTableCell.tableIndexOnPage);
+    }
+    // Only react to a newly-resolved cell; selectedTableIndex is read, not tracked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTableCell]);
+
+  // Run an add/remove row/column action on the selected table: resolve the
+  // action to a positional TableEdit, flush pending edits, bake, then adopt +
+  // re-parse (which refreshes the table structure via the file-change effect).
+  const handleTableEditAction = useCallback(
+    async (tableIndexOnPage: number, action: TableEditAction) => {
+      if (tableEditBusy) return;
+      const pageNumber = effectivePageIndex + 1;
+      const target = documentTables.find(
+        (tbl) =>
+          tbl.pageNumber === pageNumber &&
+          tbl.tableIndexOnPage === tableIndexOnPage,
+      );
+      if (!target) return;
+
+      // Precise positioning when the active cell belongs to THIS table; else the
+      // action falls back to the table's edges.
+      const activeCell =
+        activeTableCell &&
+        activeTableCell.tableIndexOnPage === tableIndexOnPage
+          ? { row: activeTableCell.row, col: activeTableCell.col }
+          : undefined;
+      const edit = actionToTableEdit(
+        {
+          pageNumber,
+          tableIndexOnPage,
+          rowCount: target.rowCount,
+          colCount: target.colCount,
+          ...(activeCell ? { activeCell } : {}),
+        },
+        action,
+      );
+      if (!edit) return; // e.g. delete that would empty the table — no-op.
+
+      setTableEditBusy(true);
+      try {
+        // Flush pending flat element ops first so the model-op bake runs on the
+        // up-to-date binary (the source of truth, not S3).
+        const base = await getPreparedBlob();
+        const file = base ?? currentPdfFileRef.current;
+        if (!file) return;
+
+        const modified = await applyModelOps.mutateAsync({
+          file,
+          edits: { tableOps: [edit] },
+        });
+        const blob =
+          modified instanceof Blob ? modified : new Blob([modified as BlobPart]);
+        // Adopt + re-parse: modelToPdf reconstructs the page, so element bounds
+        // change — the scene graph must be rebuilt from the new bytes. The file
+        // swap also re-triggers the table-structure refresh.
+        adoptModifiedPdf(blob, { reparse: true });
+        toast({ title: t("tableEdit.toasts.applied") });
+      } catch (err) {
+        clientLogger.error("[editor] table edit bake failed:", err);
+        toast({ title: t("tableEdit.toasts.failed") });
+      } finally {
+        setTableEditBusy(false);
+      }
+    },
+    [
+      tableEditBusy,
+      effectivePageIndex,
+      documentTables,
+      activeTableCell,
+      getPreparedBlob,
+      applyModelOps,
+      adoptModifiedPdf,
+      toast,
+      t,
+    ],
+  );
+
+  // The table-edit overlay for the ACTIVE page, shared by the single-page editor
+  // (`EditorCanvas` `overlay` prop) and the continuous view (`PageSlot`'s
+  // `renderActiveOverlay`). Uses `effectivePage` so the geometry matches whichever
+  // page is focused in either mode. Returns `null` when table editing is off.
+  const renderTableEditOverlay = useCallback((): React.ReactNode => {
+    if (!showTableEdit || !effectivePage) return null;
+    return (
+      <TableEditOverlay
+        tables={currentPageTables}
+        pageWidthPts={effectivePage.dimensions.width}
+        pageHeightPts={effectivePage.dimensions.height}
+        rotation={effectivePage.dimensions.rotation}
+        zoom={zoom}
+        selectedTableIndex={selectedTableIndex}
+        activeCell={activeTableCell}
+        onSelectTable={setSelectedTableIndex}
+        onAction={handleTableEditAction}
+        busy={tableEditBusy}
+      />
+    );
+  }, [
+    showTableEdit,
+    effectivePage,
+    currentPageTables,
+    zoom,
+    selectedTableIndex,
+    activeTableCell,
+    handleTableEditAction,
+    tableEditBusy,
+  ]);
+
   // Shared helper: run a page-level op through /api/pdf/pages, swap the
   // binary in memory, and trigger an immediate save. Returns the new file
   // so callers can run extra local-state updates (duplicate/add/delete need
@@ -3765,6 +3969,12 @@ export default function EditorPage() {
         canCopyFormat={canCopyFormat}
         canPaste={canPaste}
         formatPainterArmed={formatPainterArmed}
+        // Table editing surfaces a selectable overlay over the active page in
+        // BOTH the single-page editor (EditorCanvas `overlay`) and the continuous
+        // view (PageSlot `renderActiveOverlay`).
+        onToggleTableEdit={handleToggleTableEdit}
+        tableEditActive={showTableEdit}
+        tableCount={documentTables.length}
       />
 
       {/* Main content */}
@@ -3818,6 +4028,7 @@ export default function EditorPage() {
               onSelectionChanged={handleSelectionChanged}
               onTextSelectionStyleChanged={handleTextSelectionStyleChanged}
               onCanvasReady={setCanvasHandle}
+              renderActiveOverlay={() => renderTableEditOverlay()}
             />
           ) : (
             <>
@@ -3846,17 +4057,20 @@ export default function EditorPage() {
                 onHyperlinkClick={handleHyperlinkClick}
                 onRedactionMarksChanged={setRedactionMarkCount}
                 overlay={
-                  showFormsPanel &&
-                  formsMode === "fill" &&
-                  loadedFormFields.length > 0 ? (
-                    <FormFillOverlay
-                      fields={loadedFormFields}
-                      currentPageIndex={currentPageIndex}
-                      zoom={zoom}
-                      focusedFieldName={focusedFormField}
-                      onFieldClick={setFocusedFormField}
-                    />
-                  ) : null
+                  <>
+                    {showFormsPanel &&
+                    formsMode === "fill" &&
+                    loadedFormFields.length > 0 ? (
+                      <FormFillOverlay
+                        fields={loadedFormFields}
+                        currentPageIndex={currentPageIndex}
+                        zoom={zoom}
+                        focusedFieldName={focusedFormField}
+                        onFieldClick={setFocusedFormField}
+                      />
+                    ) : null}
+                    {renderTableEditOverlay()}
+                  </>
                 }
               />
 

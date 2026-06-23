@@ -98,6 +98,14 @@ export interface PageSlotProps {
   onReady?: (index: number) => void;
   /** Forwarded to the (inactive) canvas host when it releases its pool slot. */
   onDispose?: (index: number) => void;
+  /**
+   * Render an extra overlay inside the ACTIVE page's sheet (absolutely positioned
+   * over the canvas, in the page×zoom space). Used to surface the table-edit
+   * overlay in the continuous view, mirroring the single-page `overlay` prop of
+   * `EditorCanvas`. Receives the 0-based page index so the callback can scope its
+   * content to this page. Returns `null` to render nothing.
+   */
+  renderActiveOverlay?: (index: number) => React.ReactNode;
 }
 
 /**
@@ -130,6 +138,7 @@ function PageSlotImpl({
   onCanvasReady,
   onReady,
   onDispose,
+  renderActiveOverlay,
 }: PageSlotProps) {
   // Draggable margin guides on the active page, once its margins are known.
   // The guides map the engine's intrinsic (un-rotated) margins to/from screen
@@ -217,6 +226,7 @@ function PageSlotImpl({
             onCommit={(m) => onMarginsCommit(index, m)}
           />
         ) : null}
+        {isActive && renderActiveOverlay ? renderActiveOverlay(index) : null}
       </PageChrome>
     </div>
   );

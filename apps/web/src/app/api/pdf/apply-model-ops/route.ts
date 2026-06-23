@@ -17,6 +17,7 @@
  *   file       — PDF file (required)
  *   paragraphs — JSON string of ParagraphStyleEdit[] (optional)
  *   lists      — JSON string of ListEdit[] (optional)
+ *   tableOps   — JSON string of TableEdit[] (optional)
  *
  * ParagraphStyleEdit:
  *   { sourceIndex: number, patch: { align?, indent_left?, indent_right?,
@@ -27,12 +28,23 @@
  *   { sourceIndex: number, kind: 'marker',  marker: GigaListMarker }
  *   { sourceIndex: number, kind: 'ordered', ordered: boolean }
  *
+ * TableEdit (one of) — addressed POSITIONALLY by (pageNumber, tableIndexOnPage),
+ * NOT by a flat run index (table cell runs carry no `source_index`):
+ *   { pageNumber, tableIndexOnPage, kind: 'insertRow'|'deleteRow'|
+ *     'insertColumn'|'deleteColumn', at: number }
+ *   { pageNumber, tableIndexOnPage, kind: 'setCellSpan', row, col, colSpan, rowSpan }
+ *
+ * At least one of `paragraphs` / `lists` / `tableOps` must contain an edit.
  * Returns the modified PDF as application/pdf binary.
  */
 
 import { NextResponse } from 'next/server';
-import { applyParagraphOps } from '@giga-pdf/pdf-engine';
-import type { ParagraphStyleEdit, ListEdit } from '@giga-pdf/pdf-engine';
+import { applyParagraphOps, applyTableOps } from '@giga-pdf/pdf-engine';
+import type {
+  ParagraphStyleEdit,
+  ListEdit,
+  TableEdit,
+} from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError, PDFPageOutOfRangeError } from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
@@ -41,6 +53,12 @@ import { validatePdfFile } from '@/lib/request-validation';
 
 const ALIGN_VALUES = new Set(['left', 'center', 'right', 'justify']);
 const LIST_KINDS = new Set(['level', 'marker', 'ordered']);
+const TABLE_AT_KINDS = new Set([
+  'insertRow',
+  'deleteRow',
+  'insertColumn',
+  'deleteColumn',
+]);
 
 /** Parse an optional JSON-array form field; returns `[]` when absent. */
 function parseJsonArray(raw: string | null, fieldName: string): unknown[] {
@@ -60,6 +78,72 @@ function parseJsonArray(raw: string | null, fieldName: string): unknown[] {
 /** A non-negative integer is a valid engine run index (`source_index`). */
 function isValidSourceIndex(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+/** A non-negative integer grid coordinate / count (table `at`/`row`/`col`/span). */
+function isNonNegativeInt(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+/** A positive integer (1-based `pageNumber`, span ≥ 1). */
+function isPositiveInt(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1;
+}
+
+/**
+ * Validate + narrow the raw `tableOps` edits. Tables are addressed positionally:
+ * a 1-based `pageNumber` + 0-based `tableIndexOnPage`. `insert*`/`delete*` carry a
+ * 0-based grid `at`; `setCellSpan` carries `row`/`col` (0-based) + `colSpan`/
+ * `rowSpan` (≥ 1). A malformed payload is an explicit 400 (never a silent no-op).
+ */
+function parseTableEdits(raw: unknown[]): TableEdit[] {
+  return raw.map((entry, i) => {
+    const e = entry as {
+      pageNumber?: unknown;
+      tableIndexOnPage?: unknown;
+      kind?: unknown;
+    };
+    if (!isPositiveInt(e.pageNumber)) {
+      throw new Error(`tableOps[${i}].pageNumber must be a positive integer.`);
+    }
+    if (!isNonNegativeInt(e.tableIndexOnPage)) {
+      throw new Error(
+        `tableOps[${i}].tableIndexOnPage must be a non-negative integer.`,
+      );
+    }
+    if (typeof e.kind !== 'string') {
+      throw new Error(`tableOps[${i}].kind must be a string.`);
+    }
+    if (TABLE_AT_KINDS.has(e.kind)) {
+      const at = (e as { at?: unknown }).at;
+      if (!isNonNegativeInt(at)) {
+        throw new Error(`tableOps[${i}].at must be a non-negative integer.`);
+      }
+      return e as unknown as TableEdit;
+    }
+    if (e.kind === 'setCellSpan') {
+      const span = e as {
+        row?: unknown;
+        col?: unknown;
+        colSpan?: unknown;
+        rowSpan?: unknown;
+      };
+      if (!isNonNegativeInt(span.row) || !isNonNegativeInt(span.col)) {
+        throw new Error(
+          `tableOps[${i}].row and .col must be non-negative integers.`,
+        );
+      }
+      if (!isPositiveInt(span.colSpan) || !isPositiveInt(span.rowSpan)) {
+        throw new Error(
+          `tableOps[${i}].colSpan and .rowSpan must be positive integers.`,
+        );
+      }
+      return e as unknown as TableEdit;
+    }
+    throw new Error(
+      `tableOps[${i}].kind must be one of insertRow|deleteRow|insertColumn|deleteColumn|setCellSpan.`,
+    );
+  });
 }
 
 /**
@@ -115,12 +199,16 @@ export async function POST(request: Request): Promise<Response> {
 
     let paragraphs: ParagraphStyleEdit[];
     let lists: ListEdit[];
+    let tableOps: TableEdit[];
     try {
       paragraphs = parseParagraphEdits(
         parseJsonArray(formData.get('paragraphs') as string | null, 'paragraphs'),
       );
       lists = parseListEdits(
         parseJsonArray(formData.get('lists') as string | null, 'lists'),
+      );
+      tableOps = parseTableEdits(
+        parseJsonArray(formData.get('tableOps') as string | null, 'tableOps'),
       );
     } catch (parseErr) {
       return NextResponse.json(
@@ -132,11 +220,12 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    if (paragraphs.length === 0 && lists.length === 0) {
+    if (paragraphs.length === 0 && lists.length === 0 && tableOps.length === 0) {
       return NextResponse.json(
         {
           success: false,
-          error: 'At least one of `paragraphs` or `lists` must contain an edit.',
+          error:
+            'At least one of `paragraphs`, `lists` or `tableOps` must contain an edit.',
         },
         { status: 400 },
       );
@@ -145,25 +234,48 @@ export async function POST(request: Request): Promise<Response> {
     const arrayBuffer = await file.arrayBuffer();
     const inputBuffer = Buffer.from(arrayBuffer);
 
-    const result = await applyParagraphOps(inputBuffer, { paragraphs, lists });
+    // Paragraph/list ops and table ops are independent structural passes. Run the
+    // paragraph/list bake first (when requested), then the table bake on its
+    // output, so a single request can carry both. Each bake re-renders the model
+    // to PDF; chaining is a no-op when a pass has no edits.
+    let bytes: Uint8Array = new Uint8Array(arrayBuffer);
+    let resolved = 0;
+    let unresolved = 0;
 
-    if (result.unresolved.length > 0) {
+    if (paragraphs.length > 0 || lists.length > 0) {
+      const paraResult = await applyParagraphOps(inputBuffer, {
+        paragraphs,
+        lists,
+      });
+      bytes = paraResult.bytes;
+      resolved += paraResult.resolved;
+      unresolved += paraResult.unresolved.length;
+    }
+
+    if (tableOps.length > 0) {
+      const tableResult = await applyTableOps(Buffer.from(bytes), tableOps);
+      bytes = tableResult.bytes;
+      resolved += tableResult.resolved;
+      unresolved += tableResult.unresolved.length;
+    }
+
+    if (unresolved > 0) {
       serverLogger.warn('api.pdf.apply-model-ops: some edits did not resolve', {
-        resolved: result.resolved,
-        unresolved: result.unresolved.length,
+        resolved,
+        unresolved,
       });
     }
 
-    return new Response(Buffer.from(result.bytes), {
+    return new Response(Buffer.from(bytes), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': sanitizeContentDisposition(file.name),
-        'Content-Length': String(result.bytes.byteLength),
+        'Content-Length': String(bytes.byteLength),
         // Surface how many edits actually baked so the client can fall back to
         // the flat redact+add path for unresolved paragraphs if it chooses to.
-        'X-Model-Ops-Resolved': String(result.resolved),
-        'X-Model-Ops-Unresolved': String(result.unresolved.length),
+        'X-Model-Ops-Resolved': String(resolved),
+        'X-Model-Ops-Unresolved': String(unresolved),
       },
     });
   } catch (error: unknown) {

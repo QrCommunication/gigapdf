@@ -7,6 +7,7 @@ import {
   Scissors,
   ClipboardPaste,
   Paintbrush,
+  Table,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -29,6 +30,17 @@ export interface EditorEditToolsProps {
   canPaste: boolean;
   /** True while a format has been picked up and is armed to be applied. */
   formatPainterArmed: boolean;
+  /**
+   * Toggle the table-editing overlay (select a reconstructed table → add/remove
+   * rows & columns). Omitted (with `tableEditActive` undefined) when the host
+   * does not wire table editing — the button is then hidden, keeping the bar
+   * backward-compatible.
+   */
+  onToggleTableEdit?: () => void;
+  /** True while the table-editing overlay is shown (drives the toggle state). */
+  tableEditActive?: boolean;
+  /** Number of editable tables detected on the document (gates the toggle). */
+  tableCount?: number;
 }
 
 interface ToolButtonProps {
@@ -85,8 +97,12 @@ export function EditorEditTools({
   canCopyFormat,
   canPaste,
   formatPainterArmed,
+  onToggleTableEdit,
+  tableEditActive,
+  tableCount,
 }: EditorEditToolsProps) {
   const t = useTranslations("editor.editTools");
+  const tTable = useTranslations("editor.tableEdit");
 
   return (
     <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border bg-background/60">
@@ -130,6 +146,23 @@ export function EditorEditTools({
         disabled={!formatPainterArmed && !canCopyFormat}
         isActive={formatPainterArmed}
       />
+
+      {onToggleTableEdit ? (
+        <>
+          <Separator />
+          <ToolButton
+            icon={<Table size={18} />}
+            label={
+              tableCount && tableCount > 0
+                ? tTable("toggle", { count: tableCount })
+                : tTable("toggleNone")
+            }
+            onClick={onToggleTableEdit}
+            disabled={!tableCount || tableCount === 0}
+            isActive={tableEditActive}
+          />
+        </>
+      ) : null}
     </div>
   );
 }
