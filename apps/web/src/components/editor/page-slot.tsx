@@ -72,7 +72,11 @@ export interface PageSlotProps {
    * the active page's EditorCanvas so the continuous view resolves embedded
    * fonts exactly like the single-page editor.
    */
-  getFontFaceName?: (originalName: string) => string | null;
+  getFontFaceName?: (
+    originalName: string,
+    wantVariant?: { bold?: boolean; italic?: boolean },
+    text?: string,
+  ) => string | null;
   /** Forwarded to the active page's EditorCanvas: element created at mouse. */
   onElementAdded?: (element: Element) => void;
   /** Forwarded to the active page's EditorCanvas: element moved/resized/retyped. */

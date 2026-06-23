@@ -127,10 +127,19 @@ export interface UseEmbeddedFontsResult {
    * the first-loaded BOLD subset (the "gras parasite" / wrong-metrics bug). When
    * omitted, or when no variant-exact subset exists, it falls back to the loose
    * family match (previous behaviour — no regression for single-variant fonts).
+   *
+   * `text` (3rd arg, optional) is the run's text. When a PDF embeds several
+   * DISJOINT subsets of the same family+variant (CERFA forms carry ~15
+   * `TimesNewRoman,Bold` subsets, each mapping only the glyphs it painted), the
+   * resolver returns the variant-exact subset that FULLY covers the run; if none
+   * does, it returns null so the renderer applies a synthetic UNIFORM weight
+   * (uniformly bold) instead of a patchy real-bold/fallback mix. Omitting `text`
+   * keeps the prior "first matching subset" behaviour (single-variant PDFs).
    */
   getFontFaceName: (
     originalName: string,
     wantVariant?: { bold?: boolean; italic?: boolean },
+    text?: string,
   ) => string | null;
   /** Retry a failed font load by fontId. Clears the cache entry first. */
   retry: (fontId: string) => Promise<void>;
@@ -167,6 +176,174 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
     Array.from({ length: binaryString.length }, (_, i) => binaryString.charCodeAt(i)),
   );
   return bytes.buffer;
+}
+
+// ─── Glyph coverage (cmap) parser ──────────────────────────────────────────────
+// A PDF routinely embeds many DISJOINT subsets of the SAME family+variant
+// (e.g. a CERFA carries ~15 `TimesNewRoman,Bold` subsets, each mapping only the
+// glyphs of the runs it painted). The scene graph collapses every such run to a
+// bare "Times New Roman" + bold:true. Picking the FIRST loaded bold subset
+// (load order is non-deterministic) renders only the codepoints THAT subset
+// happens to carry — the rest of a title falls to the browser's non-bold
+// fallback, so the title looks unevenly bold. To choose the subset that ACTUALLY
+// covers a run, we parse each loaded font's `cmap` and keep the set of Unicode
+// codepoints it maps. This is a pure, allocation-light sfnt reader (TrueType AND
+// OpenType/CFF share the same table directory + `cmap` structure). On ANY
+// malformed/short input it returns an empty set — a font with unknown coverage
+// is simply never preferred by coverage (it can still be the loose fallback),
+// so this can only REFINE selection, never break a previously working path.
+
+/**
+ * Parse the Unicode codepoints a font's `cmap` maps. Supports subtable formats
+ * 0, 4, 6 and 12 (the ones real PDF embedded fonts use). Prefers a Unicode
+ * subtable: platform 3 / encoding 1 (BMP) or 10 (full), or platform 0 (any).
+ * Returns an empty Set on any parse error (safe: "unknown coverage").
+ */
+export function parseCmapCodepoints(buffer: ArrayBuffer): Set<number> {
+  const out = new Set<number>();
+  try {
+    const view = new DataView(buffer);
+    if (view.byteLength < 12) return out;
+
+    // sfnt table directory: u32 tag, u16 numTables at offset 4.
+    const numTables = view.getUint16(4);
+    let cmapOffset = -1;
+    for (let i = 0; i < numTables; i++) {
+      const rec = 12 + i * 16;
+      if (rec + 16 > view.byteLength) break;
+      // tag is 4 ASCII bytes: 'c' 'm' 'a' 'p' = 0x636d6170
+      if (view.getUint32(rec) === 0x636d6170) {
+        cmapOffset = view.getUint32(rec + 8); // offset field of the table record
+        break;
+      }
+    }
+    if (cmapOffset < 0 || cmapOffset + 4 > view.byteLength) return out;
+
+    // cmap header: u16 version, u16 numSubtables, then numSubtables encoding
+    // records (u16 platformID, u16 encodingID, u32 subtableOffset).
+    const numSub = view.getUint16(cmapOffset + 2);
+    let best = -1;
+    let bestScore = -1;
+    for (let i = 0; i < numSub; i++) {
+      const rec = cmapOffset + 4 + i * 8;
+      if (rec + 8 > view.byteLength) break;
+      const platform = view.getUint16(rec);
+      const encoding = view.getUint16(rec + 2);
+      const sub = cmapOffset + view.getUint32(rec + 4);
+      // Score Unicode-capable subtables; higher = preferred.
+      let score = -1;
+      if (platform === 3 && encoding === 10) score = 4; // Windows UCS-4
+      else if (platform === 3 && encoding === 1) score = 3; // Windows BMP
+      else if (platform === 0) score = 2; // Unicode
+      else if (platform === 3 && encoding === 0) score = 1; // Windows Symbol
+      if (score > bestScore && sub > 0 && sub < view.byteLength) {
+        bestScore = score;
+        best = sub;
+      }
+    }
+    if (best < 0) return out;
+
+    readCmapSubtable(view, best, out);
+  } catch {
+    /* malformed font → empty coverage (safe) */
+  }
+  return out;
+}
+
+/** Decode a single cmap subtable (format 0/4/6/12) into `out`. */
+function readCmapSubtable(view: DataView, sub: number, out: Set<number>): void {
+  if (sub + 2 > view.byteLength) return;
+  const format = view.getUint16(sub);
+
+  if (format === 0) {
+    // Byte encoding table: 256 single-byte glyph indices.
+    if (sub + 6 + 256 > view.byteLength) return;
+    for (let c = 0; c < 256; c++) {
+      if (view.getUint8(sub + 6 + c) !== 0) out.add(c);
+    }
+    return;
+  }
+
+  if (format === 4) {
+    // Segment mapping to delta values.
+    if (sub + 14 > view.byteLength) return;
+    const segCountX2 = view.getUint16(sub + 6);
+    const segCount = segCountX2 >> 1;
+    const endBase = sub + 14;
+    const startBase = endBase + segCountX2 + 2; // +2 reservedPad
+    const deltaBase = startBase + segCountX2;
+    const rangeBase = deltaBase + segCountX2;
+    if (rangeBase + segCountX2 > view.byteLength) return;
+    for (let s = 0; s < segCount; s++) {
+      const end = view.getUint16(endBase + s * 2);
+      const start = view.getUint16(startBase + s * 2);
+      const delta = view.getUint16(deltaBase + s * 2);
+      const rangeOffset = view.getUint16(rangeBase + s * 2);
+      if (start > end) continue;
+      // 0xFFFF is the required terminator segment, never a real glyph.
+      const hardEnd = end === 0xffff ? 0xfffe : end;
+      for (let c = start; c <= hardEnd; c++) {
+        let glyph: number;
+        if (rangeOffset === 0) {
+          glyph = (c + delta) & 0xffff;
+        } else {
+          // glyphIdArray index per the spec's idRangeOffset arithmetic.
+          const idx =
+            rangeBase + s * 2 + rangeOffset + (c - start) * 2;
+          if (idx + 2 > view.byteLength) continue;
+          const g = view.getUint16(idx);
+          glyph = g === 0 ? 0 : (g + delta) & 0xffff;
+        }
+        if (glyph !== 0) out.add(c);
+      }
+    }
+    return;
+  }
+
+  if (format === 6) {
+    // Trimmed table mapping: contiguous range.
+    if (sub + 10 > view.byteLength) return;
+    const first = view.getUint16(sub + 6);
+    const count = view.getUint16(sub + 8);
+    if (sub + 10 + count * 2 > view.byteLength) return;
+    for (let i = 0; i < count; i++) {
+      if (view.getUint16(sub + 10 + i * 2) !== 0) out.add(first + i);
+    }
+    return;
+  }
+
+  if (format === 12) {
+    // Segmented coverage (UCS-4): u16 format, u16 reserved, u32 length,
+    // u32 language, u32 nGroups, then nGroups × (u32 start, u32 end, u32 glyph).
+    if (sub + 16 > view.byteLength) return;
+    const nGroups = view.getUint32(sub + 12);
+    let g = sub + 16;
+    // Cap groups defensively against a corrupt count.
+    const maxGroups = Math.min(nGroups, Math.floor((view.byteLength - g) / 12));
+    for (let i = 0; i < maxGroups; i++, g += 12) {
+      const start = view.getUint32(g);
+      const end = view.getUint32(g + 4);
+      if (start > end || end - start > 0x10ffff) continue;
+      for (let c = start; c <= end; c++) out.add(c);
+    }
+  }
+}
+
+/**
+ * Unique codepoints of a run's text (skips whitespace — every font "covers"
+ * spaces/newlines, so they must not inflate or distort coverage comparison).
+ * Pure helper, exported for testing.
+ */
+export function textCodepoints(text: string): number[] {
+  const set = new Set<number>();
+  for (const ch of text) {
+    const cp = ch.codePointAt(0);
+    if (cp === undefined) continue;
+    // Skip ASCII/Unicode whitespace.
+    if (cp === 0x20 || cp === 0x09 || cp === 0x0a || cp === 0x0d || cp === 0xa0) continue;
+    set.add(cp);
+  }
+  return [...set];
 }
 
 function formatToMime(format: 'ttf' | 'otf' | 'cff'): string {
@@ -320,6 +497,10 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
 
   // Registered FontFace instances for cleanup on unmount / document change
   const registeredFontFaces = useRef<FontFace[]>([]);
+  // Glyph coverage per loaded font (fontId → Unicode codepoints its cmap maps).
+  // Read synchronously by getFontFaceName to pick, among same-family+variant
+  // subsets, the one that actually covers a run's text (CERFA disjoint subsets).
+  const coverageRef = useRef<Map<string, Set<number>>>(new Map());
   // Signal object passed to async tasks so they can detect stale runs
   const abortRef = useRef<{ aborted: boolean }>({ aborted: false });
   // Tracks documentIds that already failed — prevents retry storm on 503/429.
@@ -480,6 +661,12 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
 
         if (signal.aborted) return;
 
+        // Record the glyph coverage of this subset BEFORE registering it, so
+        // getFontFaceName can prefer (among same-family+variant subsets) the one
+        // that actually covers a given run. Google substitutes are full fonts;
+        // their coverage is recorded too and naturally wins on completeness.
+        coverageRef.current.set(metadata.fontId, parseCmapCodepoints(fontBuffer));
+
         // Same conventional CSS name for embedded and Google-substituted fonts,
         // so getFontFaceName resolves both without special-casing.
         const fontFaceName = buildFontFaceName(documentId, metadata.fontId);
@@ -562,6 +749,7 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
       try { getFontSet().delete(ff); } catch { /* ignore */ }
     }
     registeredFontFaces.current = [];
+    coverageRef.current = new Map();
 
     setFonts([]);
     setError(null);
@@ -681,6 +869,7 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
     (
       originalName: string,
       wantVariant?: { bold?: boolean; italic?: boolean },
+      text?: string,
     ): string | null => {
       if (!originalName) return null;
       const target = normaliseFontName(originalName);
@@ -695,10 +884,10 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
       };
 
       // VARIANT-EXACT mode: when the caller passes the run's weight/style intent,
-      // resolve ONLY the subset whose OWN name advertises that same bold/italic,
-      // and return null otherwise. The renderer then falls back to the loose
-      // 1-arg call for the closest subset AND re-applies a synthetic weight/style,
-      // so a missing variant is approximated instead of silently mis-rendered.
+      // resolve ONLY the subset whose OWN name advertises that same bold/italic.
+      // The renderer falls back to the loose 1-arg call for the closest subset
+      // AND re-applies a synthetic weight/style when this returns null, so a
+      // missing/incomplete variant is approximated instead of mis-rendered.
       //
       // Crucially the family is matched on the WEIGHT-BEARING names (originalName /
       // postscriptName) only — NOT the backend-collapsed `fontFamily`
@@ -708,7 +897,8 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
       if (wantVariant) {
         const wantBold = wantVariant.bold === true;
         const wantItalic = wantVariant.italic === true;
-        const exact = loaded.find((f) => {
+        // ALL same-family subsets whose own name advertises this exact variant.
+        const candidates = loaded.filter((f) => {
           const weightNames = [f.metadata.originalName, f.metadata.postscriptName].filter(
             (s): s is string => Boolean(s),
           );
@@ -719,7 +909,34 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
           }
           return false;
         });
-        return exact?.fontFaceName ?? null;
+        if (candidates.length === 0) return null;
+
+        // GLYPH-COVERAGE refinement. A PDF embeds many DISJOINT subsets of the
+        // same family+variant (a CERFA carries ~15 `TimesNewRoman,Bold` subsets,
+        // each mapping only the glyphs of the runs it painted). Returning the
+        // first-loaded one renders only ITS glyphs in the variant — the rest of a
+        // run falls to the non-bold browser fallback, so a title looks unevenly
+        // bold. When the caller passes the run's text:
+        //   • prefer a candidate that FULLY covers it (real bold, perfect);
+        //   • if NONE covers it fully, return null so the renderer uses the loose
+        //     subset + a SYNTHETIC, UNIFORM weight/style (uniformly bold like the
+        //     reference) instead of a patchy real-bold/fallback mix.
+        // Without text (or with no recorded coverage), keep the prior behaviour:
+        // first matching subset — so single-variant PDFs are unchanged.
+        const needed = text ? textCodepoints(text) : [];
+        if (needed.length === 0) {
+          return candidates[0]!.fontFaceName;
+        }
+        const fullyCovers = candidates.find((f) => {
+          const cov = coverageRef.current.get(f.metadata.fontId);
+          if (!cov || cov.size === 0) return false;
+          return needed.every((cp) => cov.has(cp));
+        });
+        // No single same-variant subset covers the whole run → defer to the
+        // loose + synthetic-uniform path (renderer's 1-arg fallback). This is the
+        // disjoint-subset case; returning a partial subset would leave glyphs
+        // un-bolded.
+        return fullyCovers ? fullyCovers.fontFaceName : null;
       }
 
       // LOOSE family match (original behaviour) — used for the 1-arg call (no

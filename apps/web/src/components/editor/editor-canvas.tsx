@@ -286,7 +286,11 @@ export interface EditorCanvasProps {
    * to a CSS font-family registered via FontFace API. When the embedded font is loaded,
    * text is rendered with the SAME font as the PDF background. Returns null for unknown.
    */
-  getFontFaceName?: (originalName: string) => string | null;
+  getFontFaceName?: (
+    originalName: string,
+    wantVariant?: { bold?: boolean; italic?: boolean },
+    text?: string,
+  ) => string | null;
   /** Type de forme sélectionné */
   shapeType?: ShapeType;
   /** Type d'annotation sélectionné */
