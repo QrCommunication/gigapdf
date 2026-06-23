@@ -36,9 +36,9 @@ Instructions d'installation complètes pour GigaPDF sur toutes les plateformes s
 | Software | Version | Purpose |
 |----------|---------|---------|
 | **Python** | 3.12+ | Backend API |
-| **Node.js** | 22+ | Frontend applications + TypeScript PDF engine |
+| **Node.js** | 24+ | Frontend applications + WASM PDF engine driver |
 | **PostgreSQL** | 17+ | Primary database |
-| **Redis** | 7+ | Caching and message queue |
+| **Redis** | 8+ | Caching and message queue |
 | **pnpm** | 10.28+ | Node.js package manager (pinned via `packageManager`) |
 | **Git** | 2.30+ | Version control |
 
@@ -99,11 +99,11 @@ sudo systemctl enable redis-server
 redis-cli ping  # Should return PONG
 ```
 
-### Step 5: Install Node.js 22 / Étape 5 : Installer Node.js 22
+### Step 5: Install Node.js 24 / Étape 5 : Installer Node.js 24
 
 ```bash
-# Install Node.js via NodeSource
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+# Install Node.js via NodeSource (24 is the version CI and production run on)
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs
 
 # Verify installation
@@ -154,13 +154,13 @@ pnpm build
 
 ```bash
 # Install all required software
-brew install python@3.12 postgresql@16 redis node@20 git
+brew install python@3.12 postgresql@17 redis node@24 git
 
-# Link Node.js 20
-brew link node@20
+# Link Node.js 24
+brew link node@24
 
 # Start services
-brew services start postgresql@16
+brew services start postgresql@17
 brew services start redis
 
 # Install pnpm
