@@ -15,6 +15,18 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.11.0",
+    date: "2026-06-23",
+    type: "minor",
+    changes: [
+      { type: "improvement", description: "Faithful document conversion (in-house engine 0.68): import Word, Excel, PowerPoint and OpenDocument (.docx, .xlsx, .pptx, .odt, .ods, .odp) keeping images, links, styles, formulas and tables; HTML to PDF with full CSS; images in WebP, AVIF, SVG and GIF; and OpenType text shaping" },
+      { type: "feature", description: "Export to Markdown, CSV and EPUB — straight from the editor and your document library, alongside the existing Office and image formats" },
+      { type: "feature", description: "Ten new conversion tools: PDF to ODS, ODP, HTML, RTF, text, Markdown, CSV and EPUB, plus CSV to PDF and Markdown to PDF" },
+      { type: "feature", description: "Editor: edit the table of contents (outline), automatically redact personal data (PII), resize pages, and add new annotation types" },
+      { type: "feature", description: "Document library: imported images and RTF files are converted automatically, and a one-click OCR action makes scans searchable" },
+    ],
+  },
+  {
     version: "1.10.0",
     date: "2026-06-21",
     type: "minor",

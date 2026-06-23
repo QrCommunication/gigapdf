@@ -5,6 +5,30 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-06-23
+
+### Added
+- **Export to Markdown, CSV and EPUB** — available from the editor and the
+  document library, alongside the existing Office (DOCX/XLSX/PPTX/ODT/ODP) and
+  image (PNG/JPEG/WebP) outputs.
+- **Ten new conversion tools** — PDF → ODS, ODP, HTML, RTF, text, Markdown, CSV
+  and EPUB, plus CSV → PDF and Markdown → PDF, each with its own guide page.
+- **Editor — table-of-contents editing**: read, add, rename, reorder and remove
+  outline entries (bookmarks), written back into the PDF.
+- **Editor — automatic PII redaction**: detect and truly remove personal data
+  (emails, phone numbers, etc.) from the page, not just mask it.
+- **Editor — page resizing** and **new annotation types**.
+- **Document library — automatic conversion on import**: images and RTF files
+  are converted to PDF as they are added, and a one-click **OCR** action makes
+  scanned documents searchable.
+
+### Changed
+- **Faithful document conversion, powered by gigapdf-lib 0.68.** Office imports
+  (DOCX/XLSX/PPTX/ODT/ODS/ODP) preserve images, hyperlinks, styles, spreadsheet
+  formulas and tables; the HTML→PDF renderer covers full CSS; image handling
+  adds WebP, AVIF, SVG and GIF; and text is laid out with OpenType shaping for
+  correct glyphs and spacing.
+
 ## [1.10.0] - 2026-06-21
 
 ### Added
