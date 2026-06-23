@@ -1,13 +1,15 @@
 "use client";
 
-import { ToolPageShell } from "@/components/dashboard/tool-page-shell";
+import { OrganizePagesTool } from "@/components/dashboard/organize-pages-tool";
 
 /**
- * /organize-pages — Extract the pages you want into a new PDF.
+ * /organize-pages — Reorder, rotate, and delete the pages of a PDF, then apply
+ * the changes in one pass and download the result.
  *
  * Auth + locale (cookie) are handled by the parent (app)/(dashboard) layout
- * (AuthGuard + force-dynamic). Thin shell over the generic ToolRunner.
+ * (AuthGuard + force-dynamic). Thin shell over the interactive client organism
+ * that owns the whole organize workflow (its own header + page board).
  */
 export default function OrganizePagesPage() {
-  return <ToolPageShell toolKey="extract-pages" />;
+  return <OrganizePagesTool />;
 }
