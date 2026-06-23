@@ -28,6 +28,31 @@ const intlMiddleware = createIntlMiddleware(routing);
 /** Pages d'auth : un utilisateur déjà connecté est renvoyé vers le dashboard. */
 const AUTH_ROUTES = ["/login", "/register", "/forgot-password"];
 
+/**
+ * Premiers segments de TOUTES les routes (app) — non localisées : servies
+ * directement, jamais réécrites par next-intl (sinon elles tombent dans le
+ * périmètre statique (site)/[locale] → 404 natif). Source de vérité complète,
+ * à garder synchronisée avec apps/web/src/app/(app)/(dashboard)/* (+ editor,
+ * embed). Toute nouvelle page-outil DOIT être ajoutée ici. Le `matcher`
+ * ci-dessous en pré-exclut déjà quelques-unes (perf) ; ce Set couvre le reste —
+ * notamment les pages-outils, longtemps absentes du matcher → 404 silencieux.
+ */
+const APP_ROUTES = new Set<string>([
+  // Conteneurs app
+  "dashboard", "documents", "search", "settings", "billing", "organization",
+  "developers", "shared", "trash", "monitoring", "forbidden", "editor", "embed",
+  // Outils — édition / sécurité / pages
+  "merge", "split", "compress", "protect", "unlock", "sign", "watermark", "ocr",
+  "pdf-a", "extract-pages", "organize-pages",
+  // Outils — conversion VERS pdf
+  "image-to-pdf", "office-to-pdf", "html-to-pdf", "text-to-pdf", "csv-to-pdf",
+  "markdown-to-pdf", "rtf-pdf",
+  // Outils — conversion DEPUIS pdf
+  "pdf-to-word", "pdf-to-excel", "pdf-to-powerpoint", "pdf-to-image",
+  "pdf-to-odt", "pdf-to-ods", "pdf-to-odp", "pdf-to-html", "pdf-to-rtf",
+  "pdf-to-text", "pdf-to-markdown", "pdf-to-csv", "pdf-to-epub",
+]);
+
 function getSessionToken(request: NextRequest) {
   const possibleCookieNames = [
     "better-auth.session_token",
@@ -61,6 +86,16 @@ export function proxy(request: NextRequest) {
   if (AUTH_ROUTES.includes(pathname) && getSessionToken(request)) {
     // /dashboard vit hors [locale] : URL non préfixée, jamais localisée.
     return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  // Routes (app) en URL nue (/merge, /pdf-to-word, …) : servies directement,
+  // sans réécriture i18n. On teste le chemin ORIGINAL — un /fr/<outil> est laissé
+  // à next-intl qui le redirige vers /<outil> (URL nue), ensuite servie ici
+  // directement. Sans ce garde, next-intl réécrit /pdf-to-word → /fr/pdf-to-word,
+  // qui n'existe pas dans le périmètre statique (site) → 404.
+  const appSegment = original.split("/")[1] ?? "";
+  if (APP_ROUTES.has(appSegment)) {
+    return NextResponse.next();
   }
 
   // Les slugs SEO inconnus/croisés (fr sous /en et inversement) donnent un 404
