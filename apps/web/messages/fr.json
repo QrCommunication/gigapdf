@@ -318,7 +318,8 @@
       "title": "Mettez le moteur à l'épreuve",
       "description": "Éditez, signez et convertissez vos PDF dès maintenant, ou explorez tous les outils que ce moteur rend possibles.",
       "ctaTry": "Essayer gratuitement",
-      "ctaTools": "Découvrir les outils"
+      "ctaTools": "Découvrir les outils",
+      "ctaGithub": "Voir le moteur sur GitHub"
     }
   },
   "openSource": {
@@ -2956,7 +2957,12 @@
         "openapi": "Spécification OpenAPI — générez des clients dans n'importe quel langage ou importez dans Postman.",
         "exampleTitle": "Exemple de requête",
         "exampleDescription": "Uploadez un document PDF avec votre clé API ou votre token.",
-        "download": "Télécharger JSON"
+        "download": "Télécharger JSON",
+        "sdkTitle": "SDK moteur (npm)",
+        "sdkDescription": "Au-delà de l'API REST, le moteur PDF lui-même est publié comme bibliothèque TypeScript autonome @qrcommunication/gigapdf-lib. Zéro dépendance (Rust → WebAssembly), elle lit, édite, rend, signe (PKCS#12 · PAdES-B-T · PAdES-LTV), chiffre, océrise et convertit vos PDF ↔ Office/HTML/RTF/Markdown/CSV directement dans votre application Node ou navigateur — sans serveur GigaPDF.",
+        "sdkInstallNote": "Le .wasm est embarqué dans le paquet et chargé via GigaPdfEngine.loadDefault(). En Next.js standalone, ajoutez le paquet à serverExternalPackages et tracez le .wasm via outputFileTracingIncludes. L'installation, l'API complète et des exemples sont documentés dans le README du SDK.",
+        "sdkGithub": "Code source (GitHub)",
+        "sdkNpm": "Paquet npm"
       },
       "embedSdk": {
         "title": "SDK Embed",

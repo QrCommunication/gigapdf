@@ -47,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   view.
 
 ### Changed
-- **Faithful document conversion, powered by gigapdf-lib 0.69.** Office imports
+- **Faithful document conversion, powered by gigapdf-lib 0.71.1.** Office imports
   (DOCX/XLSX/PPTX/ODT/ODS/ODP) preserve images, hyperlinks, styles, spreadsheet
   formulas and tables; the HTML→PDF renderer covers full CSS; image handling
   adds WebP, AVIF, SVG and GIF; and text is laid out with OpenType shaping for
