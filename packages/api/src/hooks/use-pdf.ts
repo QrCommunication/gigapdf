@@ -18,6 +18,7 @@ import type {
   ApplyElementsOperation,
   ParagraphStyleEdit,
   ListEdit,
+  TableEdit,
 } from '../services/pdf';
 import type { DocumentMetadata, FormFieldElement } from '@giga-pdf/types';
 
@@ -296,9 +297,10 @@ export const useApplyElements = () => {
 };
 
 /**
- * Hook to bake native paragraph-style / list-level formatting into a PDF via
- * the engine's unified model (`setParagraphStyle` / `setList*` model ops keyed
- * by the editor's flat run index). Returns the modified PDF as a Blob.
+ * Hook to bake native paragraph-style / list-level formatting AND/OR table
+ * structural edits (add/remove row or column) into a PDF via the engine's
+ * unified model. Paragraph/list ops are keyed by the editor's flat run index;
+ * table ops by a positional table handle. Returns the modified PDF as a Blob.
  */
 export const useApplyModelOps = () => {
   return useMutation({
@@ -307,8 +309,24 @@ export const useApplyModelOps = () => {
       edits,
     }: {
       file: File | Blob;
-      edits: { paragraphs?: ParagraphStyleEdit[]; lists?: ListEdit[] };
+      edits: {
+        paragraphs?: ParagraphStyleEdit[];
+        lists?: ListEdit[];
+        tableOps?: TableEdit[];
+      };
     }) => pdfService.applyModelOps(file, edits),
+  });
+};
+
+/**
+ * Hook to enumerate a PDF's tables for the editor's table-edit overlay. Returns
+ * each table's positional handle, grid size and PDF-space placement frame. The
+ * handle is what {@link useApplyModelOps}'s `tableOps` address.
+ */
+export const useTableStructure = () => {
+  return useMutation({
+    mutationFn: ({ file }: { file: File | Blob }) =>
+      pdfService.tableStructure(file),
   });
 };
 

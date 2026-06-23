@@ -1896,6 +1896,22 @@
         "replacedAll": "Replaced {count} occurrence(s)",
         "replaceFailed": "Replacement failed"
       }
+    },
+    "tableEdit": {
+      "toggle": "Edit tables ({count})",
+      "toggleNone": "No tables detected",
+      "selectTable": "Select table ({rows} × {cols})",
+      "insertRowAbove": "Insert row above",
+      "insertRowBelow": "Insert row below",
+      "insertColumnLeft": "Insert column left",
+      "insertColumnRight": "Insert column right",
+      "deleteRow": "Delete row",
+      "deleteColumn": "Delete column",
+      "atCell": "cell row {row}, column {col}",
+      "toasts": {
+        "applied": "Table updated",
+        "failed": "Table edit failed"
+      }
     }
   },
   "errors": {

@@ -129,17 +129,25 @@ export type { OcrScript } from 'gigapdf-lib-ocr';
 export {
   applyModelOps,
   applyParagraphOps,
+  applyTableOps,
   buildSourceIndexAddrMap,
   buildListAddrMap,
+  listTablesInModel,
+  listPdfTables,
 } from './model-ops';
 export type {
   ParagraphStyleEdit,
   ListEdit,
   ApplyParagraphOpsResult,
+  TableEdit,
+  TableInfo,
+  TableCellInfo,
+  ApplyTableOpsResult,
   GigaBlockAddr,
   GigaDocument,
   GigaListMarker,
   GigaParaPatch,
+  GigaRect,
   ModelOp,
 } from './model-ops';
 

@@ -129,6 +129,12 @@ export interface ContinuousPageViewProps {
    * single-page editor exposes.
    */
   onCanvasReady?: (handle: EditorCanvasHandle) => void;
+  /**
+   * Render an extra overlay inside the ACTIVE page's sheet (page×zoom space) —
+   * the seam for the table-edit overlay in the continuous view, mirroring the
+   * single-page `overlay` prop of `EditorCanvas`. Receives the 0-based page index.
+   */
+  renderActiveOverlay?: (index: number) => React.ReactNode;
 }
 
 /**
@@ -155,6 +161,7 @@ function ContinuousPageViewImpl(
     onSelectionChanged,
     onTextSelectionStyleChanged,
     onCanvasReady,
+    renderActiveOverlay,
   }: ContinuousPageViewProps,
   ref: React.ForwardedRef<ContinuousPageViewHandle>,
 ) {
@@ -517,6 +524,9 @@ function ContinuousPageViewImpl(
                     ? { onTextSelectionStyleChanged }
                     : {})}
                   {...(isActive && onCanvasReady ? { onCanvasReady } : {})}
+                  {...(isActive && renderActiveOverlay
+                    ? { renderActiveOverlay }
+                    : {})}
                   onActivate={onActivatePage}
                 />
               ) : null}
