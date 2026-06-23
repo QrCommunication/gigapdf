@@ -15,6 +15,17 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.12.0",
+    date: "2026-06-23",
+    type: "minor",
+    changes: [
+      { type: "security", description: "Long-term signature validation (PAdES-B-LT): embed revocation data (OCSP/CRL) into a digital signature so it stays verifiable for years, even after the signing certificate expires" },
+      { type: "feature", description: "Editor: native optional-content layers (OCG) — show and toggle a PDF's layers — plus a dedicated annotations panel and a document-language badge" },
+      { type: "feature", description: "Document library: organize pages of a stored document (reorder, rotate, delete) from a visual grid, without opening the editor" },
+      { type: "feature", description: "Document library: export a stored document to 12 formats and apply PDF→PDF transforms in place" },
+    ],
+  },
+  {
     version: "1.11.0",
     date: "2026-06-23",
     type: "minor",
