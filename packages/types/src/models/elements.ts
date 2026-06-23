@@ -431,4 +431,5 @@ export type FieldCreationKind =
   | "date"
   | "checkbox"
   | "radio_group"
-  | "dropdown";
+  | "dropdown"
+  | "listbox";

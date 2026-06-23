@@ -745,6 +745,7 @@ export function EditorToolbar({
     { kind: "checkbox", icon: <CheckSquare size={16} />, labelKey: "fields.checkbox" },
     { kind: "radio_group", icon: <CircleDot size={16} />, labelKey: "fields.radioGroup" },
     { kind: "dropdown", icon: <List size={16} />, labelKey: "fields.dropdown" },
+    { kind: "listbox", icon: <Rows3 size={16} />, labelKey: "fields.listBox" },
     { kind: "date", icon: <CalendarDays size={16} />, labelKey: "fields.date" },
   ];
 

@@ -393,6 +393,9 @@ const FIELD_DEFAULT_SIZES: Record<FieldCreationKind, { width: number; height: nu
   checkbox: { width: 20, height: 20 },
   radio_group: { width: 18, height: 18 },
   dropdown: { width: 200, height: 30 },
+  // Liste à sélection visible : plusieurs lignes affichées d'un coup, donc
+  // plus haute que la liste déroulante (combo) qui ne montre qu'une ligne.
+  listbox: { width: 200, height: 76 },
 };
 
 interface NewFormFieldParams {
@@ -425,8 +428,12 @@ function createFormFieldElement(params: NewFormFieldParams): FormFieldElement {
         ? "radio"
         : kind === "dropdown"
           ? "dropdown"
-          : "text";
-  const isList = fieldType === "dropdown";
+          : kind === "listbox"
+            ? "listbox"
+            : "text";
+  // dropdown (combo) ET listbox (sélection visible) sont tous deux des champs
+  // à options : valeur tableau + liste d'options par défaut.
+  const isList = fieldType === "dropdown" || fieldType === "listbox";
   const isRadio = fieldType === "radio";
   const isCheckbox = fieldType === "checkbox";
 
@@ -1722,7 +1729,7 @@ export function EditorCanvas({
               y: pointer.y,
               placeholder: placeholderText,
               options:
-                currentKind === "dropdown"
+                currentKind === "dropdown" || currentKind === "listbox"
                   ? [1, 2, 3].map((n) => `${t("defaultOption")} ${n}`)
                   : undefined,
             });
@@ -1775,6 +1782,57 @@ export function EditorCanvas({
                       fontSize: 14,
                       fontFamily: "Arial",
                       fill: "#666666",
+                    }),
+                  ],
+                  { left: pointer.x, top: pointer.y },
+                );
+                break;
+              }
+              case "listbox": {
+                // Liste à sélection visible : plusieurs options affichées d'un
+                // coup (pas de chevron, à la différence de la combo). La 1re
+                // ligne est « surlignée » pour signaler la sélection.
+                formFieldGroup = new Group(
+                  [
+                    new Rect({
+                      left: 0,
+                      top: 0,
+                      width: 200,
+                      height: 76,
+                      fill: "#ffffff",
+                      stroke: "#cccccc",
+                      strokeWidth: 1,
+                      rx: 4,
+                      ry: 4,
+                    }),
+                    // Bande de sélection sur la première option.
+                    new Rect({
+                      left: 2,
+                      top: 2,
+                      width: 196,
+                      height: 22,
+                      fill: "#e0ecff",
+                    }),
+                    new FabricText(`${t("defaultOption")} 1`, {
+                      left: 10,
+                      top: 6,
+                      fontSize: 12,
+                      fontFamily: "Arial",
+                      fill: "#1f2937",
+                    }),
+                    new FabricText(`${t("defaultOption")} 2`, {
+                      left: 10,
+                      top: 30,
+                      fontSize: 12,
+                      fontFamily: "Arial",
+                      fill: "#374151",
+                    }),
+                    new FabricText(`${t("defaultOption")} 3`, {
+                      left: 10,
+                      top: 54,
+                      fontSize: 12,
+                      fontFamily: "Arial",
+                      fill: "#374151",
                     }),
                   ],
                   { left: pointer.x, top: pointer.y },
