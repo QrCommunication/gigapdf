@@ -18,22 +18,34 @@
 
 import { api, getAuthToken } from "@/lib/api";
 import { exportDocumentAs } from "@/components/editor/lib/export-document";
-import { EXPORT_FORMATS } from "@/components/editor/lib/export-formats";
+import {
+  EXPORT_FORMATS,
+  type ExportFormat,
+} from "@/components/editor/lib/export-formats";
 import { exportPagesAsImages } from "@/components/editor/lib/export-pages-as-images";
 import { extractDocumentText } from "@/components/editor/lib/extract-text";
 
-/** Formats the dashboard export menu offers for a stored document. */
+/**
+ * Per-page raster image targets the dashboard offers (zipped). Not part of the
+ * SDK's editable {@link ExportFormat} set — handled by {@link exportPagesAsImages}.
+ */
+export type DashboardImageFormat = "png" | "jpeg" | "webp";
+
+/**
+ * Formats the dashboard export menu offers for a stored document.
+ *
+ * The editable / reflowable targets are the SAME 12 the editor's universal
+ * export menu produces ({@link ExportFormat}: docx, xlsx, pptx, odt, ods, odp,
+ * html, rtf, pdf, markdown, csv, epub) — kept in lockstep by reusing that type —
+ * plus the dashboard-only per-page image rasters ({@link DashboardImageFormat})
+ * and `txt` (plain text extraction). All editable targets are lowered through
+ * the same SDK exporter via {@link convertDocumentBytes}, so adding an
+ * {@link ExportFormat} member here needs no extra branch.
+ */
 export type DashboardExportFormat =
-  | "png"
-  | "jpeg"
-  | "webp"
-  | "html"
-  | "txt"
-  | "docx"
-  | "xlsx"
-  | "markdown"
-  | "csv"
-  | "epub";
+  | ExportFormat
+  | DashboardImageFormat
+  | "txt";
 
 /**
  * Download the current PDF bytes of a stored document as a `Uint8Array`.
@@ -68,9 +80,10 @@ export async function downloadDocumentBytes(
  *
  * - `png` / `jpeg` / `webp` → a `.zip` of per-page images
  *   ({@link exportPagesAsImages}).
- * - `docx` / `xlsx` / `html` / `markdown` / `csv` / `epub` → the SDK's editable
- *   exporter ({@link exportDocumentAs}). `markdown`/`csv`/`epub` are raised from
- *   the unified model (`toModel` → `modelTo*`).
+ * - `docx` / `xlsx` / `pptx` / `odt` / `ods` / `odp` / `html` / `rtf` / `pdf` /
+ *   `markdown` / `csv` / `epub` → the SDK's editable exporter
+ *   ({@link exportDocumentAs}). `markdown`/`csv`/`epub` are raised from the
+ *   unified model (`toModel` → `modelTo*`).
  * - `txt` → extracted plain text ({@link extractDocumentText}) as a UTF-8 Blob.
  */
 export async function convertDocumentBytes(
@@ -91,8 +104,10 @@ export async function convertDocumentBytes(
       extension: "txt",
     };
   }
-  // docx | xlsx | html | markdown | csv | epub — the SDK lowers the PDF into the
-  // editable format. The extension comes from the format descriptor (markdown → md).
+  // docx | xlsx | pptx | odt | ods | odp | html | rtf | pdf | markdown | csv |
+  // epub — the SDK lowers the PDF into the editable format. After the image and
+  // txt guards above, `format` narrows to ExportFormat. The extension comes from
+  // the format descriptor (markdown → md).
   const blob = await exportDocumentAs(bytes, format);
   return { blob, extension: EXPORT_FORMATS[format].extension };
 }
