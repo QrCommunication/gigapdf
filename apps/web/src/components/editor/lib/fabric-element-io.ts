@@ -184,7 +184,15 @@ export function fabricObjectToElement(
     };
   }
 
-  if (typeName === "i-text" || typeName === "text" || typeName === "textbox") {
+  // A freetext ANNOTATION is rendered as an IText so its text is readable, but
+  // it must round-trip as an annotation (the `data.annotationType` branch
+  // below), NOT as a plain text element. Skip the text branch when the object
+  // carries an `annotationType` marker so the annotation branch claims it.
+  const carriesAnnotationMarker = typeof obj.data?.annotationType === "string";
+  if (
+    !carriesAnnotationMarker &&
+    (typeName === "i-text" || typeName === "text" || typeName === "textbox")
+  ) {
     const textObj = obj as FabricObjectWithData & {
       text?: string;
       fontSize?: number;
@@ -376,11 +384,19 @@ export function fabricObjectToElement(
   if (dataAnnotationType) {
     const isLineLike =
       dataAnnotationType === "line" || dataAnnotationType === "arrow";
+    // A freetext annotation is rendered as an editable IText: its live text is
+    // the canonical content (so a typed edit persists). Other annotation types
+    // keep their stashed `data.content`.
+    const liveText = (obj as FabricObjectWithData & { text?: string }).text;
+    const annotationContent =
+      dataAnnotationType === "freetext" && typeof liveText === "string"
+        ? liveText
+        : ((obj.data?.content as string) ?? "");
     return {
       ...baseElement,
       type: "annotation" as const,
       annotationType: dataAnnotationType,
-      content: (obj.data?.content as string) ?? "",
+      content: annotationContent,
       style: {
         color: (obj.stroke as string) || (obj.fill as string) || "#ffff00",
         opacity: obj.opacity ?? 1,

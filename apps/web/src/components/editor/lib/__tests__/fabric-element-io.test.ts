@@ -525,3 +525,36 @@ describe("fabricObjectToElement — list / indent round-trip", () => {
     expect(el.style.indentLeft).toBeUndefined();
   });
 });
+
+describe("fabricObjectToElement — freetext annotation IText round-trip", () => {
+  it("serialises a freetext IText back as an ANNOTATION (not a text element)", () => {
+    // A freetext annotation is rendered as an IText so its text is readable; on
+    // save it must round-trip as type:"annotation" via the data.annotationType
+    // marker, NOT be claimed by the i-text→text branch.
+    const obj = fabricStub({
+      type: "i-text",
+      text: "Edited note",
+      fill: "#ff0000",
+      data: { elementId: "ft1", annotationType: "freetext" },
+    });
+    const el = fabricObjectToElement(obj) as unknown as {
+      type: string;
+      annotationType: string;
+      content: string;
+    };
+    expect(el.type).toBe("annotation");
+    expect(el.annotationType).toBe("freetext");
+    // Live IText content is the canonical value (a typed edit persists).
+    expect(el.content).toBe("Edited note");
+  });
+
+  it("still serialises a plain IText (no annotationType) as a text element", () => {
+    const obj = fabricStub({
+      type: "i-text",
+      text: "Hello",
+      data: { elementId: "t9", type: "text", originalFont: "Helvetica" },
+    });
+    const el = fabricObjectToElement(obj);
+    expect(el?.type).toBe("text");
+  });
+});
