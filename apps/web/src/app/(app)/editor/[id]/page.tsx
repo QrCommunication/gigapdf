@@ -93,9 +93,13 @@ import {
 } from "@/components/editor/forms-panel";
 import { FormFillOverlay } from "@/components/editor/form-fill-overlay";
 import { TableEditOverlay } from "@/components/editor/table-edit-overlay";
-import type { TableEditAction } from "@/components/editor/table-edit-overlay";
+import type {
+  TableEditAction,
+  TableStyleAction,
+} from "@/components/editor/table-edit-overlay";
 import {
   actionToTableEdit,
+  styleActionToTableEdit,
   buildSourceIndexToCellMap,
 } from "@/components/editor/lib/table-edit";
 import { ShareDialog } from "@/components/sharing/share-dialog";
@@ -2498,6 +2502,52 @@ export default function EditorPage() {
     ],
   );
 
+  // Run a STYLE action (cell shading, row height, column width, table border,
+  // cell span) on the selected table. Same flush → bake → adopt + re-parse flow
+  // as `handleTableEditAction`, but resolves a value-carrying `TableStyleAction`
+  // to its positional `TableEdit` via `styleActionToTableEdit`.
+  const handleTableStyleAction = useCallback(
+    async (tableIndexOnPage: number, action: TableStyleAction) => {
+      if (tableEditBusy) return;
+      const pageNumber = effectivePageIndex + 1;
+      const edit = styleActionToTableEdit(
+        { pageNumber, tableIndexOnPage },
+        action,
+      );
+
+      setTableEditBusy(true);
+      try {
+        // Flush pending flat element ops first so the bake runs on up-to-date bytes.
+        const base = await getPreparedBlob();
+        const file = base ?? currentPdfFileRef.current;
+        if (!file) return;
+
+        const modified = await applyModelOps.mutateAsync({
+          file,
+          edits: { tableOps: [edit] },
+        });
+        const blob =
+          modified instanceof Blob ? modified : new Blob([modified as BlobPart]);
+        adoptModifiedPdf(blob, { reparse: true });
+        toast({ title: t("tableEdit.toasts.applied") });
+      } catch (err) {
+        clientLogger.error("[editor] table style bake failed:", err);
+        toast({ title: t("tableEdit.toasts.failed") });
+      } finally {
+        setTableEditBusy(false);
+      }
+    },
+    [
+      tableEditBusy,
+      effectivePageIndex,
+      getPreparedBlob,
+      applyModelOps,
+      adoptModifiedPdf,
+      toast,
+      t,
+    ],
+  );
+
   // The table-edit overlay for the ACTIVE page, shared by the single-page editor
   // (`EditorCanvas` `overlay` prop) and the continuous view (`PageSlot`'s
   // `renderActiveOverlay`). Uses `effectivePage` so the geometry matches whichever
@@ -2515,6 +2565,7 @@ export default function EditorPage() {
         activeCell={activeTableCell}
         onSelectTable={setSelectedTableIndex}
         onAction={handleTableEditAction}
+        onStyleAction={handleTableStyleAction}
         busy={tableEditBusy}
       />
     );
@@ -2526,6 +2577,7 @@ export default function EditorPage() {
     selectedTableIndex,
     activeTableCell,
     handleTableEditAction,
+    handleTableStyleAction,
     tableEditBusy,
   ]);
 

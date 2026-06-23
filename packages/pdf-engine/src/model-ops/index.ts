@@ -32,6 +32,7 @@
 import type {
   GigaBlock,
   GigaBlockAddr,
+  GigaBorderStyle,
   GigaDocument,
   GigaInline,
   GigaListItem,
@@ -47,12 +48,20 @@ import { engineLogger } from '../utils/logger';
 // a single import surface and never depend on the lib package directly.
 export type {
   GigaBlockAddr,
+  GigaBorderStyle,
   GigaDocument,
   GigaListMarker,
   GigaParaPatch,
   GigaRect,
   ModelOp,
 } from '@qrcommunication/gigapdf-lib';
+
+/**
+ * An RGB triple in the engine's `0..=1` float channel space (mirror of the
+ * lib's `[number, number, number]` colour), used by table cell shading and the
+ * table border colour. `null` (where accepted) clears the colour/shading.
+ */
+export type RgbColor = [number, number, number];
 
 /**
  * A paragraph-style edit keyed by the editor's flat engine run index
@@ -659,6 +668,42 @@ export type TableEdit =
       colSpan: number;
       /** Rows the cell spans (clamped ≥ 1 engine-side). */
       rowSpan: number;
+    }
+  | {
+      pageNumber: number;
+      tableIndexOnPage: number;
+      kind: 'setCellShading';
+      /** Row index in `rows`. */
+      row: number;
+      /** Cell index in `rows[row].cells` (not a grid column). */
+      col: number;
+      /** RGB `0..=1` shading, or `null` to clear the cell's shading. */
+      color: RgbColor | null;
+    }
+  | {
+      pageNumber: number;
+      tableIndexOnPage: number;
+      kind: 'setRowHeight';
+      /** Row index in `rows`. */
+      row: number;
+      /** Fixed row height in PDF points (clamped ≥ 0 engine-side). */
+      height: number;
+    }
+  | {
+      pageNumber: number;
+      tableIndexOnPage: number;
+      kind: 'setColWidth';
+      /** Grid column index. */
+      col: number;
+      /** Fixed column width in PDF points (clamped ≥ 0 engine-side). */
+      width: number;
+    }
+  | {
+      pageNumber: number;
+      tableIndexOnPage: number;
+      kind: 'setTableBorder';
+      /** The table/cell border: stroke `width` (points) + RGB `0..=1` `color`. */
+      border: GigaBorderStyle;
     };
 
 export interface ApplyTableOpsResult {
@@ -695,17 +740,33 @@ function tableEditToOp(edit: TableEdit, addr: GigaBlockAddr): ModelOp {
         col_span: edit.colSpan,
         row_span: edit.rowSpan,
       };
+    case 'setCellShading':
+      return {
+        op: 'setCellShading',
+        addr,
+        row: edit.row,
+        col: edit.col,
+        color: edit.color,
+      };
+    case 'setRowHeight':
+      return { op: 'setRowHeight', addr, row: edit.row, height: edit.height };
+    case 'setColWidth':
+      return { op: 'setColWidth', addr, col: edit.col, width: edit.width };
+    case 'setTableBorder':
+      return { op: 'setTableBorder', addr, border: edit.border };
   }
 }
 
 /**
- * Bake table structural edits (add/remove row or column, set a cell span) keyed
- * by a table's positional handle `(pageNumber, tableIndexOnPage)`.
+ * Bake table structural & style edits (add/remove row or column, set a cell
+ * span, shade a cell, size a row/column, restyle the table border) keyed by a
+ * table's positional handle `(pageNumber, tableIndexOnPage)`.
  *
  * End-to-end native edit: open → toModel → enumerate tables ({@link listTablesInModel})
  * → resolve each edit's `(pageNumber, tableIndexOnPage)` to the table's
  * {@link GigaBlockAddr} → emit `insertTableRow` / `deleteTableRow` /
- * `insertTableColumn` / `deleteTableColumn` / `setCellSpan` {@link ModelOp}s →
+ * `insertTableColumn` / `deleteTableColumn` / `setCellSpan` / `setCellShading` /
+ * `setRowHeight` / `setColWidth` / `setTableBorder` {@link ModelOp}s →
  * applyModelOps → modelToPdf. A single `toModel()` powers both the address
  * resolution AND the op application, so addresses and the edited model stay
  * consistent. Edits whose handle matches no table are reported in `unresolved`

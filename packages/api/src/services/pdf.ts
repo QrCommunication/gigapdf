@@ -1203,10 +1203,27 @@ export type ListEdit =
   | { sourceIndex: number; kind: 'ordered'; ordered: boolean };
 
 /**
- * A table structural edit keyed by a POSITIONAL handle (`pageNumber` 1-based +
- * `tableIndexOnPage` 0-based) — table cell runs carry no `source_index`, so a
- * table is addressed by its position, not by a flat run index. `insert*`/
- * `delete*` act at a 0-based grid `at`; `setCellSpan` retargets a cell's span.
+ * An RGB triple in the engine's `0..=1` float channel space (mirror of the
+ * engine `[number, number, number]` colour). Used by table cell shading and the
+ * table border colour; `null` (where accepted) clears the colour/shading.
+ */
+export type RgbColor = [number, number, number];
+
+/** A table/cell border (mirrors the engine `GigaBorderStyle`). */
+export interface TableBorderSpec {
+  /** Stroke width in PDF points. */
+  width: number;
+  /** RGB `0..=1` stroke colour. */
+  color: RgbColor;
+}
+
+/**
+ * A table structural / style edit keyed by a POSITIONAL handle (`pageNumber`
+ * 1-based + `tableIndexOnPage` 0-based) — table cell runs carry no
+ * `source_index`, so a table is addressed by its position, not by a flat run
+ * index. `insert*`/`delete*` act at a 0-based grid `at`; `setCellSpan` retargets
+ * a cell's span; `setCellShading`/`setRowHeight`/`setColWidth`/`setTableBorder`
+ * restyle the table.
  */
 export type TableEdit =
   | {
@@ -1223,6 +1240,37 @@ export type TableEdit =
       col: number;
       colSpan: number;
       rowSpan: number;
+    }
+  | {
+      pageNumber: number;
+      tableIndexOnPage: number;
+      kind: 'setCellShading';
+      row: number;
+      col: number;
+      /** RGB `0..=1` shading, or `null` to clear the cell's shading. */
+      color: RgbColor | null;
+    }
+  | {
+      pageNumber: number;
+      tableIndexOnPage: number;
+      kind: 'setRowHeight';
+      row: number;
+      /** Fixed row height in PDF points. */
+      height: number;
+    }
+  | {
+      pageNumber: number;
+      tableIndexOnPage: number;
+      kind: 'setColWidth';
+      col: number;
+      /** Fixed column width in PDF points. */
+      width: number;
+    }
+  | {
+      pageNumber: number;
+      tableIndexOnPage: number;
+      kind: 'setTableBorder';
+      border: TableBorderSpec;
     };
 
 /** A table placement rectangle in PDF user-space (origin bottom-left), points. */

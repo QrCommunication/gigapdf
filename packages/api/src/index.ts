@@ -55,6 +55,8 @@ export type {
   ParagraphStyleEdit,
   ListEdit,
   TableEdit,
+  TableBorderSpec,
+  RgbColor,
   TableRect,
   TableCellInfo,
   TableStructureInfo,
