@@ -42,6 +42,13 @@ import {
   fabricCharToModelStyle,
   type FabricCharStyle,
 } from "./lib/text-runs";
+// Word-like rulers + draggable page margins. In the single-page view these are
+// mounted INSIDE the canvas-container sheet (same gutter anchoring the continuous
+// view uses inside PageChrome), reusing the exact same overlay + commit flow.
+import { PageMarginOverlay } from "./page-margin-overlay";
+import { PageRulers } from "./page-rulers";
+import type { PageMargins } from "./lib/page-margins";
+import type { RulerUnit } from "./lib/ruler-ticks";
 
 /** Zoom hard bounds (10% – 800%) shared by wheel, toolbar and fit modes. */
 const MIN_ZOOM = 0.1;
@@ -307,6 +314,24 @@ export interface EditorCanvasProps {
   /** Zoom recalculé par un mode fit (page/width). */
   onFitZoomChange?: (zoom: number) => void;
   /**
+   * Afficher les règles Word-like (et, si les marges sont connues, les marges
+   * draggables). Câblé sur le même toggle « Règles & marges » de la toolbar que
+   * la vue continue. Rendu UNIQUEMENT en mode standalone (single-page) : la vue
+   * continue monte ses propres règles via PageSlot, donc l'EditorCanvas
+   * `embedded` ne les rend jamais (sinon doublon).
+   */
+  showRulers?: boolean;
+  /** Unité d'affichage des règles (px/mm/cm/in/pt). Défaut « mm ». */
+  rulerUnit?: RulerUnit;
+  /**
+   * Marges (points PDF, boîte intrinsèque non-rotée) de la page affichée, ou
+   * `null` si inconnues. Les marqueurs/guides draggables ne s'affichent que si
+   * présentes ET `onMarginsCommit` fourni.
+   */
+  margins?: PageMargins | null;
+  /** Commit des nouvelles marges (points PDF) après un drag règle/guide. */
+  onMarginsCommit?: (margins: PageMargins) => void;
+  /**
    * Contenu superposé au canvas (ex: surlignage des champs de formulaire en
    * mode Remplir). Rendu DANS le conteneur du canvas, donc positionné en
    * coordonnées page×zoom et défilant avec la page.
@@ -496,6 +521,10 @@ export function EditorCanvas({
   fitMode: fitModeProp = null,
   embedded = false,
   onFitZoomChange,
+  showRulers = false,
+  rulerUnit = "mm",
+  margins = null,
+  onMarginsCommit,
   overlay,
   strokeColor = "#000000",
   fillColor = "transparent",
@@ -3189,6 +3218,34 @@ export function EditorCanvas({
         <div className="absolute inset-0 z-10 pointer-events-none">
           {overlay}
         </div>
+      ) : null}
+
+      {/* Règles Word-like + marges draggables (single-page uniquement). Montées
+          DANS le sheet position:relative — les barres se placent dans la gouttière
+          au-dessus/à gauche via bottom:100%/right:100% (le padding du viewport
+          standalone fournit la place). En mode `embedded`, la vue continue les
+          monte déjà via PageSlot : on ne les rend donc jamais ici pour éviter le
+          doublon. Marges draggables si connues + commit fourni, sinon règles
+          passives (mêmes composants/flux que la vue continue). */}
+      {showRulers && !embedded ? (
+        margins != null && onMarginsCommit ? (
+          <PageMarginOverlay
+            width={canvasWidth * zoom}
+            height={canvasHeight * zoom}
+            zoom={zoom}
+            unit={rulerUnit}
+            margins={margins}
+            rotation={page?.dimensions?.rotation ?? 0}
+            onCommit={onMarginsCommit}
+          />
+        ) : (
+          <PageRulers
+            pageWidthPts={canvasWidth}
+            pageHeightPts={canvasHeight}
+            zoom={zoom}
+            unit={rulerUnit}
+          />
+        )
       ) : null}
 
       {/* Mini-formulaire de création d'un groupe de boutons radio. */}

@@ -126,6 +126,7 @@ import {
 } from "@/components/editor/lib/paragraph-style-bake";
 import {
   applyPageMargins,
+  readAllPageMargins,
   type PageMargins,
 } from "@/components/editor/lib/page-margins";
 import {
@@ -2635,6 +2636,36 @@ export default function EditorPage() {
     [adoptModifiedPdf, toast, t],
   );
 
+  // Per-page margins (PDF points) of the current binary, for the SINGLE-PAGE
+  // view's draggable ruler/guide markers. The continuous view reads its own
+  // margins inside ContinuousPageView, so we only read here when single — the
+  // single-page EditorCanvas is fed `singlePageMargins[currentPageIndex]`. Read
+  // off the same bytes the editor already holds (cheap: one short-lived doc on
+  // the loaded engine). Failure is non-fatal → no markers for that page.
+  const [singlePageMargins, setSinglePageMargins] = useState<
+    Array<PageMargins | null>
+  >([]);
+  useEffect(() => {
+    if (isContinuous || !currentPdfFile) {
+      setSinglePageMargins([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const bytes = new Uint8Array(await currentPdfFile.arrayBuffer());
+        const margins = await readAllPageMargins(bytes);
+        if (!cancelled) setSinglePageMargins(margins);
+      } catch (err) {
+        clientLogger.warn("[editor] single-page margin read failed:", err);
+        if (!cancelled) setSinglePageMargins([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isContinuous, currentPdfFile]);
+
   // Bake a Word-style running header/footer onto the current PDF. The GigaPDF
   // engine draws the band text (with {{page}}/{{pages}} tokens) in the top/
   // bottom margin band, producing new bytes we adopt without re-parsing — the
@@ -3952,10 +3983,11 @@ export default function EditorPage() {
             goToPage(effectivePageIndex);
           }
         }}
-        // Rulers + draggable margins are a continuous-view feature; the toggle
-        // only appears there.
+        // Rulers + draggable margins work in BOTH views (single-page mounts
+        // them inside the EditorCanvas sheet, continuous via PageSlot). The
+        // toggle is therefore always available.
         showRulers={showRulers}
-        {...(isContinuous ? { onToggleRulers: toggleRulers } : {})}
+        onToggleRulers={toggleRulers}
         rulerUnit={rulerUnit}
         onRulerUnitChange={setRulerUnit}
         fitMode={fitMode}
@@ -4092,6 +4124,13 @@ export default function EditorPage() {
                 zoom={zoom}
                 fitMode={fitMode}
                 onFitZoomChange={setZoom}
+                // Rulers + draggable margins (same toolbar toggle + commit flow
+                // as the continuous view). Margins for the current page come
+                // from the binary; markers appear only when known.
+                showRulers={showRulers}
+                rulerUnit={rulerUnit}
+                margins={singlePageMargins[currentPageIndex] ?? null}
+                onMarginsCommit={(m) => handleMarginsCommit(currentPageIndex, m)}
                 shapeType={shapeType}
                 annotationType={annotationType}
                 fieldKind={fieldKind}
