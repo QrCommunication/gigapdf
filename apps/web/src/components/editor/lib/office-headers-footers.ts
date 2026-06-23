@@ -39,12 +39,13 @@ function toBytes(source: ArrayBuffer | Uint8Array): Uint8Array {
 }
 
 /**
- * Flatten an inline node to its text contribution. Only `run` nodes carry text;
- * a `break` becomes a space, and images/links contribute nothing.
+ * Flatten an inline node to its text contribution. Only `run` nodes carry text
+ * (in `v.text`); a `br` (line break) becomes a space, and images/links
+ * contribute nothing.
  */
 function inlineText(inline: GigaInline): string {
-  if (inline.t === "run") return inline.text;
-  if (inline.t === "break") return " ";
+  if (inline.t === "run") return inline.v.text;
+  if (inline.t === "br") return " ";
   return "";
 }
 

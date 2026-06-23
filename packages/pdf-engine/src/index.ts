@@ -119,8 +119,8 @@ export type {
 // Re-export the OCR script identifiers from the engine library so callers
 // (API route validation, UI script picker) have a single source of truth for
 // the set of writing systems the bundled OCR models cover.
-export { ALL_OCR_SCRIPTS } from '@qrcommunication/gigapdf-lib';
-export type { OcrScript } from '@qrcommunication/gigapdf-lib';
+export { ALL_OCR_SCRIPTS } from 'gigapdf-lib-ocr';
+export type { OcrScript } from 'gigapdf-lib-ocr';
 
 // Merge/Split
 export { mergePDFs, splitPDF, splitAt } from './merge-split';

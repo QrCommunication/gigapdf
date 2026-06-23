@@ -5,7 +5,7 @@
  * no external binary. Nothing leaves the process.
  */
 
-import { getEngine } from '../wasm';
+import { getOcrEngine } from '../wasm-ocr';
 
 export class OcrUnavailableError extends Error {
   constructor() {
@@ -68,7 +68,7 @@ export async function ocrPdf(pdfBytes: Uint8Array, options: OcrOptions = {}): Pr
   const { pages, dpi = 144, format = 'text' } = options;
   const scale = Math.max(2, dpi / 72);
 
-  const giga = await getEngine();
+  const giga = await getOcrEngine();
   const doc = giga.open(pdfBytes);
   try {
     const totalPages = doc.pageCount();
