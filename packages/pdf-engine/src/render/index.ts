@@ -38,3 +38,9 @@ export type {
   WatermarkPosition,
   WatermarkResult,
 } from './watermark';
+export { addImageWatermark } from './image-watermark';
+export type {
+  ImageWatermarkOptions,
+  ImageWatermarkAnchor,
+  ImageWatermarkResult,
+} from './image-watermark';

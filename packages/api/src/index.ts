@@ -227,6 +227,7 @@ export {
   useTableStructure,
   useSearchPdf,
   useAddWatermark,
+  useAddImageWatermark,
   useSignPdf,
   useOcrPdf,
   useMakeSearchablePdf,

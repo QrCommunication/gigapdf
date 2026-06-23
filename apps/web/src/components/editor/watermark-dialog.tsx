@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useTranslations } from "next-intl";
 import { X, Loader2, Droplet } from "lucide-react";
-import { useAddWatermark, downloadBlob } from "@giga-pdf/api";
+import { useAddWatermark, useAddImageWatermark, downloadBlob } from "@giga-pdf/api";
 
 export interface WatermarkDialogProps {
   open: boolean;
@@ -31,6 +31,13 @@ type Position =
   | "header"
   | "footer";
 
+type Anchor =
+  | "center"
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
+
 const POSITIONS: { value: Position; label: string }[] = [
   { value: "center-diagonal", label: "Diagonale centrale" },
   { value: "header", label: "En-tête" },
@@ -41,11 +48,19 @@ const POSITIONS: { value: Position; label: string }[] = [
   { value: "bottom-right", label: "Coin bas droit" },
 ];
 
+const ANCHORS: { value: Anchor; label: string }[] = [
+  { value: "center", label: "Centre" },
+  { value: "top-left", label: "Coin haut gauche" },
+  { value: "top-right", label: "Coin haut droit" },
+  { value: "bottom-left", label: "Coin bas gauche" },
+  { value: "bottom-right", label: "Coin bas droit" },
+];
+
 /**
- * WatermarkDialog — stamp text on every page (or a selected range) of the
- * current PDF. Position presets cover the 90% use case; advanced custom
- * positioning lives behind the API but is intentionally hidden from the
- * dialog for now (most users don't need it).
+ * WatermarkDialog — stamp text or an image on every page (or a selected
+ * range) of the current PDF. The Texte/Image toggle at the top switches
+ * between the two modes while keeping the shared Opacité and Pages fields
+ * visible in both.
  */
 export function WatermarkDialog({
   open,
@@ -55,12 +70,27 @@ export function WatermarkDialog({
   onApplied,
 }: WatermarkDialogProps) {
   const t = useTranslations("editor.watermark");
+
+  // ── Mode toggle ────────────────────────────────────────────────────────
+  const [mode, setMode] = useState<"text" | "image">("text");
+
+  // ── Text-mode state ────────────────────────────────────────────────────
   const [text, setText] = useState("CONFIDENTIEL");
   const [position, setPosition] = useState<Position>("center-diagonal");
+
+  // ── Image-mode state ───────────────────────────────────────────────────
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [anchor, setAnchor] = useState<Anchor>("center");
+  const [rotation, setRotation] = useState(0);
+  const [tile, setTile] = useState(false);
+
+  // ── Shared state ───────────────────────────────────────────────────────
   const [opacity, setOpacity] = useState(25);
   const [pagesInput, setPagesInput] = useState("");
   const [outputMode, setOutputMode] = useState<OutputMode>("apply");
+
   const addWatermark = useAddWatermark();
+  const addImageWatermark = useAddImageWatermark();
 
   // Without an onApplied callback there is nothing to apply the result to —
   // the dialog degrades to its historical download-only behaviour.
@@ -86,16 +116,35 @@ export function WatermarkDialog({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentFile || !text.trim()) return;
-    const blob = await addWatermark.mutateAsync({
-      file: currentFile,
-      options: {
-        text: text.trim(),
-        position,
-        opacity: opacity / 100,
-        pages: parsePages(pagesInput),
-      },
-    });
+
+    let blob: Blob;
+
+    if (mode === "text") {
+      if (!currentFile || !text.trim()) return;
+      blob = await addWatermark.mutateAsync({
+        file: currentFile,
+        options: {
+          text: text.trim(),
+          position,
+          opacity: opacity / 100,
+          pages: parsePages(pagesInput),
+        },
+      });
+    } else {
+      if (!currentFile || !imageFile) return;
+      blob = await addImageWatermark.mutateAsync({
+        file: currentFile,
+        image: imageFile,
+        options: {
+          anchor,
+          opacity: opacity / 100,
+          rotation,
+          tile,
+          pages: parsePages(pagesInput),
+        },
+      });
+    }
+
     if (canApplyToDocument && outputMode === "apply") {
       // Hand the watermarked binary to the editor so it replaces the live
       // document (and gets persisted) instead of only producing a download.
@@ -108,6 +157,12 @@ export function WatermarkDialog({
     }
     onClose();
   };
+
+  const isPending = addWatermark.isPending || addImageWatermark.isPending;
+  const isDisabled =
+    mode === "text"
+      ? !currentFile || !text.trim() || isPending
+      : !currentFile || !imageFile || isPending;
 
   if (!open) return null;
 
@@ -143,36 +198,129 @@ export function WatermarkDialog({
         </div>
 
         <form onSubmit={submit} className="px-6 pb-6 pt-2 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">
-              Texte
-            </label>
-            <input
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="ex. CONFIDENTIEL"
-              className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              required
-            />
+          {/* ── Mode toggle ── */}
+          <div className="flex gap-2">
+            {(["text", "image"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                className={`flex-1 px-3 py-2 rounded-md border text-sm font-medium transition-colors ${
+                  mode === m
+                    ? "border-primary bg-primary/5 text-foreground"
+                    : "border-input hover:bg-muted text-muted-foreground"
+                }`}
+              >
+                {m === "text" ? "Texte" : "Image"}
+              </button>
+            ))}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">
-              Position
-            </label>
-            <select
-              value={position}
-              onChange={(e) => setPosition(e.target.value as Position)}
-              className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              {POSITIONS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* ── Text-mode fields ── */}
+          {mode === "text" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  Texte
+                </label>
+                <input
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="ex. CONFIDENTIEL"
+                  className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  required={mode === "text"}
+                />
+              </div>
 
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  Position
+                </label>
+                <select
+                  value={position}
+                  onChange={(e) => setPosition(e.target.value as Position)}
+                  className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {POSITIONS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          {/* ── Image-mode fields ── */}
+          {mode === "image" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  Image
+                </label>
+                <label className="flex items-center gap-2 w-full px-3 py-2 rounded-md border border-input bg-background text-sm cursor-pointer hover:bg-muted transition-colors">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif,image/avif,.png,.jpg,.jpeg,.webp,.gif,.avif"
+                    className="sr-only"
+                    onChange={(e) =>
+                      setImageFile(e.target.files?.[0] ?? null)
+                    }
+                  />
+                  <span className="text-muted-foreground truncate">
+                    {imageFile ? imageFile.name : "Choisir une image…"}
+                  </span>
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  Ancrage
+                </label>
+                <select
+                  value={anchor}
+                  onChange={(e) => setAnchor(e.target.value as Anchor)}
+                  disabled={tile}
+                  className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {ANCHORS.map((a) => (
+                    <option key={a.value} value={a.value}>
+                      {a.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  Rotation : {rotation}°
+                </label>
+                <input
+                  type="range"
+                  min="-180"
+                  max="180"
+                  step="5"
+                  value={rotation}
+                  onChange={(e) => setRotation(Number(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={tile}
+                  onChange={(e) => setTile(e.target.checked)}
+                  className="accent-primary"
+                />
+                <span className="text-sm text-foreground">
+                  Répéter sur toute la page
+                </span>
+              </label>
+            </>
+          )}
+
+          {/* ── Shared fields ── */}
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">
               Opacité : {opacity}%
@@ -250,9 +398,14 @@ export function WatermarkDialog({
             </fieldset>
           )}
 
-          {addWatermark.isError && (
+          {(addWatermark.isError || addImageWatermark.isError) && (
             <p className="text-sm text-destructive">
-              {(addWatermark.error as Error)?.message ?? "Échec du filigrane."}
+              {(
+                (addWatermark.error ?? addImageWatermark.error) as
+                  | Error
+                  | null
+                  | undefined
+              )?.message ?? "Échec du filigrane."}
             </p>
           )}
 
@@ -266,12 +419,10 @@ export function WatermarkDialog({
             </button>
             <button
               type="submit"
-              disabled={!currentFile || !text.trim() || addWatermark.isPending}
+              disabled={isDisabled}
               className="px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
             >
-              {addWatermark.isPending && (
-                <Loader2 size={14} className="animate-spin" />
-              )}
+              {isPending && <Loader2 size={14} className="animate-spin" />}
               Appliquer
             </button>
           </div>
