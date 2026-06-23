@@ -569,18 +569,33 @@ export default function EditorPage() {
   // Activate a page in the continuous scroller: it becomes the focused page
   // (editable overlay) and drives the page-scoped panels + selection store.
   // Cheap and idempotent — safe to call on every click.
+  //
+  // SELECTION CLOBBER FIX: the PageSlot root <div> fires this via its React
+  // `onMouseDown`, which (React 19 root delegation) runs AFTER Fabric's native
+  // `selection:created` for the SAME physical click has already written the
+  // clicked element into the selection store. So clearing the selection here
+  // unconditionally wiped the selection a click just made — the Properties /
+  // layer panels stayed empty even though Fabric drew the blue handles. We
+  // therefore only reset the selection when the page ACTUALLY changes (stale
+  // selection from the previously-focused page): re-activating the already-
+  // active page must leave the just-made selection intact. On the active page,
+  // selection is owned by Fabric's own events (`selection:created/cleared` →
+  // `handleSelectionChanged`), which correctly clears on empty-space clicks.
   const activatePage = useCallback(
     (index: number) => {
+      const pageChanged = index !== activePageIndex;
       setActivePageIndex(index);
       setCanvasCurrentPage(index);
       const page = pages[index];
-      if (page) {
-        // Keep the selection store's page in sync so panel selection logic and
-        // the next element-create target resolve to the right page.
+      // Only when focusing a DIFFERENT page: drop the prior page's (now stale)
+      // selection and re-point the store at the newly active page. For a click
+      // on the already-active page this is skipped so the element the click is
+      // selecting (set by Fabric in the same tick) survives.
+      if (pageChanged && page) {
         selectElements([], page.pageId);
       }
     },
-    [setActivePageIndex, setCanvasCurrentPage, pages, selectElements]
+    [activePageIndex, setActivePageIndex, setCanvasCurrentPage, pages, selectElements]
   );
 
   // ── Cross-session layer persistence (P2b) ─────────────────────────────────
@@ -1630,11 +1645,18 @@ export default function EditorPage() {
     (elementIds: string[]) => {
       if (elementIds.length === 0) {
         clearSelection();
-      } else if (currentPage) {
-        selectElements(elementIds, currentPage.pageId);
+      } else if (effectivePage) {
+        // Tag the selection with the page the editable canvas actually shows
+        // (= effectivePage: the focused page in continuous mode, currentPage in
+        // single mode). Using currentPage here was wrong in continuous mode when
+        // useDocument's pointer hadn't caught up to the just-focused page yet —
+        // the selection got the previous page's id, desyncing the store's
+        // selectedPageId from the displayed page. effectivePage drives
+        // selectedElements too, so the two stay consistent.
+        selectElements(elementIds, effectivePage.pageId);
       }
     },
-    [currentPage, selectElements, clearSelection]
+    [effectivePage, selectElements, clearSelection]
   );
 
   // Word-like partial formatting: the canvas reports the live style of the
