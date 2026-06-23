@@ -76,7 +76,7 @@ export const SOLUTIONS: SolutionData[] = [
           "GigaPDF indexes document content in full text — including scans that went through OCR. Search a name, a date, or a phrase: every exhibit containing it surfaces, wherever it's filed. Matter folders and tags complete the safety net.",
       },
     ],
-    relatedTools: ["sign-pdf", "protect-pdf", "pdf-a", "ocr-pdf", "edit-pdf"],
+    relatedTools: ["redact-pdf", "sign-pdf", "protect-pdf", "ocr-pdf", "edit-pdf"],
     icon: "scale",
   },
   {

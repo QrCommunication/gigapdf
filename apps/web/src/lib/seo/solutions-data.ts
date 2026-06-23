@@ -96,7 +96,7 @@ export const SOLUTIONS: SolutionData[] = [
           "La GED de GigaPDF indexe le contenu des documents en texte intégral — y compris les scans passés à l'OCR. Recherchez un nom, une date ou une expression : les pièces qui la contiennent remontent, où qu'elles soient classées. Les dossiers et tags par affaire complètent ce filet de recherche.",
       },
     ],
-    relatedTools: ["signer-pdf", "proteger-pdf", "pdf-a", "ocr-pdf", "editer-pdf"],
+    relatedTools: ["caviarder-pdf", "signer-pdf", "proteger-pdf", "ocr-pdf", "editer-pdf"],
     icon: "scale",
   },
   {

@@ -49,7 +49,7 @@ export default function PrivacyContent() {
         </div>
       </section>
 
-      {/* Privacy by design — client-side OCR + local embeddings */}
+      {/* Privacy by design — server-side OCR (own infra, no third party) + local embeddings */}
       <section className="mb-12">
         <div className="flex items-center gap-3 mb-4 not-prose">
           <div className="w-10 h-10 rounded-lg bg-terminal-green/10 flex items-center justify-center">
@@ -60,8 +60,8 @@ export default function PrivacyContent() {
         <p className="text-muted-foreground leading-relaxed">{t("processing.description")}</p>
         <div className="grid gap-4 md:grid-cols-3 not-prose mt-6">
           <div className="rounded-xl border border-border bg-card/50 p-5">
-            <h4 className="font-semibold mb-2">{t("processing.clientSide.title")}</h4>
-            <p className="text-sm text-muted-foreground">{t("processing.clientSide.description")}</p>
+            <h4 className="font-semibold mb-2">{t("processing.serverSideOcr.title")}</h4>
+            <p className="text-sm text-muted-foreground">{t("processing.serverSideOcr.description")}</p>
           </div>
           <div className="rounded-xl border border-border bg-card/50 p-5">
             <h4 className="font-semibold mb-2">{t("processing.localAi.title")}</h4>

@@ -6,6 +6,7 @@ import {
   Binary,
   Check,
   FileSignature,
+  Files,
   FileType2,
   FormInput,
   Globe,
@@ -64,10 +65,10 @@ export async function generateMetadata({
 }
 
 /**
- * Les onze sections détaillées du moteur. Chaque entrée mappe une sous-clé i18n
+ * Les douze sections détaillées du moteur. Chaque entrée mappe une sous-clé i18n
  * (engine.sections.<key>) à son icône et à la liste ordonnée de ses points
  * (engine.sections.<key>.points.<point>). L'ordre fait foi pour la numérotation
- * « 01 → 11 » façon cahier d'impression.
+ * « 01 → 12 » façon cahier d'impression.
  */
 const SECTIONS: ReadonlyArray<{
   key: string;
@@ -75,14 +76,15 @@ const SECTIONS: ReadonlyArray<{
   points: readonly string[];
 }> = [
   { key: "core", icon: Binary, points: ["lowLevel", "flate", "wasm", "souverain"] },
-  { key: "edit", icon: PenLine, points: ["realEdit", "inPlace", "restyle", "opacity", "stacking", "trueDelete", "redaction", "fidelity"] },
+  { key: "edit", icon: PenLine, points: ["realEdit", "inPlace", "restyle", "tables", "lists", "opacity", "stacking", "trueDelete", "redaction", "fidelity"] },
+  { key: "pages", icon: Files, points: ["rotate", "assemble", "headers", "links", "metadata"] },
   { key: "render", icon: ImageIcon, points: ["vector", "glyphs", "selective", "previews", "images"] },
   { key: "forms", icon: FormInput, points: ["types", "fill", "flatten", "fidelity"] },
   { key: "annotations", icon: Highlighter, points: ["markup", "notes", "stamps", "standard"] },
   { key: "fonts", icon: Type, points: ["identify", "download", "embed", "cmap"] },
   { key: "security", icon: ShieldCheck, points: ["encryption", "signature", "tamper", "archive"] },
   { key: "html", icon: Globe, points: ["css", "fonts", "js", "noThirdParty"] },
-  { key: "convert", icon: FileType2, points: ["office", "editable", "web", "fidelity"] },
+  { key: "convert", icon: FileType2, points: ["office", "formats", "editable", "web", "fidelity"] },
   { key: "ocr", icon: ScanText, points: ["recognize", "serverSide", "layer", "searchable", "preserve"] },
   { key: "privacy", icon: FileSignature, points: ["free", "oss", "serverSide", "localAi", "noThirdParty", "selfHost"] },
 ] as const;
@@ -111,6 +113,7 @@ const OCR_LANG_CHIPS: readonly string[] = [
   "indic",
   "cjk",
   "print",
+  "handwriting",
 ] as const;
 
 /** Étapes du front-end de restauration automatique (engine.ocrSection.restore.steps.<key>). */
