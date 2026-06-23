@@ -21,9 +21,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Document library — automatic conversion on import**: images and RTF files
   are converted to PDF as they are added, and a one-click **OCR** action makes
   scanned documents searchable.
+- **Image watermarks** — stamp a logo or picture across the pages (not just
+  text), from both the watermark tool and the editor.
+- **Timestamped digital signatures (PAdES-B-T)** — add an eIDAS advanced
+  electronic signature sealed with a trusted RFC 3161 timestamp (FreeTSA),
+  proving when a document was signed.
+- **List-box form fields** — create multi-choice list boxes when building
+  interactive PDF forms, alongside text fields, checkboxes, radios and dropdowns.
+- **Editor — rulers and draggable margin guides** (Word-style) in single-page
+  view.
 
 ### Changed
-- **Faithful document conversion, powered by gigapdf-lib 0.68.** Office imports
+- **Faithful document conversion, powered by gigapdf-lib 0.69.** Office imports
   (DOCX/XLSX/PPTX/ODT/ODS/ODP) preserve images, hyperlinks, styles, spreadsheet
   formulas and tables; the HTML→PDF renderer covers full CSS; image handling
   adds WebP, AVIF, SVG and GIF; and text is laid out with OpenType shaping for
