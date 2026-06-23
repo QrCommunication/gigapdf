@@ -27,7 +27,7 @@
  */
 
 import type { TableEdit, TableStructureInfo } from "@giga-pdf/api";
-import type { TableEditAction } from "../table-edit-overlay";
+import type { TableEditAction, TableStyleAction } from "../table-edit-overlay";
 
 /** The selected table's identity + grid size, enough to resolve an action. */
 export interface TableEditTarget {
@@ -88,6 +88,46 @@ export function actionToTableEdit(
     case "deleteColumn":
       if (colCount <= 1) return null;
       return { ...base, kind: "deleteColumn", at: col ?? colCount - 1 };
+  }
+}
+
+/**
+ * Build the positional engine {@link TableEdit} for a table STYLE action
+ * (shading, row height, column width, border, cell span). Unlike the grid
+ * {@link actionToTableEdit}, the {@link TableStyleAction} already carries its
+ * value(s) and target cell/row/column — this only stamps the table's
+ * `(pageNumber, tableIndexOnPage)` handle onto it. Pure & deterministic.
+ */
+export function styleActionToTableEdit(
+  target: Pick<TableEditTarget, "pageNumber" | "tableIndexOnPage">,
+  action: TableStyleAction,
+): TableEdit {
+  const { pageNumber, tableIndexOnPage } = target;
+  const base = { pageNumber, tableIndexOnPage } as const;
+  switch (action.kind) {
+    case "setCellShading":
+      return {
+        ...base,
+        kind: "setCellShading",
+        row: action.row,
+        col: action.col,
+        color: action.color,
+      };
+    case "setRowHeight":
+      return { ...base, kind: "setRowHeight", row: action.row, height: action.height };
+    case "setColWidth":
+      return { ...base, kind: "setColWidth", col: action.col, width: action.width };
+    case "setTableBorder":
+      return { ...base, kind: "setTableBorder", border: action.border };
+    case "setCellSpan":
+      return {
+        ...base,
+        kind: "setCellSpan",
+        row: action.row,
+        col: action.col,
+        colSpan: action.colSpan,
+        rowSpan: action.rowSpan,
+      };
   }
 }
 

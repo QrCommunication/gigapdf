@@ -83,7 +83,7 @@
       "description": "Discover the GigaPDF in-house PDF engine: low-level read/write, real content editing, high-fidelity rendering, forms, digital signing, OCR and Office conversion. Compiled to WebAssembly, with no third-party PDF, Office or image library."
     },
     "hero": {
-      "kicker": "The in-house PDF engine — gigapdf-lib 0.58.1",
+      "kicker": "The in-house PDF engine — gigapdf-lib 0.67.0",
       "title": "A complete PDF engine,",
       "titleAccent": "written from scratch.",
       "description": "Most PDF tools stitch together third-party building blocks. GigaPDF took the opposite path: a full PDF engine, designed and written in-house, that reads, writes, edits, renders, signs and converts your documents. 100% in-house, no third-party PDF, Office or image library — that is what makes faithful editing and sovereign processing possible.",
@@ -115,11 +115,25 @@
           "realEdit": "Real editing of text, shapes and images: adding, moving, resizing, rotating and reformatting directly inside the page content.",
           "inPlace": "In-place, lossless transforms: every element — text, image or shape — is moved or scaled via an affine transform, with no re-compression of images and no re-drawing of vectors.",
           "restyle": "Vector shape restyling: fill, stroke colour, stroke width and dash pattern edited and written back into the page.",
+          "tables": "Editable tables: insert or delete rows and columns, merge cells, set borders and shading — including tables reconstructed from an existing PDF.",
+          "lists": "Bulleted and numbered lists: indent levels, markers and numbering handled natively.",
           "opacity": "Per-element opacity and transparency, applied through the PDF's own graphics state (ExtGState).",
           "stacking": "Stacking order written into the document: bring to front / send to back is preserved when the file is reopened.",
           "trueDelete": "True object deletion: erased content disappears from the file, not hidden under a mask — no ghost data remains.",
           "redaction": "Evidence-grade redaction: redacted text and images are removed from the document irreversibly.",
           "fidelity": "Original layout preserved: changes blend into the document without breaking its structure."
+        }
+      },
+      "pages": {
+        "label": "Pages & assembly",
+        "title": "Assemble, reorder and enrich pages",
+        "description": "Beyond content, the engine manipulates the document's structure: pages, links, outline and metadata are all handled natively, with no external tool.",
+        "points": {
+          "rotate": "Rotate, resize, move, duplicate, insert or delete any page.",
+          "assemble": "Merge several PDFs and extract a selection of pages into a new document.",
+          "headers": "Word-style headers and footers with automatic page numbering, baked into the layout.",
+          "links": "Hyperlinks (URLs and internal navigation), bookmarks and outline reconstructed and preserved.",
+          "metadata": "Document metadata — title, author, subject, keywords — read and editable."
         }
       },
       "render": {
@@ -172,7 +186,7 @@
         "title": "Encryption, signing and archiving",
         "description": "Protect a document, prove its integrity, keep it over time: the engine handles encryption, digital signing and archival compliance end to end.",
         "points": {
-          "encryption": "Document encryption in RC4 and AES (128 and 256 bits), built on the audited RustCrypto crates: password protection and permission control.",
+          "encryption": "AES-256 and AES-128 document encryption (with backward-compatible reading of RC4-protected PDFs), built on the audited RustCrypto crates: password protection and permission control.",
           "signature": "PKCS#7 digital signing with a certificate: a verifiable proof of integrity, the way major PDF viewers do it.",
           "tamper": "Any tampering with a signed document is detectable — trust is demonstrable.",
           "archive": "Long-term archival compliance (PDF/A) to preserve your documents over time."
@@ -194,7 +208,8 @@
         "title": "Convert to truly editable documents",
         "description": "The in-house conversion engine doesn't just take a picture of the page: it rebuilds genuinely editable documents, with selectable text, tables and repositioned images.",
         "points": {
-          "office": "Conversion between PDF and office formats: Word (DOCX), Excel (XLSX), PowerPoint (PPTX) and OpenDocument (ODT, ODS).",
+          "office": "Conversion between PDF and office formats: Word (DOCX), Excel (XLSX), PowerPoint (PPTX) and OpenDocument (ODT, ODS, ODP).",
+          "formats": "Import RTF, HTML, Markdown, CSV and plain text, plus JPEG, PNG, GIF, WebP and AVIF images — all converted to PDF by the engine.",
           "editable": "Genuinely editable elements in the output — text, tables, images — not a flat scan.",
           "web": "Export to HTML and plain text to reuse the content elsewhere.",
           "fidelity": "Structure and formatting preserved as faithfully as possible from one format to another."
@@ -229,11 +244,11 @@
     "ocrSection": {
       "label": "OCR · Coverage",
       "title": "Strong recognition across many scripts",
-      "description": "Our in-house OCR is built on the PaddleOCR models (PP-OCRv3/v4) and runs server-side, on our own infrastructure, with no Tesseract binary and no third-party recognition service. It is designed for printed text and is strongest on Latin scripts.",
+      "description": "Our OCR is built on the state-of-the-art PaddleOCR models (PP-OCRv3/v4), run through an in-house runtime server-side — with no Tesseract binary and no third-party recognition service. Printed: Latin (English, French, German, Spanish, Italian, Portuguese…), Cyrillic (Russian, Ukrainian…), Arabic, Hebrew (a model we trained ourselves), Devanagari (Hindi, Marathi…), Tamil, Telugu, Kannada, Chinese (Simplified and Traditional), Japanese and Korean. Handwriting, on demand: Latin (French included), Cyrillic and Greek.",
       "results": {
         "label": "Supported scripts",
         "title": "Scripts we recognize",
-        "lead": "A model family covering the world's major scripts — printed text.",
+        "lead": "Thirteen printed-text recognizers — twelve PaddleOCR scripts plus a Hebrew model we trained ourselves — rounded out by handwriting on demand.",
         "table": {
           "script": "Script",
           "languages": "Languages / examples",
@@ -243,7 +258,7 @@
           "latin": {
             "script": "Extended Latin",
             "languages": "French, English, German, Spanish, Italian, Portuguese…",
-            "verdict": "Strongest"
+            "verdict": "Broadest coverage"
           },
           "cyrillic": {
             "script": "Cyrillic",
@@ -252,7 +267,7 @@
           },
           "rtl": {
             "script": "Arabic / Hebrew (RTL)",
-            "languages": "Arabic; Hebrew (being finalized)",
+            "languages": "Arabic; Hebrew (dedicated model, trained in-house)",
             "verdict": "Supported"
           },
           "indic": {
@@ -266,7 +281,7 @@
             "verdict": "Supported"
           }
         },
-        "note": "Honest framing: a dependency-free OCR engine, running server-side, designed for printed text and most accurate on Latin scripts. It also reads Latin handwriting on demand (never auto-detected); other scripts remain limited to printed text. On very degraded or very dense scans, Tesseract's breadth can still have the edge."
+        "note": "Honest framing: a dependency-free OCR engine built on the state-of-the-art PaddleOCR models, running server-side on our own infrastructure. It also reads Latin (French included), Cyrillic and Greek handwriting on demand (never auto-detected); other scripts remain limited to printed text."
       },
       "langs": {
         "label": "Language coverage",
@@ -281,7 +296,8 @@
           "devanagari": "Devanagari (Hindi…)",
           "indic": "Telugu · Kannada",
           "cjk": "CJK (Simpl./Trad. Chinese, Japanese, Korean)",
-          "print": "Printed text"
+          "print": "Printed text",
+          "handwriting": "Latin (FR…), Cyrillic, Greek handwriting — on demand"
         }
       },
       "restore": {
@@ -414,6 +430,7 @@
           "fonts": "Faithful fonts: originals are identified, fetched from Google Fonts and embedded automatically",
           "formatting": "Real formatting — bold, italic, underline, alignment, size and color",
           "shapeStyling": "Restyle vector shapes: fill, stroke color, stroke width and dash pattern",
+          "tables": "Editable tables — insert or delete rows and columns, merge cells; bulleted and numbered lists",
           "opacity": "Element opacity and transparency, baked into the PDF",
           "stacking": "Stacking order — bring to front or send to back, saved in the PDF itself",
           "layers": "Layers to organize text, images and shapes — create, rename, lock and hide, kept across sessions",
@@ -449,7 +466,7 @@
         "title": "Everything in. Everything out.",
         "description": "Word, Excel, PowerPoint, OpenDocument: 9 formats import to PDF — and the way back works too.",
         "points": {
-          "imports": "Import 9 Office and OpenDocument formats: DOCX, XLSX, PPTX, ODT, ODS, ODP, RTF, TXT, HTML",
+          "imports": "Import Office and OpenDocument formats (DOCX, XLSX, PPTX, ODT, ODS, ODP), plus RTF, TXT, HTML, Markdown, CSV and images",
           "exports": "Export to DOCX, XLSX, PPTX, ODT, ODP — plus PNG, JPEG, HTML",
           "compression": "Smart compression: lighter files with no visible quality loss"
         }
@@ -1600,6 +1617,11 @@
       "listNumbered": "Numbered list",
       "indentIncrease": "Increase indent",
       "indentDecrease": "Decrease indent",
+      "paragraphSpacing": "Paragraph spacing & indents",
+      "indentRight": "Right indent",
+      "firstLineIndent": "First-line indent",
+      "spaceBefore": "Space before",
+      "spaceAfter": "Space after",
       "rectangle": "Rectangle",
       "circle": "Circle",
       "triangle": "Triangle",
@@ -1908,6 +1930,14 @@
       "deleteRow": "Delete row",
       "deleteColumn": "Delete column",
       "atCell": "cell row {row}, column {col}",
+      "tableStyle": "Table style",
+      "mergeCells": "Merge cells",
+      "cellShading": "Cell shading",
+      "cellShadingClear": "Clear shading",
+      "rowHeight": "Row height",
+      "columnWidth": "Column width",
+      "tableBorder": "Table border",
+      "apply": "Apply",
       "toasts": {
         "applied": "Table updated",
         "failed": "Table edit failed"
@@ -2177,7 +2207,7 @@
       "processing": {
         "title": "Privacy by design",
         "description": "GigaPDF is built around an in-house PDF engine that processes your documents on our own infrastructure, without relying on any third-party service. Processing your documents' content is designed to stay private.",
-        "clientSide": {
+        "serverSideOcr": {
           "title": "OCR and text extraction on our infrastructure",
           "description": "Optical character recognition (OCR) and text extraction run server-side, on our own infrastructure: the image or PDF is never sent to a third-party recognition service. The extracted text is then stored to make your documents searchable (full-text and semantic search), with the embeddings computed locally on our infrastructure."
         },

@@ -33,6 +33,12 @@
  *   { pageNumber, tableIndexOnPage, kind: 'insertRow'|'deleteRow'|
  *     'insertColumn'|'deleteColumn', at: number }
  *   { pageNumber, tableIndexOnPage, kind: 'setCellSpan', row, col, colSpan, rowSpan }
+ *   { pageNumber, tableIndexOnPage, kind: 'setCellShading', row, col,
+ *     color: [r,g,b] (0..1) | null }
+ *   { pageNumber, tableIndexOnPage, kind: 'setRowHeight', row, height }
+ *   { pageNumber, tableIndexOnPage, kind: 'setColWidth', col, width }
+ *   { pageNumber, tableIndexOnPage, kind: 'setTableBorder',
+ *     border: { width, color: [r,g,b] (0..1) } }
  *
  * At least one of `paragraphs` / `lists` / `tableOps` must contain an edit.
  * Returns the modified PDF as application/pdf binary.
@@ -90,6 +96,22 @@ function isPositiveInt(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1;
 }
 
+/** A finite non-negative number (a row height / column width in points). */
+function isNonNegativeNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+/** An RGB triple of finite `0..1` channels (engine colour space). */
+function isRgbColor(value: unknown): value is [number, number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    value.every(
+      (c) => typeof c === 'number' && Number.isFinite(c) && c >= 0 && c <= 1,
+    )
+  );
+}
+
 /**
  * Validate + narrow the raw `tableOps` edits. Tables are addressed positionally:
  * a 1-based `pageNumber` + 0-based `tableIndexOnPage`. `insert*`/`delete*` carry a
@@ -140,8 +162,64 @@ function parseTableEdits(raw: unknown[]): TableEdit[] {
       }
       return e as unknown as TableEdit;
     }
+    if (e.kind === 'setCellShading') {
+      const shade = e as { row?: unknown; col?: unknown; color?: unknown };
+      if (!isNonNegativeInt(shade.row) || !isNonNegativeInt(shade.col)) {
+        throw new Error(
+          `tableOps[${i}].row and .col must be non-negative integers.`,
+        );
+      }
+      // `null` clears the shading; otherwise an RGB 0..1 triple is required.
+      if (shade.color !== null && !isRgbColor(shade.color)) {
+        throw new Error(
+          `tableOps[${i}].color must be an RGB triple of 0..1 numbers, or null.`,
+        );
+      }
+      return e as unknown as TableEdit;
+    }
+    if (e.kind === 'setRowHeight') {
+      const rh = e as { row?: unknown; height?: unknown };
+      if (!isNonNegativeInt(rh.row)) {
+        throw new Error(`tableOps[${i}].row must be a non-negative integer.`);
+      }
+      if (!isNonNegativeNumber(rh.height)) {
+        throw new Error(
+          `tableOps[${i}].height must be a non-negative number.`,
+        );
+      }
+      return e as unknown as TableEdit;
+    }
+    if (e.kind === 'setColWidth') {
+      const cw = e as { col?: unknown; width?: unknown };
+      if (!isNonNegativeInt(cw.col)) {
+        throw new Error(`tableOps[${i}].col must be a non-negative integer.`);
+      }
+      if (!isNonNegativeNumber(cw.width)) {
+        throw new Error(`tableOps[${i}].width must be a non-negative number.`);
+      }
+      return e as unknown as TableEdit;
+    }
+    if (e.kind === 'setTableBorder') {
+      const border = (e as { border?: unknown }).border as
+        | { width?: unknown; color?: unknown }
+        | undefined;
+      if (!border || typeof border !== 'object') {
+        throw new Error(`tableOps[${i}].border must be an object.`);
+      }
+      if (!isNonNegativeNumber(border.width)) {
+        throw new Error(
+          `tableOps[${i}].border.width must be a non-negative number.`,
+        );
+      }
+      if (!isRgbColor(border.color)) {
+        throw new Error(
+          `tableOps[${i}].border.color must be an RGB triple of 0..1 numbers.`,
+        );
+      }
+      return e as unknown as TableEdit;
+    }
     throw new Error(
-      `tableOps[${i}].kind must be one of insertRow|deleteRow|insertColumn|deleteColumn|setCellSpan.`,
+      `tableOps[${i}].kind must be one of insertRow|deleteRow|insertColumn|deleteColumn|setCellSpan|setCellShading|setRowHeight|setColWidth|setTableBorder.`,
     );
   });
 }

@@ -71,6 +71,31 @@ export interface TextStyle {
    */
   indentLeft?: number;
   /**
+   * Optional right indentation of the paragraph, in PDF points. Absent ⇒ 0.
+   * Narrows the text box from the right edge. Additive / backward-compatible;
+   * bakes natively via `setParagraphStyle` (`indent_right`).
+   */
+  indentRight?: number;
+  /**
+   * Optional first-line indent of the paragraph, in PDF points. Positive ⇒ the
+   * first line is indented further than the rest; negative ⇒ a hanging indent
+   * (first line outdented). Absent ⇒ 0. Additive / backward-compatible; bakes
+   * natively via `setParagraphStyle` (`first_line`).
+   */
+  firstLine?: number;
+  /**
+   * Optional spacing ABOVE the paragraph, in PDF points. Absent ⇒ 0. Adds
+   * vertical room before the paragraph's first line. Additive /
+   * backward-compatible; bakes natively via `setParagraphStyle` (`space_before`).
+   */
+  spaceBefore?: number;
+  /**
+   * Optional spacing BELOW the paragraph, in PDF points. Absent ⇒ 0. Adds
+   * vertical room after the paragraph's last line. Additive /
+   * backward-compatible; bakes natively via `setParagraphStyle` (`space_after`).
+   */
+  spaceAfter?: number;
+  /**
    * Bidirectional reading direction of the run. Surfaced by the engine
    * (`GigaPdfDoc.textElements().direction`) from the script of the text so the
    * canvas (Fabric `direction`) and the layer properties panel (`dir`) edit

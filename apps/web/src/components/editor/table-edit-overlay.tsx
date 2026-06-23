@@ -28,7 +28,7 @@
  * (the rest is `pointer-events-none`), so it never steals clicks from the page.
  */
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   ArrowUpToLine,
@@ -36,6 +36,9 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   Trash2,
+  Combine,
+  PaintBucket,
+  ChevronDown,
 } from "lucide-react";
 import type { TableStructureInfo } from "@giga-pdf/api";
 
@@ -47,6 +50,37 @@ export type TableEditAction =
   | "insertColumnRight"
   | "deleteRow"
   | "deleteColumn";
+
+/**
+ * A table STYLE action carrying its value(s). Distinct from the grid
+ * {@link TableEditAction} (which is a bare string resolved positionally): each
+ * style action targets a specific cell/row/column/table and carries the new
+ * value, so it maps directly to a `setCellShading` / `setRowHeight` /
+ * `setColWidth` / `setTableBorder` / `setCellSpan` bake.
+ */
+export type TableStyleAction =
+  | {
+      kind: "setCellShading";
+      /** 0-based cell row in `rows`. */
+      row: number;
+      /** 0-based cell index in `rows[row].cells`. */
+      col: number;
+      /** RGB `0..1` shading, or `null` to clear it. */
+      color: [number, number, number] | null;
+    }
+  | { kind: "setRowHeight"; row: number; height: number }
+  | { kind: "setColWidth"; col: number; width: number }
+  | {
+      kind: "setTableBorder";
+      border: { width: number; color: [number, number, number] };
+    }
+  | {
+      kind: "setCellSpan";
+      row: number;
+      col: number;
+      colSpan: number;
+      rowSpan: number;
+    };
 
 export interface TableEditOverlayProps {
   /** Tables on THIS page (already filtered to `pageNumber`), in reading order. */
@@ -72,6 +106,8 @@ export interface TableEditOverlayProps {
   onSelectTable: (tableIndexOnPage: number | null) => void;
   /** Run an add/remove action on the selected table. */
   onAction: (tableIndexOnPage: number, action: TableEditAction) => void;
+  /** Run a STYLE action (cell shading, row/col size, border, span) on a table. */
+  onStyleAction: (tableIndexOnPage: number, action: TableStyleAction) => void;
   /** Disables the toolbar buttons while a bake is in flight. */
   busy?: boolean;
 }
@@ -166,6 +202,245 @@ function ToolbarButton({
   );
 }
 
+/** Default stroke colour (black) used when first setting a table border. */
+const DEFAULT_BORDER_COLOR = "#000000";
+/** Default cell shading colour offered by the picker (light yellow). */
+const DEFAULT_SHADE_COLOR = "#fff2a8";
+
+/** Parse a `#rrggbb` hex string to an RGB `0..1` triple (engine colour space). */
+function hexToRgb01(hex: string): [number, number, number] {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m?.[1]) return [0, 0, 0];
+  const n = Number.parseInt(m[1], 16);
+  return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
+}
+
+/**
+ * The table STYLE popover: merge cells, cell shading, row height, column width
+ * and table border. Cell-scoped controls (merge, shading, row height, column
+ * width) require an `activeCell`; the table border always applies. Each control
+ * fires `onStyleAction`, which bakes the matching model op and re-parses.
+ */
+function TableStyleMenu({
+  tableIndexOnPage,
+  activeCell,
+  colCount,
+  onStyleAction,
+  busy,
+}: {
+  tableIndexOnPage: number;
+  activeCell: { row: number; col: number } | null;
+  colCount: number;
+  onStyleAction: (tableIndexOnPage: number, action: TableStyleAction) => void;
+  busy: boolean;
+}) {
+  const t = useTranslations("editor.tableEdit");
+  const [open, setOpen] = useState(false);
+  const [borderWidth, setBorderWidth] = useState(1);
+  const [borderColor, setBorderColor] = useState(DEFAULT_BORDER_COLOR);
+  const [rowHeight, setRowHeight] = useState(20);
+  const [colWidth, setColWidth] = useState(80);
+
+  const fire = (action: TableStyleAction) =>
+    onStyleAction(tableIndexOnPage, action);
+
+  // Merge needs a cell AND a right-hand neighbour to span into.
+  const canMerge = activeCell != null && activeCell.col < colCount - 1;
+  const cellDisabled = busy || activeCell == null;
+
+  return (
+    <div
+      className="relative"
+      // Keep the menu open while interacting; closing is by the toggle / blur.
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        title={t("tableStyle")}
+        aria-label={t("tableStyle")}
+        onClick={() => setOpen((v) => !v)}
+        disabled={busy}
+        className="flex h-7 items-center justify-center gap-0.5 rounded px-1 text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <PaintBucket size={15} />
+        <ChevronDown size={11} />
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-full z-40 mt-1 w-60 rounded-lg border border-border bg-background p-2 shadow-xl">
+          {/* Merge cells (active cell + right neighbour → colSpan 2) */}
+          <button
+            type="button"
+            disabled={!canMerge}
+            onClick={() => {
+              if (!activeCell) return;
+              fire({
+                kind: "setCellSpan",
+                row: activeCell.row,
+                col: activeCell.col,
+                colSpan: 2,
+                rowSpan: 1,
+              });
+            }}
+            className="mb-1 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Combine size={14} />
+            {t("mergeCells")}
+          </button>
+
+          {/* Cell shading — colour picker + clear (cell-scoped) */}
+          <div className="flex items-center justify-between gap-2 px-2 py-1 text-sm">
+            <span className="text-muted-foreground">{t("cellShading")}</span>
+            <span className="flex items-center gap-1">
+              <input
+                type="color"
+                defaultValue={DEFAULT_SHADE_COLOR}
+                disabled={cellDisabled}
+                onChange={(e) => {
+                  if (!activeCell) return;
+                  fire({
+                    kind: "setCellShading",
+                    row: activeCell.row,
+                    col: activeCell.col,
+                    color: hexToRgb01(e.target.value),
+                  });
+                }}
+                className="h-7 w-9 cursor-pointer rounded border bg-background disabled:cursor-not-allowed disabled:opacity-40"
+              />
+              <button
+                type="button"
+                title={t("cellShadingClear")}
+                disabled={cellDisabled}
+                onClick={() => {
+                  if (!activeCell) return;
+                  fire({
+                    kind: "setCellShading",
+                    row: activeCell.row,
+                    col: activeCell.col,
+                    color: null,
+                  });
+                }}
+                className="rounded border px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ×
+              </button>
+            </span>
+          </div>
+
+          {/* Row height (cell-scoped: the active cell's row) */}
+          <div className="flex items-center justify-between gap-2 px-2 py-1 text-sm">
+            <span className="text-muted-foreground">{t("rowHeight")}</span>
+            <span className="flex items-center gap-1">
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={rowHeight}
+                disabled={cellDisabled}
+                onChange={(e) => {
+                  const v = Number.parseFloat(e.target.value);
+                  setRowHeight(Number.isFinite(v) ? Math.max(0, v) : 0);
+                }}
+                className="w-16 rounded border bg-background px-1.5 py-1 text-right text-foreground disabled:opacity-40"
+              />
+              <button
+                type="button"
+                disabled={cellDisabled}
+                onClick={() => {
+                  if (!activeCell) return;
+                  fire({
+                    kind: "setRowHeight",
+                    row: activeCell.row,
+                    height: Math.max(0, rowHeight),
+                  });
+                }}
+                className="rounded border px-1.5 py-1 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {t("apply")}
+              </button>
+            </span>
+          </div>
+
+          {/* Column width (cell-scoped: the active cell's column) */}
+          <div className="flex items-center justify-between gap-2 px-2 py-1 text-sm">
+            <span className="text-muted-foreground">{t("columnWidth")}</span>
+            <span className="flex items-center gap-1">
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={colWidth}
+                disabled={cellDisabled}
+                onChange={(e) => {
+                  const v = Number.parseFloat(e.target.value);
+                  setColWidth(Number.isFinite(v) ? Math.max(0, v) : 0);
+                }}
+                className="w-16 rounded border bg-background px-1.5 py-1 text-right text-foreground disabled:opacity-40"
+              />
+              <button
+                type="button"
+                disabled={cellDisabled}
+                onClick={() => {
+                  if (!activeCell) return;
+                  fire({
+                    kind: "setColWidth",
+                    col: activeCell.col,
+                    width: Math.max(0, colWidth),
+                  });
+                }}
+                className="rounded border px-1.5 py-1 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {t("apply")}
+              </button>
+            </span>
+          </div>
+
+          {/* Table border — width + colour (whole-table; always available) */}
+          <div className="mt-1 flex items-center justify-between gap-2 border-t border-border px-2 pt-2 text-sm">
+            <span className="text-muted-foreground">{t("tableBorder")}</span>
+            <span className="flex items-center gap-1">
+              <input
+                type="number"
+                min={0}
+                step={0.5}
+                value={borderWidth}
+                disabled={busy}
+                onChange={(e) => {
+                  const v = Number.parseFloat(e.target.value);
+                  setBorderWidth(Number.isFinite(v) ? Math.max(0, v) : 0);
+                }}
+                className="w-14 rounded border bg-background px-1.5 py-1 text-right text-foreground disabled:opacity-40"
+              />
+              <input
+                type="color"
+                value={borderColor}
+                disabled={busy}
+                onChange={(e) => setBorderColor(e.target.value)}
+                className="h-7 w-9 cursor-pointer rounded border bg-background disabled:opacity-40"
+              />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  fire({
+                    kind: "setTableBorder",
+                    border: {
+                      width: Math.max(0, borderWidth),
+                      color: hexToRgb01(borderColor),
+                    },
+                  })
+                }
+                className="rounded border px-1.5 py-1 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {t("apply")}
+              </button>
+            </span>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * The floating add/remove toolbar, positioned just above a table's screen rect
  * (or below it when the table starts near the top of the sheet so the toolbar
@@ -174,18 +449,22 @@ function ToolbarButton({
 function TableToolbar({
   rect,
   tableIndexOnPage,
+  colCount,
   canDeleteRow,
   canDeleteColumn,
   activeCell,
   onAction,
+  onStyleAction,
   busy,
 }: {
   rect: ScreenRect;
   tableIndexOnPage: number;
+  colCount: number;
   canDeleteRow: boolean;
   canDeleteColumn: boolean;
   activeCell: { row: number; col: number } | null;
   onAction: (tableIndexOnPage: number, action: TableEditAction) => void;
+  onStyleAction: (tableIndexOnPage: number, action: TableStyleAction) => void;
   busy: boolean;
 }) {
   const t = useTranslations("editor.tableEdit");
@@ -252,6 +531,14 @@ function TableToolbar({
       >
         <ArrowRightToLine size={15} className="rotate-90" />
       </ToolbarButton>
+      <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
+      <TableStyleMenu
+        tableIndexOnPage={tableIndexOnPage}
+        activeCell={activeCell}
+        colCount={colCount}
+        onStyleAction={onStyleAction}
+        busy={busy}
+      />
     </div>
   );
 }
@@ -271,6 +558,7 @@ export function TableEditOverlay({
   activeCell,
   onSelectTable,
   onAction,
+  onStyleAction,
   busy = false,
 }: TableEditOverlayProps) {
   const t = useTranslations("editor.tableEdit");
@@ -335,10 +623,12 @@ export function TableEditOverlay({
         <TableToolbar
           rect={selected.rect}
           tableIndexOnPage={selected.table.tableIndexOnPage}
+          colCount={selected.table.colCount}
           canDeleteRow={selected.table.rowCount > 1}
           canDeleteColumn={selected.table.colCount > 1}
           activeCell={activeCell}
           onAction={onAction}
+          onStyleAction={onStyleAction}
           busy={busy}
         />
       ) : null}

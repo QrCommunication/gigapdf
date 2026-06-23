@@ -44,6 +44,7 @@ import {
   ListOrdered,
   IndentIncrease,
   IndentDecrease,
+  Pilcrow,
 } from "lucide-react";
 import type { TextElement, TextListStyle, TextStyle } from "@giga-pdf/types";
 
@@ -125,6 +126,48 @@ function Separator() {
   return <div className="w-px h-6 bg-border mx-1" />;
 }
 
+interface ParagraphNumberRowProps {
+  label: string;
+  value: number;
+  /** Allow negative values (a hanging first-line indent). Default false. */
+  allowNegative?: boolean;
+  onCommit: (value: number) => void;
+}
+
+/**
+ * One labelled numeric input (PDF points) inside the paragraph spacing/indent
+ * popover. Commits on change, parsing to a finite number and clamping to ≥ 0
+ * unless `allowNegative` (first-line/hanging indent). A blank/invalid input
+ * commits 0 so the field is always defined.
+ */
+function ParagraphNumberRow({
+  label,
+  value,
+  allowNegative = false,
+  onCommit,
+}: ParagraphNumberRowProps) {
+  return (
+    <label className="flex items-center justify-between gap-2 px-2 py-1 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="flex items-center gap-1">
+        <input
+          type="number"
+          step={1}
+          {...(allowNegative ? {} : { min: 0 })}
+          value={value}
+          onChange={(e) => {
+            const parsed = Number.parseFloat(e.target.value);
+            const next = Number.isFinite(parsed) ? parsed : 0;
+            onCommit(allowNegative ? next : Math.max(0, next));
+          }}
+          className="w-16 rounded border bg-background px-1.5 py-1 text-right text-foreground"
+        />
+        <span className="text-xs text-muted-foreground">pt</span>
+      </span>
+    </label>
+  );
+}
+
 export function FormattingToolbar({
   selectedTextElements,
   onElementStyleChange,
@@ -134,6 +177,8 @@ export function FormattingToolbar({
   const t = useTranslations("editor.toolbar");
   const [showSpacing, setShowSpacing] = useState(false);
   const spacingRef = useRef<HTMLDivElement>(null);
+  const [showParagraph, setShowParagraph] = useState(false);
+  const paragraphRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!showSpacing) return;
@@ -149,6 +194,21 @@ export function FormattingToolbar({
     return () =>
       document.removeEventListener("mousedown", handleClickOutside);
   }, [showSpacing]);
+
+  useEffect(() => {
+    if (!showParagraph) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        paragraphRef.current &&
+        !paragraphRef.current.contains(event.target as Node)
+      ) {
+        setShowParagraph(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () =>
+      document.removeEventListener("mousedown", handleClickOutside);
+  }, [showParagraph]);
 
   // Source of truth for the active states = the primary (first) selection.
   const primary = selectedTextElements[0];
@@ -181,6 +241,12 @@ export function FormattingToolbar({
   const listType = style?.list?.type;
   const listLevel = style?.list?.level ?? 0;
   const indentLeft = style?.indentLeft ?? 0;
+  // Paragraph spacing & precise indents (all PDF points; paragraph-level). The
+  // quick popover edits these as numeric inputs; absent ⇒ 0.
+  const indentRight = style?.indentRight ?? 0;
+  const firstLine = style?.firstLine ?? 0;
+  const spaceBefore = style?.spaceBefore ?? 0;
+  const spaceAfter = style?.spaceAfter ?? 0;
 
   /**
    * Apply a CHARACTER-LEVEL style patch. In partial mode it targets the live
@@ -430,6 +496,46 @@ export function FormattingToolbar({
                 </button>
               );
             })}
+          </div>
+        ) : null}
+      </div>
+
+      <Separator />
+
+      {/* Paragraph spacing & precise indents — quick numeric popover (points) */}
+      <div className="relative" ref={paragraphRef}>
+        <button
+          type="button"
+          onClick={() => setShowParagraph((v) => !v)}
+          title={t("paragraphSpacing")}
+          className="p-2 rounded-lg transition-colors flex items-center gap-0.5 cursor-pointer hover:bg-muted text-muted-foreground hover:text-foreground"
+        >
+          <Pilcrow size={20} />
+          <ChevronDown size={12} />
+        </button>
+        {showParagraph ? (
+          <div className="absolute top-full left-0 mt-1 bg-background border rounded-lg shadow-lg p-1 z-50 min-w-[220px]">
+            <ParagraphNumberRow
+              label={t("indentRight")}
+              value={indentRight}
+              onCommit={(v) => patchAll({ indentRight: v })}
+            />
+            <ParagraphNumberRow
+              label={t("firstLineIndent")}
+              value={firstLine}
+              allowNegative
+              onCommit={(v) => patchAll({ firstLine: v })}
+            />
+            <ParagraphNumberRow
+              label={t("spaceBefore")}
+              value={spaceBefore}
+              onCommit={(v) => patchAll({ spaceBefore: v })}
+            />
+            <ParagraphNumberRow
+              label={t("spaceAfter")}
+              value={spaceAfter}
+              onCommit={(v) => patchAll({ spaceAfter: v })}
+            />
           </div>
         ) : null}
       </div>

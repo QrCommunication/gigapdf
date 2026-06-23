@@ -83,7 +83,7 @@
       "description": "Découvrez le moteur PDF maison de GigaPDF : lecture/écriture bas niveau, édition réelle du contenu, rendu haute fidélité, formulaires, signature numérique, OCR et conversion Office. Compilé en WebAssembly, sans aucune bibliothèque PDF, Office ou image tierce."
     },
     "hero": {
-      "kicker": "Le moteur PDF maison — gigapdf-lib 0.58.1",
+      "kicker": "Le moteur PDF maison — gigapdf-lib 0.67.0",
       "title": "Un moteur PDF complet,",
       "titleAccent": "écrit de zéro.",
       "description": "La plupart des outils PDF assemblent des briques tierces. GigaPDF a fait le choix inverse : un moteur PDF intégral, conçu et écrit en interne, qui lit, écrit, édite, rend, signe et convertit vos documents. 100 % maison, zéro bibliothèque PDF, Office ou image tierce — c'est ce qui rend l'édition fidèle et le traitement souverain possibles.",
@@ -115,11 +115,25 @@
           "realEdit": "Édition réelle du texte, des formes et des images : ajout, déplacement, redimensionnement, rotation et reformatage directement dans le contenu de la page.",
           "inPlace": "Transformations sur place et sans perte : chaque élément — texte, image ou forme — est déplacé ou redimensionné via une transformation affine, sans recompression des images ni redessin des vecteurs.",
           "restyle": "Restyle des formes vectorielles : remplissage, couleur de contour, épaisseur et pointillés modifiés et réécrits dans la page.",
+          "tables": "Tableaux éditables : insérer ou supprimer des lignes et des colonnes, fusionner des cellules, régler bordures et fonds — y compris les tableaux reconstruits depuis un PDF existant.",
+          "lists": "Listes à puces et numérotées : niveaux d'indentation, marqueurs et numérotation gérés nativement.",
           "opacity": "Opacité et transparence par élément, appliquées via l'état graphique propre au PDF (ExtGState).",
           "stacking": "Ordre d'empilement inscrit dans le document : premier ou arrière-plan est préservé à la réouverture du fichier.",
           "trueDelete": "Suppression réelle des objets : le contenu effacé disparaît du fichier, pas masqué sous un cache — aucune donnée fantôme ne subsiste.",
           "redaction": "Caviardage à valeur probante : le texte et les images expurgés sont retirés du document de façon irréversible.",
           "fidelity": "Mise en page d'origine préservée : les modifications s'intègrent au document sans en casser la structure."
+        }
+      },
+      "pages": {
+        "label": "Pages & assemblage",
+        "title": "Assembler, réorganiser et enrichir les pages",
+        "description": "Au-delà du contenu, le moteur manipule la structure du document : pages, liens, sommaire et métadonnées sont gérés nativement, sans outil externe.",
+        "points": {
+          "rotate": "Pivoter, redimensionner, déplacer, dupliquer, insérer ou supprimer n'importe quelle page.",
+          "assemble": "Fusionner plusieurs PDF et extraire une sélection de pages dans un nouveau document.",
+          "headers": "En-têtes et pieds de page façon traitement de texte, avec numérotation automatique, intégrés à la mise en page.",
+          "links": "Liens hypertextes (URL et navigation interne), signets et sommaire reconstruits et préservés.",
+          "metadata": "Métadonnées du document — titre, auteur, sujet, mots-clés — lues et modifiables."
         }
       },
       "render": {
@@ -172,7 +186,7 @@
         "title": "Chiffrement, signature et archivage",
         "description": "Protéger un document, prouver son intégrité, le conserver dans le temps : le moteur gère le chiffrement, la signature numérique et la conformité d'archivage de bout en bout.",
         "points": {
-          "encryption": "Chiffrement des documents en RC4 et AES (128 et 256 bits), via les crates cryptographiques auditées RustCrypto : protection par mot de passe et contrôle des permissions.",
+          "encryption": "Chiffrement des documents en AES-256 et AES-128 (lecture rétrocompatible des PDF protégés en RC4), via les crates cryptographiques auditées RustCrypto : protection par mot de passe et contrôle des permissions.",
           "signature": "Signature numérique PKCS#7 avec certificat : une preuve d'intégrité vérifiable, à la manière des grands lecteurs PDF.",
           "tamper": "Toute altération d'un document signé est détectable — la confiance est démontrable.",
           "archive": "Conformité d'archivage longue durée (PDF/A) pour conserver vos documents dans le temps."
@@ -194,7 +208,8 @@
         "title": "Convertir vers de vrais documents éditables",
         "description": "Le moteur de conversion maison ne se contente pas de prendre une photo de la page : il reconstruit de véritables documents éditables, avec du texte sélectionnable, des tableaux et des images repositionnés.",
         "points": {
-          "office": "Conversion entre PDF et formats bureautiques : Word (DOCX), Excel (XLSX), PowerPoint (PPTX) et OpenDocument (ODT, ODS).",
+          "office": "Conversion entre PDF et formats bureautiques : Word (DOCX), Excel (XLSX), PowerPoint (PPTX) et OpenDocument (ODT, ODS, ODP).",
+          "formats": "Import de RTF, HTML, Markdown, CSV et texte brut, et d'images JPEG, PNG, GIF, WebP et AVIF — toutes converties en PDF par le moteur.",
           "editable": "De vrais éléments éditables en sortie — du texte, des tableaux, des images — et non un simple scan figé.",
           "web": "Export vers HTML et texte brut pour réutiliser le contenu ailleurs.",
           "fidelity": "Structure et mise en forme préservées au mieux d'un format à l'autre."
@@ -229,11 +244,11 @@
     "ocrSection": {
       "label": "OCR · Couverture",
       "title": "Une reconnaissance solide, sur de nombreuses écritures",
-      "description": "Notre OCR maison s'appuie sur les modèles PaddleOCR (PP-OCRv3/v4) et s'exécute côté serveur, sur notre propre infrastructure, sans aucun binaire Tesseract ni service de reconnaissance tiers. Il est conçu pour le texte imprimé et reste le plus solide sur les écritures latines.",
+      "description": "Notre OCR s'appuie sur les modèles PaddleOCR (PP-OCRv3/v4), à l'état de l'art, exécutés via un runtime maison côté serveur — sans aucun binaire Tesseract ni service de reconnaissance tiers. Imprimé : latin (français, anglais, allemand, espagnol, italien, portugais…), cyrillique (russe, ukrainien…), arabe, hébreu (modèle entraîné par nos soins), devanagari (hindi, marathi…), tamoul, télougou, kannada, chinois (simplifié et traditionnel), japonais et coréen. Manuscrit, sur demande : latin (français inclus), cyrillique et grec.",
       "results": {
         "label": "Écritures prises en charge",
         "title": "Les écritures reconnues",
-        "lead": "Une famille de modèles couvrant les principales écritures du monde — texte imprimé.",
+        "lead": "Treize modèles de reconnaissance pour le texte imprimé — douze scripts PaddleOCR plus un modèle hébreu entraîné par nos soins —, complétés par le manuscrit sur demande.",
         "table": {
           "script": "Écriture",
           "languages": "Langues / exemples",
@@ -243,7 +258,7 @@
           "latin": {
             "script": "Latin étendu",
             "languages": "Français, anglais, allemand, espagnol, italien, portugais…",
-            "verdict": "Le plus solide"
+            "verdict": "Couverture maximale"
           },
           "cyrillic": {
             "script": "Cyrillique",
@@ -252,7 +267,7 @@
           },
           "rtl": {
             "script": "Arabe / Hébreu (RTL)",
-            "languages": "Arabe ; hébreu (en cours de finalisation)",
+            "languages": "Arabe ; hébreu (modèle dédié, entraîné par nos soins)",
             "verdict": "Pris en charge"
           },
           "indic": {
@@ -266,7 +281,7 @@
             "verdict": "Pris en charge"
           }
         },
-        "note": "Cadre honnête : un moteur OCR sans dépendance tierce, exécuté côté serveur, conçu pour le texte imprimé et le plus précis sur les écritures latines. Il reconnaît aussi l'écriture manuscrite latine, sur demande (jamais en détection automatique) ; les autres écritures restent limitées au texte imprimé. Sur les scans très dégradés ou très denses, la largeur de Tesseract peut garder l'avantage."
+        "note": "Cadre honnête : un moteur OCR sans dépendance tierce, fondé sur les modèles PaddleOCR (état de l'art) et exécuté côté serveur, sur notre propre infrastructure. Il reconnaît aussi l'écriture manuscrite latine (français inclus), cyrillique et grecque, sur demande (jamais en détection automatique) ; les autres écritures restent limitées au texte imprimé."
       },
       "langs": {
         "label": "Couverture linguistique",
@@ -281,7 +296,8 @@
           "devanagari": "Devanagari (hindi…)",
           "indic": "Télougou · Kannada",
           "cjk": "CJK (chinois simpl./trad., japonais, coréen)",
-          "print": "Texte imprimé"
+          "print": "Texte imprimé",
+          "handwriting": "Manuscrit latin (FR…), cyrillique, grec — sur demande"
         }
       },
       "restore": {
@@ -414,6 +430,7 @@
           "fonts": "Polices fidèles : les polices d'origine sont identifiées, téléchargées depuis Google Fonts et embarquées automatiquement",
           "formatting": "Formatage réel — gras, italique, souligné, alignement, taille et couleur",
           "shapeStyling": "Restyler les formes vectorielles : remplissage, couleur de contour, épaisseur et pointillés",
+          "tables": "Tableaux éditables — insérer ou supprimer des lignes et colonnes, fusionner des cellules ; listes à puces et numérotées",
           "opacity": "Opacité et transparence des éléments, intégrées dans le PDF",
           "stacking": "Ordre d'empilement — premier ou arrière-plan, enregistré dans le PDF lui-même",
           "layers": "Calques pour organiser textes, images et formes — créer, renommer, verrouiller et masquer, conservés d'une session à l'autre",
@@ -449,7 +466,7 @@
         "title": "Tout entre. Tout ressort.",
         "description": "Word, Excel, PowerPoint, OpenDocument : 9 formats s'importent en PDF — et le chemin inverse fonctionne aussi.",
         "points": {
-          "imports": "Import de 9 formats Office et OpenDocument : DOCX, XLSX, PPTX, ODT, ODS, ODP, RTF, TXT, HTML",
+          "imports": "Import de formats Office et OpenDocument (DOCX, XLSX, PPTX, ODT, ODS, ODP), plus RTF, TXT, HTML, Markdown, CSV et images",
           "exports": "Export vers DOCX, XLSX, PPTX, ODT, ODP — et PNG, JPEG, HTML",
           "compression": "Compression intelligente : des fichiers plus légers sans dégradation visible"
         }
@@ -1600,6 +1617,11 @@
       "listNumbered": "Liste numérotée",
       "indentIncrease": "Augmenter le retrait",
       "indentDecrease": "Diminuer le retrait",
+      "paragraphSpacing": "Espacement et retraits du paragraphe",
+      "indentRight": "Retrait à droite",
+      "firstLineIndent": "Retrait de première ligne",
+      "spaceBefore": "Espacement avant",
+      "spaceAfter": "Espacement après",
       "rectangle": "Rectangle",
       "circle": "Cercle",
       "triangle": "Triangle",
@@ -1908,6 +1930,14 @@
       "deleteRow": "Supprimer la ligne",
       "deleteColumn": "Supprimer la colonne",
       "atCell": "cellule ligne {row}, colonne {col}",
+      "tableStyle": "Style du tableau",
+      "mergeCells": "Fusionner les cellules",
+      "cellShading": "Ombrage de cellule",
+      "cellShadingClear": "Retirer l'ombrage",
+      "rowHeight": "Hauteur de ligne",
+      "columnWidth": "Largeur de colonne",
+      "tableBorder": "Bordure du tableau",
+      "apply": "Appliquer",
       "toasts": {
         "applied": "Tableau modifié",
         "failed": "La modification du tableau a échoué"
@@ -2177,7 +2207,7 @@
       "processing": {
         "title": "Confidentialité par conception",
         "description": "GigaPDF est bâti autour d'un moteur PDF maison qui traite vos documents sur notre propre infrastructure, sans recourir à aucun service tiers. Le traitement du contenu de vos documents est conçu pour rester privé.",
-        "clientSide": {
+        "serverSideOcr": {
           "title": "OCR et extraction de texte sur notre infrastructure",
           "description": "La reconnaissance optique de caractères (OCR) et l'extraction de texte s'exécutent côté serveur, sur notre propre infrastructure : l'image ou le PDF n'est jamais envoyé à un service de reconnaissance tiers. Le texte ainsi extrait est ensuite stocké pour rendre vos documents cherchables (recherche plein texte et sémantique), les embeddings étant calculés localement sur notre infrastructure."
         },

@@ -17,11 +17,15 @@
  * separates the two so the caller routes each correctly.
  *
  * Field mapping (editor → engine, lengths already in PDF points):
- *   textAlign  → ParagraphStylePatch.align
- *   indentLeft → ParagraphStylePatch.indent_left
- *   lineHeight → ParagraphStylePatch.line_height = { t: 'multiple', v }
- *   list.level → ListEdit { kind: 'level' }
- *   list.type  → ListEdit { kind: 'marker' } + { kind: 'ordered' }
+ *   textAlign   → ParagraphStylePatch.align
+ *   indentLeft  → ParagraphStylePatch.indent_left
+ *   indentRight → ParagraphStylePatch.indent_right
+ *   firstLine   → ParagraphStylePatch.first_line   (positive = indent, negative = hanging)
+ *   spaceBefore → ParagraphStylePatch.space_before
+ *   spaceAfter  → ParagraphStylePatch.space_after
+ *   lineHeight  → ParagraphStylePatch.line_height = { t: 'multiple', v }
+ *   list.level  → ListEdit { kind: 'level' }
+ *   list.type   → ListEdit { kind: 'marker' } + { kind: 'ordered' }
  */
 
 import type { ListType, TextListStyle, TextStyle } from "@giga-pdf/types";
@@ -39,6 +43,10 @@ import type {
 const PARAGRAPH_STYLE_KEYS = [
   "textAlign",
   "indentLeft",
+  "indentRight",
+  "firstLine",
+  "spaceBefore",
+  "spaceAfter",
   "lineHeight",
 ] as const satisfies readonly (keyof TextStyle)[];
 
@@ -84,6 +92,34 @@ export function buildParagraphPatch(
   if (typeof style.indentLeft === "number" && Number.isFinite(style.indentLeft)) {
     // Never negative — the toolbar clamps, but guard the bake too.
     patch.indent_left = Math.max(0, style.indentLeft);
+    hasField = true;
+  }
+  if (
+    typeof style.indentRight === "number" &&
+    Number.isFinite(style.indentRight)
+  ) {
+    // Never negative (mirrors indent_left); the toolbar clamps, guard here too.
+    patch.indent_right = Math.max(0, style.indentRight);
+    hasField = true;
+  }
+  if (typeof style.firstLine === "number" && Number.isFinite(style.firstLine)) {
+    // May be NEGATIVE: a hanging indent outdents the first line. No clamp.
+    patch.first_line = style.firstLine;
+    hasField = true;
+  }
+  if (
+    typeof style.spaceBefore === "number" &&
+    Number.isFinite(style.spaceBefore)
+  ) {
+    // Spacing is additive vertical room — never negative.
+    patch.space_before = Math.max(0, style.spaceBefore);
+    hasField = true;
+  }
+  if (
+    typeof style.spaceAfter === "number" &&
+    Number.isFinite(style.spaceAfter)
+  ) {
+    patch.space_after = Math.max(0, style.spaceAfter);
     hasField = true;
   }
   if (typeof style.lineHeight === "number" && Number.isFinite(style.lineHeight)) {
