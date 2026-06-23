@@ -3,176 +3,63 @@
 /**
  * page-margin-guides.tsx
  *
- * The four draggable margin guide lines overlaid on a page sheet in the
- * Word-like editor. Each guide marks one side's margin (top/right/bottom/left);
- * dragging a guide moves the corresponding margin, and on drop the new margins
- * (in PDF points) are committed via {@link PageMarginGuidesProps.onCommit}.
+ * The four draggable margin GUIDE LINES drawn across a page sheet in the
+ * Word-like editor (one per side: top/right/bottom/left). This is a *controlled*,
+ * presentational surface: it renders the dashed lines at the px positions it is
+ * given and only ARMS a drag (`onSideDown`); the pointer move/up + commit are
+ * owned by {@link PageMarginOverlay}, which captures the pointer on a single
+ * sheet-filling target. That owner holds the one live margin state shared with
+ * the ruler handles, so the page guides and the ruler markers always move
+ * together (no divergence).
  *
- * Coordinate model
- * ────────────────
- * Margins are PDF points; the page sheet is rendered at `zoom` (1pt → 1px at
- * zoom 1), so `px = pts * zoom` and `pts = px / zoom`. Guide positions are kept
- * in px (for crisp dragging) and converted back to points only on commit.
+ * The component fills the (position:relative) page sheet absolutely; only the
+ * guide hit-areas are pointer-interactive (the rest is `pointer-events-none`),
+ * so they never steal clicks from the page body.
  *
- * The component lives inside the (position:relative) page sheet and fills it
- * absolutely; the guides are the only pointer-interactive elements (the rest is
- * `pointer-events-none`), so they never steal clicks from the page body.
+ * Pure px↔point geometry lives in `lib/ruler-margins.ts`.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PageMargins } from "./lib/page-margins";
-import {
-  screenMarginsFromPage,
-  pageMarginsFromScreen,
-} from "./lib/margin-rotation";
-
-/** Which side a guide controls (on the displayed sheet). */
-type Side = "top" | "right" | "bottom" | "left";
+import React from "react";
+import type { MarginGuidePx, MarginSide } from "./lib/ruler-margins";
 
 export interface PageMarginGuidesProps {
-  /** Rendered (displayed) page width in CSS px. */
-  width: number;
-  /** Rendered (displayed) page height in CSS px. */
-  height: number;
-  /** Current zoom factor (1 = 100%): points ↔ px. */
-  zoom: number;
-  /** Current margins in PDF points, on the page's intrinsic (un-rotated) box. */
-  margins: PageMargins;
-  /** Page `/Rotate` (CW). Margins are mapped to/from screen space accordingly. */
-  rotation?: number;
-  /** Commit new margins (PDF points, intrinsic box) when a guide is dropped. */
-  onCommit: (margins: PageMargins) => void;
-}
-
-/** Clamp `v` into `[min, max]`. */
-function clamp(v: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, v));
+  /** Live guide line positions (px) within the sheet — owned by the overlay. */
+  guidePx: MarginGuidePx;
+  /** Begin dragging a side's guide (the overlay owns move/up + commit). */
+  onSideDown: (side: MarginSide, e: React.PointerEvent<HTMLDivElement>) => void;
 }
 
 /**
- * Live px positions of the four guides, derived from the committed margins but
- * overridden locally while a drag is in progress.
+ * Controlled margin-guide overlay: draws the four dashed lines at `guidePx` and
+ * arms a drag on pointer-down. Pointer move/up are handled by the owning overlay
+ * (which holds capture), so a drag tracks the pointer even off the thin line.
  */
-interface GuidePx {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-}
-
-/** Margins (points) → guide line positions (px) within a width×height sheet. */
-function marginsToPx(m: PageMargins, zoom: number, width: number, height: number): GuidePx {
-  return {
-    top: m.top * zoom,
-    bottom: height - m.bottom * zoom,
-    left: m.left * zoom,
-    right: width - m.right * zoom,
-  };
-}
-
-export function PageMarginGuides({
-  width,
-  height,
-  zoom,
-  margins,
-  rotation = 0,
-  onCommit,
-}: PageMarginGuidesProps) {
-  // Guides work in SCREEN space (the displayed sheet's edges). Map the page's
-  // intrinsic margins into screen space for display; the inverse runs on commit.
-  const screenMargins = useMemo(
-    () => screenMarginsFromPage(margins, rotation),
-    [margins, rotation],
-  );
-
-  const [px, setPx] = useState<GuidePx>(() =>
-    marginsToPx(screenMargins, zoom, width, height),
-  );
-  const draggingRef = useRef<Side | null>(null);
-  // Latest guide positions mirrored into a ref so the pointerup handler reads
-  // the final value without re-binding listeners. Synced in an effect (never
-  // mutated during render).
-  const pxRef = useRef(px);
-  useEffect(() => {
-    pxRef.current = px;
-  }, [px]);
-
-  // Re-sync from committed margins / geometry when not mid-drag (zoom change,
-  // page swap, external margin update).
-  useEffect(() => {
-    if (draggingRef.current === null) {
-      setPx(marginsToPx(screenMargins, zoom, width, height));
-    }
-  }, [screenMargins, zoom, width, height]);
-
-  const safeZoom = zoom > 0 ? zoom : 1;
-
-  // Convert the current px guide positions back to PDF-point margins (page's
-  // intrinsic box), clamped to a sane non-overlapping range.
-  const pxToMargins = useCallback(
-    (g: GuidePx): PageMargins => {
-      const screen: PageMargins = {
-        top: clamp(g.top, 0, height) / safeZoom,
-        bottom: clamp(height - g.bottom, 0, height) / safeZoom,
-        left: clamp(g.left, 0, width) / safeZoom,
-        right: clamp(width - g.right, 0, width) / safeZoom,
-      };
-      return pageMarginsFromScreen(screen, rotation);
-    },
-    [width, height, safeZoom, rotation],
-  );
-
-  const onPointerDown = useCallback(
-    (side: Side) => (e: React.PointerEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-      draggingRef.current = side;
-      (e.target as Element).setPointerCapture?.(e.pointerId);
-    },
-    [],
-  );
-
-  // Pointer move/up are bound on the overlay element (which has capture), so a
-  // drag tracks the pointer even when it leaves the thin guide line.
-  const onPointerMove = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      const side = draggingRef.current;
-      if (!side) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      setPx((prev) => {
-        if (side === "top") {
-          return { ...prev, top: clamp(e.clientY - rect.top, 0, prev.bottom) };
-        }
-        if (side === "bottom") {
-          return { ...prev, bottom: clamp(e.clientY - rect.top, prev.top, height) };
-        }
-        if (side === "left") {
-          return { ...prev, left: clamp(e.clientX - rect.left, 0, prev.right) };
-        }
-        return { ...prev, right: clamp(e.clientX - rect.left, prev.left, width) };
-      });
-    },
-    [width, height],
-  );
-
-  const endDrag = useCallback(() => {
-    if (draggingRef.current === null) return;
-    draggingRef.current = null;
-    onCommit(pxToMargins(pxRef.current));
-  }, [onCommit, pxToMargins]);
-
+export function PageMarginGuides({ guidePx, onSideDown }: PageMarginGuidesProps) {
   return (
     <div
-      className="pointer-events-none absolute inset-0 z-10"
-      onPointerMove={onPointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
+      className="pointer-events-none absolute inset-0"
       data-margin-guides="true"
     >
-      <GuideLine orientation="horizontal" pos={px.top} onPointerDown={onPointerDown("top")} />
-      <GuideLine orientation="horizontal" pos={px.bottom} onPointerDown={onPointerDown("bottom")} />
-      <GuideLine orientation="vertical" pos={px.left} onPointerDown={onPointerDown("left")} />
-      <GuideLine orientation="vertical" pos={px.right} onPointerDown={onPointerDown("right")} />
+      <GuideLine
+        orientation="horizontal"
+        pos={guidePx.top}
+        onPointerDown={(e) => onSideDown("top", e)}
+      />
+      <GuideLine
+        orientation="horizontal"
+        pos={guidePx.bottom}
+        onPointerDown={(e) => onSideDown("bottom", e)}
+      />
+      <GuideLine
+        orientation="vertical"
+        pos={guidePx.left}
+        onPointerDown={(e) => onSideDown("left", e)}
+      />
+      <GuideLine
+        orientation="vertical"
+        pos={guidePx.right}
+        onPointerDown={(e) => onSideDown("right", e)}
+      />
     </div>
   );
 }

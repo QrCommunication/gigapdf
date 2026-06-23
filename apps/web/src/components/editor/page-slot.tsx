@@ -27,7 +27,7 @@ import type { PageObject, Element, Bounds, Tool, TextStyle } from "@giga-pdf/typ
 import { PageChrome } from "./page-chrome";
 import { PageCanvasHost } from "./page-canvas-host";
 import { EditorCanvas, type EditorCanvasHandle } from "./editor-canvas";
-import { PageMarginGuides } from "./page-margin-guides";
+import { PageMarginOverlay } from "./page-margin-overlay";
 import { PageRulers } from "./page-rulers";
 import { effectivePagePoints } from "./lib/page-layout";
 import type { PageMargins } from "./lib/page-margins";
@@ -140,18 +140,16 @@ function PageSlotImpl({
   onDispose,
   renderActiveOverlay,
 }: PageSlotProps) {
-  // Draggable margin guides on the active page, once its margins are known.
-  // The guides map the engine's intrinsic (un-rotated) margins to/from screen
-  // space using the page rotation, so they work at any /Rotate. Gated on
-  // `showRulers` so the single "Rulers & margins" toolbar toggle shows/hides
-  // both the rulers and the margin guides together (Word's "View → Ruler").
-  const showGuides =
-    isActive &&
-    showRulers &&
-    margins != null &&
-    onMarginsCommit !== undefined;
-  // Rulers anchor to the active page; convert its rotated box to displayed points.
+  // Rulers + draggable margins on the active page. Gated on `showRulers` so the
+  // single "Rulers & margins" toolbar toggle shows/hides both together (Word's
+  // "View → Ruler"). When this page's margins are known AND committable, render
+  // the unified PageMarginOverlay (rulers WITH draggable margin handles + on-
+  // sheet guide lines, sharing one live state). Otherwise fall back to passive
+  // rulers (ticks only). The overlay maps the engine's intrinsic (un-rotated)
+  // margins to/from screen space using the page rotation, so it works at any
+  // /Rotate.
   const showPageRulers = isActive && showRulers;
+  // Rulers anchor to the active page; convert its rotated box to displayed points.
   const pts = effectivePagePoints(page);
 
   return (
@@ -208,22 +206,22 @@ function PageSlotImpl({
             pageNumber={page.pageNumber}
           />
         )}
-        {showPageRulers ? (
+        {showPageRulers && margins != null && onMarginsCommit ? (
+          <PageMarginOverlay
+            width={slot.width}
+            height={slot.height}
+            zoom={zoom}
+            unit={rulerUnit}
+            margins={margins}
+            rotation={page.dimensions.rotation}
+            onCommit={(m) => onMarginsCommit(index, m)}
+          />
+        ) : showPageRulers ? (
           <PageRulers
             pageWidthPts={pts.w}
             pageHeightPts={pts.h}
             zoom={zoom}
             unit={rulerUnit}
-          />
-        ) : null}
-        {showGuides ? (
-          <PageMarginGuides
-            width={slot.width}
-            height={slot.height}
-            zoom={zoom}
-            margins={margins}
-            rotation={page.dimensions.rotation}
-            onCommit={(m) => onMarginsCommit(index, m)}
           />
         ) : null}
         {isActive && renderActiveOverlay ? renderActiveOverlay(index) : null}
