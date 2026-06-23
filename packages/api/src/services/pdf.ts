@@ -915,13 +915,18 @@ export const pdfService = {
    * request body — they are never stored, cached, or logged anywhere.
    *
    * Throws an Error whose `name` is `'InvalidCertificateError'` when the
-   * server rejects the certificate/passphrase pair, or `'TsaUnreachableError'`
-   * when a requested PAdES-B-T timestamp could not be obtained — so callers can
-   * show a dedicated i18n message without parsing server strings.
+   * server rejects the certificate/passphrase pair, `'TsaUnreachableError'`
+   * when a requested PAdES-B-T timestamp could not be obtained, or
+   * `'LtvUnreachableError'` when a requested PAdES-LTV signature could not reach
+   * the timestamp/revocation infrastructure — so callers can show a dedicated
+   * i18n message without parsing server strings.
    *
    * Set `options.timestamp` to embed an RFC 3161 trusted timestamp (PAdES-B-T,
-   * eIDAS advanced) from the server's fixed TSA. This makes the request perform
-   * a network round trip and may fail with `'TsaUnreachableError'`.
+   * eIDAS advanced) from the server's fixed TSA. Set `options.ltv` for long-term
+   * validation (PAdES-B-LT: chain + OCSP/CRL in a /DSS); LTV implies a timestamp
+   * and takes precedence over `options.timestamp`. Either makes the request
+   * perform network round trips and may fail with `'TsaUnreachableError'` /
+   * `'LtvUnreachableError'`.
    */
   signPdf: async (
     file: File | Blob,
@@ -934,6 +939,12 @@ export const pdfService = {
       signerName?: string;
       /** Embed an RFC 3161 trusted timestamp (PAdES-B-T). Default false. */
       timestamp?: boolean;
+      /**
+       * Embed long-term validation material (PAdES-B-LT: certificate chain +
+       * OCSP/CRL in a /DSS). Implies a B-T timestamp and takes precedence over
+       * `timestamp`. Default false.
+       */
+      ltv?: boolean;
     } = {},
   ): Promise<Blob> => {
     const form = new FormData();
@@ -945,6 +956,7 @@ export const pdfService = {
     if (options.contactInfo) form.append('contactInfo', options.contactInfo);
     if (options.signerName) form.append('signerName', options.signerName);
     if (options.timestamp) form.append('timestamp', 'true');
+    if (options.ltv) form.append('ltv', 'true');
 
     const response = await fetch('/api/pdf/sign', {
       method: 'POST',
@@ -960,6 +972,8 @@ export const pdfService = {
         error.name = 'InvalidCertificateError';
       } else if (json.code === 'TSA_UNREACHABLE') {
         error.name = 'TsaUnreachableError';
+      } else if (json.code === 'LTV_UNREACHABLE') {
+        error.name = 'LtvUnreachableError';
       }
       throw error;
     }

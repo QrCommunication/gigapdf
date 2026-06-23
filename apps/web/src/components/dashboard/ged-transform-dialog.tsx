@@ -193,7 +193,11 @@ export function GedTransformDialog({
   const [passphrase, setPassphrase] = useState("");
   const [signReason, setSignReason] = useState("");
   const [signLocation, setSignLocation] = useState("");
-  const [timestamp, setTimestamp] = useState(false);
+  // Signature assurance level: plain / B-T timestamped / B-LT long-term (LTV).
+  // `ltv` implies a timestamp server-side and takes precedence over `timestamp`.
+  const [signLevel, setSignLevel] = useState<"basic" | "timestamped" | "ltv">(
+    "basic",
+  );
   // watermark
   const [watermarkText, setWatermarkText] = useState("CONFIDENTIEL");
   const [watermarkPosition, setWatermarkPosition] =
@@ -225,7 +229,7 @@ export function GedTransformDialog({
     setPassphrase("");
     setSignReason("");
     setSignLocation("");
-    setTimestamp(false);
+    setSignLevel("basic");
     setSplitPointsInput("");
     setRangesInput("");
   }, [open, transform]);
@@ -294,7 +298,8 @@ export function GedTransformDialog({
           options: {
             reason: signReason.trim() || undefined,
             location: signLocation.trim() || undefined,
-            timestamp,
+            timestamp: signLevel === "timestamped",
+            ltv: signLevel === "ltv",
           },
         });
       case "watermark":
@@ -372,9 +377,11 @@ export function GedTransformDialog({
           ? t("signInvalidCert")
           : err instanceof Error && err.name === "TsaUnreachableError"
             ? t("signTsaUnreachable")
-            : err instanceof Error
-              ? err.message
-              : undefined;
+            : err instanceof Error && err.name === "LtvUnreachableError"
+              ? t("signLtvUnreachable")
+              : err instanceof Error
+                ? err.message
+                : undefined;
       toast({ variant: "destructive", title: t("failed"), description: message });
     } finally {
       setRunning(false);
@@ -536,16 +543,36 @@ export function GedTransformDialog({
                   />
                 </div>
               </div>
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
-                <input
-                  type="checkbox"
-                  checked={timestamp}
-                  onChange={(e) => setTimestamp(e.target.checked)}
+              <div>
+                <label
+                  htmlFor="ged-sign-level"
+                  className="mb-1 block text-xs font-medium text-foreground"
+                >
+                  {t("signLevelLabel")}
+                </label>
+                <select
+                  id="ged-sign-level"
+                  value={signLevel}
+                  onChange={(e) =>
+                    setSignLevel(
+                      e.target.value as "basic" | "timestamped" | "ltv",
+                    )
+                  }
                   disabled={running}
-                  className="accent-primary"
-                />
-                {t("timestampLabel")}
-              </label>
+                  className={inputClass}
+                >
+                  <option value="basic">{t("signLevelBasic")}</option>
+                  <option value="timestamped">{t("signLevelTimestamped")}</option>
+                  <option value="ltv">{t("signLevelLtv")}</option>
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {signLevel === "ltv"
+                    ? t("signLevelLtvHint")
+                    : signLevel === "timestamped"
+                      ? t("signLevelTimestampedHint")
+                      : t("signLevelBasicHint")}
+                </p>
+              </div>
             </div>
           )}
 

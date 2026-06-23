@@ -98,8 +98,14 @@ const PRIVATE_IPV6 = [/^::1$/i, /^fc/i, /^fd/i, /^fe80:/i, /^::ffff:/i, /^64:ff9
  * hostname is a bare private/reserved IP literal. Hostnames that *resolve* to a
  * private IP are caught by the route's DNS pre-flight; this is the package-level
  * baseline so the engine is safe even when no external guard is injected.
+ *
+ * Exported so other host-side fetch surfaces driven by URLs the engine extracts
+ * from untrusted input (e.g. the OCSP/CRL responder URLs the PAdES-LTV signer
+ * reads from a user-supplied certificate's AIA/CRL-DP extensions — see
+ * `sign/pdf-sign.ts`) reuse the SAME baseline guard rather than re-deriving the
+ * private/reserved IP ranges.
  */
-function isBlockedFetchUrl(raw: string): boolean {
+export function isBlockedFetchUrl(raw: string): boolean {
   let parsed: URL;
   try {
     parsed = new URL(raw);
