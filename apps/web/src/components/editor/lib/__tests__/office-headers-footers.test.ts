@@ -17,7 +17,7 @@ function paragraph(text: string): GigaBlock {
     rotation: { t: "d0" },
     kind: {
       t: "paragraph",
-      v: { runs: [{ t: "run", text, style: {}, source_index: null }] },
+      v: { runs: [{ t: "run", v: { text, style: {}, source_index: null } }] },
     },
   } as unknown as GigaBlock;
 }
@@ -111,8 +111,8 @@ describe("detectHeaderFooterFromModel", () => {
         v: {
           runs: [
             { t: "image" },
-            { t: "run", text: "Real text", style: {}, source_index: null },
-            { t: "break" },
+            { t: "run", v: { text: "Real text", style: {}, source_index: null } },
+            { t: "br" },
           ],
         },
       },
