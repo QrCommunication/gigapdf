@@ -14,11 +14,16 @@ export interface EncryptOptions {
 
 /**
  * Maps {@link DocumentPermissions} to the PDF `/P` permission bitmask
- * (ISO 32000 Table 22). The base value `-3904` pre-sets the spec-required
- * reserved bits; each allowed operation flips its bit on.
+ * (ISO 32000-1 Table 22). The base value `-4096` (`0xFFFFF000`) sets every
+ * reserved high bit (13–32) to 1 while keeping bits 1–12 clear — crucially
+ * bits 7–8, which are reserved and MUST be 0. Each allowed operation flips its
+ * own bit on. With every permission granted this yields `/P = -196`, matching
+ * the engine's canonical `permissionsToP()`; the previous base `-3904`
+ * (`0xFFFFF0C0`) erroneously set reserved bits 7–8, producing a
+ * non-conformant `/P` (`-4` for all-allowed).
  */
 export function computePermissionFlags(perms: Partial<DocumentPermissions>): number {
-  let flags = -3904; // reserved bits set per spec
+  let flags = -4096; // 0xFFFFF000: reserved high bits set, bits 1–12 (incl. reserved 7–8) clear
   if (perms.print !== false) flags |= 0x4; // bit 3
   if (perms.modify !== false) flags |= 0x8; // bit 4
   if (perms.copy !== false) flags |= 0x10; // bit 5

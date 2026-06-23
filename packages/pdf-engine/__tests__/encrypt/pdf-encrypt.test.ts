@@ -1,8 +1,88 @@
 import { describe, it, expect } from 'vitest';
 import { loadFixture, SIMPLE_PDF } from '../helpers';
-import { encryptPDF } from '../../src/encrypt/pdf-encrypt';
+import { encryptPDF, computePermissionFlags } from '../../src/encrypt/pdf-encrypt';
 import { decryptPDF } from '../../src/encrypt/pdf-decrypt';
 import { openDocument, closeDocument } from '../../src/engine/document-handle';
+
+// ---------------------------------------------------------------------------
+// computePermissionFlags — ISO 32000-1 Table 22 `/P` conformance
+//
+// Bit layout (1-based): 3 print, 4 modify, 5 copy, 6 annotate, 9 fillForms,
+// 10 extract, 11 assemble, 12 printHighQuality. Bits 1–2 and the reserved
+// bits 7–8 MUST be 0; high bits 13–32 MUST be 1. The value is a 32-bit signed
+// integer. This mirrors the engine's canonical `permissionsToP()`, which
+// yields -196 when every permission is granted.
+// ---------------------------------------------------------------------------
+
+describe('computePermissionFlags — ISO 32000-1 /P conformance', () => {
+  /** Bit positions reserved by the spec that MUST always read 0. */
+  const RESERVED_BITS = [0x1, 0x2, 0x40, 0x80]; // bits 1, 2, 7, 8
+
+  it('yields /P = -196 when every permission is granted (matches permissionsToP)', () => {
+    expect(computePermissionFlags({})).toBe(-196);
+  });
+
+  it('treats an explicit all-true object identically to the default (-196)', () => {
+    const flags = computePermissionFlags({
+      print: true,
+      modify: true,
+      copy: true,
+      annotate: true,
+      fillForms: true,
+      extract: true,
+      assemble: true,
+      printHighQuality: true,
+    });
+    expect(flags).toBe(-196);
+  });
+
+  it('never sets the spec-reserved bits 1, 2, 7, 8 — even when all permissions are denied', () => {
+    const allDenied = computePermissionFlags({
+      print: false,
+      modify: false,
+      copy: false,
+      annotate: false,
+      fillForms: false,
+      extract: false,
+      assemble: false,
+      printHighQuality: false,
+    });
+    for (const bit of RESERVED_BITS) {
+      expect(allDenied & bit).toBe(0);
+    }
+    // All-denied keeps only the high reserved bits set ⇒ 0xFFFFF000 = -4096.
+    expect(allDenied).toBe(-4096);
+  });
+
+  it('clears exactly the print bit (3) when printing is disallowed', () => {
+    const noPrint = computePermissionFlags({ print: false });
+    // -196 with bit 3 (0x4) cleared.
+    expect(noPrint).toBe(-196 & ~0x4);
+    expect(noPrint & 0x4).toBe(0);
+    // Other permission bits stay granted.
+    expect(noPrint & 0x10).toBe(0x10); // copy still on
+  });
+
+  it('clears exactly the copy bit (5) when copying is disallowed', () => {
+    const noCopy = computePermissionFlags({ copy: false });
+    expect(noCopy).toBe(-196 & ~0x10);
+    expect(noCopy & 0x10).toBe(0);
+    expect(noCopy & 0x4).toBe(0x4); // print still on
+  });
+
+  it('keeps the high reserved bits (13–32) set for every combination', () => {
+    const combos: Parameters<typeof computePermissionFlags>[0][] = [
+      {},
+      { print: false },
+      { extract: false, assemble: false },
+      { print: false, modify: false, copy: false, annotate: false },
+    ];
+    for (const combo of combos) {
+      // 0xFFFFF000 = bits 13..32. They must all remain set.
+      expect(computePermissionFlags(combo) & 0xfffff000).toBe(-4096 & 0xfffff000);
+    }
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
