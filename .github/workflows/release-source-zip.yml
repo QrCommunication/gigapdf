@@ -1,0 +1,86 @@
+name: Attach source zip to release
+
+# When a release is published, build a clean ZIP archive of the *tagged* source
+# tree and attach it to that release as a downloadable asset.
+#
+# - Uses `git archive`, so the zip contains exactly the committed source at the
+#   release commit (no .git, no build artifacts, no working-tree leftovers) and
+#   honours any `.gitattributes export-ignore` rules.
+# - Talks to the GitHub REST API with curl + the built-in GITHUB_TOKEN — no
+#   third-party action and no dependency on the `gh` CLI being installed on the
+#   self-hosted runner.
+# - Idempotent: a re-run replaces a previously attached asset of the same name.
+#
+# Security: every piece of event data (tag name, repo, release id) is passed to
+# the shell through `env:` and referenced as a quoted variable — never inlined
+# as a `${{ ... }}` expression inside a `run:` script — so a crafted tag name
+# cannot inject shell commands. The checkout uses no `ref:` (it defaults to
+# `github.sha`, i.e. the release commit), avoiding ref injection entirely.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  attach-source-zip:
+    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    steps:
+      - name: Checkout the release commit
+        # No `ref:` — on a `release` event github.sha is the tagged commit.
+        uses: actions/checkout@v6
+
+      - name: Build source archive
+        id: archive
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          ver="${TAG#v}"                       # strip a leading "v" (v1.11.0 -> 1.11.0)
+          file="gigapdf-${ver}-source.zip"
+          # HEAD is the checked-out release commit; git archive emits the
+          # committed tree only (excludes .git and build output).
+          git archive --format=zip --prefix="gigapdf-${ver}/" -o "${file}" HEAD
+          echo "file=${file}" >> "$GITHUB_OUTPUT"
+          ls -lh "${file}"
+
+      - name: Attach the archive to the release (idempotent)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RELEASE_ID: ${{ github.event.release.id }}
+          TAG: ${{ github.event.release.tag_name }}
+          FILE: ${{ steps.archive.outputs.file }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com"
+
+          # 1. Remove a previous asset of the same name (re-run safety).
+          assets_json=$(curl -fsS \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api}/repos/${REPO}/releases/${RELEASE_ID}/assets")
+          asset_id=$(printf '%s' "${assets_json}" | python3 -c \
+            'import json,os,sys; name=os.environ["FILE"]; print(next((a["id"] for a in json.load(sys.stdin) if a["name"]==name), ""))')
+          if [ -n "${asset_id}" ]; then
+            echo "Replacing existing asset ${asset_id} (${FILE})"
+            curl -fsS -X DELETE \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${api}/repos/${REPO}/releases/assets/${asset_id}"
+          fi
+
+          # 2. Upload the fresh archive. `FILE` is built by us (slug + version),
+          # not user input, so it is safe in the query string.
+          upload="https://uploads.github.com/repos/${REPO}/releases/${RELEASE_ID}/assets?name=${FILE}"
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/zip" \
+            --data-binary @"${FILE}" \
+            "${upload}"
+          echo "Attached ${FILE} to release ${TAG}"
