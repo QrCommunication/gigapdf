@@ -122,7 +122,7 @@ if ! \$SKIP_INSTALL; then
   # Force the lib to its newest published version — \`--no-frozen-lockfile\` above
   # would otherwise keep the lockfile's pinned version. The fixed-version alias
   # gigapdf-lib-ocr (npm:@qrcommunication/gigapdf-lib@<pinned>) is untouched.
-  pnpm update "@qrcommunication/gigapdf-lib@latest" --recursive --no-frozen-lockfile
+  pnpm update "@qrcommunication/gigapdf-lib@latest" --recursive
 fi
 
 # ── 2.4-pre (removed) No third-party binaries required ───────────────────
