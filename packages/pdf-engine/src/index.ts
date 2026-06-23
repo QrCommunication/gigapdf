@@ -180,15 +180,18 @@ export { encryptPDF, decryptPDF, getPermissions, setPermissions } from './encryp
 export type { EncryptOptions, EncryptionAlgorithm, PermissionsResult } from './encrypt';
 
 // Sign — PKCS#7 detached digital signature with a user-provided P12/PFX,
-// optionally PAdES-B-T (RFC 3161 trusted timestamp) via FreeTSA.
+// optionally PAdES-B-T (RFC 3161 trusted timestamp) via FreeTSA, or PAdES-LTV
+// (B-LT/B-LTA: DSS with chain + OCSP/CRL, optional document timestamp).
 export {
   signPdf,
   signPdfTimestamped,
+  signPdfLtv,
   PdfSignInvalidCertificateError,
   PdfSignTimestampError,
+  PdfSignLtvError,
   FREETSA_TSA_URL,
 } from './sign';
-export type { SignPdfOptions, SignPdfResult } from './sign';
+export type { SignPdfOptions, SignPdfLtvOptions, SignPdfResult } from './sign';
 
 // Preview
 export { renderPage, renderThumbnail, renderAllThumbnails } from './preview';

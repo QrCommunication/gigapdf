@@ -602,7 +602,7 @@ importers:
         version: link:../types
       '@qrcommunication/gigapdf-lib':
         specifier: latest
-        version: 0.70.0
+        version: 0.71.0
       fabric:
         specifier: ^7.4.0
         version: 7.4.0
@@ -767,7 +767,7 @@ importers:
         version: link:../types
       '@qrcommunication/gigapdf-lib':
         specifier: latest
-        version: 0.70.0
+        version: 0.71.0
       gigapdf-lib-ocr:
         specifier: npm:@qrcommunication/gigapdf-lib@0.63.0
         version: '@qrcommunication/gigapdf-lib@0.63.0'
@@ -2639,8 +2639,8 @@ packages:
     resolution: {integrity: sha512-L/6pfqwHmb4AvsOyTLELBCIw2D8UwiP9KTkqKCkhlF6P2E6pal5ZuIKCO8Hpc9RpCEuL/aOZthQHZcsuhsFRGQ==}
     engines: {node: '>=18.17.0'}
 
-  '@qrcommunication/gigapdf-lib@0.70.0':
-    resolution: {integrity: sha512-Hr1je1j2bIFsbVN958k7EinelhxAyEidYI/7FZ0dLcFtAbnvWzgSbbhgzhsrN+lgMzVMtUUBioTa24wUNc02BA==}
+  '@qrcommunication/gigapdf-lib@0.71.0':
+    resolution: {integrity: sha512-QyzlOPAdPXU5MVlw+gi7F7mu4fPWafgKcu74wrXaeRSZmQvsp4h1M+FX2zOD0bgOOPdb7PKB4Dw6bP9RHu/hYA==}
     engines: {node: '>=18.17.0'}
 
   '@radix-ui/number@1.1.2':
@@ -10913,7 +10913,7 @@ snapshots:
 
   '@qrcommunication/gigapdf-lib@0.63.0': {}
 
-  '@qrcommunication/gigapdf-lib@0.70.0': {}
+  '@qrcommunication/gigapdf-lib@0.71.0': {}
 
   '@radix-ui/number@1.1.2': {}
 
@@ -11617,7 +11617,9 @@ snapshots:
       metro-runtime: 0.84.4
     transitivePeerDependencies:
       - '@babel/core'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-color@2.1.0': {}
 

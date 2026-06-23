@@ -563,6 +563,17 @@ export const TOOL_CONFIGS = {
         descriptionKey: "timestampDescription",
         defaultValue: "false",
       },
+      {
+        // Long-term validation (PAdES-B-LT): adds a /DSS with the chain +
+        // OCSP/CRL revocation material. The route gives `ltv` precedence over
+        // `timestamp` and LTV always embeds a B-T timestamp, so enabling this
+        // forces timestamping regardless of the toggle above.
+        type: "switch",
+        name: "ltv",
+        labelKey: "ltvLabel",
+        descriptionKey: "ltvDescription",
+        defaultValue: "false",
+      },
     ],
   },
 

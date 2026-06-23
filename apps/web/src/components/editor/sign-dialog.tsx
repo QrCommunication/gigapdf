@@ -2,7 +2,16 @@
 
 import React, { useState } from "react";
 import { useTranslations } from "next-intl";
-import { X, Loader2, FileSignature, ShieldCheck, TriangleAlert, Clock } from "lucide-react";
+import {
+  X,
+  Loader2,
+  FileSignature,
+  ShieldCheck,
+  TriangleAlert,
+  Clock,
+  PenLine,
+  ShieldHalf,
+} from "lucide-react";
 import { useSignPdf, downloadBlob } from "@giga-pdf/api";
 
 export interface SignDialogProps {
@@ -21,6 +30,15 @@ export interface SignDialogProps {
 
 /** What to do with the signed PDF once produced. */
 type OutputMode = "apply" | "download";
+
+/**
+ * Signature assurance level:
+ * - `basic`       — plain PKCS#7 detached signature.
+ * - `timestamped` — PAdES-B-T: adds an RFC 3161 trusted timestamp (FreeTSA).
+ * - `ltv`         — PAdES-LTV (B-LT): a B-T signature + a /DSS carrying the
+ *                   chain and OCSP/CRL revocation material. Implies a timestamp.
+ */
+type SignatureLevel = "basic" | "timestamped" | "ltv";
 
 /** Route-aligned cap on the P12 container size. */
 const MAX_P12_SIZE_BYTES = 1024 * 1024;
@@ -46,7 +64,7 @@ export function SignDialog({
   const [reason, setReason] = useState("");
   const [location, setLocation] = useState("");
   const [contactInfo, setContactInfo] = useState("");
-  const [timestamp, setTimestamp] = useState(false);
+  const [level, setLevel] = useState<SignatureLevel>("basic");
   const [outputMode, setOutputMode] = useState<OutputMode>("apply");
   const signPdf = useSignPdf();
 
@@ -79,7 +97,10 @@ export function SignDialog({
         reason: reason.trim() || undefined,
         location: location.trim() || undefined,
         contactInfo: contactInfo.trim() || undefined,
-        timestamp,
+        // `ltv` implies a B-T timestamp server-side and takes precedence over
+        // `timestamp`; both are derived from the single level selector.
+        timestamp: level === "timestamped",
+        ltv: level === "ltv",
       },
     });
     if (canApplyToDocument && outputMode === "apply") {
@@ -100,7 +121,9 @@ export function SignDialog({
       ? t("errors.invalidCertificate")
       : errorName === "TsaUnreachableError"
         ? t("errors.tsaUnreachable")
-        : t("errors.generic")
+        : errorName === "LtvUnreachableError"
+          ? t("errors.ltvUnreachable")
+          : t("errors.generic")
     : null;
 
   return (
@@ -225,31 +248,65 @@ export function SignDialog({
             />
           </div>
 
-          <label
-            htmlFor="sign-timestamp-input"
-            className={`flex items-start gap-3 px-3 py-2 rounded-md border cursor-pointer transition-colors ${
-              timestamp
-                ? "border-primary bg-primary/5"
-                : "border-input hover:bg-muted"
-            }`}
-          >
-            <input
-              id="sign-timestamp-input"
-              type="checkbox"
-              checked={timestamp}
-              onChange={(e) => setTimestamp(e.target.checked)}
-              className="mt-0.5 accent-primary"
-            />
-            <span className="min-w-0">
-              <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <Clock size={14} className="shrink-0 text-muted-foreground" />
-                {t("timestampLabel")}
-              </span>
-              <span className="block text-xs text-muted-foreground">
-                {t("timestampHint")}
-              </span>
-            </span>
-          </label>
+          <fieldset>
+            <legend className="block text-sm font-medium text-foreground mb-1">
+              {t("levelLabel")}
+            </legend>
+            <div className="space-y-2">
+              {(
+                [
+                  {
+                    value: "basic",
+                    Icon: PenLine,
+                    label: t("levelBasic"),
+                    hint: t("levelBasicHint"),
+                  },
+                  {
+                    value: "timestamped",
+                    Icon: Clock,
+                    label: t("levelTimestamped"),
+                    hint: t("levelTimestampedHint"),
+                  },
+                  {
+                    value: "ltv",
+                    Icon: ShieldHalf,
+                    label: t("levelLtv"),
+                    hint: t("levelLtvHint"),
+                  },
+                ] as const
+              ).map((option) => (
+                <label
+                  key={option.value}
+                  className={`flex items-start gap-3 px-3 py-2 rounded-md border cursor-pointer transition-colors ${
+                    level === option.value
+                      ? "border-primary bg-primary/5"
+                      : "border-input hover:bg-muted"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="sign-level"
+                    value={option.value}
+                    checked={level === option.value}
+                    onChange={() => setLevel(option.value)}
+                    className="mt-0.5 accent-primary"
+                  />
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                      <option.Icon size={14} className="shrink-0 text-muted-foreground" />
+                      {option.label}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {option.hint}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {level === "ltv" && (
+              <p className="mt-2 text-xs text-muted-foreground">{t("ltvCaHint")}</p>
+            )}
+          </fieldset>
 
           <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
             <ShieldCheck size={16} className="mt-0.5 shrink-0 text-muted-foreground" />

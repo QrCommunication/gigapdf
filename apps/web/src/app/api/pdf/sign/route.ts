@@ -13,6 +13,10 @@
  *   signerName  — /Name (optional, ≤ 255 chars)
  *   timestamp   — "true" to embed an RFC 3161 trusted timestamp (PAdES-B-T,
  *                 eIDAS advanced) via FreeTSA. Default "false" (plain PKCS#7).
+ *   ltv         — "true" for long-term validation (PAdES-B-LT: a B-T signature
+ *                 + a /DSS carrying the chain and the OCSP/CRL revocation
+ *                 material). Takes precedence over `timestamp` (LTV always
+ *                 embeds a B-T timestamp). Default "false".
  *
  * Returns the signed PDF as application/pdf.
  *
@@ -29,8 +33,10 @@ import { NextResponse } from 'next/server';
 import {
   signPdf,
   signPdfTimestamped,
+  signPdfLtv,
   PdfSignInvalidCertificateError,
   PdfSignTimestampError,
+  PdfSignLtvError,
   PDFCorruptedError,
 } from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
@@ -108,6 +114,11 @@ export async function POST(request: Request): Promise<Response> {
     // server-controlled TSA (FreeTSA). The TSA URL is never taken from the
     // request, so there is no SSRF surface here.
     const timestampRequested = formData.get('timestamp') === 'true';
+    // Opt-in PAdES-LTV (B-LT): adds a /DSS with the chain + OCSP/CRL revocation
+    // material on top of a B-T signature. LTV always embeds a B-T timestamp, so
+    // it takes precedence over `timestamp`. The OCSP/CRL responder URLs come
+    // from the user's certificate and are SSRF-guarded inside `signPdfLtv`.
+    const ltvRequested = formData.get('ltv') === 'true';
 
     const [pdfBuffer, p12Buffer] = await Promise.all([
       file.arrayBuffer(),
@@ -123,9 +134,11 @@ export async function POST(request: Request): Promise<Response> {
       signerName: optional.signerName,
     } as const;
 
-    const result = timestampRequested
-      ? await signPdfTimestamped(new Uint8Array(pdfBuffer), signOptions)
-      : await signPdf(new Uint8Array(pdfBuffer), signOptions);
+    const result = ltvRequested
+      ? await signPdfLtv(new Uint8Array(pdfBuffer), signOptions)
+      : timestampRequested
+        ? await signPdfTimestamped(new Uint8Array(pdfBuffer), signOptions)
+        : await signPdf(new Uint8Array(pdfBuffer), signOptions);
 
     return new Response(Buffer.from(result.bytes), {
       status: 200,
@@ -157,6 +170,20 @@ export async function POST(request: Request): Promise<Response> {
           success: false,
           error: "Autorité d'horodatage injoignable",
           code: 'TSA_UNREACHABLE',
+        },
+        { status: 502 },
+      );
+    }
+    if (error instanceof PdfSignLtvError) {
+      // The credential is fine; the long-term-validation infrastructure (the
+      // mandatory timestamp / archival TSA leg) was unreachable. 502 lets the
+      // client invite a retry rather than blame the certificate. Unreachable
+      // OCSP/CRL responders are NOT fatal (skipped inside signPdfLtv).
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation long-terme indisponible',
+          code: 'LTV_UNREACHABLE',
         },
         { status: 502 },
       );
