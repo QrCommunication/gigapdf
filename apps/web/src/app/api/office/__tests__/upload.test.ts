@@ -49,6 +49,14 @@ if (!('arrayBuffer' in Blob.prototype)) {
 // ── Mocks (must be declared before imports) ───────────────────────────────────
 
 vi.mock('@giga-pdf/pdf-engine', () => {
+  const PDFEngineError = class PDFEngineError extends Error {
+    code: string;
+    constructor(message: string, code = 'PDF_ENGINE_ERROR') {
+      super(message);
+      this.name = 'PDFEngineError';
+      this.code = code;
+    }
+  };
   const OfficeConversionError = class OfficeConversionError extends Error {
     constructor(message: string) {
       super(message);
@@ -58,7 +66,9 @@ vi.mock('@giga-pdf/pdf-engine', () => {
 
   return {
     convertOfficeToPdf: vi.fn(),
+    rtfToPdf: vi.fn(),
     OfficeConversionError,
+    PDFEngineError,
   };
 });
 
@@ -83,7 +93,9 @@ vi.mock('server-only', () => ({}));
 import { POST } from '../upload/route';
 import {
   convertOfficeToPdf,
+  rtfToPdf,
   OfficeConversionError,
+  PDFEngineError,
 } from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
 
@@ -94,6 +106,9 @@ const ZIP_MAGIC = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
 
 /** Valid OLE2 compound-file magic bytes — legacy Office 97-2003 (doc/xls/ppt). */
 const OLE2_MAGIC = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+
+/** Valid RTF magic bytes (`{\rtf`). */
+const RTF_MAGIC = new Uint8Array([0x7b, 0x5c, 0x72, 0x74, 0x66]);
 
 /** Minimal fake PDF bytes for mock return values. */
 const FAKE_PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]); // %PDF-
@@ -165,12 +180,20 @@ function makeValidLegacyOfficeFile(name: string, extraBytes = 100): File {
   return makeFile(name, buf);
 }
 
+/** Creates a valid RTF file: `{\rtf` magic bytes + a tiny body. */
+function makeValidRtfFile(name: string, extraBytes = 32): File {
+  const buf = new Uint8Array(RTF_MAGIC.length + extraBytes);
+  buf.set(RTF_MAGIC, 0);
+  return makeFile(name, buf);
+}
+
 // ── Test suite ────────────────────────────────────────────────────────────────
 
 describe('POST /api/office/upload', () => {
   beforeEach(() => {
     vi.mocked(requireSession).mockResolvedValue(mockAuthOk);
     vi.mocked(convertOfficeToPdf).mockResolvedValue(FAKE_PDF);
+    vi.mocked(rtfToPdf).mockResolvedValue(FAKE_PDF);
   });
 
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -223,14 +246,49 @@ describe('POST /api/office/upload', () => {
     expect(body.success).toBe(false);
   });
 
-  it('returns 400 for .rtf extension (not in the allowed list)', async () => {
-    const file = makeFile('legacy.rtf', OLE2_MAGIC);
+  it('returns 200 with application/pdf for a .rtf file with RTF magic bytes', async () => {
+    const file = makeValidRtfFile('letter.rtf');
+    const req = makeRequest(file);
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/pdf');
+    const body = await res.arrayBuffer();
+    expect(new Uint8Array(body)).toEqual(FAKE_PDF);
+  });
+
+  it('routes RTF through rtfToPdf (NOT convertOfficeToPdf)', async () => {
+    const file = makeValidRtfFile('notes.rtf');
+    await POST(makeRequest(file));
+    expect(vi.mocked(rtfToPdf)).toHaveBeenCalledWith(expect.any(Uint8Array));
+    expect(vi.mocked(convertOfficeToPdf)).not.toHaveBeenCalled();
+  });
+
+  it('accepts .RTF (uppercase extension)', async () => {
+    const file = makeValidRtfFile('MEMO.RTF');
+    const res = await POST(makeRequest(file));
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 400 for a .rtf that lacks the {\\rtf magic bytes', async () => {
+    const file = makeFile('fake.rtf', OLE2_MAGIC);
     const req = makeRequest(file);
     const res = await POST(req);
     expect(res.status).toBe(400);
     const body = await res.json() as { success: boolean; error: string };
     expect(body.success).toBe(false);
-    expect(body.error).toMatch(/unsupported file extension/i);
+    expect(body.error).toMatch(/invalid magic bytes/i);
+  });
+
+  it('returns 422 when rtfToPdf rejects with a PDFEngineError', async () => {
+    vi.mocked(rtfToPdf).mockRejectedValue(
+      new PDFEngineError('unrecognized RTF', 'PDF_RTF_CONVERT_FAILED'),
+    );
+    const file = makeValidRtfFile('broken.rtf');
+    const res = await POST(makeRequest(file));
+    expect(res.status).toBe(422);
+    const body = await res.json() as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toMatch(/convert/i);
   });
 
   it('accepts .DOCX (uppercase extension)', async () => {
