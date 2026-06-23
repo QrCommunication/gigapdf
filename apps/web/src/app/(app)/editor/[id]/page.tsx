@@ -50,6 +50,8 @@ import {
   FileImage,
   FileCode,
   FileType,
+  Hash,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -257,6 +259,9 @@ const SDK_EXPORT_ITEMS: ReadonlyArray<{
   { format: "odp", icon: Presentation, labelKey: "office.exportOdp" },
   { format: "html", icon: FileCode, labelKey: "office.exportHtmlEditable" },
   { format: "rtf", icon: FileType, labelKey: "office.exportRtf" },
+  { format: "markdown", icon: Hash, labelKey: "office.exportMarkdown" },
+  { format: "csv", icon: Sheet, labelKey: "office.exportCsv" },
+  { format: "epub", icon: BookOpen, labelKey: "office.exportEpub" },
   { format: "pdf", icon: Download, labelKey: "office.exportPdf" },
 ];
 

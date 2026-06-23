@@ -115,6 +115,12 @@ function makeFakeDoc() {
     toHtml: record("toHtml", "<html></html>"),
     toRtf: record("toRtf", "{\\rtf1}"),
     save: record("save", new Uint8Array([9])),
+    // The reflowable targets (markdown/csv/epub) lower via the model: the helper
+    // calls toModel() on the doc, then the engine's modelTo*() raisers.
+    toModel: () => {
+      calls.method = "toModel";
+      return { kind: "model" };
+    },
     close: () => {
       calls.closed += 1;
     },
@@ -124,7 +130,14 @@ function makeFakeDoc() {
 
 function fakeLoader(doc: ReturnType<typeof makeFakeDoc>["doc"]) {
   const open = vi.fn((_bytes: Uint8Array) => doc);
-  return Object.assign(async () => ({ open }) as never, { open });
+  // The engine exposes the model-raising exporters used by markdown/csv/epub.
+  const engine = {
+    open,
+    modelToMarkdown: (_m: unknown) => "# md",
+    modelToCsv: (_m: unknown) => "a,b",
+    modelToEpub: (_m: unknown) => new Uint8Array([7]),
+  };
+  return Object.assign(async () => engine as never, { open });
 }
 
 const BYTES = new Uint8Array([9, 9, 9]);
@@ -140,6 +153,11 @@ describe("exportDocumentAs", () => {
     { format: "html", method: "toHtml" },
     { format: "rtf", method: "toRtf" },
     { format: "pdf", method: "save" },
+    // Reflowable targets go through the model: doc.toModel() is the last method
+    // recorded on the doc; the engine's modelTo*() raiser produces the bytes.
+    { format: "markdown", method: "toModel" },
+    { format: "csv", method: "toModel" },
+    { format: "epub", method: "toModel" },
   ];
 
   for (const { format, method } of cases) {

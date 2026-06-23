@@ -22,15 +22,21 @@ export type ExportFormat =
   | "odp"
   | "html"
   | "rtf"
-  | "pdf";
+  | "pdf"
+  | "markdown"
+  | "csv"
+  | "epub";
 
 /** Whether the SDK method for a format returns raw bytes or a text string. */
 export type ExportKind = "binary" | "text";
 
 /** Descriptor for one export target. */
 export interface ExportFormatDescriptor {
-  /** Lower-case file extension (no leading dot). */
-  readonly extension: ExportFormat;
+  /**
+   * Lower-case file extension (no leading dot). Usually equals the format key,
+   * but differs where the conventional extension does not (`markdown` → `md`).
+   */
+  readonly extension: string;
   /** MIME type used for the download `Blob` + `Content-Type`. */
   readonly contentType: string;
   /** `binary` → SDK returns `Uint8Array`; `text` → SDK returns `string`. */
@@ -89,6 +95,22 @@ export const EXPORT_FORMATS: Readonly<Record<ExportFormat, ExportFormatDescripto
   pdf: {
     extension: "pdf",
     contentType: "application/pdf",
+    kind: "binary",
+  },
+  // Reflowable targets raised from the unified model (`toModel` → `modelTo*`).
+  markdown: {
+    extension: "md",
+    contentType: "text/markdown;charset=utf-8",
+    kind: "text",
+  },
+  csv: {
+    extension: "csv",
+    contentType: "text/csv;charset=utf-8",
+    kind: "text",
+  },
+  epub: {
+    extension: "epub",
+    contentType: "application/epub+zip",
     kind: "binary",
   },
 } as const;

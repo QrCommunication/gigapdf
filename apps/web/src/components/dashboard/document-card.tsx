@@ -46,6 +46,8 @@ import {
   CheckSquare,
   Square,
   Tags,
+  Hash,
+  BookOpen,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { DragItem } from "./document-explorer";
@@ -56,6 +58,7 @@ import { triggerBlobDownload } from "./blob-download";
 import {
   downloadDocumentBytes,
   convertDocumentBytes,
+  type DashboardExportFormat,
 } from "./download-document-bytes";
 import { TagChips } from "./tag-input";
 import { ManageTagsDialog } from "./manage-tags-dialog";
@@ -239,7 +242,7 @@ export function DocumentCard({
     setShareDialogOpen(true);
   };
 
-  const handleExport = async (format: "png" | "jpeg" | "webp" | "html" | "txt" | "docx" | "xlsx") => {
+  const handleExport = async (format: DashboardExportFormat) => {
     try {
       setExporting(true);
       setExportDialogOpen(true);
@@ -390,6 +393,18 @@ export function DocumentCard({
                   <DropdownMenuItem onClick={() => handleExport("txt")}>
                     <FileSpreadsheet className="mr-2 h-4 w-4" />
                     {t("menu.exportText")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("markdown")}>
+                    <Hash className="mr-2 h-4 w-4" />
+                    {t("menu.exportMarkdown")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("csv")}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    {t("menu.exportCsv")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("epub")}>
+                    <BookOpen className="mr-2 h-4 w-4" />
+                    {t("menu.exportEpub")}
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
