@@ -3065,7 +3065,7 @@
       "passwordPlaceholder": "Mot de passe du PDF"
     },
     "extractPages": {
-      "title": "Organiser les pages",
+      "title": "Extraire des pages",
       "subtitle": "Extrayez uniquement les pages dont vous avez besoin dans un nouveau PDF.",
       "formatsHint": "Fichier PDF uniquement.",
       "actionButton": "Extraire les pages",
