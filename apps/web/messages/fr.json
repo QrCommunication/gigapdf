@@ -70,10 +70,10 @@
       "default": "GigaPDF — Éditez vos PDF comme un document Word. Open source.",
       "template": "%s | GigaPDF"
     },
-    "description": "Éditeur PDF open source avec collaboration en temps réel : modifiez texte, images et formes avec les polices d'origine, signez (PKCS#7), océrisez vos scans, convertissez 9 formats Office. Auto-hébergeable, chiffré AES-256, conforme RGPD.",
+    "description": "Éditeur PDF open source avec collaboration en temps réel : modifiez texte, images et formes avec les polices d'origine, signez (PKCS#7), océrisez vos scans, convertissez de nombreux formats Office et OpenDocument. Auto-hébergeable, chiffré AES-256, conforme RGPD.",
     "keywords": "éditeur PDF open source, modifier PDF en ligne, éditeur PDF gratuit, modifier texte PDF, modifier images PDF, modifier formes PDF, calques PDF, style de formes PDF, signer PDF PKCS#7, OCR PDF cherchable, convertir Word en PDF, convertir PDF en Word, PDF collaboratif temps réel, PDF auto-hébergé, GED open source, compression PDF, PDF/A, GigaPDF",
     "ogTitle": "GigaPDF — Éditez vos PDF comme un document Word. Vraiment.",
-    "ogDescription": "Éditeur PDF open source : texte, images et formes modifiables avec polices fidèles, collaboration live, signature PKCS#7, OCR, 9 formats Office. Auto-hébergeable.",
+    "ogDescription": "Éditeur PDF open source : texte, images et formes modifiables avec polices fidèles, collaboration live, signature PKCS#7, OCR, de nombreux formats Office. Auto-hébergeable.",
     "twitterTitle": "GigaPDF — L'éditeur PDF open source",
     "twitterDescription": "Modifiez vos PDF comme un document Word : polices fidèles, collaboration live, signature, OCR. Open source, auto-hébergeable."
   },
@@ -464,10 +464,10 @@
       "formats": {
         "label": "Formats",
         "title": "Tout entre. Tout ressort.",
-        "description": "Word, Excel, PowerPoint, OpenDocument : 9 formats s'importent en PDF — et le chemin inverse fonctionne aussi.",
+        "description": "Word, Excel, PowerPoint, OpenDocument : de nombreux formats s'importent en PDF — et le chemin inverse fonctionne aussi.",
         "points": {
           "imports": "Import de formats Office et OpenDocument (DOCX, XLSX, PPTX, ODT, ODS, ODP), plus RTF, TXT, HTML, Markdown, CSV et images",
-          "exports": "Export vers DOCX, XLSX, PPTX, ODT, ODP — et PNG, JPEG, HTML",
+          "exports": "Export vers DOCX, XLSX, PPTX, ODT, ODP, RTF, Markdown, EPUB — et PNG, JPEG, HTML, texte",
           "compression": "Compression intelligente : des fichiers plus légers sans dégradation visible"
         }
       },
@@ -505,7 +505,7 @@
         "description": "La ligne de scan transforme l'image imprimée en texte."
       },
       "formats": {
-        "title": "9 formats Office",
+        "title": "Office, texte et plus",
         "description": "Imports et exports qui défilent sans s'arrêter."
       },
       "compression": {
@@ -527,8 +527,8 @@
         "signature": "Signature PKCS#7",
         "ocr": "OCR cherchable",
         "collaboration": "Collaboration live",
-        "tools": "29 outils PDF",
-        "office": "Import Office 9 formats"
+        "tools": "36 outils PDF",
+        "office": "Import Office de nombreux formats"
       },
       "mostPopular": "Populaire",
       "perMonth": "/mois",
@@ -1746,6 +1746,12 @@
         "dimensions": "Dimensions",
         "opacity": "Opacité"
       },
+      "annotation": {
+        "type": "Type",
+        "content": "Contenu",
+        "color": "Couleur",
+        "opacity": "Opacité"
+      },
       "formField": {
         "fieldType": "Type de champ",
         "name": "Nom du champ",
@@ -1988,7 +1994,7 @@
         "toolsTitle": "Outils PDF populaires",
         "toolsSubtitle": "Gratuits, sans filigrane, auto-hébergeables.",
         "solutionsTitle": "Des solutions pour votre métier",
-        "viewAllTools": "Voir les 29 outils",
+        "viewAllTools": "Voir les 36 outils",
         "viewAllSolutions": "Voir toutes les solutions",
         "registerCta": "Commencez à travailler vos PDF dès maintenant"
       },
@@ -2548,8 +2554,8 @@
             "title": "Productivité",
             "items": {
               "palette": "Palette de commandes globale (Ctrl/Cmd+K)",
-              "megaMenu": "Méga-menu reprenant les 29 outils par catégorie",
-              "tools": "29 outils PDF dédiés avec pages d'aide",
+              "megaMenu": "Méga-menu reprenant les 36 outils par catégorie",
+              "tools": "36 outils PDF dédiés avec pages d'aide",
               "editor": "Éditeur visuel : zoom, déplacement, vue continue des pages"
             }
           },
@@ -2959,7 +2965,7 @@
   },
   "toolsMenu": {
     "allTools": "Tous les outils",
-    "viewAll": "Voir les 29 outils",
+    "viewAll": "Voir les 36 outils",
     "categories": {
       "organize": "Organiser",
       "convert": "Convertir",
@@ -2979,6 +2985,40 @@
     "noResults": "Aucun résultat",
     "recent": "Recherches récentes",
     "toggleHint": "pour rechercher"
+  },
+  "organizePages": {
+    "title": "Organiser les pages",
+    "subtitle": "Réordonnez, faites pivoter et supprimez les pages d’un PDF, puis appliquez tout en une passe.",
+    "dropzoneLabel": "Glissez-déposez votre PDF ici",
+    "dropNow": "Déposez pour ouvrir",
+    "formatsHint": "Fichier PDF uniquement (250 Mo max).",
+    "addFile": "Parcourir les fichiers",
+    "loadingHint": "Lecture du document…",
+    "emptyState": "Aucun document pour le moment. Ouvrez un PDF pour organiser ses pages.",
+    "pageListTitle": "{count, plural, one {# page} other {# pages}}",
+    "orderHint": "L’ordre de la liste détermine l’ordre des pages. Réorganisez avec les flèches, pivotez ou supprimez chaque page.",
+    "clearAll": "Recommencer",
+    "totalSize": "Taille : {size}",
+    "overLimit": "Le fichier dépasse la limite de {max}.",
+    "pageLabel": "Page {number}",
+    "rotationBadge": "Rotation : {degrees}°",
+    "moveUp": "Monter",
+    "moveDown": "Descendre",
+    "moveUpPage": "Monter la page {number}",
+    "moveDownPage": "Descendre la page {number}",
+    "rotatePage": "Pivoter de 90°",
+    "rotatePageNumbered": "Pivoter la page {number} de 90°",
+    "deletePage": "Supprimer",
+    "deletePageNumbered": "Supprimer la page {number}",
+    "allDeletedError": "Conservez au moins une page avant d’appliquer.",
+    "outputNameLabel": "Nom du fichier de sortie",
+    "outputNamePlaceholder": "pages-organisees.pdf",
+    "applyButton": "Appliquer et télécharger",
+    "applying": "Application en cours…",
+    "applyingHint": "Réorganisation, rotation et suppression des pages en cours…",
+    "loadError": "Impossible d’ouvrir ce PDF.",
+    "toastSuccess": "PDF réorganisé",
+    "toastError": "Échec de la réorganisation"
   },
   "universalMerge": {
     "title": "Fusion universelle",
@@ -3148,6 +3188,14 @@
       "formatsHint": "Word, Excel, PowerPoint et OpenDocument (.docx, .xlsx, .pptx, .odt, .ods, .odp…) acceptés.",
       "actionButton": "Convertir en PDF",
       "toastSuccess": "Document converti",
+      "toastError": "Échec de la conversion"
+    },
+    "rtfToPdf": {
+      "title": "RTF vers PDF",
+      "subtitle": "Convertissez un fichier RTF (Rich Text Format) en PDF, mise en forme préservée.",
+      "formatsHint": "Fichiers RTF (.rtf) uniquement.",
+      "actionButton": "Convertir en PDF",
+      "toastSuccess": "RTF converti",
       "toastError": "Échec de la conversion"
     },
     "ocr": {
