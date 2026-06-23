@@ -556,6 +556,13 @@ export const TOOL_CONFIGS = {
         labelKey: "locationLabel",
         placeholderKey: "locationPlaceholder",
       },
+      {
+        type: "switch",
+        name: "timestamp",
+        labelKey: "timestampLabel",
+        descriptionKey: "timestampDescription",
+        defaultValue: "false",
+      },
     ],
   },
 

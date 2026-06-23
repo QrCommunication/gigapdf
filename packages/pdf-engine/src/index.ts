@@ -172,8 +172,15 @@ export type { FormFieldInfo, FillResult, FlattenFormsResult } from './forms';
 export { encryptPDF, decryptPDF, getPermissions, setPermissions } from './encrypt';
 export type { EncryptOptions, EncryptionAlgorithm, PermissionsResult } from './encrypt';
 
-// Sign — PKCS#7 detached digital signature with a user-provided P12/PFX
-export { signPdf, PdfSignInvalidCertificateError } from './sign';
+// Sign — PKCS#7 detached digital signature with a user-provided P12/PFX,
+// optionally PAdES-B-T (RFC 3161 trusted timestamp) via FreeTSA.
+export {
+  signPdf,
+  signPdfTimestamped,
+  PdfSignInvalidCertificateError,
+  PdfSignTimestampError,
+  FREETSA_TSA_URL,
+} from './sign';
 export type { SignPdfOptions, SignPdfResult } from './sign';
 
 // Preview

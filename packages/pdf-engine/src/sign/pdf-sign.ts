@@ -21,6 +21,16 @@ import { getEngine } from '../wasm';
 import { PDFCorruptedError, PDFEngineError } from '../errors';
 
 /**
+ * Default RFC 3161 Time-Stamping Authority used for PAdES-B-T signatures.
+ *
+ * FreeTSA (https://freetsa.org/tsr) is a public, no-account TSA. This URL is
+ * fixed server-side and is NEVER taken from user input — there is therefore no
+ * SSRF surface here (the engine only POSTs the `TimeStampReq` to this exact
+ * host via its built-in `defaultTsaPost`).
+ */
+export const FREETSA_TSA_URL = 'https://freetsa.org/tsr';
+
+/**
  * Business error raised when the provided P12/PFX cannot be used: wrong
  * passphrase, corrupt/truncated DER, no private key or certificate bag, or an
  * unsupported encryption cipher.
@@ -33,6 +43,22 @@ export class PdfSignInvalidCertificateError extends PDFEngineError {
   constructor() {
     super('Invalid certificate or passphrase', 'PDF_SIGN_INVALID_CERTIFICATE');
     this.name = 'PdfSignInvalidCertificateError';
+  }
+}
+
+/**
+ * Business error raised when a PAdES-B-T (timestamped) signature could not
+ * obtain a trusted timestamp: the TSA was unreachable, timed out, or returned
+ * an invalid/rejected `TimeStampResp`.
+ *
+ * Distinct from {@link PdfSignInvalidCertificateError} so the UI can tell the
+ * user "the timestamp authority is unreachable, try again" rather than blaming
+ * their certificate. Carries no secret and nothing user-supplied.
+ */
+export class PdfSignTimestampError extends PDFEngineError {
+  constructor() {
+    super('Timestamp authority unreachable', 'PDF_SIGN_TIMESTAMP_FAILED');
+    this.name = 'PdfSignTimestampError';
   }
 }
 
@@ -115,6 +141,91 @@ export async function signPdf(
     if (err instanceof PDFEngineError) throw err;
     // The engine's generic "PKCS#12 signing failed: …" is, by construction, a
     // credential problem. Anything else here is an internal pipeline failure.
+    if (err instanceof Error && /PKCS#12 signing failed/i.test(err.message)) {
+      throw new PdfSignInvalidCertificateError();
+    }
+    throw new PDFEngineError('Failed to sign PDF', 'PDF_SIGN_FAILED');
+  } finally {
+    doc.close();
+  }
+}
+
+/**
+ * Decides whether an error thrown by `signTimestamped` is a TSA/network
+ * problem (→ {@link PdfSignTimestampError}) rather than a credential problem.
+ * The engine prefixes timestamp-round-trip failures with "TSA"/"timestamp",
+ * and `defaultTsaPost` surfaces `fetch` failures (network/DNS/HTTP) — none of
+ * which implicate the user's certificate.
+ */
+function isTimestampFailure(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return /\b(tsa|timestamp|timestampresp|timestampreq|time-?stamp|fetch failed|failed to fetch|network|enotfound|econnrefused|etimedout|getaddrinfo)\b/i.test(
+    err.message,
+  );
+}
+
+/**
+ * Signs a PDF with a PAdES-B-T signature: a PKCS#7 detached signature that
+ * additionally embeds an RFC 3161 trusted timestamp (eIDAS *advanced* level)
+ * obtained from a Time-Stamping Authority. The timestamp proves the document
+ * existed at a verifiable moment, independent of the signer's clock.
+ *
+ * Like {@link signPdf}, the signature is invisible and covers the whole
+ * document via /ByteRange — it MUST be the last operation in a workflow.
+ *
+ * The TSA round trip is performed by the engine's built-in `defaultTsaPost`
+ * against {@link FREETSA_TSA_URL} (a fixed, host-controlled URL — never user
+ * input, so no SSRF surface). It is a network call and may fail; such failures
+ * surface as {@link PdfSignTimestampError}, distinct from certificate errors.
+ *
+ * @throws {PdfSignInvalidCertificateError} wrong passphrase or unusable P12
+ * @throws {PdfSignTimestampError} the TSA was unreachable or rejected the request
+ * @throws {PDFCorruptedError} input bytes are not a loadable PDF
+ * @throws {PDFEngineError} internal signing failure (code PDF_SIGN_FAILED)
+ */
+export async function signPdfTimestamped(
+  pdfBytes: Uint8Array,
+  opts: SignPdfOptions,
+): Promise<SignPdfResult> {
+  const { p12, passphrase, reason, location, contactInfo, signerName } = opts;
+
+  if (p12.byteLength === 0) {
+    throw new PdfSignInvalidCertificateError();
+  }
+
+  const giga = await getEngine();
+
+  let doc: GigaPdfDoc;
+  try {
+    doc = giga.open(pdfBytes);
+  } catch (err) {
+    throw new PDFCorruptedError(
+      `Failed to load PDF for signing: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  try {
+    // tsaFetch is intentionally omitted: the engine uses its built-in
+    // defaultTsaPost against the fixed FREETSA_TSA_URL. The URL is a constant,
+    // never user-supplied, so there is no SSRF surface to allow-list.
+    const signed = await doc.signTimestamped({
+      p12,
+      password: passphrase,
+      tsaUrl: FREETSA_TSA_URL,
+      name: signerName ?? '',
+      reason: reason ?? '',
+      date: pdfDateNow(),
+      location: location ?? '',
+      contactInfo: contactInfo ?? '',
+    });
+    return { bytes: signed };
+  } catch (err) {
+    if (err instanceof PDFEngineError) throw err;
+    // Order matters: a TSA/network failure is the most likely runtime error
+    // and must NOT be misreported as a certificate problem.
+    if (isTimestampFailure(err)) {
+      throw new PdfSignTimestampError();
+    }
     if (err instanceof Error && /PKCS#12 signing failed/i.test(err.message)) {
       throw new PdfSignInvalidCertificateError();
     }

@@ -1529,9 +1529,12 @@
       "applyToDocumentHint": "The document you are editing is replaced with the signed version",
       "downloadOnly": "Download only",
       "downloadOnlyHint": "Downloads a signed copy without modifying the document",
+      "timestampLabel": "Timestamp (PAdES-B-T)",
+      "timestampHint": "Adds an RFC 3161 trusted timestamp (eIDAS advanced signature) proving the signing date. Requires a connection to the timestamp authority.",
       "errors": {
         "invalidCertificate": "Invalid certificate or password.",
         "certificateTooLarge": "The certificate exceeds the 1 MB limit.",
+        "tsaUnreachable": "Timestamp authority unreachable. Try again or sign without a timestamp.",
         "generic": "Failed to sign the document."
       },
       "appliedTitle": "Document signed",
@@ -3373,7 +3376,9 @@
       "reasonLabel": "Reason (optional)",
       "reasonPlaceholder": "Document approval",
       "locationLabel": "Location",
-      "locationPlaceholder": "Paris, France"
+      "locationPlaceholder": "Paris, France",
+      "timestampLabel": "Timestamp (PAdES-B-T)",
+      "timestampDescription": "Adds an RFC 3161 trusted timestamp (eIDAS advanced signature) via FreeTSA. Requires a network connection."
     },
     "textToPdf": {
       "title": "Text to PDF",
