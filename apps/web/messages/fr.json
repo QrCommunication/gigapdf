@@ -856,6 +856,7 @@
         "transformWatermark": "Filigrane",
         "transformPdfa": "Convertir en PDF/A",
         "transformSplit": "Fractionner",
+        "transformOrganize": "Organiser les pages",
         "delete": "Mettre à la corbeille"
       },
       "deleteDialog": {
@@ -1092,6 +1093,24 @@
         "japanese": "Japonais",
         "korean": "Coréen"
       }
+    },
+    "organize": {
+      "title": "Organiser les pages",
+      "description": "Réordonnez, faites pivoter et supprimez les pages de « {name} » sur une grille visuelle, puis appliquez tout en une passe.",
+      "comment": "Pages réorganisées",
+      "outputLabel": "Résultat",
+      "outputReplace": "Remplacer le document",
+      "outputReplaceHint": "Enregistre la version réorganisée à la place de l'originale.",
+      "outputDownload": "Télécharger une copie",
+      "outputDownloadHint": "Télécharge le PDF réorganisé sans modifier le document stocké.",
+      "run": "Appliquer",
+      "processing": "Application en cours…",
+      "cancel": "Annuler",
+      "loadError": "Impossible d'ouvrir ce document.",
+      "replacedTitle": "Pages réorganisées",
+      "replacedDescription": "« {name} » a été remplacé par sa version réorganisée.",
+      "downloadedTitle": "Copie réorganisée téléchargée",
+      "failed": "La réorganisation des pages a échoué."
     },
     "transform": {
       "title": {

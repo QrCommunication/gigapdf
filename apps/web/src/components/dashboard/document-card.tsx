@@ -57,6 +57,7 @@ import {
   Droplet,
   FileCheck2,
   Scissors,
+  Wand2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { DragItem } from "./document-explorer";
@@ -72,6 +73,7 @@ import {
 import { TagChips } from "./tag-input";
 import { ManageTagsDialog } from "./manage-tags-dialog";
 import { GedOcrDialog } from "./ged-ocr-dialog";
+import { GedOrganizeDialog } from "./ged-organize-dialog";
 import {
   GedTransformDialog,
   type GedTransform,
@@ -130,6 +132,7 @@ export function DocumentCard({
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [tagsDialogOpen, setTagsDialogOpen] = useState(false);
   const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
+  const [organizeDialogOpen, setOrganizeDialogOpen] = useState(false);
   // Active PDF→PDF transform; non-null opens the transform dialog.
   const [activeTransform, setActiveTransform] = useState<GedTransform | null>(
     null,
@@ -481,6 +484,10 @@ export function DocumentCard({
                     <Scissors className="mr-2 h-4 w-4" />
                     {t("menu.transformSplit")}
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setOrganizeDialogOpen(true)}>
+                    <Wand2 className="mr-2 h-4 w-4" />
+                    {t("menu.transformOrganize")}
+                  </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
               <DropdownMenuSeparator />
@@ -638,6 +645,15 @@ export function DocumentCard({
       <GedOcrDialog
         open={ocrDialogOpen}
         onOpenChange={setOcrDialogOpen}
+        documentId={id}
+        documentName={documentName}
+        onReplaced={() => onChanged?.()}
+      />
+
+      {/* Organize pages Dialog (visual grid) */}
+      <GedOrganizeDialog
+        open={organizeDialogOpen}
+        onOpenChange={setOrganizeDialogOpen}
         documentId={id}
         documentName={documentName}
         onReplaced={() => onChanged?.()}

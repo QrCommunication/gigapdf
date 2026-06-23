@@ -62,6 +62,7 @@ import {
   Droplet,
   FileCheck2,
   Scissors,
+  Wand2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { DragItem, FolderStats, SelectionItem } from "./document-explorer";
@@ -76,6 +77,7 @@ import {
 } from "./download-document-bytes";
 import { ManageTagsDialog } from "./manage-tags-dialog";
 import { GedOcrDialog } from "./ged-ocr-dialog";
+import { GedOrganizeDialog } from "./ged-organize-dialog";
 import {
   GedTransformDialog,
   type GedTransform,
@@ -168,6 +170,7 @@ export function DocumentTable({
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [tagsDialogOpen, setTagsDialogOpen] = useState(false);
   const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
+  const [organizeDialogOpen, setOrganizeDialogOpen] = useState(false);
   // Active PDF→PDF transform (with the doc it targets); non-null opens the dialog.
   const [activeTransform, setActiveTransform] = useState<GedTransform | null>(
     null,
@@ -280,6 +283,11 @@ export function DocumentTable({
   const openTransformDialog = (doc: Document, transform: GedTransform) => {
     setSelectedDoc(doc);
     setActiveTransform(transform);
+  };
+
+  const openOrganizeDialog = (doc: Document) => {
+    setSelectedDoc(doc);
+    setOrganizeDialogOpen(true);
   };
 
   const handleRename = async () => {
@@ -787,6 +795,12 @@ export function DocumentTable({
                             <Scissors className="mr-2 h-4 w-4" />
                             {tCard("menu.transformSplit")}
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => openOrganizeDialog(doc)}
+                          >
+                            <Wand2 className="mr-2 h-4 w-4" />
+                            {tCard("menu.transformOrganize")}
+                          </DropdownMenuItem>
                         </DropdownMenuSubContent>
                       </DropdownMenuSub>
                       <DropdownMenuSeparator />
@@ -954,6 +968,17 @@ export function DocumentTable({
         <GedOcrDialog
           open={ocrDialogOpen}
           onOpenChange={setOcrDialogOpen}
+          documentId={selectedDoc.id}
+          documentName={selectedDoc.name}
+          onReplaced={() => onChanged?.()}
+        />
+      )}
+
+      {/* Organize pages Dialog (visual grid) */}
+      {selectedDoc && (
+        <GedOrganizeDialog
+          open={organizeDialogOpen}
+          onOpenChange={setOrganizeDialogOpen}
           documentId={selectedDoc.id}
           documentName={selectedDoc.name}
           onReplaced={() => onChanged?.()}
