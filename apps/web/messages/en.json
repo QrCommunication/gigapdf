@@ -856,6 +856,7 @@
         "transformWatermark": "Watermark",
         "transformPdfa": "Convert to PDF/A",
         "transformSplit": "Split",
+        "transformOrganize": "Organize pages",
         "delete": "Move to trash"
       },
       "deleteDialog": {
@@ -1092,6 +1093,24 @@
         "japanese": "Japanese",
         "korean": "Korean"
       }
+    },
+    "organize": {
+      "title": "Organize pages",
+      "description": "Reorder, rotate and delete the pages of “{name}” on a visual grid, then apply everything in one pass.",
+      "comment": "Pages reorganized",
+      "outputLabel": "Result",
+      "outputReplace": "Replace the document",
+      "outputReplaceHint": "Saves the reorganized version in place of the original.",
+      "outputDownload": "Download a copy",
+      "outputDownloadHint": "Downloads the reorganized PDF without changing the stored document.",
+      "run": "Apply",
+      "processing": "Applying…",
+      "cancel": "Cancel",
+      "loadError": "This document could not be opened.",
+      "replacedTitle": "Pages reorganized",
+      "replacedDescription": "“{name}” was replaced by its reorganized version.",
+      "downloadedTitle": "Reorganized copy downloaded",
+      "failed": "Page organization failed."
     },
     "transform": {
       "title": {
