@@ -40,6 +40,13 @@ interface DocumentInfoSidebarProps {
   onAssignElementToLayer?: (elementId: string, layerId: string | null) => void;
   onDownloadFile?: (file: EmbeddedFileObject) => void;
   currentPageIndex?: number;
+  /**
+   * Bake an edited outline (TOC). When provided, the TOC panel exposes its
+   * edit mode (add / rename / delete / reorder / indent bookmarks).
+   */
+  onApplyOutline?: (outline: BookmarkObject[]) => void;
+  /** Total page count — bounds the destination page input in outline edit. */
+  pageCount?: number;
   className?: string;
 }
 
@@ -68,6 +75,8 @@ export function DocumentInfoSidebar({
   onAssignElementToLayer,
   onDownloadFile,
   currentPageIndex,
+  onApplyOutline,
+  pageCount,
   className,
 }: DocumentInfoSidebarProps) {
   const t = useTranslations("editor");
@@ -81,7 +90,8 @@ export function DocumentInfoSidebar({
     layers.length > 0 ||
     embeddedFiles.length > 0 ||
     elements.length > 0 ||
-    Boolean(onLayerCreate);
+    Boolean(onLayerCreate) ||
+    Boolean(onApplyOutline);
 
   if (!hasContent) {
     return null;
@@ -125,6 +135,8 @@ export function DocumentInfoSidebar({
             outlines={outlines}
             onNavigateToPage={onNavigateToPage}
             currentPageIndex={currentPageIndex}
+            onApplyOutline={onApplyOutline}
+            pageCount={pageCount}
           />
 
           {/* Calques (éléments de la page + groupes OCG en lecture seule) */}
