@@ -1649,6 +1649,7 @@ export const TOOLS: ToolData[] = [
     slug: "rtf-pdf",
     name: "RTF et PDF",
     category: "convert",
+    appHref: "/rtf-pdf",
     metaTitle: "Convertir RTF en PDF et PDF en RTF | GigaPDF",
     metaDescription:
       "Convertissez vos fichiers RTF en PDF, et repassez du PDF vers le RTF modifiable. Le pont RTF ↔ PDF, gratuit et open source.",
@@ -1899,6 +1900,7 @@ export const TOOLS: ToolData[] = [
     slug: "markdown-vers-pdf",
     name: "Markdown vers PDF",
     category: "convert",
+    appHref: "/markdown-to-pdf",
     metaTitle: "Convertir un fichier Markdown (.md) en PDF | GigaPDF",
     metaDescription:
       "Transformez vos fichiers Markdown (.md) en PDF mis en page : titres, listes, tableaux, code et liens rendus proprement. Gratuit et open source.",
@@ -1959,6 +1961,7 @@ export const TOOLS: ToolData[] = [
     slug: "csv-vers-pdf",
     name: "CSV vers PDF",
     category: "convert",
+    appHref: "/csv-to-pdf",
     metaTitle: "Convertir un fichier CSV en PDF (tableau) | GigaPDF",
     metaDescription:
       "Transformez un fichier CSV en PDF : les données sont rendues en tableau propre et paginé, prêt à imprimer ou partager. Gratuit et open source.",
@@ -2020,6 +2023,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-vers-markdown",
     name: "PDF vers Markdown",
     category: "convert",
+    appHref: "/pdf-to-markdown",
     metaTitle: "Convertir un PDF en Markdown (.md) | GigaPDF",
     metaDescription:
       "Transformez un PDF en Markdown propre : titres, listes, tableaux et liens reconstruits en texte structuré. Gratuit, open source.",
@@ -2081,6 +2085,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-vers-epub",
     name: "PDF vers EPUB",
     category: "convert",
+    appHref: "/pdf-to-epub",
     metaTitle: "Convertir un PDF en EPUB (livre numérique) | GigaPDF",
     metaDescription:
       "Transformez un PDF en EPUB lisible sur liseuse et mobile : texte refluable, chapitres et images repris. Conversion gratuite, open source, sans filigrane.",
@@ -2141,6 +2146,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-vers-rtf",
     name: "PDF vers RTF",
     category: "convert",
+    appHref: "/pdf-to-rtf",
     metaTitle: "Convertir un PDF en RTF (texte enrichi) | GigaPDF",
     metaDescription:
       "Transformez un PDF en RTF modifiable, ouvert par tous les traitements de texte, mise en forme reprise. Conversion gratuite, open source, sans filigrane.",
@@ -2202,6 +2208,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-vers-html",
     name: "PDF vers HTML",
     category: "convert",
+    appHref: "/pdf-to-html",
     metaTitle: "Convertir un PDF en HTML (page web) | GigaPDF",
     metaDescription:
       "Transformez un PDF en HTML : texte positionné et images reprises pour réutiliser le contenu sur le web. Conversion gratuite, open source, sans filigrane.",
@@ -2263,6 +2270,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-vers-texte",
     name: "PDF vers texte",
     category: "convert",
+    appHref: "/pdf-to-text",
     metaTitle: "Convertir un PDF en texte (.txt) | GigaPDF",
     metaDescription:
       "Extrayez le texte d'un PDF dans un fichier .txt propre, prêt à réutiliser ou indexer. OCR intégré pour les scans. Gratuit, open source, sans filigrane.",

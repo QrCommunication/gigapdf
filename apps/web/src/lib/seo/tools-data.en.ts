@@ -1608,6 +1608,7 @@ export const TOOLS: ToolData[] = [
     slug: "rtf-pdf",
     name: "RTF & PDF",
     category: "convert",
+    appHref: "/rtf-pdf",
     metaTitle: "Convert RTF to PDF and PDF to RTF | GigaPDF",
     metaDescription:
       "Convert RTF to PDF to freeze the layout, and PDF back to editable RTF. The bidirectional RTF bridge, free and open source.",
@@ -1858,6 +1859,7 @@ export const TOOLS: ToolData[] = [
     slug: "markdown-to-pdf",
     name: "Markdown to PDF",
     category: "convert",
+    appHref: "/markdown-to-pdf",
     metaTitle: "Convert a Markdown file (.md) to PDF | GigaPDF",
     metaDescription:
       "Turn your Markdown (.md) files into a laid-out PDF: headings, lists, tables, code and links rendered cleanly. Free, open source, no watermark.",
@@ -1919,6 +1921,7 @@ export const TOOLS: ToolData[] = [
     slug: "csv-to-pdf",
     name: "CSV to PDF",
     category: "convert",
+    appHref: "/csv-to-pdf",
     metaTitle: "Convert a CSV file to PDF (table) | GigaPDF",
     metaDescription:
       "Turn a CSV file into a PDF: the data is rendered as a clean, paginated table, ready to print or share. Free, open source, no watermark.",
@@ -1980,6 +1983,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-to-markdown",
     name: "PDF to Markdown",
     category: "convert",
+    appHref: "/pdf-to-markdown",
     metaTitle: "Convert a PDF to Markdown (.md) | GigaPDF",
     metaDescription:
       "Turn a PDF into clean Markdown: headings, lists, tables and links rebuilt as structured text, reusable in docs or a site. Free, open source.",
@@ -2041,6 +2045,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-to-epub",
     name: "PDF to EPUB",
     category: "convert",
+    appHref: "/pdf-to-epub",
     metaTitle: "Convert a PDF to EPUB (e-book) | GigaPDF",
     metaDescription:
       "Turn a PDF into an EPUB readable on e-readers and phones: reflowable text, chapters and images carried over. Free, open source, no watermark.",
@@ -2102,6 +2107,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-to-rtf",
     name: "PDF to RTF",
     category: "convert",
+    appHref: "/pdf-to-rtf",
     metaTitle: "Convert a PDF to RTF (rich text) | GigaPDF",
     metaDescription:
       "Turn a PDF into editable RTF, opened by every word processor, formatting carried over. Free, open source, no watermark.",
@@ -2163,6 +2169,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-to-html",
     name: "PDF to HTML",
     category: "convert",
+    appHref: "/pdf-to-html",
     metaTitle: "Convert a PDF to HTML (web page) | GigaPDF",
     metaDescription:
       "Turn a PDF into HTML: positioned text and images carried over to reuse the content on the web. Free, open source, no watermark.",
@@ -2224,6 +2231,7 @@ export const TOOLS: ToolData[] = [
     slug: "pdf-to-text",
     name: "PDF to text",
     category: "convert",
+    appHref: "/pdf-to-text",
     metaTitle: "Convert a PDF to text (.txt) | GigaPDF",
     metaDescription:
       "Extract a PDF's text into a clean .txt file, ready to reuse or index. Built-in OCR for scans. Free, open source, no watermark.",
