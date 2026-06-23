@@ -32,8 +32,8 @@
  * same page, so the content-stream paint order is [scan] → [masks] → [text].
  */
 
-import type { GigaPdfEngine, OcrWord } from '@qrcommunication/gigapdf-lib';
-import { getEngine } from '../wasm';
+import type { GigaPdfEngine, OcrWord } from 'gigapdf-lib-ocr';
+import { getOcrEngine } from '../wasm-ocr';
 import { engineLogger } from '../utils/logger';
 import { extractPlainText } from './structured-text';
 import {
@@ -218,7 +218,7 @@ export async function makeEditableOcrPdf(
   }
 
   const scale = dpi / 72;
-  const giga = await getEngine();
+  const giga = await getOcrEngine();
   await ensureOcrModels(giga, options.languages, options.handwriting);
   const doc = giga.open(pdfBytes);
 

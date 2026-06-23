@@ -24,8 +24,8 @@
 
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
-import type { GigaPdfEngine, OcrScript } from '@qrcommunication/gigapdf-lib';
-import { getEngine } from '../wasm';
+import type { GigaPdfEngine, OcrScript } from 'gigapdf-lib-ocr';
+import { getOcrEngine } from '../wasm-ocr';
 import { engineLogger } from '../utils/logger';
 import { extractPlainText } from './structured-text';
 
@@ -201,7 +201,7 @@ const loadedOcrScripts = new Set<OcrScript>();
  * enum (so `loadBundledOcrModel` cannot load it); it ships as a raw `.gpocr` blob
  * under the engine package's `models/` and is host-loaded via `loadOcrModel`.
  */
-const HANDWRITING_MODEL_SPECIFIER = '@qrcommunication/gigapdf-lib/models/ocr_alpha_hw.gpocr';
+const HANDWRITING_MODEL_SPECIFIER = 'gigapdf-lib-ocr/models/ocr_alpha_hw.gpocr';
 
 // Load-once guard for the handwriting model (engine registry is process-global).
 let handwritingModelLoaded = false;
@@ -305,7 +305,7 @@ export async function makeSearchablePdf(
   //    POST-rotation and returns word boxes in image pixels; `addTextLayer`
   //    writes glyphs in render mode 3 (invisible) — one batched call per page.
   const scale = dpi / 72;
-  const giga = await getEngine();
+  const giga = await getOcrEngine();
   // Load per-script recognizers so non-Latin scripts are recognized, not just
   // the built-in mono-glyph Latin classifier; add the Latin handwriting model
   // when the caller opts in.

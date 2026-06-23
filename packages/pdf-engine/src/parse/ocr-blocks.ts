@@ -19,7 +19,7 @@
  * fragmented per-word token — better embeddings, fewer rows, tighter snippets.
  */
 
-import { getEngine } from '../wasm';
+import { getOcrEngine } from '../wasm-ocr';
 import { engineLogger } from '../utils/logger';
 import type { OcrWordBox, PdfPlacementContext } from './ocr-searchable';
 
@@ -287,7 +287,7 @@ export async function extractOcrBlocks(
   const { pages, dpi = 144, granularity = 'line' } = options;
   const scale = dpi / 72;
 
-  const giga = await getEngine();
+  const giga = await getOcrEngine();
   const doc = giga.open(pdfBytes);
 
   const blocks: OcrBlock[] = [];
