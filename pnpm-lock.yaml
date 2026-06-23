@@ -602,7 +602,7 @@ importers:
         version: link:../types
       '@qrcommunication/gigapdf-lib':
         specifier: latest
-        version: 0.68.0
+        version: 0.69.0
       fabric:
         specifier: ^7.4.0
         version: 7.4.0
@@ -767,7 +767,7 @@ importers:
         version: link:../types
       '@qrcommunication/gigapdf-lib':
         specifier: latest
-        version: 0.68.0
+        version: 0.69.0
       gigapdf-lib-ocr:
         specifier: npm:@qrcommunication/gigapdf-lib@0.63.0
         version: '@qrcommunication/gigapdf-lib@0.63.0'
@@ -2639,8 +2639,8 @@ packages:
     resolution: {integrity: sha512-L/6pfqwHmb4AvsOyTLELBCIw2D8UwiP9KTkqKCkhlF6P2E6pal5ZuIKCO8Hpc9RpCEuL/aOZthQHZcsuhsFRGQ==}
     engines: {node: '>=18.17.0'}
 
-  '@qrcommunication/gigapdf-lib@0.68.0':
-    resolution: {integrity: sha512-G3qdLUeijbL/5d1eYzKiHj9isMOoRVKG+M94TkOFQxDLwYL/mtCWGGwrma7HtQ1dY68MKpadmzNIjFVv9bMq5A==}
+  '@qrcommunication/gigapdf-lib@0.69.0':
+    resolution: {integrity: sha512-aqgCoCS7XaSijm8mLfvMOpPr9DqkhamR+S0nbBYt3om4xD48/qdWQRNjdes8PARKnhQ1nvodGu3rdP2gcYJ6Ug==}
     engines: {node: '>=18.17.0'}
 
   '@radix-ui/number@1.1.2':
@@ -10913,7 +10913,7 @@ snapshots:
 
   '@qrcommunication/gigapdf-lib@0.63.0': {}
 
-  '@qrcommunication/gigapdf-lib@0.68.0': {}
+  '@qrcommunication/gigapdf-lib@0.69.0': {}
 
   '@radix-ui/number@1.1.2': {}
 
