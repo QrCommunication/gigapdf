@@ -35,8 +35,13 @@ documents/versions).
   native JS interpreter, Office↔PDF conversion, rasterisation, crypto/signatures,
   image codecs). No third-party PDF binary (Tesseract, poppler, LibreOffice,
   Ghostscript, Chromium/Playwright, mupdf, pdf-lib) is required.
-- The WASM module ships with the frontend; OCR, rendering and conversion run
-  client-side. The backend proxies preview rendering and persists results.
+- The same WASM module runs in two places. In the browser it powers the live
+  editor (page rasterisation and direct text editing). In the Next.js API
+  routes (Node) it runs the heavy, privacy-sensitive operations **server-side**:
+  OCR (`/api/pdf/ocr`), Office/HTML conversions (`/api/office/*`,
+  `/api/pdf/convert`), signing, encryption, redaction and preview rendering.
+  Documents are never sent to a third-party service. The FastAPI backend
+  persists results and computes embeddings locally for semantic search.
 
 ### Frontend (Next.js)
 - Web App: Main editor UI and user dashboard.

@@ -18,7 +18,7 @@ Under the following terms:
   you may not distribute the modified material.
 
 The GigaPDF source code is licensed separately under
-[GNU AGPL-3.0-or-later](../LICENSE).
+[PolyForm Noncommercial 1.0.0](../LICENSE).
 
 ## Trademark notice
 
@@ -27,12 +27,16 @@ Use of these marks is governed by [TRADEMARK.md](../TRADEMARK.md).
 
 ## Files
 
+Each lockup ships in a `-light` variant (for light backgrounds) and a `-dark`
+variant (for dark backgrounds). The legacy unsuffixed names are kept as aliases
+of the light variant.
+
 | File | Use case |
 |------|----------|
-| `logo-icon.svg` | Square icon (light background) |
-| `logo-icon-dark.svg` | Square icon (dark background) |
-| `logo-horizontal.svg` | Horizontal lockup (text + icon) |
-| `logo-stacked.svg` | Stacked lockup (icon above text) |
+| `logo-icon-light.svg` / `logo-icon-dark.svg` | Square icon |
+| `logo-horizontal-light.svg` / `logo-horizontal-dark.svg` | Horizontal lockup (icon + text) |
+| `logo-stacked-light.svg` / `logo-stacked-dark.svg` | Stacked lockup (icon above text) |
+| `logo-icon.svg` · `logo-horizontal.svg` · `logo-stacked.svg` | Light-variant aliases (back-compat) |
 
 ## Requesting modifications
 
