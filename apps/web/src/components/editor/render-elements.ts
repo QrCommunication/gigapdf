@@ -53,6 +53,7 @@ import {
   leftIndentOffset,
   shiftStylesForMarker,
 } from "./lib/list-format";
+import { clampCombValue, computeCombLayout } from "./lib/comb-layout";
 
 type FabricModule = typeof FabricNamespace;
 
@@ -1505,18 +1506,39 @@ export async function renderElementsOverlay(
           formElement.fieldType === "radio";
 
         if (isTextEntry) {
+          // A COMB (PEIGNE) field lays its value out one char per equally-spaced
+          // cell across `maxLength` cells (CERFA SSN/date boxes). Reproduce the
+          // original cell spacing: monospace face + charSpacing so each glyph is
+          // centred in its cell, and never more chars than there are cells.
+          const combMaxLen = formElement.properties?.maxLength ?? 0;
+          const isComb =
+            (formElement.properties?.comb ?? false) && combMaxLen > 0;
           // Empty fields show the AcroForm placeholder if one exists, otherwise
           // BLANK — never the internal field NAME ("NOM PAR 2", "SS PAR 2"…),
           // which is identity metadata, not a user-facing value. The name stays
           // available on data.fieldName (round-trip) and in the side panel label.
           const placeholder = formElement.placeholder ?? "";
-          const currentValue = formFieldTextValue(formElement.value);
+          const rawValue = formFieldTextValue(formElement.value);
+          const currentValue = isComb
+            ? clampCombValue(rawValue, combMaxLen)
+            : rawValue;
           const showPlaceholder = currentValue.length === 0;
+          // Comb geometry (monospace, equal cells); only used when isComb.
+          const combLayout = isComb
+            ? computeCombLayout(
+                formElement.bounds.width,
+                formElement.bounds.height,
+                combMaxLen,
+                formElement.style?.daSize ?? formElement.style?.fontSize ?? 0,
+              )
+            : null;
           // Field font size: honour the AcroForm style, fall back to a size that
-          // fits the field height (auto-size fields use 0 in PDF).
+          // fits the field height (auto-size fields use 0 in PDF). Comb fields
+          // size to the cell so a glyph never bleeds into the next box.
           const styleFontSize = formElement.style?.fontSize ?? 0;
-          const fieldFontSize =
-            styleFontSize > 0
+          const fieldFontSize = combLayout
+            ? combLayout.fontSize
+            : styleFontSize > 0
               ? styleFontSize
               : Math.max(8, Math.min(formElement.bounds.height * 0.7, 16));
           const textColour = formElement.style?.textColor || "#0a3a8a";
@@ -1525,16 +1547,27 @@ export async function renderElementsOverlay(
             {
               ...baseOptions,
               width: formElement.bounds.width,
-              // Slight inset + vertical centring inside the field box.
-              left: formElement.bounds.x + 2,
+              // Slight inset + vertical centring inside the field box. Comb cells
+              // centre the first glyph in cell 0 instead of a flat 2px inset.
+              left:
+                formElement.bounds.x +
+                (combLayout ? combLayout.leftInset : 2),
               top:
                 formElement.bounds.y +
                 Math.max(0, (formElement.bounds.height - fieldFontSize) / 2),
               fontSize: fieldFontSize,
-              fontFamily: formElement.style?.fontFamily || "Helvetica",
+              fontFamily: combLayout
+                ? combLayout.fontFamily
+                : formElement.style?.fontFamily || "Helvetica",
               fill: showPlaceholder ? "rgba(0,0,0,0.4)" : textColour,
               backgroundColor: fieldFill,
-              textAlign: formElement.style?.textAlign || "left",
+              // Comb fields are left-anchored (each char sits in its own cell);
+              // other fields honour the AcroForm /Q quadding (left/center/right).
+              textAlign: combLayout
+                ? "left"
+                : formElement.style?.textAlign || "left",
+              // Per-cell spacing for comb fields (1/1000 em); 0 otherwise.
+              charSpacing: combLayout ? combLayout.charSpacing : 0,
               hasControls: false,
               hasBorders: true,
               borderColor: fieldStroke,

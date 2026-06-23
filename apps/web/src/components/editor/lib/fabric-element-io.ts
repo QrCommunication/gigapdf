@@ -39,6 +39,9 @@ import {
   stripDisplayText,
   unshiftStylesForMarker,
 } from "./list-format";
+// Comb (PEIGNE) field constraint: never persist more characters than there are
+// cells, so the next overlay re-lays the value across exactly `maxLength` boxes.
+import { clampCombValue } from "./comb-layout";
 
 /** Fabric object carrying our custom `.data` metadata. */
 export interface FabricObjectWithData extends FabricObject {
@@ -107,6 +110,11 @@ export function readFormFieldValue(
     const placeholder = obj.data?.fieldPlaceholder;
     if (typeof placeholder === "string" && typed === placeholder) {
       return "";
+    }
+    // Comb fields can never hold more characters than they have cells — clamp on
+    // the way back so the value re-flows across exactly `maxLength` boxes.
+    if (field.properties?.comb) {
+      return clampCombValue(typed, field.properties.maxLength);
     }
     return typed;
   }

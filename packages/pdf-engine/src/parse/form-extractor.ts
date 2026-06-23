@@ -13,9 +13,21 @@ import { getEngine } from '../wasm';
 // engine; this only builds the editor scene-graph elements.
 // ---------------------------------------------------------------------------
 
-// `/Ff` field flag bits the engine doesn't surface as named booleans.
+// `/Ff` field flag bits the engine doesn't surface as a named boolean.
+// (`comb` and `multiline` ARE surfaced directly on FieldInfo; only password is not.)
 const FLAG_PASSWORD = 1 << 13;
-const FLAG_COMB = 1 << 24;
+
+/** Map the AcroForm `/Q` quadding (0/1/2) to a CSS text alignment. */
+function quaddingToAlign(quadding: number): "left" | "center" | "right" {
+  switch (quadding) {
+    case 1:
+      return "center";
+    case 2:
+      return "right";
+    default:
+      return "left";
+  }
+}
 
 function stableUUID(fieldName: string, pageNumber: number): string {
   const hash = createHash('sha256').update(`${fieldName}:${pageNumber}`).digest('hex');
@@ -69,18 +81,28 @@ function toElement(field: FieldInfo): FormFieldElement {
     properties: {
       required: field.required,
       readOnly: field.readOnly,
+      // For a comb field `/MaxLen` is the number of equally-spaced cells the
+      // value is laid out into; the editor overlay reproduces that spacing.
       maxLength: field.maxLen ?? null,
       multiline: field.multiline,
       password: (field.flags & FLAG_PASSWORD) !== 0,
-      comb: (field.flags & FLAG_COMB) !== 0,
+      // The engine surfaces the comb flag (`/Ff` bit 25) directly.
+      comb: field.comb,
     },
     style: {
       fontFamily: 'Helvetica',
-      fontSize: 12,
+      // `/DA` font size (`0` = auto-size). Kept as 0 so the overlay sizes the
+      // value to fit the field box, matching the field's original render.
+      fontSize: field.daSize > 0 ? field.daSize : 12,
       textColor: '#000000',
       backgroundColor: null,
       borderColor: null,
       borderWidth: 1,
+      // `/Q` text alignment (0/1/2 → left/center/right).
+      textAlign: quaddingToAlign(field.quadding),
+      // `/DA` default-appearance font resource name + size (0 = auto-size).
+      daFont: field.daFont ?? null,
+      daSize: field.daSize,
     },
     format: { type: 'none', pattern: null },
   };

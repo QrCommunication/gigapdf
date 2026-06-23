@@ -602,7 +602,7 @@ importers:
         version: link:../types
       '@qrcommunication/gigapdf-lib':
         specifier: latest
-        version: 0.71.0
+        version: 0.72.0
       fabric:
         specifier: ^7.4.0
         version: 7.4.0
@@ -767,7 +767,7 @@ importers:
         version: link:../types
       '@qrcommunication/gigapdf-lib':
         specifier: latest
-        version: 0.71.0
+        version: 0.72.0
       gigapdf-lib-ocr:
         specifier: npm:@qrcommunication/gigapdf-lib@0.63.0
         version: '@qrcommunication/gigapdf-lib@0.63.0'
@@ -2639,8 +2639,8 @@ packages:
     resolution: {integrity: sha512-L/6pfqwHmb4AvsOyTLELBCIw2D8UwiP9KTkqKCkhlF6P2E6pal5ZuIKCO8Hpc9RpCEuL/aOZthQHZcsuhsFRGQ==}
     engines: {node: '>=18.17.0'}
 
-  '@qrcommunication/gigapdf-lib@0.71.0':
-    resolution: {integrity: sha512-QyzlOPAdPXU5MVlw+gi7F7mu4fPWafgKcu74wrXaeRSZmQvsp4h1M+FX2zOD0bgOOPdb7PKB4Dw6bP9RHu/hYA==}
+  '@qrcommunication/gigapdf-lib@0.72.0':
+    resolution: {integrity: sha512-a/0DDRlzxpZ7Td8lo7XzwlzCEsprEBoskK/aZ6CLOn2030GfNoF517xUTAE+dCZeJEEjkOnGpfJ20eSQQUHZng==}
     engines: {node: '>=18.17.0'}
 
   '@radix-ui/number@1.1.2':
@@ -5262,8 +5262,8 @@ packages:
   electron-to-chromium@1.5.372:
     resolution: {integrity: sha512-M3yhbAlilnwqC8D21t28UCDGHyitShTmmLRU/H+b74P6Ski16Nb9HONYEaVpMj/pwC7BEo5B95FpjODLCWbtfA==}
 
-  electron-to-chromium@1.5.377:
-    resolution: {integrity: sha512-cH1jZgJHoezfTnKfKwnScpHywTFVnJUNITDPREFdhNjiuD502+QFpG0Qk7G8jhsV/f+CEAFlIrzP1fT+IMb92g==}
+  electron-to-chromium@1.5.378:
+    resolution: {integrity: sha512-VinvOAuuPmdD1guEgGv5f2Qp7/vlfqOrUOMYNnOD4wj3pit8kRsQHzfIf6teyUGWo15Tg5+bOJaRunvyltpVWQ==}
 
   emoji-regex@10.6.0:
     resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
@@ -10913,7 +10913,7 @@ snapshots:
 
   '@qrcommunication/gigapdf-lib@0.63.0': {}
 
-  '@qrcommunication/gigapdf-lib@0.71.0': {}
+  '@qrcommunication/gigapdf-lib@0.72.0': {}
 
   '@radix-ui/number@1.1.2': {}
 
@@ -13123,7 +13123,7 @@ snapshots:
     dependencies:
       baseline-browser-mapping: 2.10.38
       caniuse-lite: 1.0.30001799
-      electron-to-chromium: 1.5.377
+      electron-to-chromium: 1.5.378
       node-releases: 2.0.48
       update-browserslist-db: 1.2.3(browserslist@4.28.4)
 
@@ -13612,7 +13612,7 @@ snapshots:
 
   electron-to-chromium@1.5.372: {}
 
-  electron-to-chromium@1.5.377: {}
+  electron-to-chromium@1.5.378: {}
 
   emoji-regex@10.6.0: {}
 

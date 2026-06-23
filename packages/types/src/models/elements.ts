@@ -360,8 +360,18 @@ export interface FieldStyle {
   backgroundColor: string | null;
   borderColor: string | null;
   borderWidth: number;
-  /** Horizontal alignment of the field text (maps to /Q in AcroForm). */
+  /** Horizontal alignment of the field text (maps to /Q in AcroForm, 0/1/2 → left/center/right). */
   textAlign?: "left" | "center" | "right";
+  /**
+   * Font resource name from the field's `/DA` default appearance (e.g. "Helv",
+   * "ZaDb"), resolved against the AcroForm. Absent when the field carries no `Tf`.
+   */
+  daFont?: string | null;
+  /**
+   * Font size in points from the field's `/DA` (`0` = auto-size). Drives the
+   * overlay font size so the editable value matches the field's original render.
+   */
+  daSize?: number | null;
 }
 
 export interface FormFieldElement extends ElementBase {
