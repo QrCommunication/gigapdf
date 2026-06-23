@@ -1,34 +1,40 @@
 /**
- * PDF → Office Export route
+ * PDF → document Export route
  *
  * POST /api/office/export
- * Fetches a session document's PDF bytes from the Python backend, then
- * converts the file to the requested Office format (docx, xlsx, pptx, odt,
- * odp) using the pdf-engine package.
+ * Fetches a session document's PDF bytes from the Python backend, then converts
+ * the file to the requested target format using the in-house zero-dependency
+ * `@giga-pdf/pdf-engine` (which wraps the `@qrcommunication/gigapdf-lib` WASM
+ * engine). Every target is produced server-side — there is no client-side WASM
+ * path — so the editor's export menu and these standalone tools share the exact
+ * same engine code.
  *
- * Conversion matrix (all via the WASM conversion engine):
- *   docx  — convertPdfToOffice
- *   odt   — convertPdfToOffice
- *   pptx  — convertPdfToOffice
- *   odp   — convertPdfToOffice
- *   xlsx  — pdfjs + exceljs extraction        (convertPdfToXlsx — dynamic import)
+ * Conversion matrix:
+ *   docx | pptx | odt | odp  — convertPdfToOffice (model → office)
+ *   xlsx                     — convertPdfToXlsx (tabular extraction)
+ *   ods                      — exportPdfToOds (doc.toOds() spreadsheet binary)
+ *   markdown                 — exportPdfToMarkdown (model → GFM text)
+ *   csv                      — exportPdfToCsv (model → RFC 4180 text)
+ *   epub                     — exportPdfToEpub (model → epub+zip binary)
+ *   html                     — exportPdfToHtml (model → standalone HTML text)
+ *   rtf                      — exportPdfToRtf (model → RTF text)
+ *   txt                      — exportPdfToText (doc.toText() plain text)
  *
  * Note on xlsx: PDF → XLSX is not a direct conversion (a PDF is not a
- * spreadsheet). A dedicated convertPdfToXlsx implementation based on pdfjs text
- * extraction + exceljs is loaded via dynamic import so this file type-checks
- * even when the symbol has not yet been added to the pdf-engine barrel.
+ * spreadsheet). A dedicated convertPdfToXlsx implementation based on text
+ * extraction is used.
  *
  * Request:
  *   Content-Type: application/json
  *   Cookie / Authorization: Better Auth session (validated by requireSession)
- *   Body: { documentId: string, format: 'docx' | 'xlsx' | 'pptx' | 'odt' | 'odp' }
+ *   Body: { documentId: string, format: ExportFormat }
  *
  * Responses:
- *   200  — Binary Office file (stream)
+ *   200  — Binary/text document (stream)
  *   400  — Missing / invalid body
  *   401  — Unauthenticated
  *   404  — Document session not found in Python backend
- *   422  — Conversion failed (OfficeConversionError)
+ *   422  — Conversion failed (OfficeConversionError / PDFEngineError)
  *   504  — Python backend timed out
  */
 
@@ -38,7 +44,15 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
   convertPdfToOffice,
+  exportPdfToMarkdown,
+  exportPdfToCsv,
+  exportPdfToEpub,
+  exportPdfToHtml,
+  exportPdfToRtf,
+  exportPdfToText,
+  exportPdfToOds,
   OfficeConversionError,
+  PDFEngineError,
   openDocument,
   saveDocument,
   flattenForms,
@@ -58,14 +72,99 @@ const PYTHON_BACKEND_URL =
 
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 
-// MIME types per export format (OOXML + OpenDocument)
-const CONTENT_TYPE_MAP = {
+/** Every target this route can produce, ordered office → text → ebook. */
+const EXPORT_FORMATS = [
+  'docx',
+  'xlsx',
+  'pptx',
+  'odt',
+  'ods',
+  'odp',
+  'markdown',
+  'csv',
+  'epub',
+  'html',
+  'rtf',
+  'txt',
+] as const;
+
+type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+// MIME types per export format (OOXML + OpenDocument + text/ebook targets).
+const CONTENT_TYPE_MAP: Record<ExportFormat, string> = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   odt: 'application/vnd.oasis.opendocument.text',
+  ods: 'application/vnd.oasis.opendocument.spreadsheet',
   odp: 'application/vnd.oasis.opendocument.presentation',
-} as const;
+  markdown: 'text/markdown;charset=utf-8',
+  csv: 'text/csv;charset=utf-8',
+  epub: 'application/epub+zip',
+  html: 'text/html;charset=utf-8',
+  rtf: 'application/rtf',
+  txt: 'text/plain;charset=utf-8',
+};
+
+// File extension per format (usually the key, except markdown → md).
+const EXTENSION_MAP: Record<ExportFormat, string> = {
+  docx: 'docx',
+  xlsx: 'xlsx',
+  pptx: 'pptx',
+  odt: 'odt',
+  ods: 'ods',
+  odp: 'odp',
+  markdown: 'md',
+  csv: 'csv',
+  epub: 'epub',
+  html: 'html',
+  rtf: 'rtf',
+  txt: 'txt',
+};
+
+/**
+ * Lower the (flattened) PDF bytes into `format`, returning bytes ready for the
+ * Response body. Text targets are UTF-8 encoded here so the caller treats every
+ * format uniformly. Throws OfficeConversionError / PDFEngineError on failure.
+ */
+async function convertTo(format: ExportFormat, pdfBytes: Uint8Array): Promise<Uint8Array> {
+  const encoder = new TextEncoder();
+  switch (format) {
+    case 'docx':
+    case 'pptx':
+    case 'odt':
+    case 'odp':
+      return convertPdfToOffice(pdfBytes, format);
+    case 'xlsx': {
+      // Dynamic import so the route compiles even before convertPdfToXlsx is
+      // added to the pdf-engine barrel (the xlsx implementation evolves
+      // independently). At runtime the symbol must be present.
+      const { convertPdfToXlsx } = (await import('@giga-pdf/pdf-engine') as unknown) as {
+        convertPdfToXlsx: (buf: Uint8Array) => Promise<Uint8Array>;
+      };
+      return convertPdfToXlsx(pdfBytes);
+    }
+    case 'ods':
+      return exportPdfToOds(pdfBytes);
+    case 'markdown':
+      return encoder.encode(await exportPdfToMarkdown(pdfBytes));
+    case 'csv':
+      return encoder.encode(await exportPdfToCsv(pdfBytes));
+    case 'epub':
+      return exportPdfToEpub(pdfBytes);
+    case 'html':
+      return encoder.encode(await exportPdfToHtml(pdfBytes));
+    case 'rtf':
+      return encoder.encode(await exportPdfToRtf(pdfBytes));
+    case 'txt':
+      return encoder.encode(await exportPdfToText(pdfBytes));
+    default: {
+      // Exhaustiveness guard — a new ExportFormat must be handled above.
+      const never: never = format;
+      throw new Error(`Unsupported export format: ${String(never)}`);
+    }
+  }
+}
 
 // ─── Zod schema ────────────────────────────────────────────────────────────────
 
@@ -73,8 +172,8 @@ const RequestBodySchema = z.object({
   documentId: z
     .string({ error: 'documentId is required and must be a string' })
     .min(1, 'documentId cannot be empty'),
-  format: z.enum(['docx', 'xlsx', 'pptx', 'odt', 'odp'], {
-    error: "format must be one of: 'docx', 'xlsx', 'pptx', 'odt', 'odp'",
+  format: z.enum(EXPORT_FORMATS, {
+    error: `format must be one of: ${EXPORT_FORMATS.join(', ')}`,
   }),
 });
 
@@ -217,26 +316,17 @@ export async function POST(request: NextRequest): Promise<Response> {
     });
   }
 
-  // ── 4. Convert PDF to the requested Office format ────────────────────────────
+  // ── 4. Convert PDF to the requested target format ────────────────────────────
   serverLogger.info('[api/office/export] Starting conversion', { documentId, format });
 
   let outputBytes: Uint8Array;
   try {
-    if (format === 'xlsx') {
-      // Dynamic import so the route compiles even before convertPdfToXlsx is
-      // added to the pdf-engine barrel (the xlsx implementation is being
-      // developed in parallel). At runtime both must be present.
-      const { convertPdfToXlsx } = (await import('@giga-pdf/pdf-engine') as unknown) as {
-        convertPdfToXlsx: (buf: Uint8Array) => Promise<Uint8Array>;
-      };
-      outputBytes = await convertPdfToXlsx(pdfBytes);
-    } else {
-      // format is 'docx' | 'pptx' | 'odt' | 'odp' — handled by the WASM engine
-      outputBytes = await convertPdfToOffice(pdfBytes, format);
-    }
+    outputBytes = await convertTo(format, pdfBytes);
   } catch (err: unknown) {
-    if (err instanceof OfficeConversionError) {
-      serverLogger.warn('[api/office/export] Office conversion failed', {
+    // Both engine error families map to 422 (unprocessable): the request was
+    // well-formed but the PDF could not be converted to this target.
+    if (err instanceof OfficeConversionError || err instanceof PDFEngineError) {
+      serverLogger.warn('[api/office/export] Conversion failed', {
         documentId,
         format,
         error: (err as Error).message,
@@ -263,7 +353,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   });
 
   // ── 5. Return binary response with correct Content-Type / Content-Disposition
-  const filename = `document-${documentId.slice(0, 8)}.${format}`;
+  const filename = `document-${documentId.slice(0, 8)}.${EXTENSION_MAP[format]}`;
   const contentDisposition = sanitizeContentDisposition(filename, 'attachment');
 
   // Wrap in Buffer so TypeScript accepts it as BodyInit across lib targets

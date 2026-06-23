@@ -56,6 +56,34 @@ async function lowerPdfModel<T>(
 }
 
 /**
+ * Open `buffer` and run `lower` directly on the short-lived `GigaPdfDoc` (for
+ * targets the doc serialises itself, without going through the unified model).
+ * The doc is always closed, even if `lower` throws.
+ *
+ * @typeParam T - The doc method's return type.
+ * @param buffer - Raw PDF bytes.
+ * @param lower - Maps the open doc to the serialised target.
+ * @throws {PDFEngineError} if the source PDF cannot be parsed.
+ */
+async function lowerPdfDoc<T>(
+  buffer: Uint8Array,
+  lower: (doc: ReturnType<GigaPdfEngine['open']>) => T,
+): Promise<T> {
+  const giga = await getEngine();
+  let doc;
+  try {
+    doc = giga.open(buffer);
+  } catch {
+    throw new PDFEngineError('could not parse the source PDF', 'PDF_PARSE_FAILED');
+  }
+  try {
+    return lower(doc);
+  } finally {
+    doc.close();
+  }
+}
+
+/**
  * Export a PDF to GitHub-flavoured Markdown (headings, lists, tables,
  * emphasis/links), decoded as a UTF-8 string.
  *
@@ -94,4 +122,61 @@ export async function exportPdfToEpub(buffer: Uint8Array): Promise<Uint8Array> {
     throw new PDFEngineError('could not export PDF to EPUB (empty result)', 'PDF_EPUB_EXPORT_FAILED');
   }
   return epub;
+}
+
+/**
+ * Export a PDF to standalone HTML — the document's content reflowed into a
+ * single self-contained HTML document (headings, paragraphs, lists, tables,
+ * inline styles), decoded as a UTF-8 string.
+ *
+ * @param buffer - Raw PDF bytes.
+ * @returns The HTML source.
+ * @throws {PDFEngineError} if the source PDF cannot be parsed.
+ */
+export async function exportPdfToHtml(buffer: Uint8Array): Promise<string> {
+  return lowerPdfModel(buffer, (giga, model) => giga.modelToHtml(model));
+}
+
+/**
+ * Export a PDF to RTF (Rich Text Format) — the document's content as a
+ * formatting-preserving RTF stream readable by Word/LibreOffice, decoded as a
+ * UTF-8 string.
+ *
+ * @param buffer - Raw PDF bytes.
+ * @returns The RTF source.
+ * @throws {PDFEngineError} if the source PDF cannot be parsed.
+ */
+export async function exportPdfToRtf(buffer: Uint8Array): Promise<string> {
+  return lowerPdfModel(buffer, (giga, model) => giga.modelToRtf(model));
+}
+
+/**
+ * Export a PDF to plain UTF-8 text — the document's extracted text content with
+ * no markup. Uses the doc's own `toText()` serialiser (reading-order text),
+ * which is the same extraction the editor's text layer relies on.
+ *
+ * @param buffer - Raw PDF bytes.
+ * @returns The plain-text content.
+ * @throws {PDFEngineError} if the source PDF cannot be parsed.
+ */
+export async function exportPdfToText(buffer: Uint8Array): Promise<string> {
+  return lowerPdfDoc(buffer, (doc) => doc.toText());
+}
+
+/**
+ * Export a PDF to an OpenDocument Spreadsheet (`.ods`) — the document's tabular
+ * content reconstructed into a native ODS workbook via the doc's own `toOds()`
+ * serialiser (the OpenDocument counterpart of `toXlsx()`).
+ *
+ * @param buffer - Raw PDF bytes.
+ * @returns The ODS bytes (a ZIP container).
+ * @throws {PDFEngineError} if the source PDF cannot be parsed, or the engine
+ *   returns an empty workbook.
+ */
+export async function exportPdfToOds(buffer: Uint8Array): Promise<Uint8Array> {
+  const ods = await lowerPdfDoc(buffer, (doc) => doc.toOds());
+  if (ods.length === 0) {
+    throw new PDFEngineError('could not export PDF to ODS (empty result)', 'PDF_ODS_EXPORT_FAILED');
+  }
+  return ods;
 }

@@ -3327,6 +3327,86 @@
       "actionButton": "Convert to ODT",
       "toastSuccess": "Document converted",
       "toastError": "Conversion failed"
+    },
+    "pdfToOds": {
+      "title": "PDF to ODS",
+      "subtitle": "Convert a PDF's tables to an OpenDocument Spreadsheet (.ods) file.",
+      "formatsHint": "PDF file only.",
+      "actionButton": "Convert to ODS",
+      "toastSuccess": "Spreadsheet converted",
+      "toastError": "Conversion failed"
+    },
+    "pdfToOdp": {
+      "title": "PDF to ODP",
+      "subtitle": "Convert a PDF to an OpenDocument Presentation (.odp) file.",
+      "formatsHint": "PDF file only.",
+      "actionButton": "Convert to ODP",
+      "toastSuccess": "Presentation converted",
+      "toastError": "Conversion failed"
+    },
+    "pdfToHtml": {
+      "title": "PDF to HTML",
+      "subtitle": "Convert a PDF to a standalone HTML web page, with formatting preserved.",
+      "formatsHint": "PDF file only.",
+      "actionButton": "Convert to HTML",
+      "toastSuccess": "Document converted",
+      "toastError": "Conversion failed"
+    },
+    "pdfToRtf": {
+      "title": "PDF to RTF",
+      "subtitle": "Convert a PDF to a Rich Text Format (.rtf) document editable in Word.",
+      "formatsHint": "PDF file only.",
+      "actionButton": "Convert to RTF",
+      "toastSuccess": "Document converted",
+      "toastError": "Conversion failed"
+    },
+    "pdfToText": {
+      "title": "PDF to Text",
+      "subtitle": "Extract a PDF's text content to a plain .txt file.",
+      "formatsHint": "PDF file only.",
+      "actionButton": "Convert to Text",
+      "toastSuccess": "Text extracted",
+      "toastError": "Conversion failed"
+    },
+    "pdfToMarkdown": {
+      "title": "PDF to Markdown",
+      "subtitle": "Convert a PDF to GitHub-flavoured Markdown (.md).",
+      "formatsHint": "PDF file only.",
+      "actionButton": "Convert to Markdown",
+      "toastSuccess": "Document converted",
+      "toastError": "Conversion failed"
+    },
+    "pdfToCsv": {
+      "title": "PDF to CSV",
+      "subtitle": "Convert a PDF's tabular content to a CSV (.csv) file.",
+      "formatsHint": "PDF file only.",
+      "actionButton": "Convert to CSV",
+      "toastSuccess": "Spreadsheet converted",
+      "toastError": "Conversion failed"
+    },
+    "pdfToEpub": {
+      "title": "PDF to EPUB",
+      "subtitle": "Convert a PDF to a reflowable EPUB (.epub) e-book.",
+      "formatsHint": "PDF file only.",
+      "actionButton": "Convert to EPUB",
+      "toastSuccess": "E-book converted",
+      "toastError": "Conversion failed"
+    },
+    "csvToPdf": {
+      "title": "CSV to PDF",
+      "subtitle": "Convert a CSV (.csv) file to a clean, paginated PDF table.",
+      "formatsHint": "CSV files (.csv) only.",
+      "actionButton": "Convert to PDF",
+      "toastSuccess": "Document converted",
+      "toastError": "Conversion failed"
+    },
+    "markdownToPdf": {
+      "title": "Markdown to PDF",
+      "subtitle": "Convert a Markdown (.md) file to a formatted PDF document.",
+      "formatsHint": "Markdown files (.md, .markdown) only.",
+      "actionButton": "Convert to PDF",
+      "toastSuccess": "Document converted",
+      "toastError": "Conversion failed"
     }
   }
 }
