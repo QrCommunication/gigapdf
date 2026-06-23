@@ -184,11 +184,16 @@ export type { ConvertOptions, UrlToPDFSafeOptions } from './convert';
 export { imageToPdf } from './convert/image-to-pdf';
 export { textToPdf, rtfToPdf } from './convert/text-to-pdf';
 export { convertMarkdownToPdf, convertCsvToPdf } from './convert/text-model-to-pdf';
-// PDF → Markdown / CSV / EPUB (fat-library model path: toModel → modelTo*)
+// PDF → Markdown / CSV / EPUB / HTML / RTF / plain text (fat-library model path:
+// toModel → modelTo*; plain text uses the doc's own toText() serialiser)
 export {
   exportPdfToMarkdown,
   exportPdfToCsv,
   exportPdfToEpub,
+  exportPdfToHtml,
+  exportPdfToRtf,
+  exportPdfToText,
+  exportPdfToOds,
 } from './convert/pdf-to-text-formats';
 export { mergeUniversal } from './convert/merge-universal';
 export type { UniversalMergeInput } from './convert/merge-universal';
