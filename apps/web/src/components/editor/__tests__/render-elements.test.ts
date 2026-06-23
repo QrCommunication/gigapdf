@@ -158,11 +158,14 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
       (o) => o instanceof IText,
     ) as IText;
     // Now resolved WEIGHT/STYLE-AWARE: the run carries no explicit weight/style,
-    // so the variant intent is regular (bold:false, italic:false).
-    expect(getFontFaceName).toHaveBeenCalledWith("KWVFOU+TimesNewRoman,Bold", {
-      bold: false,
-      italic: false,
-    });
+    // so the variant intent is regular (bold:false, italic:false). The run text
+    // is forwarded so the resolver can pick the COVERING subset (CERFA disjoint
+    // subsets) — here "Bonjour" from the textElement() factory.
+    expect(getFontFaceName).toHaveBeenCalledWith(
+      "KWVFOU+TimesNewRoman,Bold",
+      { bold: false, italic: false },
+      "Bonjour",
+    );
     expect(it_.opts.fontFamily).toBe("gigapdf-doc-font-abc");
   });
 
@@ -192,10 +195,11 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
       (o) => o instanceof IText,
     ) as IText;
-    expect(getFontFaceName).toHaveBeenCalledWith("Times New Roman", {
-      bold: true,
-      italic: true,
-    });
+    expect(getFontFaceName).toHaveBeenCalledWith(
+      "Times New Roman",
+      { bold: true, italic: true },
+      "Bonjour",
+    );
     expect(it_.opts.fontFamily).toBe("gigapdf-doc-bolditalic");
     // Variant-exact subset already encodes the weight/style → no synthetic.
     expect(it_.opts.fontWeight).toBe("normal");
@@ -229,11 +233,14 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
       (o) => o instanceof IText,
     ) as IText;
-    // Both calls happened: variant-exact (missed) then loose (hit).
-    expect(getFontFaceName).toHaveBeenCalledWith("Times New Roman", {
-      bold: true,
-      italic: false,
-    });
+    // Both calls happened: variant-exact (missed, carries the run text) then
+    // loose 1-arg (hit). The loose path is exactly what FIX #1b relies on when no
+    // same-variant subset covers the run → loose subset + synthetic uniform weight.
+    expect(getFontFaceName).toHaveBeenCalledWith(
+      "Times New Roman",
+      { bold: true, italic: false },
+      "Bonjour",
+    );
     expect(getFontFaceName).toHaveBeenCalledWith("Times New Roman");
     expect(it_.opts.fontFamily).toBe("gigapdf-doc-regular");
     // Closest subset is not the bold variant → synthesise bold so it still reads bold.
@@ -572,6 +579,48 @@ describe("renderElementsOverlay — editable form fields", () => {
     expect((it_.data as Record<string, unknown>).fieldPlaceholder).toBe(
       "Last name",
     );
+  });
+
+  it("shows BLANK (never the field name) for an empty TEXT field with no placeholder", async () => {
+    const canvas = makeCanvas();
+    // No AcroForm placeholder: the empty field must render blank, NOT the
+    // internal field NAME ("lastName" / CERFA's "NOM PAR 2"). The name is
+    // identity metadata, kept on data.fieldName for round-trip / side panel.
+    await renderElementsOverlay(
+      canvas,
+      [formFieldElement({ placeholder: null })],
+      fabricMock,
+    );
+    const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof IText,
+    ) as IText;
+    expect(it_.text).toBe("");
+    const data = it_.data as Record<string, unknown>;
+    expect(data.fieldPlaceholder).toBe("");
+    // The field NAME is still available for the round-trip + side-panel label.
+    expect(data.fieldName).toBe("lastName");
+  });
+
+  it("renders an empty LISTBOX (no options) as blank, not its field name", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [
+        formFieldElement({
+          elementId: "lb",
+          fieldType: "listbox",
+          fieldName: "country",
+          options: [],
+          value: "",
+        }),
+      ],
+      fabricMock,
+    );
+    const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof IText,
+    ) as IText;
+    expect(it_.text).toBe("");
+    expect((it_.data as Record<string, unknown>).fieldName).toBe("country");
   });
 
   it("renders a CHECKBOX as a clickable mark reflecting its checked state", async () => {

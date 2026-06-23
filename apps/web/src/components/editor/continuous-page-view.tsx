@@ -95,7 +95,11 @@ export interface ContinuousPageViewProps {
    * the active page's EditorCanvas so the continuous (Word-like) view resolves
    * embedded fonts identically to the single-page editor.
    */
-  getFontFaceName?: (originalName: string) => string | null;
+  getFontFaceName?: (
+    originalName: string,
+    wantVariant?: { bold?: boolean; italic?: boolean },
+    text?: string,
+  ) => string | null;
   /**
    * Element CREATED at mouse on the ACTIVE page. Wired to the same page.tsx
    * handler as the single-page editor (scene graph + queue + apply-elements

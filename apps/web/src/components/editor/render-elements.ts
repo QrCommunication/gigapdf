@@ -124,6 +124,7 @@ export interface RenderElementsOptions {
   getFontFaceName?: (
     originalName: string,
     wantVariant?: { bold?: boolean; italic?: boolean },
+    text?: string,
   ) => string | null;
   /** Résout une URL d'image relative en URL absolue (défaut : API base URL). */
   resolveImageUrl?: (url: string) => string;
@@ -250,7 +251,9 @@ function resolveTextFont(
   getFontFaceName?: (
     originalName: string,
     wantVariant?: { bold?: boolean; italic?: boolean },
+    text?: string,
   ) => string | null,
+  text?: string,
 ): ResolvedTextFont {
   const parsedWeight: "normal" | "bold" = style.fontWeight === "bold" ? "bold" : "normal";
   const parsedStyle: "normal" | "italic" = style.fontStyle === "italic" ? "italic" : "normal";
@@ -259,8 +262,12 @@ function resolveTextFont(
   const orig = style.originalFont;
 
   if (orig && getFontFaceName) {
-    // 1. Variant-exact embedded subset → trust its built-in weight/style.
-    const exact = getFontFaceName(orig, { bold: wantBold, italic: wantItalic });
+    // 1. Variant-exact embedded subset that COVERS this run's glyphs → trust its
+    //    built-in weight/style. Passing the run text lets the resolver pick, among
+    //    several disjoint same-variant subsets (CERFA), the one that actually
+    //    covers the run — or return null when none fully does, so step 2 applies a
+    //    synthetic UNIFORM weight (uniformly bold) instead of a patchy mix.
+    const exact = getFontFaceName(orig, { bold: wantBold, italic: wantItalic }, text);
     if (exact) {
       return {
         fontFamily: exact,
@@ -960,7 +967,11 @@ export async function renderElementsOverlay(
         // When the exact variant is embedded, its FontFace already IS the right
         // weight/style → no synthetic bold/italic (which would double-bold and
         // widen glyphs). Otherwise the parsed weight/style is applied synthetically.
-        const _font = resolveTextFont(textElement.style, getFontFaceName);
+        const _font = resolveTextFont(
+          textElement.style,
+          getFontFaceName,
+          textElement.content || "",
+        );
         const _usingEmbeddedFont = _font.usingEmbeddedFont;
         const _resolvedFontFamily = _font.fontFamily;
         // Word-like list + paragraph indentation. The marker glyph is a
@@ -1494,8 +1505,11 @@ export async function renderElementsOverlay(
           formElement.fieldType === "radio";
 
         if (isTextEntry) {
-          const placeholder =
-            formElement.placeholder ?? formElement.fieldName ?? "";
+          // Empty fields show the AcroForm placeholder if one exists, otherwise
+          // BLANK — never the internal field NAME ("NOM PAR 2", "SS PAR 2"…),
+          // which is identity metadata, not a user-facing value. The name stays
+          // available on data.fieldName (round-trip) and in the side panel label.
+          const placeholder = formElement.placeholder ?? "";
           const currentValue = formFieldTextValue(formElement.value);
           const showPlaceholder = currentValue.length === 0;
           // Field font size: honour the AcroForm style, fall back to a size that
@@ -1597,12 +1611,14 @@ export async function renderElementsOverlay(
                 : [],
           );
           const options = formElement.options ?? [];
+          // No options → BLANK, never the internal field name (identity metadata,
+          // not a user-facing value). fieldName stays on data.fieldName.
           const listText =
             options.length > 0
               ? options
                   .map((opt) => (selected.has(opt) ? `▸ ${opt}` : `  ${opt}`))
                   .join("\n")
-              : formElement.fieldName;
+              : "";
           const styleFontSize = formElement.style?.fontSize ?? 0;
           const lbFontSize =
             styleFontSize > 0 ? styleFontSize : Math.max(8, Math.min(11, 14));
@@ -1743,13 +1759,14 @@ export async function renderElementsOverlay(
 
     const fontSize = first.style.fontSize ?? 12;
     const textColour = first.style.color || "#000000";
+    const content = runs.map((r) => r.content).join("\n");
     // Same weight/style-aware resolution as the per-run IText branch: pick the
     // subset matching the paragraph's bold/italic (no "gras parasite"), and only
-    // synthesise weight/style when the exact variant is not embedded.
-    const paraFont = resolveTextFont(first.style, getFontFaceName);
+    // synthesise weight/style when the exact variant is not embedded OR no single
+    // same-variant subset covers the block's glyphs (→ synthetic uniform weight).
+    const paraFont = resolveTextFont(first.style, getFontFaceName, content);
     const usingEmbeddedFont = paraFont.usingEmbeddedFont;
     const resolvedFontFamily = paraFont.fontFamily;
-    const content = runs.map((r) => r.content).join("\n");
 
     const tb = new Textbox(content, {
       left: blockLeft,
