@@ -250,6 +250,67 @@ export const TOOL_CONFIGS = {
           { value: "AES-128", labelKey: "algorithmAes128" },
         ],
       },
+      // The eight ISO 32000-1 (Table 22) access permissions, each a switch that
+      // defaults to "true" (granted) for backward compatibility — leaving them
+      // untouched encrypts with every action allowed, as before. Turning one
+      // off sends `<name>=false`; the encrypt route assembles these into the
+      // `DocumentPermissions` object passed to the engine.
+      {
+        type: "switch",
+        name: "print",
+        labelKey: "permPrintLabel",
+        descriptionKey: "permPrintDescription",
+        defaultValue: "true",
+      },
+      {
+        type: "switch",
+        name: "modify",
+        labelKey: "permModifyLabel",
+        descriptionKey: "permModifyDescription",
+        defaultValue: "true",
+      },
+      {
+        type: "switch",
+        name: "copy",
+        labelKey: "permCopyLabel",
+        descriptionKey: "permCopyDescription",
+        defaultValue: "true",
+      },
+      {
+        type: "switch",
+        name: "annotate",
+        labelKey: "permAnnotateLabel",
+        descriptionKey: "permAnnotateDescription",
+        defaultValue: "true",
+      },
+      {
+        type: "switch",
+        name: "fillForms",
+        labelKey: "permFillFormsLabel",
+        descriptionKey: "permFillFormsDescription",
+        defaultValue: "true",
+      },
+      {
+        type: "switch",
+        name: "extract",
+        labelKey: "permExtractLabel",
+        descriptionKey: "permExtractDescription",
+        defaultValue: "true",
+      },
+      {
+        type: "switch",
+        name: "assemble",
+        labelKey: "permAssembleLabel",
+        descriptionKey: "permAssembleDescription",
+        defaultValue: "true",
+      },
+      {
+        type: "switch",
+        name: "printHighQuality",
+        labelKey: "permPrintHighQualityLabel",
+        descriptionKey: "permPrintHighQualityDescription",
+        defaultValue: "true",
+      },
     ],
   },
 
