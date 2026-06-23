@@ -104,8 +104,14 @@ import {
   useSaveDocumentLayers,
   socketClient,
   type SocketEventData,
+  type ParagraphStyleEdit,
+  type ListEdit,
 } from "@giga-pdf/api";
 import { ContentEditLayer, type ElementModification } from "@/components/editor/content-edit-layer";
+import {
+  splitTextStylePatch,
+  buildListEdits,
+} from "@/components/editor/lib/paragraph-style-bake";
 import {
   applyPageMargins,
   type PageMargins,
@@ -736,12 +742,14 @@ export default function EditorPage() {
   const drainOperations = useOperationsStore((s) => s.drain);
   const currentPdfFileRef = useRef<File | null>(null);
   const contentModificationsRef = useRef<ElementModification[]>([]);
-  // Late-bound paragraph-alignment baker. `handleTextStyleChange` (defined
-  // before `adoptModifiedPdf`/`getPreparedBlob`) routes alignment-only edits
-  // here without a TDZ on those later-declared callbacks. Assigned by an effect
-  // once the baker is constructed.
-  const bakeParagraphAlignmentRef = useRef<
-    | ((element: TextElement, align: TextStyle["textAlign"]) => Promise<boolean>)
+  // Late-bound paragraph/list-format baker. `handleTextStyleChange` (defined
+  // before `adoptModifiedPdf`/`getPreparedBlob`) routes paragraph-level edits
+  // (alignment, indent, line-height, list level/marker/ordered) here without a
+  // TDZ on those later-declared callbacks. Assigned by an effect once the baker
+  // is constructed. The `style` patch is the same partial TextStyle the toolbar
+  // emits; the baker maps it to the engine's model ops.
+  const bakeParagraphStyleRef = useRef<
+    | ((element: TextElement, style: Partial<TextStyle>) => Promise<boolean>)
     | null
   >(null);
   // ElementIds that were baked into the PDF in the most recent apply-elements
@@ -1883,21 +1891,20 @@ export default function EditorPage() {
       ) as TextElement | undefined;
       if (!existing) return;
 
-      // Paragraph ALIGNMENT is a structural property: when the patch is an
-      // alignment-only change, bake it natively through the engine's model
-      // (`setParagraphStyle` keyed by the run's `source_index`) instead of the
-      // flat redact+add path. The baker returns false (and we fall through to
-      // the flat path) when the element isn't model-addressable or the bake
-      // fails, so alignment always persists.
-      const keys = Object.keys(style);
-      const isAlignOnly =
-        keys.length === 1 && keys[0] === "textAlign" && style.textAlign != null;
-      if (isAlignOnly && bakeParagraphAlignmentRef.current) {
-        const align = style.textAlign as TextStyle["textAlign"];
-        void bakeParagraphAlignmentRef.current(existing, align).then((baked) => {
+      // PARAGRAPH-level formatting (alignment, left indent, line spacing) and
+      // LIST level/marker/ordered are structural properties: bake them natively
+      // through the engine's model (`setParagraphStyle` / `setList*` keyed by
+      // the run's `source_index`) instead of the flat redact+add path. The baker
+      // returns false (and we fall through to the flat path) when the element
+      // isn't model-addressable or the bake fails, so the formatting always
+      // persists. Character-level fields (bold/italic/colour/…) and the list
+      // TOGGLE (no structural op) keep using the flat path.
+      const split = splitTextStylePatch(style);
+      if (split.bakeable && bakeParagraphStyleRef.current) {
+        void bakeParagraphStyleRef.current(existing, style).then((baked) => {
           if (!baked) {
             handleElementUpdate(elementId, {
-              style: { ...existing.style, textAlign: align },
+              style: { ...existing.style, ...style },
             } as Partial<Element>);
           }
         });
@@ -2209,23 +2216,32 @@ export default function EditorPage() {
     [setDirty, saveWithPriority, updateCurrentPdfFile, reparseFromFile],
   );
 
-  // ── Native paragraph-alignment bake (the flat-index ↔ BlockAddr bridge) ────
+  // ── Native paragraph/list-format bake (the flat-index ↔ BlockAddr bridge) ──
   //
-  // Word-like alignment is a PARAGRAPH-level property, not a per-run geometric
-  // one, so it bakes cleanly via the engine's structural model rather than the
-  // flat redact+add path. The editor already carries each run's `source_index`
-  // on `TextElement.index`; the server resolves it to a `[section, page, index]`
-  // block address and applies a `setParagraphStyle` model op. We then adopt the
-  // re-rendered PDF (with re-parse) so the reopened document reflects the
-  // alignment — a real structural bake + reload, not an overlay.
+  // Word-like paragraph formatting (alignment, left indent, line spacing) and
+  // list level/marker/ordered are PARAGRAPH-level properties, not per-run
+  // geometric ones, so they bake cleanly via the engine's structural model
+  // rather than the flat redact+add path. The editor already carries each run's
+  // `source_index` on `TextElement.index`; the server resolves it to a
+  // `[section, page, index]` block address and applies `setParagraphStyle` /
+  // `setList*` model ops. We then adopt the re-rendered PDF (with re-parse) so
+  // the reopened document reflects the change — a real structural bake + reload,
+  // not an overlay.
+  //
+  // `style` is the partial TextStyle patch the toolbar/panel emits;
+  // `splitTextStylePatch` maps its paragraph + list parts to engine edits. The
+  // list TOGGLE (creating/removing a list) and character-level fields are not
+  // structurally bakeable and are excluded by the split, so they never reach
+  // here.
   //
   // Returns true when the native bake ran; false when the element is not
-  // model-addressable (no/sentinel `index`), so the caller falls back to the
-  // existing flat style path. Never throws.
-  const bakeParagraphAlignment = useCallback(
+  // model-addressable (no/sentinel `index`), the patch had nothing structural,
+  // or the bake failed — the caller then falls back to the flat style path.
+  // Never throws.
+  const bakeParagraphStyle = useCallback(
     async (
       element: TextElement,
-      align: TextStyle["textAlign"],
+      style: Partial<TextStyle>,
     ): Promise<boolean> => {
       // Only runs surfaced by the per-run extractor carry a usable engine
       // index; a missing or sentinel (`< 0`) index is a coalesced/Form-XObject
@@ -2233,9 +2249,20 @@ export default function EditorPage() {
       const sourceIndex = element.index;
       if (typeof sourceIndex !== "number" || sourceIndex < 0) return false;
 
-      // Optimistic UI: reflect the alignment in the scene graph + canvas now,
-      // then bake structurally. The subsequent re-parse rebuilds the scene
-      // graph from the baked bytes, so this is purely for instant feedback.
+      const split = splitTextStylePatch(style);
+      const paragraphs: ParagraphStyleEdit[] = split.paragraphPatch
+        ? [{ sourceIndex, patch: split.paragraphPatch }]
+        : [];
+      // A present list value bakes its family + level; a removal toggle yields
+      // [] (no structural op) and stays on the flat decoration path.
+      const lists: ListEdit[] = buildListEdits(sourceIndex, split.listValue);
+      // Nothing structural to bake (e.g. a list-removal toggle slipped through)
+      // — defer to the flat path.
+      if (paragraphs.length === 0 && lists.length === 0) return false;
+
+      // Optimistic UI: reflect the (whole) style patch in the scene graph +
+      // canvas now, then bake structurally. The subsequent re-parse rebuilds the
+      // scene graph from the baked bytes, so this is purely for instant feedback.
       const ownerPage = pages.find((p) =>
         p.elements.some((e) => e.elementId === element.elementId),
       );
@@ -2246,7 +2273,7 @@ export default function EditorPage() {
         if (existing) {
           const merged = {
             ...existing,
-            style: { ...existing.style, textAlign: align },
+            style: { ...existing.style, ...style },
           } as TextElement;
           updateElementInPage(element.elementId, merged);
           if (pages.indexOf(ownerPage) === currentPageIndex) {
@@ -2266,9 +2293,7 @@ export default function EditorPage() {
 
         const modified = await applyModelOps.mutateAsync({
           file,
-          edits: {
-            paragraphs: [{ sourceIndex, patch: { align } }],
-          },
+          edits: { paragraphs, lists },
         });
         const blob =
           modified instanceof Blob ? modified : new Blob([modified as BlobPart]);
@@ -2277,8 +2302,8 @@ export default function EditorPage() {
         adoptModifiedPdf(blob, { reparse: true });
         return true;
       } catch (err) {
-        clientLogger.error("[editor] paragraph-align bake failed:", err);
-        // Fall back to the flat style path so the alignment still persists.
+        clientLogger.error("[editor] paragraph-format bake failed:", err);
+        // Fall back to the flat style path so the formatting still persists.
         return false;
       }
     },
@@ -2297,8 +2322,8 @@ export default function EditorPage() {
   // Bind the late-constructed baker so `handleTextStyleChange` (declared earlier)
   // can invoke it without a temporal-dead-zone on `adoptModifiedPdf`.
   useEffect(() => {
-    bakeParagraphAlignmentRef.current = bakeParagraphAlignment;
-  }, [bakeParagraphAlignment]);
+    bakeParagraphStyleRef.current = bakeParagraphStyle;
+  }, [bakeParagraphStyle]);
 
   // Shared helper: run a page-level op through /api/pdf/pages, swap the
   // binary in memory, and trigger an immediate save. Returns the new file

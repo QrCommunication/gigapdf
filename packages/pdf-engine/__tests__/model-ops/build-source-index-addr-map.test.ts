@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { GigaDocument } from '@qrcommunication/gigapdf-lib';
-import { buildSourceIndexAddrMap } from '../../src/model-ops';
+import {
+  buildSourceIndexAddrMap,
+  buildListAddrMap,
+} from '../../src/model-ops';
 
 // `buildSourceIndexAddrMap` is the flat-index ↔ BlockAddr bridge: it walks the
 // unified document model (sections → pages → blocks → runs) and maps every
@@ -51,6 +54,43 @@ function imageBlock(): unknown {
     frame: null,
     rotation: { t: 'd0' },
     kind: { t: 'image', v: { resource: 0, alt: null } },
+  };
+}
+
+/**
+ * List block whose items each wrap a single paragraph carrying the given
+ * `source_index`es. `itemsSourceIndices[k]` is the run indices of item k.
+ */
+function listBlock(itemsSourceIndices: number[][]): unknown {
+  return {
+    id: 0,
+    frame: null,
+    rotation: { t: 'd0' },
+    kind: {
+      t: 'list',
+      v: {
+        ordered: false,
+        marker: { t: 'bullet', v: '•' },
+        items: itemsSourceIndices.map((indices, level) => ({
+          level,
+          blocks: [
+            {
+              id: 0,
+              frame: null,
+              rotation: { t: 'd0' },
+              kind: {
+                t: 'paragraph',
+                v: {
+                  style: {},
+                  style_ref: null,
+                  runs: indices.map((source_index) => ({ t: 'run', source_index })),
+                },
+              },
+            },
+          ],
+        })),
+      },
+    },
   };
 }
 
@@ -145,5 +185,52 @@ describe('buildSourceIndexAddrMap', () => {
     const broken = { sections: null } as unknown as GigaDocument;
     expect(() => buildSourceIndexAddrMap(broken)).not.toThrow();
     expect(buildSourceIndexAddrMap(broken).size).toBe(0);
+  });
+
+  it('maps list-item paragraph runs to the list block address (for setParagraphStyle)', () => {
+    // A list block at index 0 owns two items; their nested-paragraph runs resolve
+    // to the list block's address so paragraph-style edits on list items bake.
+    const model = doc([[listBlock([[30, 31], [40]])]]);
+    const map = buildSourceIndexAddrMap(model);
+    expect(map.get(30)).toEqual([0, 0, 0]);
+    expect(map.get(31)).toEqual([0, 0, 0]);
+    expect(map.get(40)).toEqual([0, 0, 0]);
+  });
+});
+
+describe('buildListAddrMap', () => {
+  it('maps every run inside a list block to that list block address', () => {
+    const model = doc([[listBlock([[1, 2], [3]])]]);
+    const map = buildListAddrMap(model);
+    expect(map.get(1)).toEqual([0, 0, 0]);
+    expect(map.get(2)).toEqual([0, 0, 0]);
+    expect(map.get(3)).toEqual([0, 0, 0]);
+    expect(map.size).toBe(3);
+  });
+
+  it('addresses the list by its position in the page (block index)', () => {
+    // paragraph at index 0, list at index 1 → list runs resolve to [0, 0, 1].
+    const model = doc([[para([5]), listBlock([[6]])]]);
+    const map = buildListAddrMap(model);
+    expect(map.get(6)).toEqual([0, 0, 1]);
+    // The plain-paragraph run is NOT a list → absent from the list map.
+    expect(map.has(5)).toBe(false);
+  });
+
+  it('excludes plain paragraph / heading runs (not lists)', () => {
+    const model = doc([[para([10]), heading([11])]]);
+    const map = buildListAddrMap(model);
+    expect(map.size).toBe(0);
+  });
+
+  it('returns an empty map for a document with no lists', () => {
+    expect(buildListAddrMap(doc([[imageBlock()]])).size).toBe(0);
+    expect(buildListAddrMap(doc([[]])).size).toBe(0);
+  });
+
+  it('tolerates a malformed model without throwing', () => {
+    const broken = { sections: undefined } as unknown as GigaDocument;
+    expect(() => buildListAddrMap(broken)).not.toThrow();
+    expect(buildListAddrMap(broken).size).toBe(0);
   });
 });
