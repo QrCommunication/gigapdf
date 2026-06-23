@@ -1529,9 +1529,12 @@
       "applyToDocumentHint": "Le document en cours d'édition est remplacé par la version signée",
       "downloadOnly": "Télécharger seulement",
       "downloadOnlyHint": "Télécharge une copie signée sans modifier le document",
+      "timestampLabel": "Horodatage (PAdES-B-T)",
+      "timestampHint": "Ajoute un horodatage certifié RFC 3161 (signature avancée eIDAS) prouvant la date de signature. Nécessite une connexion à l'autorité d'horodatage.",
       "errors": {
         "invalidCertificate": "Certificat ou mot de passe invalide.",
         "certificateTooLarge": "Le certificat dépasse la limite de 1 Mo.",
+        "tsaUnreachable": "Autorité d'horodatage injoignable. Réessayez ou signez sans horodatage.",
         "generic": "Échec de la signature du document."
       },
       "appliedTitle": "Document signé",
@@ -3373,7 +3376,9 @@
       "reasonLabel": "Motif (facultatif)",
       "reasonPlaceholder": "Approbation du document",
       "locationLabel": "Lieu (facultatif)",
-      "locationPlaceholder": "Paris, France"
+      "locationPlaceholder": "Paris, France",
+      "timestampLabel": "Horodatage (PAdES-B-T)",
+      "timestampDescription": "Ajoute un horodatage certifié RFC 3161 (signature avancée eIDAS) via FreeTSA. Nécessite une connexion réseau."
     },
     "textToPdf": {
       "title": "Texte vers PDF",

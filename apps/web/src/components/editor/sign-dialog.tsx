@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useTranslations } from "next-intl";
-import { X, Loader2, FileSignature, ShieldCheck, TriangleAlert } from "lucide-react";
+import { X, Loader2, FileSignature, ShieldCheck, TriangleAlert, Clock } from "lucide-react";
 import { useSignPdf, downloadBlob } from "@giga-pdf/api";
 
 export interface SignDialogProps {
@@ -46,6 +46,7 @@ export function SignDialog({
   const [reason, setReason] = useState("");
   const [location, setLocation] = useState("");
   const [contactInfo, setContactInfo] = useState("");
+  const [timestamp, setTimestamp] = useState(false);
   const [outputMode, setOutputMode] = useState<OutputMode>("apply");
   const signPdf = useSignPdf();
 
@@ -78,6 +79,7 @@ export function SignDialog({
         reason: reason.trim() || undefined,
         location: location.trim() || undefined,
         contactInfo: contactInfo.trim() || undefined,
+        timestamp,
       },
     });
     if (canApplyToDocument && outputMode === "apply") {
@@ -92,10 +94,13 @@ export function SignDialog({
 
   if (!open) return null;
 
+  const errorName = signPdf.isError ? (signPdf.error as Error)?.name : null;
   const errorMessage = signPdf.isError
-    ? (signPdf.error as Error)?.name === "InvalidCertificateError"
+    ? errorName === "InvalidCertificateError"
       ? t("errors.invalidCertificate")
-      : t("errors.generic")
+      : errorName === "TsaUnreachableError"
+        ? t("errors.tsaUnreachable")
+        : t("errors.generic")
     : null;
 
   return (
@@ -219,6 +224,32 @@ export function SignDialog({
               className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
+
+          <label
+            htmlFor="sign-timestamp-input"
+            className={`flex items-start gap-3 px-3 py-2 rounded-md border cursor-pointer transition-colors ${
+              timestamp
+                ? "border-primary bg-primary/5"
+                : "border-input hover:bg-muted"
+            }`}
+          >
+            <input
+              id="sign-timestamp-input"
+              type="checkbox"
+              checked={timestamp}
+              onChange={(e) => setTimestamp(e.target.checked)}
+              className="mt-0.5 accent-primary"
+            />
+            <span className="min-w-0">
+              <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                <Clock size={14} className="shrink-0 text-muted-foreground" />
+                {t("timestampLabel")}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {t("timestampHint")}
+              </span>
+            </span>
+          </label>
 
           <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
             <ShieldCheck size={16} className="mt-0.5 shrink-0 text-muted-foreground" />

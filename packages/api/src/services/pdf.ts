@@ -889,8 +889,13 @@ export const pdfService = {
    * request body — they are never stored, cached, or logged anywhere.
    *
    * Throws an Error whose `name` is `'InvalidCertificateError'` when the
-   * server rejects the certificate/passphrase pair, so callers can show a
-   * dedicated i18n message without parsing server strings.
+   * server rejects the certificate/passphrase pair, or `'TsaUnreachableError'`
+   * when a requested PAdES-B-T timestamp could not be obtained — so callers can
+   * show a dedicated i18n message without parsing server strings.
+   *
+   * Set `options.timestamp` to embed an RFC 3161 trusted timestamp (PAdES-B-T,
+   * eIDAS advanced) from the server's fixed TSA. This makes the request perform
+   * a network round trip and may fail with `'TsaUnreachableError'`.
    */
   signPdf: async (
     file: File | Blob,
@@ -901,6 +906,8 @@ export const pdfService = {
       location?: string;
       contactInfo?: string;
       signerName?: string;
+      /** Embed an RFC 3161 trusted timestamp (PAdES-B-T). Default false. */
+      timestamp?: boolean;
     } = {},
   ): Promise<Blob> => {
     const form = new FormData();
@@ -911,6 +918,7 @@ export const pdfService = {
     if (options.location) form.append('location', options.location);
     if (options.contactInfo) form.append('contactInfo', options.contactInfo);
     if (options.signerName) form.append('signerName', options.signerName);
+    if (options.timestamp) form.append('timestamp', 'true');
 
     const response = await fetch('/api/pdf/sign', {
       method: 'POST',
@@ -924,6 +932,8 @@ export const pdfService = {
       const error = new Error(json.error ?? `HTTP ${response.status}`);
       if (json.code === 'INVALID_CERTIFICATE_OR_PASSPHRASE') {
         error.name = 'InvalidCertificateError';
+      } else if (json.code === 'TSA_UNREACHABLE') {
+        error.name = 'TsaUnreachableError';
       }
       throw error;
     }

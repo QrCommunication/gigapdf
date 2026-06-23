@@ -11,6 +11,8 @@
  *   location    — /Location (optional, ≤ 255 chars)
  *   contactInfo — /ContactInfo (optional, ≤ 255 chars)
  *   signerName  — /Name (optional, ≤ 255 chars)
+ *   timestamp   — "true" to embed an RFC 3161 trusted timestamp (PAdES-B-T,
+ *                 eIDAS advanced) via FreeTSA. Default "false" (plain PKCS#7).
  *
  * Returns the signed PDF as application/pdf.
  *
@@ -24,7 +26,13 @@
  */
 
 import { NextResponse } from 'next/server';
-import { signPdf, PdfSignInvalidCertificateError, PDFCorruptedError } from '@giga-pdf/pdf-engine';
+import {
+  signPdf,
+  signPdfTimestamped,
+  PdfSignInvalidCertificateError,
+  PdfSignTimestampError,
+  PDFCorruptedError,
+} from '@giga-pdf/pdf-engine';
 import { requireSession } from '@/lib/auth-helpers';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
 import { serverLogger } from '@/lib/server-logger';
@@ -96,19 +104,28 @@ export async function POST(request: Request): Promise<Response> {
       if (trimmed) optional[field] = trimmed;
     }
 
+    // Opt-in PAdES-B-T: embed an RFC 3161 trusted timestamp from a fixed,
+    // server-controlled TSA (FreeTSA). The TSA URL is never taken from the
+    // request, so there is no SSRF surface here.
+    const timestampRequested = formData.get('timestamp') === 'true';
+
     const [pdfBuffer, p12Buffer] = await Promise.all([
       file.arrayBuffer(),
       p12Entry.arrayBuffer(),
     ]);
 
-    const result = await signPdf(new Uint8Array(pdfBuffer), {
+    const signOptions = {
       p12: new Uint8Array(p12Buffer),
       passphrase,
       reason: optional.reason,
       location: optional.location,
       contactInfo: optional.contactInfo,
       signerName: optional.signerName,
-    });
+    } as const;
+
+    const result = timestampRequested
+      ? await signPdfTimestamped(new Uint8Array(pdfBuffer), signOptions)
+      : await signPdf(new Uint8Array(pdfBuffer), signOptions);
 
     return new Response(Buffer.from(result.bytes), {
       status: 200,
@@ -129,6 +146,19 @@ export async function POST(request: Request): Promise<Response> {
           code: 'INVALID_CERTIFICATE_OR_PASSPHRASE',
         },
         { status: 400 },
+      );
+    }
+    if (error instanceof PdfSignTimestampError) {
+      // The signature itself is fine; the trusted-timestamp authority could
+      // not be reached. 502 (upstream dependency failure) lets the client tell
+      // the user to retry rather than blame their certificate.
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Autorité d'horodatage injoignable",
+          code: 'TSA_UNREACHABLE',
+        },
+        { status: 502 },
       );
     }
     if (error instanceof PDFCorruptedError) {
