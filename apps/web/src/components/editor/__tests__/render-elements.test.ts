@@ -686,6 +686,208 @@ describe("renderElementsOverlay — editable form fields", () => {
     expect((rect.data as Record<string, unknown>).fieldType).toBe("signature");
     expect((rect.data as Record<string, unknown>).formFieldElement).toBeDefined();
   });
+
+  it("renders a LISTBOX showing its options with the selected one marked", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [
+        formFieldElement({
+          elementId: "lb",
+          fieldType: "listbox",
+          fieldName: "country",
+          options: ["France", "Spain", "Italy"],
+          value: "Spain",
+        }),
+      ],
+      fabricMock,
+    );
+    const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof IText,
+    ) as IText;
+    expect(it_).toBeDefined();
+    // The selected option is prefixed with a marker; the others are not.
+    expect(it_.text).toContain("▸ Spain");
+    expect(it_.text).toContain("France");
+    expect(it_.opts.editable).toBe(false);
+    const data = it_.data as Record<string, unknown>;
+    expect(data.fieldType).toBe("listbox");
+    expect(data.formFieldElement).toBeDefined();
+  });
+
+  it("renders a BUTTON showing its label (centred, non-editable)", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [
+        formFieldElement({
+          elementId: "btn",
+          fieldType: "button",
+          fieldName: "submit",
+          value: "Submit",
+        }),
+      ],
+      fabricMock,
+    );
+    const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof IText,
+    ) as IText;
+    expect(it_).toBeDefined();
+    expect(it_.text).toBe("Submit");
+    expect(it_.opts.editable).toBe(false);
+    expect(it_.opts.originX).toBe("center");
+    expect((it_.data as Record<string, unknown>).fieldType).toBe("button");
+  });
+});
+
+// --- Annotation sub-types (real geometry, not approximations) ----------------
+
+function annotationElement(
+  over: Partial<Record<string, unknown>> = {},
+): Element {
+  return {
+    type: "annotation",
+    elementId: "a1",
+    annotationType: "highlight",
+    content: "",
+    bounds: { x: 10, y: 20, width: 80, height: 12 },
+    visible: true,
+    locked: false,
+    style: { color: "#ff0000", opacity: 1 },
+    linkDestination: null,
+    popup: null,
+    ...over,
+  } as unknown as Element;
+}
+
+describe("renderElementsOverlay — annotation sub-types", () => {
+  it("renders a SQUIGGLY as a wavy Path (not a dashed line)", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [annotationElement({ annotationType: "squiggly" })],
+      fabricMock,
+    );
+    const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    const path = objects.find((o) => o instanceof Path) as Path;
+    // Rendered as a Path (wavy), NOT a Line (the old dashed approximation).
+    expect(path).toBeDefined();
+    expect(objects.some((o) => o instanceof Line)).toBe(false);
+    expect((path.data as Record<string, unknown>).annotationType).toBe(
+      "squiggly",
+    );
+  });
+
+  it("renders an ARROW as a single Path (shaft + filled head)", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [
+        annotationElement({
+          annotationType: "arrow",
+          linePoints: { x1: 10, y1: 10, x2: 90, y2: 50 },
+          style: { color: "#0000ff", opacity: 1, strokeWidth: 2 },
+        }),
+      ],
+      fabricMock,
+    );
+    const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    const path = objects.find((o) => o instanceof Path) as Path;
+    expect(path).toBeDefined();
+    // Exactly ONE object for the whole arrow (no Group, no duplicate).
+    expect(objects.filter((o) => o instanceof Path)).toHaveLength(1);
+    expect((path.data as Record<string, unknown>).annotationType).toBe("arrow");
+    expect(path.opts.fill).toBe("#0000ff");
+  });
+
+  it("renders a LINE annotation from its explicit endpoints", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [
+        annotationElement({
+          annotationType: "line",
+          linePoints: { x1: 5, y1: 5, x2: 95, y2: 5 },
+        }),
+      ],
+      fabricMock,
+    );
+    const line = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof Line,
+    ) as Line;
+    expect(line).toBeDefined();
+    expect((line.data as Record<string, unknown>).annotationType).toBe("line");
+  });
+
+  it("renders a FREETEXT annotation as an editable IText of its content", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [annotationElement({ annotationType: "freetext", content: "A note" })],
+      fabricMock,
+    );
+    const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof IText,
+    ) as IText;
+    expect(it_).toBeDefined();
+    expect(it_.text).toBe("A note");
+    expect(it_.opts.editable).toBe(true);
+    expect((it_.data as Record<string, unknown>).annotationType).toBe(
+      "freetext",
+    );
+  });
+
+  it("warns (does not silently drop) for an unknown annotation subtype", async () => {
+    const canvas = makeCanvas();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await renderElementsOverlay(
+      canvas,
+      [annotationElement({ annotationType: "weird-kind" })],
+      fabricMock,
+    );
+    // Still produces a hit-target Rect AND logs a warning.
+    const rect = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof Rect,
+    );
+    expect(rect).toBeDefined();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
+// --- Image without a usable source → visible placeholder, not silent drop ----
+
+describe("renderElementsOverlay — image placeholder", () => {
+  it("renders a dashed placeholder (and warns) when an image has no dataUrl", async () => {
+    const canvas = makeCanvas();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await renderElementsOverlay(
+      canvas,
+      [
+        {
+          type: "image",
+          elementId: "img-broken",
+          bounds: { x: 10, y: 20, width: 60, height: 40 },
+          visible: true,
+          locked: false,
+          source: { type: "embedded", dataUrl: "" },
+          style: { opacity: 1 },
+        } as unknown as Element,
+      ],
+      fabricMock,
+    );
+    const rect = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof Rect,
+    ) as Rect;
+    expect(rect).toBeDefined();
+    expect((rect.data as Record<string, unknown>).type).toBe("image");
+    expect((rect.data as Record<string, unknown>).isImagePlaceholder).toBe(true);
+    // Non-interactive so it is never serialised back as a shape on save.
+    expect(rect.opts.selectable).toBe(false);
+    expect(rect.opts.evented).toBe(false);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
 });
 
 // --- Paragraph grouping (Word-like multi-line editing) -----------------------

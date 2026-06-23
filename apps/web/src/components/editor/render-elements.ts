@@ -356,6 +356,62 @@ function formFieldChecked(field: {
 }
 
 // ---------------------------------------------------------------------------
+// Annotation geometry helpers (pure)
+// ---------------------------------------------------------------------------
+
+/**
+ * SVG path data for a squiggly (wavy) underline spanning `width` at the local
+ * origin (the Fabric.Path is positioned at the annotation's top-left). A real
+ * zig-zag of period `~amp*2` — far truer to a PDF "squiggly" markup than the
+ * previous dashed straight line. `amp` (peak height) defaults to 2pt.
+ */
+function squigglyPathData(width: number, amp = 2): string {
+  const w = Math.max(1, width);
+  const period = Math.max(2, amp * 2);
+  const segments = Math.max(1, Math.round(w / period));
+  const step = w / segments;
+  // Start on the baseline, then alternate up/down peaks across the width.
+  let d = `M 0 ${amp}`;
+  for (let i = 0; i < segments; i++) {
+    const x1 = step * (i + 0.5);
+    const y1 = i % 2 === 0 ? 0 : amp * 2;
+    const x2 = step * (i + 1);
+    d += ` Q ${x1} ${y1} ${x2} ${amp}`;
+  }
+  return d;
+}
+
+/**
+ * Triangle points (Fabric.Polygon) for an arrowhead at the END of a segment
+ * going from (x1,y1) → (x2,y2), in the same coordinate space as the line. The
+ * head is `size` long and `size*0.7` wide, pointing along the segment direction.
+ */
+function arrowHeadPoints(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  size: number,
+): { x: number; y: number }[] {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  // Perpendicular (for the two base corners).
+  const px = -uy;
+  const py = ux;
+  const half = size * 0.35;
+  const baseX = x2 - ux * size;
+  const baseY = y2 - uy * size;
+  return [
+    { x: x2, y: y2 }, // tip
+    { x: baseX + px * half, y: baseY + py * half },
+    { x: baseX - px * half, y: baseY - py * half },
+  ];
+}
+
+// ---------------------------------------------------------------------------
 // Paragraph grouping (Word-like editing) — pure helpers
 // ---------------------------------------------------------------------------
 
@@ -1054,6 +1110,40 @@ export async function renderElementsOverlay(
               );
             });
           imageLoadPromises.push(loadPromise);
+        } else {
+          // No usable image source (empty/missing dataUrl). Rather than dropping
+          // the element SILENTLY — which loses the click/move/delete hit-target
+          // and hides the data gap — render a VISIBLE dashed placeholder of the
+          // element's bounds and warn. It still carries the engine index so the
+          // in-place transform/remove pipeline keeps working on it.
+          clientLogger.warn(
+            "[renderElements] Image element has no dataUrl — placeholder shown:",
+            imgElement.elementId,
+          );
+          const placeholder = new Rect({
+            ...baseOptions,
+            width: imgElement.bounds.width,
+            height: imgElement.bounds.height,
+            fill: "rgba(120, 120, 120, 0.08)",
+            stroke: "#9ca3af",
+            strokeWidth: 1,
+            strokeDashArray: [4, 4],
+            // Purely a visual stand-in for a broken image: NOT interactive, so
+            // the save pipeline never serialises it (a Rect would otherwise be
+            // mis-persisted as a `shape`, corrupting the image element).
+            selectable: false,
+            evented: false,
+          });
+          (placeholder as FabricObjectWithData).data = {
+            elementId: imgElement.elementId,
+            type: "image",
+            index: imgElement.index,
+            rotation0: imgElement.transform?.rotation ?? 0,
+            // Flags this overlay as a stand-in for a source-less image so the
+            // round-trip/apply side can tell it apart from a loaded image.
+            isImagePlaceholder: true,
+          };
+          fabricObj = placeholder;
         }
         break;
       }
@@ -1226,14 +1316,64 @@ export async function renderElementsOverlay(
             });
             break;
           case "squiggly":
-            // Render as a colored underline for now
-            fabricObj = new Line([0, 0, annoWidth, 0], {
+            // Real wavy underline (a true zig-zag spanning the run width),
+            // positioned at the annotation's top-left. Far closer to a PDF
+            // "squiggly" markup than the previous dashed straight line.
+            fabricObj = new FabricPath(squigglyPathData(annoWidth, 2), {
               ...annoOptions,
+              left: annoElement.bounds.x,
+              top: annoElement.bounds.y,
+              originX: "left" as const,
+              originY: "top" as const,
+              fill: "transparent",
               stroke: annoColor,
-              strokeWidth: 2,
-              strokeDashArray: [2, 2],
+              strokeWidth: annoElement.style?.strokeWidth ?? 1.5,
             });
             break;
+          case "line":
+          case "arrow": {
+            // Explicit endpoints when present; otherwise the diagonal of
+            // `bounds`. Coordinates are absolute (web/canvas).
+            const lp = annoElement.linePoints;
+            const x1 = lp?.x1 ?? annoElement.bounds.x;
+            const y1 = lp?.y1 ?? annoElement.bounds.y;
+            const x2 = lp?.x2 ?? annoElement.bounds.x + annoWidth;
+            const y2 = lp?.y2 ?? annoElement.bounds.y + annoHeight;
+            const lineWidth = annoElement.style?.strokeWidth ?? 2;
+            if (annoElement.annotationType === "arrow") {
+              // Shaft + filled triangular head as ONE Fabric.Path → a single
+              // selectable hit-target that round-trips as one annotation (no
+              // Group, no duplicate object). The head is closed (`Z`) so it
+              // fills; the shaft is the open `M…L`.
+              const headSize = Math.max(6, lineWidth * 4);
+              const [tip, c1, c2] = arrowHeadPoints(x1, y1, x2, y2, headSize);
+              const d =
+                `M ${x1} ${y1} L ${x2} ${y2} ` +
+                `M ${tip!.x} ${tip!.y} L ${c1!.x} ${c1!.y} ` +
+                `L ${c2!.x} ${c2!.y} Z`;
+              fabricObj = new FabricPath(d, {
+                ...annoOptions,
+                left: Math.min(x1, x2, c1!.x, c2!.x),
+                top: Math.min(y1, y2, c1!.y, c2!.y),
+                originX: "left" as const,
+                originY: "top" as const,
+                fill: annoColor,
+                stroke: annoColor,
+                strokeWidth: lineWidth,
+              });
+            } else {
+              fabricObj = new Line([x1, y1, x2, y2], {
+                ...annoOptions,
+                left: 0,
+                top: 0,
+                originX: "left" as const,
+                originY: "top" as const,
+                stroke: annoColor,
+                strokeWidth: lineWidth,
+              });
+            }
+            break;
+          }
           case "note":
           case "stamp":
             fabricObj = new Rect({
@@ -1245,8 +1385,43 @@ export async function renderElementsOverlay(
               strokeWidth: 1,
             });
             break;
+          case "freetext": {
+            // Render the annotation TEXT itself (editable), not an opaque marker.
+            // Empty content falls back to a faint placeholder box so the region
+            // stays a visible, clickable hit-target.
+            const ftText = annoElement.content ?? "";
+            if (ftText.length > 0) {
+              const ftSize = Math.max(
+                8,
+                Math.min(annoHeight > 0 ? annoHeight * 0.7 : 14, 16),
+              );
+              fabricObj = new IText(ftText, {
+                ...annoOptions,
+                left: annoElement.bounds.x + 1,
+                top: annoElement.bounds.y + 1,
+                originX: "left" as const,
+                originY: "top" as const,
+                width: annoWidth,
+                fontSize: ftSize,
+                fontFamily: "Helvetica",
+                fill: annoColor,
+                editable: true,
+              }) as unknown as FabricObject;
+            } else {
+              fabricObj = new Rect({
+                ...annoOptions,
+                width: annoWidth,
+                height: annoHeight,
+                fill: "rgba(33, 150, 243, 0.08)",
+                stroke: "#1976d2",
+                strokeWidth: 1,
+                strokeDashArray: [3, 3],
+              });
+            }
+            break;
+          }
           case "comment":
-          case "freetext":
+            // Sticky-note marker (a small dot the user clicks to read/edit).
             fabricObj = new Circle({
               ...annoOptions,
               radius: Math.min(annoWidth, annoHeight) / 2,
@@ -1265,13 +1440,21 @@ export async function renderElementsOverlay(
               strokeWidth: 1,
             });
             break;
-          default:
+          default: {
+            // Unknown annotation subtype: show a neutral highlight box AND warn
+            // (never a silent drop), so the gap is visible in the console.
+            clientLogger.warn(
+              "[renderElements] Unhandled annotation subtype — generic box shown:",
+              annoElement.annotationType,
+              annoElement.elementId,
+            );
             fabricObj = new Rect({
               ...annoOptions,
               width: annoWidth,
               height: annoHeight,
               fill: "rgba(255, 255, 0, 0.3)",
             });
+          }
         }
         if (fabricObj) {
           (fabricObj as FabricObjectWithData).data = {
@@ -1401,8 +1584,91 @@ export async function renderElementsOverlay(
             formFieldElement: formElement,
           };
           fabricObj = markText as unknown as FabricObject;
+        } else if (formElement.fieldType === "listbox") {
+          // Listbox: show the available options (one per line) with the SELECTED
+          // value(s) marked "▸ …", inside the field box. The value is preserved
+          // on save by readFormFieldValue (listbox values are not re-read from
+          // the IText, so this is display-only and lossless).
+          const selected = new Set<string>(
+            Array.isArray(formElement.value)
+              ? formElement.value
+              : typeof formElement.value === "string" && formElement.value
+                ? [formElement.value]
+                : [],
+          );
+          const options = formElement.options ?? [];
+          const listText =
+            options.length > 0
+              ? options
+                  .map((opt) => (selected.has(opt) ? `▸ ${opt}` : `  ${opt}`))
+                  .join("\n")
+              : formElement.fieldName;
+          const styleFontSize = formElement.style?.fontSize ?? 0;
+          const lbFontSize =
+            styleFontSize > 0 ? styleFontSize : Math.max(8, Math.min(11, 14));
+          const lbText = new IText(listText, {
+            ...baseOptions,
+            left: formElement.bounds.x + 2,
+            top: formElement.bounds.y + 1,
+            width: formElement.bounds.width,
+            fontSize: lbFontSize,
+            fontFamily: formElement.style?.fontFamily || "Helvetica",
+            fill: formElement.style?.textColor || "#0a3a8a",
+            backgroundColor: fieldFill,
+            textAlign: "left",
+            // The selection is changed via the field UI, not by typing on canvas.
+            editable: false,
+            hasControls: false,
+            hasBorders: true,
+            borderColor: fieldStroke,
+          });
+          (lbText as FabricObjectWithData).data = {
+            elementId: formElement.elementId,
+            type: "form_field",
+            fieldName: formElement.fieldName,
+            fieldType: formElement.fieldType,
+            formFieldElement: formElement,
+          };
+          fabricObj = lbText as unknown as FabricObject;
+        } else if (formElement.fieldType === "button") {
+          // Push button: render its label (value, else fieldName) centred on a
+          // filled box so it reads as a real button, not an empty zone.
+          const label =
+            formFieldTextValue(formElement.value) || formElement.fieldName || "";
+          const styleFontSize = formElement.style?.fontSize ?? 0;
+          const btnFontSize =
+            styleFontSize > 0
+              ? styleFontSize
+              : Math.max(8, Math.min(formElement.bounds.height * 0.5, 14));
+          const btnText = new IText(label, {
+            ...baseOptions,
+            originX: "center" as const,
+            originY: "center" as const,
+            left: formElement.bounds.x + formElement.bounds.width / 2,
+            top: formElement.bounds.y + formElement.bounds.height / 2,
+            fontSize: btnFontSize,
+            fontFamily: formElement.style?.fontFamily || "Helvetica",
+            fill: formElement.style?.textColor || "#333333",
+            backgroundColor: fieldFill,
+            textAlign: "center",
+            editable: false,
+            hasControls: false,
+            hasBorders: true,
+            borderColor: fieldStroke,
+          });
+          (btnText as FabricObjectWithData).data = {
+            elementId: formElement.elementId,
+            type: "form_field",
+            fieldName: formElement.fieldName,
+            fieldType: formElement.fieldType,
+            formFieldElement: formElement,
+          };
+          fabricObj = btnText as unknown as FabricObject;
         } else {
-          // listbox / signature / button — selectable hit-target only.
+          // signature (and any unknown field type) — a selectable hit-target
+          // Rect. A signature is a drawn/image artefact, not text, so its
+          // "value" is not representable as a canvas label; the dashed zone marks
+          // where to sign and stays editable/movable.
           fabricObj = new Rect({
             ...baseOptions,
             width: formElement.bounds.width,
@@ -1422,6 +1688,23 @@ export async function renderElementsOverlay(
             formFieldElement: formElement,
           };
         }
+        break;
+      }
+
+      default: {
+        // Exhaustiveness guard. `Element` is a closed union of the five cases
+        // above, so this is unreachable at compile time (`never`). It exists for
+        // RUNTIME safety: the scene graph is produced by the backend (Pydantic)
+        // and a future element kind (e.g. a dedicated ink/draw type — ink
+        // strokes currently arrive as `shape` with `shapeType: "path"`/
+        // `"polygon"` and ARE rendered by the shape case) would otherwise be
+        // dropped SILENTLY. Warn instead so the gap is visible, never a no-op.
+        const _exhaustive: never = element;
+        clientLogger.warn(
+          "[renderElements] Unrendered element type (no case) — dropped:",
+          (_exhaustive as { type?: string }).type,
+          (_exhaustive as { elementId?: string }).elementId,
+        );
         break;
       }
     }
