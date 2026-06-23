@@ -24,6 +24,7 @@
 
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import type { GigaPdfEngine, OcrScript } from 'gigapdf-lib-ocr';
 import { getOcrEngine } from '../wasm-ocr';
 import { engineLogger } from '../utils/logger';
@@ -201,8 +202,6 @@ const loadedOcrScripts = new Set<OcrScript>();
  * enum (so `loadBundledOcrModel` cannot load it); it ships as a raw `.gpocr` blob
  * under the engine package's `models/` and is host-loaded via `loadOcrModel`.
  */
-const HANDWRITING_MODEL_SPECIFIER = 'gigapdf-lib-ocr/models/ocr_alpha_hw.gpocr';
-
 // Load-once guard for the handwriting model (engine registry is process-global).
 let handwritingModelLoaded = false;
 let handwritingModelPromise: Promise<boolean> | null = null;
@@ -219,7 +218,13 @@ async function ensureHandwritingModel(engine: GigaPdfEngine): Promise<boolean> {
   if (handwritingModelLoaded) return true;
   handwritingModelPromise ??= (async () => {
     const require = createRequire(import.meta.url);
-    const modelPath = require.resolve(HANDWRITING_MODEL_SPECIFIER);
+    // Resolve the model via the package's `package.json` (a known module type)
+    // then join the path manually. A direct `require.resolve('….gpocr')` makes
+    // Turbopack try to bundle the model and fail the build with "Unknown module
+    // type"; the bytes are read from disk at runtime (the `.gpocr` files are
+    // traced into the standalone output via next.config outputFileTracingIncludes).
+    const ocrPkgDir = dirname(require.resolve('gigapdf-lib-ocr/package.json'));
+    const modelPath = join(ocrPkgDir, 'models', 'ocr_alpha_hw.gpocr');
     const bytes = await readFile(modelPath);
     const ok = engine.loadOcrModel(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
     handwritingModelLoaded = ok;
