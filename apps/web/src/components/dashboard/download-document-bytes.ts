@@ -18,6 +18,7 @@
 
 import { api, getAuthToken } from "@/lib/api";
 import { exportDocumentAs } from "@/components/editor/lib/export-document";
+import { EXPORT_FORMATS } from "@/components/editor/lib/export-formats";
 import { exportPagesAsImages } from "@/components/editor/lib/export-pages-as-images";
 import { extractDocumentText } from "@/components/editor/lib/extract-text";
 
@@ -29,7 +30,10 @@ export type DashboardExportFormat =
   | "html"
   | "txt"
   | "docx"
-  | "xlsx";
+  | "xlsx"
+  | "markdown"
+  | "csv"
+  | "epub";
 
 /**
  * Download the current PDF bytes of a stored document as a `Uint8Array`.
@@ -64,8 +68,9 @@ export async function downloadDocumentBytes(
  *
  * - `png` / `jpeg` / `webp` → a `.zip` of per-page images
  *   ({@link exportPagesAsImages}).
- * - `docx` / `xlsx` / `html` → the SDK's editable exporter
- *   ({@link exportDocumentAs}).
+ * - `docx` / `xlsx` / `html` / `markdown` / `csv` / `epub` → the SDK's editable
+ *   exporter ({@link exportDocumentAs}). `markdown`/`csv`/`epub` are raised from
+ *   the unified model (`toModel` → `modelTo*`).
  * - `txt` → extracted plain text ({@link extractDocumentText}) as a UTF-8 Blob.
  */
 export async function convertDocumentBytes(
@@ -86,7 +91,8 @@ export async function convertDocumentBytes(
       extension: "txt",
     };
   }
-  // docx | xlsx | html — the SDK lowers the PDF into the editable format.
+  // docx | xlsx | html | markdown | csv | epub — the SDK lowers the PDF into the
+  // editable format. The extension comes from the format descriptor (markdown → md).
   const blob = await exportDocumentAs(bytes, format);
-  return { blob, extension: format };
+  return { blob, extension: EXPORT_FORMATS[format].extension };
 }

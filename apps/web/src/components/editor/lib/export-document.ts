@@ -46,9 +46,20 @@ function freshCopy(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
 }
 
 /**
+ * Opaque unified-model handle (`GigaDocument`) returned by `toModel()` and
+ * consumed by the engine's `modelTo*` exporters. Typed as `unknown` here so this
+ * module stays decoupled from the SDK's public type surface.
+ */
+type Model = unknown;
+
+/**
  * Minimal structural view of the SDK document we rely on here. Declared locally
  * so this module stays decoupled from the SDK's public type surface (the methods
  * are stable on `GigaPdfDoc`).
+ *
+ * `docx`/`xlsx`/… lower directly via dedicated `to*()` methods; the reflowable
+ * targets (`markdown`/`csv`/`epub`) go through the unified model — `toModel()`
+ * here, then the engine's `modelTo*()` raisers below.
  */
 interface ExportableDoc {
   toDocx(): Uint8Array;
@@ -60,11 +71,23 @@ interface ExportableDoc {
   toHtml(): string;
   toRtf(): string;
   save(): Uint8Array;
+  toModel(): Model;
   close(): void;
 }
 
+/** Minimal structural view of the SDK engine's model-raising exporters. */
+interface ModelExporter {
+  modelToMarkdown(model: Model): string;
+  modelToCsv(model: Model): string;
+  modelToEpub(model: Model): Uint8Array;
+}
+
 /** Run the right SDK method for `format`, returning a `BlobPart`. */
-function serialise(doc: ExportableDoc, format: ExportFormat): BlobPart {
+function serialise(
+  engine: ModelExporter,
+  doc: ExportableDoc,
+  format: ExportFormat,
+): BlobPart {
   switch (format) {
     case "docx":
       return freshCopy(doc.toDocx());
@@ -84,6 +107,12 @@ function serialise(doc: ExportableDoc, format: ExportFormat): BlobPart {
       return doc.toRtf();
     case "pdf":
       return freshCopy(doc.save());
+    case "markdown":
+      return engine.modelToMarkdown(doc.toModel());
+    case "csv":
+      return engine.modelToCsv(doc.toModel());
+    case "epub":
+      return freshCopy(engine.modelToEpub(doc.toModel()));
     default: {
       // Exhaustiveness guard — a new ExportFormat must be handled above.
       const never: never = format;
@@ -106,10 +135,11 @@ export async function exportDocumentAs(
   const engine = await loadEngine();
   // open → serialise → close in the same synchronous tick (no await between
   // open and close) so the short-lived doc never overlaps page rendering on the
-  // shared wasm instance — mirrors page-headers-footers.ts.
+  // shared wasm instance — mirrors page-headers-footers.ts. The reflowable
+  // targets raise the model via the engine's `modelTo*` exporters.
   const doc = engine.open(toBytes(source)) as unknown as ExportableDoc;
   try {
-    const part = serialise(doc, format);
+    const part = serialise(engine as unknown as ModelExporter, doc, format);
     return new Blob([part], { type: EXPORT_FORMATS[format].contentType });
   } finally {
     doc.close();

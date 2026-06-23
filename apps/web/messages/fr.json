@@ -838,6 +838,9 @@
         "exportWebp": "Images (.webp)",
         "exportHtml": "HTML",
         "exportText": "Texte (.txt)",
+        "exportMarkdown": "Markdown (.md)",
+        "exportCsv": "CSV (.csv)",
+        "exportEpub": "EPUB (.epub)",
         "duplicate": "Dupliquer",
         "manageTags": "Gérer les tags",
         "delete": "Mettre à la corbeille"
@@ -1416,6 +1419,9 @@
       "exportOdp": "Présentation OpenDocument (.odp)",
       "exportHtmlEditable": "Page web (.html)",
       "exportRtf": "Texte enrichi (.rtf)",
+      "exportMarkdown": "Markdown (.md)",
+      "exportCsv": "CSV (.csv)",
+      "exportEpub": "EPUB (.epub)",
       "exportPdf": "PDF (.pdf)",
       "exportSuccess": "Export réussi",
       "exportError": "Échec de l'export"
