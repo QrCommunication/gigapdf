@@ -98,6 +98,7 @@ import {
   usePdfPageOperation,
   downloadBlob,
   useApplyElements,
+  useApplyModelOps,
   useElementUpdates,
   useDocumentLayers,
   useSaveDocumentLayers,
@@ -714,6 +715,12 @@ export default function EditorPage() {
   const flattenPdf = useFlattenPdf();
   const pageOperation = usePdfPageOperation();
   const applyElements = useApplyElements();
+  // Native paragraph-style bake (alignment/indents/spacing) via the engine's
+  // unified model — keyed by the editor's flat run index (`TextElement.index`),
+  // resolved to a `[section, page, index]` block address server-side. Distinct
+  // from `applyElements` (flat redact+add): this writes formatting structurally
+  // into the document model, so a reload reflects it.
+  const applyModelOps = useApplyModelOps();
 
   // currentPdfFile is the single source of truth for the PDF binary. It
   // receives every local mutation (rotate/extract/element add/modify/delete
@@ -729,6 +736,14 @@ export default function EditorPage() {
   const drainOperations = useOperationsStore((s) => s.drain);
   const currentPdfFileRef = useRef<File | null>(null);
   const contentModificationsRef = useRef<ElementModification[]>([]);
+  // Late-bound paragraph-alignment baker. `handleTextStyleChange` (defined
+  // before `adoptModifiedPdf`/`getPreparedBlob`) routes alignment-only edits
+  // here without a TDZ on those later-declared callbacks. Assigned by an effect
+  // once the baker is constructed.
+  const bakeParagraphAlignmentRef = useRef<
+    | ((element: TextElement, align: TextStyle["textAlign"]) => Promise<boolean>)
+    | null
+  >(null);
   // ElementIds that were baked into the PDF in the most recent apply-elements
   // call. They should be removed from the Redis backend ONLY after the S3
   // upload succeeds — flushed by the onSaved callback below. Keeping them
@@ -1867,6 +1882,28 @@ export default function EditorPage() {
         (e) => e.elementId === elementId,
       ) as TextElement | undefined;
       if (!existing) return;
+
+      // Paragraph ALIGNMENT is a structural property: when the patch is an
+      // alignment-only change, bake it natively through the engine's model
+      // (`setParagraphStyle` keyed by the run's `source_index`) instead of the
+      // flat redact+add path. The baker returns false (and we fall through to
+      // the flat path) when the element isn't model-addressable or the bake
+      // fails, so alignment always persists.
+      const keys = Object.keys(style);
+      const isAlignOnly =
+        keys.length === 1 && keys[0] === "textAlign" && style.textAlign != null;
+      if (isAlignOnly && bakeParagraphAlignmentRef.current) {
+        const align = style.textAlign as TextStyle["textAlign"];
+        void bakeParagraphAlignmentRef.current(existing, align).then((baked) => {
+          if (!baked) {
+            handleElementUpdate(elementId, {
+              style: { ...existing.style, textAlign: align },
+            } as Partial<Element>);
+          }
+        });
+        return;
+      }
+
       handleElementUpdate(elementId, {
         style: { ...existing.style, ...style },
       } as Partial<Element>);
@@ -2171,6 +2208,97 @@ export default function EditorPage() {
     },
     [setDirty, saveWithPriority, updateCurrentPdfFile, reparseFromFile],
   );
+
+  // ── Native paragraph-alignment bake (the flat-index ↔ BlockAddr bridge) ────
+  //
+  // Word-like alignment is a PARAGRAPH-level property, not a per-run geometric
+  // one, so it bakes cleanly via the engine's structural model rather than the
+  // flat redact+add path. The editor already carries each run's `source_index`
+  // on `TextElement.index`; the server resolves it to a `[section, page, index]`
+  // block address and applies a `setParagraphStyle` model op. We then adopt the
+  // re-rendered PDF (with re-parse) so the reopened document reflects the
+  // alignment — a real structural bake + reload, not an overlay.
+  //
+  // Returns true when the native bake ran; false when the element is not
+  // model-addressable (no/sentinel `index`), so the caller falls back to the
+  // existing flat style path. Never throws.
+  const bakeParagraphAlignment = useCallback(
+    async (
+      element: TextElement,
+      align: TextStyle["textAlign"],
+    ): Promise<boolean> => {
+      // Only runs surfaced by the per-run extractor carry a usable engine
+      // index; a missing or sentinel (`< 0`) index is a coalesced/Form-XObject
+      // run the model can't address — let the flat path handle it.
+      const sourceIndex = element.index;
+      if (typeof sourceIndex !== "number" || sourceIndex < 0) return false;
+
+      // Optimistic UI: reflect the alignment in the scene graph + canvas now,
+      // then bake structurally. The subsequent re-parse rebuilds the scene
+      // graph from the baked bytes, so this is purely for instant feedback.
+      const ownerPage = pages.find((p) =>
+        p.elements.some((e) => e.elementId === element.elementId),
+      );
+      if (ownerPage) {
+        const existing = ownerPage.elements.find(
+          (e) => e.elementId === element.elementId,
+        ) as TextElement | undefined;
+        if (existing) {
+          const merged = {
+            ...existing,
+            style: { ...existing.style, textAlign: align },
+          } as TextElement;
+          updateElementInPage(element.elementId, merged);
+          if (pages.indexOf(ownerPage) === currentPageIndex) {
+            canvasHandle?.applyLocalElementUpdate(merged);
+          }
+        }
+      }
+      setDirty(true);
+
+      try {
+        // Flush any pending flat element ops first so the model-op bake runs on
+        // a binary that already contains the user's other edits (getPreparedBlob
+        // applies + swaps currentPdfFile, returning the up-to-date bytes).
+        const base = await getPreparedBlob();
+        const file = base ?? currentPdfFileRef.current;
+        if (!file) return false;
+
+        const modified = await applyModelOps.mutateAsync({
+          file,
+          edits: {
+            paragraphs: [{ sourceIndex, patch: { align } }],
+          },
+        });
+        const blob =
+          modified instanceof Blob ? modified : new Blob([modified as BlobPart]);
+        // Adopt + re-parse: modelToPdf reconstructs the page, so run indices
+        // change — the scene graph must be rebuilt from the new bytes.
+        adoptModifiedPdf(blob, { reparse: true });
+        return true;
+      } catch (err) {
+        clientLogger.error("[editor] paragraph-align bake failed:", err);
+        // Fall back to the flat style path so the alignment still persists.
+        return false;
+      }
+    },
+    [
+      pages,
+      currentPageIndex,
+      updateElementInPage,
+      canvasHandle,
+      setDirty,
+      getPreparedBlob,
+      applyModelOps,
+      adoptModifiedPdf,
+    ],
+  );
+
+  // Bind the late-constructed baker so `handleTextStyleChange` (declared earlier)
+  // can invoke it without a temporal-dead-zone on `adoptModifiedPdf`.
+  useEffect(() => {
+    bakeParagraphAlignmentRef.current = bakeParagraphAlignment;
+  }, [bakeParagraphAlignment]);
 
   // Shared helper: run a page-level op through /api/pdf/pages, swap the
   // binary in memory, and trigger an immediate save. Returns the new file

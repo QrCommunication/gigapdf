@@ -674,6 +674,39 @@ export const pdfService = {
   },
 
   /**
+   * Bake native paragraph-style / list-level formatting into a PDF and return
+   * the modified binary. Edits are keyed by the editor's flat engine run index
+   * (`TextElement.index`); the engine resolves each to a structural block
+   * address and applies the matching model op (`setParagraphStyle` /
+   * `setList*`) on the unified document model — a true structural bake, not an
+   * overlay. At least one of `paragraphs` / `lists` must be non-empty.
+   */
+  applyModelOps: async (
+    file: File | Blob,
+    edits: {
+      paragraphs?: ParagraphStyleEdit[];
+      lists?: ListEdit[];
+    },
+  ): Promise<Blob> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+    if (edits.paragraphs && edits.paragraphs.length > 0) {
+      form.append('paragraphs', JSON.stringify(edits.paragraphs));
+    }
+    if (edits.lists && edits.lists.length > 0) {
+      form.append('lists', JSON.stringify(edits.lists));
+    }
+
+    const response = await fetch('/api/pdf/apply-model-ops', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+
+    return handleBlobResponse(response);
+  },
+
+  /**
    * Convert HTML to PDF
    */
   convertToPdf: async (options: ConvertOptions): Promise<Blob> => {
@@ -1092,6 +1125,49 @@ export interface ApplyElementsOperation {
   reorder?: { toFront: boolean };
 }
 
+/** A list bullet/number marker style (mirrors the engine `GigaListMarker`). */
+export type ListMarkerSpec =
+  | { t: 'bullet'; v: string }
+  | { t: 'decimal' }
+  | { t: 'lower_alpha' }
+  | { t: 'upper_alpha' }
+  | { t: 'lower_roman' }
+  | { t: 'upper_roman' };
+
+/** A paragraph leading policy (mirrors the engine `GigaParaPatch.line_height`). */
+export type LineHeightSpec =
+  | { t: 'normal' }
+  | { t: 'multiple'; v: number }
+  | { t: 'points'; v: number };
+
+/**
+ * Paragraph-level formatting patch passed to applyModelOps. Only the provided
+ * fields change. Lengths are in PDF points. Keyed (in the edit below) by the
+ * editor's flat engine run index, not by an explicit block address.
+ */
+export interface ParagraphStylePatch {
+  align?: 'left' | 'center' | 'right' | 'justify';
+  indent_left?: number;
+  indent_right?: number;
+  /** First-line indent (positive) or hanging indent (negative), in points. */
+  first_line?: number;
+  space_before?: number;
+  space_after?: number;
+  line_height?: LineHeightSpec;
+}
+
+/** A paragraph-style edit keyed by the editor's `TextElement.index`. */
+export interface ParagraphStyleEdit {
+  sourceIndex: number;
+  patch: ParagraphStylePatch;
+}
+
+/** A list-level edit keyed by the editor's `TextElement.index`. */
+export type ListEdit =
+  | { sourceIndex: number; kind: 'level'; level: number }
+  | { sourceIndex: number; kind: 'marker'; marker: ListMarkerSpec }
+  | { sourceIndex: number; kind: 'ordered'; ordered: boolean };
+
 // Re-export types for consumers
 export type {
   OpenPdfOptions,
@@ -1112,5 +1188,8 @@ export type {
   MetadataResult,
   FlattenOptions,
 };
+// ApplyElementsOperation, ParagraphStyleEdit, ListEdit, ParagraphStylePatch,
+// ListMarkerSpec & LineHeightSpec are exported above (interface/type
+// declarations) — no re-export needed here.
 // CompressPdfResult & SearchablePdfResult are exported above (interface
 // declarations) — no re-export needed here.
