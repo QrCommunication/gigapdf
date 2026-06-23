@@ -843,6 +843,7 @@
         "exportEpub": "EPUB (.epub)",
         "duplicate": "Dupliquer",
         "manageTags": "Gérer les tags",
+        "makeSearchable": "Rendre cherchable (OCR)",
         "delete": "Mettre à la corbeille"
       },
       "deleteDialog": {
@@ -1038,6 +1039,46 @@
       "textFormat": {
         "conversionFailed": "Impossible de convertir ce fichier Markdown/CSV en PDF",
         "unavailable": "La conversion Markdown/CSV est temporairement indisponible"
+      },
+      "image": {
+        "conversionFailed": "Impossible de convertir cette image en PDF",
+        "unavailable": "La conversion d'image est temporairement indisponible"
+      }
+    },
+    "ocr": {
+      "title": "Rendre cherchable (OCR)",
+      "description": "Reconnaît le texte de « {name} » et ajoute une couche de texte invisible : le document scanné devient sélectionnable et cherchable, son apparence est préservée.",
+      "scriptLabel": "Système d'écriture",
+      "dpiLabel": "Qualité (DPI)",
+      "dpiFast": "144 (rapide)",
+      "dpiBalanced": "200 (équilibré)",
+      "dpiHigh": "300 (haute qualité)",
+      "outputLabel": "Résultat",
+      "outputReplace": "Remplacer le document",
+      "outputReplaceHint": "Enregistre une nouvelle version cherchable à la place de l'originale.",
+      "outputDownload": "Télécharger une copie",
+      "outputDownloadHint": "Télécharge la version cherchable sans modifier le document stocké.",
+      "run": "Lancer l'OCR",
+      "processing": "Reconnaissance en cours…",
+      "cancel": "Annuler",
+      "unavailable": "Le moteur OCR n'est pas disponible. Réessayez plus tard ou contactez l'administrateur.",
+      "replacedTitle": "Document rendu cherchable",
+      "replacedDescription": "« {name} » a été remplacé par sa version cherchable.",
+      "downloadedTitle": "Copie cherchable téléchargée",
+      "failed": "La reconnaissance de texte a échoué.",
+      "lang": {
+        "latin": "Latin",
+        "cyrillic": "Cyrillique",
+        "arabic": "Arabe",
+        "hebrew": "Hébreu",
+        "devanagari": "Devanagari",
+        "tamil": "Tamoul",
+        "telugu": "Télougou",
+        "kannada": "Kannada",
+        "chinese_simplified": "Chinois simplifié",
+        "chinese_traditional": "Chinois traditionnel",
+        "japanese": "Japonais",
+        "korean": "Coréen"
       }
     },
     "office": {

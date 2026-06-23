@@ -69,16 +69,18 @@ export function isPdfFile(file: { name: string; type?: string }): boolean {
 }
 
 /**
- * Office import formats convertible to an editable PDF on upload.
+ * Office (and RTF) import formats convertible to an editable PDF on upload.
  *
- * MIRRORS `OFFICE_IMPORT_FORMATS` from `@giga-pdf/pdf-engine`
- * (`convert/office-headless.ts`) — kept as a local literal so this module stays
- * pure (no WASM engine import, which would break the jsdom unit test). The
- * conversion route (`/api/office/upload`) is the type-checked gate against the
- * engine's `OfficeImportFormat`; this list only decides client-side routing.
+ * The OOXML/OLE2/ODF entries MIRROR `OFFICE_IMPORT_FORMATS` from
+ * `@giga-pdf/pdf-engine` (`convert/office-headless.ts`) — kept as a local
+ * literal so this module stays pure (no WASM engine import, which would break
+ * the jsdom unit test). The conversion route (`/api/office/upload`) is the
+ * type-checked gate against the engine's `OfficeImportFormat`; this list only
+ * decides client-side routing.
  *
- * NOTE: `rtf` is intentionally absent — the engine does not convert it and the
- * route would reject it (400), so we leave RTF on the as-is store path.
+ * NOTE: `rtf` is included — `/api/office/upload` accepts it (magic `{\rtf`) and
+ * converts it via the engine's `rtfToPdf`. RTF therefore becomes an editable PDF
+ * on upload instead of being dead-stored as raw text.
  */
 const OFFICE_CONVERT_EXTENSIONS = new Set([
   "docx",
@@ -90,15 +92,44 @@ const OFFICE_CONVERT_EXTENSIONS = new Set([
   "odt",
   "ods",
   "odp",
+  "rtf",
 ]);
 
 /**
- * True when the file is an Office document that should be converted to PDF on
- * upload (so it becomes editable in the editor). Detected by extension only;
- * the conversion route re-validates the container magic bytes server-side.
+ * True when the file is an Office (or RTF) document that should be converted to
+ * PDF on upload (so it becomes editable in the editor). Detected by extension
+ * only; the conversion route re-validates the container/RTF magic bytes
+ * server-side.
  */
 export function isOfficeFile(file: { name: string }): boolean {
   return OFFICE_CONVERT_EXTENSIONS.has(getFileExtension(file.name));
+}
+
+/**
+ * Raster image formats convertible to a single-page editable PDF on upload.
+ *
+ * MIRRORS the engine's `imageToPdf` supported formats (PNG/JPEG/GIF/WebP/AVIF).
+ * On upload they are raised to a PDF (`/api/convert/image` → native WASM
+ * `imageToPdf`) so they open as an editable page in the editor instead of being
+ * dead-stored as raw image bytes. The conversion route re-validates the image
+ * magic bytes server-side.
+ */
+const IMAGE_CONVERT_EXTENSIONS = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "avif",
+]);
+
+/**
+ * True when the file is a raster image that should be converted to PDF on upload
+ * (so it becomes editable in the editor). Detected by extension only; the
+ * conversion route re-validates the image magic bytes server-side.
+ */
+export function isImageFile(file: { name: string }): boolean {
+  return IMAGE_CONVERT_EXTENSIONS.has(getFileExtension(file.name));
 }
 
 /**

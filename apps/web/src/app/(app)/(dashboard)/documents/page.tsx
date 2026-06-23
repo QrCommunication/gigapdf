@@ -24,6 +24,7 @@ import { ImportDialog } from "@/components/dashboard/import-dialog";
 import {
   IMPORT_CONCURRENCY,
   MAX_IMPORT_FILE_SIZE_BYTES,
+  isImageFile,
   isOfficeFile,
   isPdfFile,
   isTextModelFile,
@@ -310,6 +311,48 @@ async function convertTextModelFileToPdf(file: File): Promise<File> {
   return new File([pdfBlob], `${baseName}.pdf`, { type: "application/pdf" });
 }
 
+/**
+ * Convert a raster image (PNG/JPEG/GIF/WebP/AVIF) to a single-page editable PDF
+ * via POST /api/convert/image (server-side magic-byte validation + native WASM
+ * `imageToPdf`). The returned PDF is wrapped as a `<base>.pdf` File
+ * (application/pdf) so the rest of the import pipeline treats it exactly like an
+ * uploaded PDF — and the editor opens it as an editable page.
+ *
+ * Reuses {@link OfficeConversionError} for a consistent per-file failure shape
+ * (a 422 here = an unrecognized/corrupt image → "conversion"; everything else is
+ * also a content/conversion failure from the user's perspective).
+ *
+ * @throws {OfficeConversionError} on any non-2xx response (precise per-file reason)
+ */
+async function convertImageFileToPdf(file: File): Promise<File> {
+  const baseName = stripExtension(file.name) || file.name;
+  const form = new FormData();
+  form.append("file", file);
+
+  let res: Response;
+  try {
+    res = await fetch("/api/convert/image", {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+  } catch (err) {
+    clientLogger.warn("documents.image-convert-network-failed", err);
+    throw new OfficeConversionError("image conversion network error", "unavailable");
+  }
+
+  if (!res.ok) {
+    clientLogger.warn("documents.image-convert-failed", res.status);
+    throw new OfficeConversionError(
+      `image conversion failed (${res.status})`,
+      res.status === 503 ? "unavailable" : "conversion",
+    );
+  }
+
+  const pdfBlob = await res.blob();
+  return new File([pdfBlob], `${baseName}.pdf`, { type: "application/pdf" });
+}
+
 /** Build the /documents URL preserving folder and tag query params. */
 function buildDocumentsUrl(folderId: string | null, tag: string | null): string {
   const params = new URLSearchParams();
@@ -496,14 +539,15 @@ export default function DocumentsPage() {
     setImportDialogOpen(true);
   }, []);
 
-  // Imports ONE file. Office documents (docx/xlsx/pptx/doc/xls/ppt/odt/ods/odp)
-  // are FIRST converted to an editable PDF (via /api/office/upload → native WASM
-  // engine) and the resulting PDF is stored, so the editor can open them as
-  // editable pages instead of failing to parse the raw Office bytes as a PDF.
-  // PDFs (uploaded or freshly converted) additionally get a first-page thumbnail
-  // + extracted full text for search; other formats are stored as-is.
-  // Never throws: every failure is returned with a precise per-file reason,
-  // so one bad file cannot abort the batch.
+  // Imports ONE file. Office/RTF documents (docx/xlsx/pptx/doc/xls/ppt/odt/ods/
+  // odp/rtf → /api/office/upload), Markdown/CSV (→ /api/convert/text-format) and
+  // raster images (png/jpg/jpeg/gif/webp/avif → /api/convert/image) are FIRST
+  // converted to an editable PDF via the native WASM engine and the resulting
+  // PDF is stored, so the editor can open them as editable pages instead of
+  // dead-storing the raw bytes. PDFs (uploaded or freshly converted) additionally
+  // get a first-page thumbnail + extracted full text for search; any remaining
+  // format is stored as-is. Never throws: every failure is returned with a
+  // precise per-file reason, so one bad file cannot abort the batch.
   const importSingleFile = useCallback(
     async (file: File): Promise<ImportOutcome> => {
       // Client-side validation: size cap only (every format is accepted).
@@ -516,12 +560,14 @@ export default function DocumentsPage() {
         };
       }
 
-      // Office / text-model (Markdown, CSV) → editable PDF. On failure we abort
-      // THIS file with a precise reason (never store broken/un-openable bytes
-      // silently). A given file matches at most one of these branches.
+      // Office / RTF, text-model (Markdown, CSV), and raster images → editable
+      // PDF. On failure we abort THIS file with a precise reason (never store
+      // broken/un-openable bytes silently). A given file matches at most one of
+      // these branches.
       let fileToStore = file;
       const office = isOfficeFile(file);
       const textModel = isTextModelFile(file);
+      const image = isImageFile(file);
       if (office) {
         try {
           fileToStore = await convertOfficeFileToPdf(file);
@@ -552,6 +598,21 @@ export default function DocumentsPage() {
                 : t("import.textFormat.conversionFailed"),
           };
         }
+      } else if (image) {
+        try {
+          fileToStore = await convertImageFileToPdf(file);
+        } catch (err) {
+          const kind =
+            err instanceof OfficeConversionError ? err.kind : "conversion";
+          return {
+            ok: false,
+            name: file.name,
+            reason:
+              kind === "unavailable"
+                ? t("import.image.unavailable")
+                : t("import.image.conversionFailed"),
+          };
+        }
       }
 
       // From here on, treat the (possibly converted) file as the document to
@@ -571,8 +632,9 @@ export default function DocumentsPage() {
           ? await extractedTextPromise
           : null;
 
-        // Store the document: the original bytes for PDFs/images/other, or the
-        // converted PDF for Office files. The title keeps the original base name.
+        // Store the document: the original bytes for already-PDF / unconverted
+        // formats, or the freshly converted PDF for Office/RTF, Markdown/CSV and
+        // images. The title keeps the original base name.
         const saved = await api.saveDocument({
           file: fileToStore,
           name: baseName,
