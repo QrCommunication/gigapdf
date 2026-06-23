@@ -1708,6 +1708,7 @@
         "checkbox": "Checkbox",
         "radioGroup": "Radio button group",
         "dropdown": "Dropdown list",
+        "listBox": "List box (visible selection)",
         "date": "Date"
       },
       "squiggly": "Squiggly",

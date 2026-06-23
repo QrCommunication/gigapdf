@@ -23,6 +23,8 @@ function fieldKindToFieldType(kind: FieldCreationKind): FieldType {
       return "radio";
     case "dropdown":
       return "dropdown";
+    case "listbox":
+      return "listbox";
     case "text":
     case "multiline":
     case "date":

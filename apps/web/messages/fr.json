@@ -1708,6 +1708,7 @@
         "checkbox": "Case à cocher",
         "radioGroup": "Groupe de boutons radio",
         "dropdown": "Liste déroulante",
+        "listBox": "Liste (sélection visible)",
         "date": "Date"
       },
       "squiggly": "Ondulé",
