@@ -1609,6 +1609,27 @@ export function EditorCanvas({
                   strokeWidth: 1,
                 });
                 break;
+              case "squiggly":
+                // Wavy text-markup under the run — drawn flat here (the baked
+                // /Annot renders the squiggle); colour mirrors underline.
+                newObj = new Line([0, 0, 100, 0], {
+                  left: pointer.x,
+                  top: pointer.y,
+                  stroke: "#2196f3",
+                  strokeWidth: 2,
+                });
+                break;
+              case "freetext":
+                // Editable free-text annotation box; the typed content is
+                // baked via addFreeText (see annotation-renderer).
+                newObj = new IText(t("defaultText") || "Text", {
+                  left: pointer.x,
+                  top: pointer.y,
+                  fontSize: 14,
+                  fontFamily: documentDefaultFontFamilyRef.current,
+                  fill: currentStrokeColor,
+                });
+                break;
               case "note":
                 newObj = new Rect({
                   left: pointer.x,

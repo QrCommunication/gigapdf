@@ -12,6 +12,7 @@ import type {
   TextStyle,
   UUID,
   PageObject,
+  BookmarkObject,
 } from "@giga-pdf/types";
 import { Button, useToast } from "@giga-pdf/ui";
 import {
@@ -150,6 +151,9 @@ import {
   type PageGeometry,
   type WebRedactionRect,
 } from "@/components/editor/lib/redact-pii";
+import { bakeOutline } from "@/components/editor/lib/outline-bake";
+import { ResizePageDialog } from "@/components/editor/resize-page-dialog";
+import { RedactPiiDialog } from "@/components/editor/redact-pii-dialog";
 import type { ExportFormat } from "@/components/editor/lib/export-formats";
 import type { HeaderFooterSpec } from "@qrcommunication/gigapdf-lib";
 import { clientLogger } from "@/lib/client-logger";
@@ -2593,7 +2597,7 @@ export default function EditorPage() {
   // to mirror the scene graph) in the same tick.
   const runPageOperation = useCallback(
     async (
-      operation: 'add' | 'copy' | 'rotate' | 'delete' | 'move',
+      operation: 'add' | 'copy' | 'rotate' | 'delete' | 'move' | 'resize',
       params: Record<string, unknown>,
       opts: { reparse?: boolean } = {},
     ): Promise<File | null> => {
@@ -3147,6 +3151,106 @@ export default function EditorPage() {
       clientLogger.error('[editor] Extract failed:', err);
     }
   }, [currentPdfFile, pageOperation]);
+
+  // --- Resize page (Word-like "page size") ----------------------------------
+  // 0-based index of the page targeted by the resize dialog (null = closed).
+  const [resizePageIndex, setResizePageIndex] = useState<number | null>(null);
+
+  const handlePageResize = useCallback((pageIndex: number) => {
+    setResizePageIndex(pageIndex);
+  }, []);
+
+  // Apply a new page size (points) via the existing `resize` page op, then
+  // re-parse so the editable overlay re-aligns with the new MediaBox.
+  const applyPageResize = useCallback(
+    async (size: { width: number; height: number }) => {
+      const idx = resizePageIndex;
+      if (idx === null) return;
+      await runPageOperation('resize', {
+        pageNumber: idx + 1,
+        width: size.width,
+        height: size.height,
+      });
+    },
+    [resizePageIndex, runPageOperation],
+  );
+
+  // --- Outline (TOC) editing -------------------------------------------------
+  // Bake an edited outline tree onto the PDF (client-side, shared engine) and
+  // adopt the new binary — same single-source-of-truth path as redaction.
+  const handleApplyOutline = useCallback(
+    (outline: BookmarkObject[]) => {
+      const file = currentPdfFileRef.current;
+      if (!file) return;
+      void (async () => {
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const { bytes: next } = await bakeOutline(bytes, outline);
+          adoptModifiedPdf(new Blob([next], { type: 'application/pdf' }), {
+            reparse: false,
+          });
+          toast({
+            title: t('toc.appliedTitle'),
+            description: t('toc.appliedDescription'),
+          });
+        } catch (err) {
+          clientLogger.error('[editor] outline bake failed:', err);
+          toast({
+            title: t('toc.errorTitle'),
+            description: t('toc.errorDescription'),
+            variant: 'destructive',
+          });
+        }
+      })();
+    },
+    [adoptModifiedPdf, toast, t],
+  );
+
+  // --- PII auto-detect redaction --------------------------------------------
+  const [showRedactPiiDialog, setShowRedactPiiDialog] = useState(false);
+
+  // Redact every auto-detected PII region (whole text runs) across the whole
+  // document. Reuses the manual redaction baking path: build per-page geometry,
+  // lower the web rects, then `redactDocument` (same `redactPii` engine call).
+  const handleRedactPiiAuto = useCallback(
+    (rects: WebRedactionRect[]) => {
+      const file = currentPdfFileRef.current;
+      if (!file || rects.length === 0) return;
+      const geometries = new Map<number, PageGeometry>();
+      for (const page of pages) {
+        geometries.set(page.pageNumber, {
+          width: page.dimensions.width,
+          height: page.dimensions.height,
+          rotation: page.dimensions.rotation as 0 | 90 | 180 | 270,
+        });
+      }
+      const rectsByPage = groupRectsByPage(rects, geometries);
+      if (rectsByPage.size === 0) return;
+      void (async () => {
+        setRedactBusy(true);
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const { bytes: next } = await redactDocument(bytes, rectsByPage);
+          adoptModifiedPdf(new Blob([next], { type: 'application/pdf' }));
+          setShowRedactPiiDialog(false);
+          toast({
+            title: t('redact.appliedTitle'),
+            description: t('redact.appliedDescription'),
+          });
+        } catch (err) {
+          clientLogger.error('[editor] PII redaction failed:', err);
+          toast({
+            title: t('redact.errorTitle'),
+            description: t('redact.errorDescription'),
+            variant: 'destructive',
+          });
+        } finally {
+          setRedactBusy(false);
+        }
+      })();
+    },
+    [pages, adoptModifiedPdf, toast, t],
+  );
 
   const handleToggleContentEdit = useCallback(() => {
     if (isContentEditActive) {
@@ -4042,6 +4146,7 @@ export default function EditorPage() {
         redactionMarkCount={redactionMarkCount}
         onRedactApply={handleRedactApply}
         onRedactClear={handleRedactClear}
+        onRedactPiiAuto={() => setShowRedactPiiDialog(true)}
         redactBusy={redactBusy}
       />
 
@@ -4080,6 +4185,7 @@ export default function EditorPage() {
           previewBaseUrl={process.env.NEXT_PUBLIC_API_URL}
           onPageRotate={handlePageRotate}
           onPageExtract={handlePageExtract}
+          onPageResize={handlePageResize}
           thumbnails={thumbnails}
         />
 
@@ -4225,6 +4331,8 @@ export default function EditorPage() {
           onAssignElementToLayer={handleAssignElementToLayer}
           onDownloadFile={handleDownloadFile}
           currentPageIndex={effectivePageIndex}
+          onApplyOutline={handleApplyOutline}
+          pageCount={pages.length}
         />
 
         {/* Forms panel (conditionally shown) */}
@@ -4272,6 +4380,27 @@ export default function EditorPage() {
         onGoToOccurrence={handleFindReplaceGoTo}
         onReplaceOne={handleReplaceOne}
         onReplaceAll={handleReplaceAll}
+      />
+
+      {/* Redimensionnement de page (A4/Letter/Legal/personnalisé) */}
+      {resizePageIndex !== null && (
+        <ResizePageDialog
+          open
+          onClose={() => setResizePageIndex(null)}
+          pageIndex={resizePageIndex}
+          currentWidth={pages[resizePageIndex]?.dimensions.width}
+          currentHeight={pages[resizePageIndex]?.dimensions.height}
+          onApply={applyPageResize}
+        />
+      )}
+
+      {/* Détection & caviardage automatique des PII */}
+      <RedactPiiDialog
+        open={showRedactPiiDialog}
+        onClose={() => setShowRedactPiiDialog(false)}
+        pages={pages}
+        isApplying={redactBusy}
+        onConfirm={handleRedactPiiAuto}
       />
 
       {/* Status bar */}

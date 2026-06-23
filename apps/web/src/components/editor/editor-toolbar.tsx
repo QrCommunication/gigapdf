@@ -41,6 +41,7 @@ import {
   MessageCircle,
   StickyNote,
   Strikethrough,
+  Spline,
   Stamp,
   ChevronDown,
   Trash2,
@@ -320,6 +321,11 @@ export interface EditorToolbarProps {
   onRedactApply?: () => void;
   /** Discard every redaction zone drawn on the active page without applying. */
   onRedactClear?: () => void;
+  /**
+   * Auto-detect PII (emails / phones / IBANs / cards / FR SSN·SIREN) across the
+   * document and open the confirmation dialog before redacting.
+   */
+  onRedactPiiAuto?: () => void;
   /** Whether a redaction apply is currently running. */
   redactBusy?: boolean;
 }
@@ -589,6 +595,7 @@ export function EditorToolbar({
   redactionMarkCount = 0,
   onRedactApply,
   onRedactClear,
+  onRedactPiiAuto,
   redactBusy = false,
 }: EditorToolbarProps) {
   const t = useTranslations("editor.toolbar");
@@ -705,9 +712,12 @@ export function EditorToolbar({
       icon: <Strikethrough size={16} />,
       labelKey: "strikeout",
     },
+    { type: "squiggly", icon: <Spline size={16} />, labelKey: "squiggly" },
+    { type: "freetext", icon: <Type size={16} />, labelKey: "freetext" },
     { type: "note", icon: <StickyNote size={16} />, labelKey: "note" },
     { type: "comment", icon: <MessageCircle size={16} />, labelKey: "comment" },
     { type: "stamp", icon: <Stamp size={16} />, labelKey: "stamp" },
+    { type: "line", icon: <Minus size={16} />, labelKey: "line" },
     { type: "arrow", icon: <ArrowRight size={16} />, labelKey: "arrow" },
   ];
 
@@ -933,6 +943,27 @@ export function EditorToolbar({
               >
                 <X size={16} />
               </button>
+              {/* Détection automatique des PII (emails, téléphones, IBAN…). */}
+              {onRedactPiiAuto && (
+                <button
+                  type="button"
+                  onClick={onRedactPiiAuto}
+                  disabled={redactBusy}
+                  title={tRedact("autoHint")}
+                  className={`
+                    px-2 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5
+                    transition-colors
+                    ${
+                      redactBusy
+                        ? "opacity-50 cursor-not-allowed bg-muted text-muted-foreground"
+                        : "border border-input hover:bg-muted cursor-pointer"
+                    }
+                  `}
+                >
+                  <ScanSearch size={14} />
+                  <span>{tRedact("autoDetect")}</span>
+                </button>
+              )}
             </div>
           )}
         </>

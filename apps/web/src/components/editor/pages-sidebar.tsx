@@ -3,7 +3,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import type { PageObject } from "@giga-pdf/types";
-import { Plus, Trash2, ChevronUp, ChevronDown, Copy, RotateCw, FileOutput } from "lucide-react";
+import { Plus, Trash2, ChevronUp, ChevronDown, Copy, RotateCw, FileOutput, Scaling } from "lucide-react";
 
 export interface PagesSidebarProps {
   /** Liste des pages */
@@ -24,6 +24,8 @@ export interface PagesSidebarProps {
   onPageRotate?: (pageIndex: number) => void;
   /** Callback pour extraire une page en PDF séparé */
   onPageExtract?: (pageIndex: number) => void;
+  /** Callback pour redimensionner une page (A4/Letter/Legal/personnalisé) */
+  onPageResize?: (pageIndex: number) => void;
   /** URL de base pour les previews */
   previewBaseUrl?: string;
   /** Map page_number (1-indexed) → dataUrl PNG pour thumbnails client-side */
@@ -43,6 +45,7 @@ export function PagesSidebar({
   onPageDuplicate,
   onPageRotate,
   onPageExtract,
+  onPageResize,
   previewBaseUrl = "",
   thumbnails,
 }: PagesSidebarProps) {
@@ -187,6 +190,20 @@ export function PagesSidebar({
                   className="p-1 bg-background/80 rounded hover:bg-muted transition-colors"
                 >
                   <RotateCw size={12} />
+                </button>
+              )}
+              {/* Resize */}
+              {onPageResize && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPageResize(index);
+                  }}
+                  title={t("resize")}
+                  className="p-1 bg-background/80 rounded hover:bg-muted transition-colors"
+                >
+                  <Scaling size={12} />
                 </button>
               )}
               {/* Extract */}

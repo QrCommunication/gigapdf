@@ -1566,7 +1566,9 @@
       "appliedTitle": "Redaction applied",
       "appliedDescription": "The content under the redacted zones was permanently removed.",
       "errorTitle": "Redaction failed",
-      "errorDescription": "The redaction could not be applied. Please try again."
+      "errorDescription": "The redaction could not be applied. Please try again.",
+      "autoDetect": "Detect PII",
+      "autoHint": "Automatically detect emails, phones, IBANs, cards and IDs (SSN/SIREN) and redact them"
     },
     "indexOcr": {
       "indexedTitle": "Document indexed",
@@ -1666,7 +1668,9 @@
         "radioGroup": "Radio button group",
         "dropdown": "Dropdown list",
         "date": "Date"
-      }
+      },
+      "squiggly": "Squiggly",
+      "freetext": "Free text"
     },
     "tools": {
       "select": "Select",
@@ -1688,7 +1692,8 @@
       "pageNumber": "Page {number}",
       "pageCount": "{count, plural, one {1 page} other {{count} pages}}",
       "rotate": "Rotate page",
-      "extract": "Extract page"
+      "extract": "Extract page",
+      "resize": "Resize page"
     },
     "properties": {
       "title": "Properties",
@@ -1800,7 +1805,24 @@
     "confirm": "Confirm",
     "cancel": "Cancel",
     "toc": {
-      "title": "Table of Contents"
+      "title": "Table of Contents",
+      "edit": "Edit table of contents",
+      "addBookmark": "Add bookmark",
+      "newBookmark": "New bookmark",
+      "deleteBookmark": "Delete bookmark",
+      "cancelEdit": "Cancel",
+      "saveEdit": "Save",
+      "emptyEdit": "No bookmarks. Use “Add bookmark” to create one.",
+      "titlePlaceholder": "Bookmark title",
+      "destinationPage": "Destination page",
+      "indent": "Indent",
+      "outdent": "Outdent",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "appliedTitle": "Table of contents updated",
+      "appliedDescription": "The bookmarks were saved to the document.",
+      "errorTitle": "Update failed",
+      "errorDescription": "The table of contents could not be saved. Please try again."
     },
     "layers": {
       "title": "Layers",
@@ -1953,6 +1975,46 @@
       "toasts": {
         "applied": "Table updated",
         "failed": "Table edit failed"
+      }
+    },
+    "redactPii": {
+      "title": "Detect and redact PII",
+      "close": "Close",
+      "cancel": "Cancel",
+      "noneFound": "No personal data detected in this document.",
+      "foundCount": "{count, plural, one {# personal data item detected} other {# personal data items detected}}",
+      "irreversible": "Redaction is irreversible: the detected text is deleted and underlying pixels are erased, not just hidden.",
+      "redactButton": "Redact {count, plural, one {# region} other {# regions}}",
+      "kinds": {
+        "email": "Email addresses",
+        "phone": "Phone numbers",
+        "iban": "IBANs",
+        "creditCard": "Credit cards",
+        "ssn": "Social security numbers",
+        "siren": "SIREN / SIRET"
+      }
+    },
+    "resizePage": {
+      "title": "Resize page {page}",
+      "close": "Close",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "sizeLabel": "Size",
+      "orientationLabel": "Orientation",
+      "widthLabel": "Width (pt)",
+      "heightLabel": "Height (pt)",
+      "summary": "New size: {width} × {height} pt",
+      "presets": {
+        "a4": "A4 (210 × 297 mm)",
+        "letter": "Letter (8.5 × 11 in)",
+        "legal": "Legal (8.5 × 14 in)",
+        "a3": "A3 (297 × 420 mm)",
+        "a5": "A5 (148 × 210 mm)",
+        "custom": "Custom"
+      },
+      "orientation": {
+        "portrait": "Portrait",
+        "landscape": "Landscape"
       }
     }
   },
