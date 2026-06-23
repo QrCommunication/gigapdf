@@ -11,6 +11,7 @@ import type {
   Element,
   TextStyle,
   TextElement,
+  DocumentLanguageInfo,
 } from "@giga-pdf/types";
 import type { RulerUnit, DocumentFontOption } from "@giga-pdf/editor";
 import { FontPicker, DEFAULT_FONTS } from "@giga-pdf/ui";
@@ -240,6 +241,11 @@ export interface EditorToolbarProps {
    * scope « page courante uniquement » de l'OCR. Défaut 1 si absent.
    */
   currentPageNumber?: number;
+  /**
+   * Langue / écriture détectée du document — pré-remplit le sélecteur d'écriture
+   * de la modale OCR (l'utilisateur peut toujours changer). Forwardé tel quel.
+   */
+  documentLanguage?: DocumentLanguageInfo;
   /** Callback pour afficher/masquer le panneau formulaires */
   onToggleFormsPanel?: () => void;
   /** Callback pour aplatir le PDF courant */
@@ -574,6 +580,7 @@ export function EditorToolbar({
   documentFonts = [],
   currentFile,
   currentPageNumber,
+  documentLanguage,
   onToggleFormsPanel,
   onFlattenPdf,
   isContentEditActive,
@@ -1531,6 +1538,7 @@ export function EditorToolbar({
         currentFile={currentFile ?? null}
         baseFilename={currentFile?.name}
         currentPageNumber={currentPageNumber}
+        documentLanguage={documentLanguage}
         onApplied={onOcrApplied}
       />
       <PdfADialog

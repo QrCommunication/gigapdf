@@ -66,6 +66,14 @@ interface LayersPanelProps {
   onLayerLockChange?: (layerId: string, locked: boolean) => void;
   /** Affecter un élément à un calque utilisateur (ou `null` pour le détacher). */
   onAssignElementToLayer?: (elementId: string, layerId: string | null) => void;
+  // --- OCG natifs du PDF (groupes de contenu optionnel). Quand ces actions sont
+  //     fournies, la section OCG devient ÉDITABLE (visibilité / verrou /
+  //     suppression). Adressés par le `ocgId` numérique de chaque LayerObject. ---
+  onOcgVisibilityChange?: (ocgId: number, visible: boolean) => void;
+  onOcgLockChange?: (ocgId: number, locked: boolean) => void;
+  onOcgRemove?: (ocgId: number) => void;
+  /** OCG en cours de bake — leurs contrôles sont désactivés le temps de l'op. */
+  ocgBusyIds?: number[];
   className?: string;
 }
 
@@ -123,6 +131,10 @@ export function LayersPanel({
   onLayerVisibilityChange,
   onLayerLockChange,
   onAssignElementToLayer,
+  onOcgVisibilityChange,
+  onOcgLockChange,
+  onOcgRemove,
+  ocgBusyIds = [],
   className,
 }: LayersPanelProps) {
   const t = useTranslations("editor.layers");
@@ -558,7 +570,7 @@ export function LayersPanel({
             );
           })}
 
-          {/* ---- Groupes OCG du PDF (lecture seule) ---- */}
+          {/* ---- Groupes OCG du PDF (natifs, éditables si actions fournies) ---- */}
           {layers.length > 0 && (
             <>
               <p className="px-2 pt-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -566,20 +578,106 @@ export function LayersPanel({
               </p>
               {[...layers]
                 .sort((a, b) => a.order - b.order)
-                .map((layer) => (
-                  <div
-                    key={layer.layerId}
-                    className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
-                  >
-                    <span
-                      className="w-2.5 h-2.5 rounded-full border shrink-0"
-                      style={{ opacity: layer.opacity }}
-                    />
-                    <span className="flex-1 truncate" title={layer.name}>
-                      {layer.name}
-                    </span>
-                  </div>
-                ))}
+                .map((layer) => {
+                  // Éditable seulement quand l'OCG a un id numérique réel ET
+                  // qu'au moins une action OCG est câblée. Sinon : lecture seule.
+                  const ocgId = layer.ocgId;
+                  const editable =
+                    ocgId !== undefined &&
+                    Boolean(
+                      onOcgVisibilityChange ||
+                        onOcgLockChange ||
+                        onOcgRemove,
+                    );
+                  const busy =
+                    ocgId !== undefined && ocgBusyIds.includes(ocgId);
+
+                  if (!editable || ocgId === undefined) {
+                    return (
+                      <div
+                        key={layer.layerId}
+                        className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
+                      >
+                        <span
+                          className="w-2.5 h-2.5 rounded-full border shrink-0"
+                          style={{ opacity: layer.opacity }}
+                        />
+                        <span className="flex-1 truncate" title={layer.name}>
+                          {layer.name}
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={layer.layerId}
+                      className={cn(
+                        "flex items-center gap-1 px-1 py-1 rounded-md text-sm",
+                        !layer.visible && "opacity-50",
+                        busy && "opacity-60",
+                      )}
+                    >
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
+                        disabled={busy || !onOcgVisibilityChange}
+                        onClick={() =>
+                          onOcgVisibilityChange?.(ocgId, !layer.visible)
+                        }
+                        title={layer.visible ? t("ocgHide") : t("ocgShow")}
+                        aria-label={layer.visible ? t("ocgHide") : t("ocgShow")}
+                        aria-pressed={!layer.visible}
+                      >
+                        {layer.visible ? (
+                          <Eye className="h-3.5 w-3.5" />
+                        ) : (
+                          <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                        )}
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
+                        disabled={busy || !onOcgLockChange}
+                        onClick={() => onOcgLockChange?.(ocgId, !layer.locked)}
+                        title={layer.locked ? t("ocgUnlock") : t("ocgLock")}
+                        aria-label={layer.locked ? t("ocgUnlock") : t("ocgLock")}
+                        aria-pressed={layer.locked}
+                      >
+                        {layer.locked ? (
+                          <Lock className="h-3.5 w-3.5 text-amber-500" />
+                        ) : (
+                          <Unlock className="h-3.5 w-3.5 text-muted-foreground" />
+                        )}
+                      </Button>
+
+                      <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span
+                        className="flex-1 truncate text-xs"
+                        title={layer.name}
+                      >
+                        {layer.name}
+                      </span>
+
+                      {onOcgRemove && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0"
+                          disabled={busy}
+                          onClick={() => onOcgRemove(ocgId)}
+                          title={busy ? t("ocgApplying") : t("ocgRemove")}
+                          aria-label={t("ocgRemove")}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
             </>
           )}
         </div>

@@ -7,6 +7,7 @@ import {
   extractLayers,
   extractEmbeddedFiles,
   extractNamedDestinations,
+  extractDocumentLanguage,
 } from './metadata-extractor';
 import { extractTextElementsByPage } from './text-extractor';
 import type { TextElement } from '@giga-pdf/types';
@@ -355,7 +356,7 @@ export async function parseDocument(
   });
 
   // Step 2 — Document-level extractions (parallel, each with graceful fallback).
-  const [metadata, bookmarks, layers, embeddedFiles, namedDestinations] = await Promise.all([
+  const [metadata, bookmarks, layers, embeddedFiles, namedDestinations, documentLanguage] = await Promise.all([
     safeExtract('metadata', async () => {
       const m = await extractMetadata(libBytes);
       // safeExtract expects T[], so we wrap the single object
@@ -382,6 +383,10 @@ export async function parseDocument(
       // safeExtract expects T[], wrap the record as a single-element array
       return [destinations];
     }).then((arr) => arr[0] ?? {}),
+
+    // Best-effort: returns undefined on failure / undecidable, so the field is
+    // simply omitted from the DocumentObject rather than misleadingly defaulted.
+    extractDocumentLanguage(libBytes).catch(() => undefined),
   ]);
 
   // Step 3 — Determine which pages to process.
@@ -469,6 +474,9 @@ export async function parseDocument(
     namedDestinations,
     embeddedFiles,
     layers,
+    // Only attach when detection succeeded — keeps the legacy response shape
+    // byte-identical when the engine cannot decide.
+    ...(documentLanguage ? { documentLanguage } : {}),
   };
 }
 

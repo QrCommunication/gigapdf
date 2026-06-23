@@ -70,6 +70,23 @@ export interface NamedDestination {
   zoom: number | null;
 }
 
+/**
+ * Best-effort reading direction / dominant script of a document's text,
+ * derived from the parsed glyphs by the native engine. Surfaced read-only in
+ * the editor (a small badge) and used to pre-select the OCR writing system.
+ */
+export interface DocumentLanguageInfo {
+  /** Overall reading direction (`rtl` for Arabic/Hebrew, `ltr` otherwise). */
+  direction: "ltr" | "rtl" | "neutral";
+  /**
+   * Dominant writing system, one of:
+   * `"arabic" | "hebrew" | "latin" | "greek" | "cyrillic" | "cjk" | "other"`.
+   */
+  script: string;
+  /** Best-effort ISO-639-1 code (e.g. `"ar"`, `"he"`, `"zh"`); absent when undecidable. */
+  lang?: string;
+}
+
 export interface DocumentObject {
   documentId: UUID;
   metadata: DocumentMetadata;
@@ -78,6 +95,11 @@ export interface DocumentObject {
   namedDestinations: Record<string, NamedDestination>;
   embeddedFiles: EmbeddedFileObject[];
   layers: LayerObject[];
+  /**
+   * Detected reading direction / dominant script. Optional: omitted by older
+   * parse responses and when detection is undecidable (empty/imageful docs).
+   */
+  documentLanguage?: DocumentLanguageInfo;
 }
 
 export interface DocumentSummary {

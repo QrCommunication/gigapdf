@@ -296,6 +296,29 @@ export const useApplyElements = () => {
   });
 };
 
+/** A single native OCG-layer mutation (by numeric OCG id). */
+export interface OcgLayerOp {
+  action: 'visibility' | 'locked' | 'remove';
+  ocgId: number;
+  value?: boolean;
+}
+
+/**
+ * Hook to mutate native PDF OCG layers (toggle visibility/lock, remove) by their
+ * numeric OCG id in a single round-trip. Returns the modified PDF as a Blob.
+ */
+export const useApplyOcgLayers = () => {
+  return useMutation({
+    mutationFn: ({
+      file,
+      operations,
+    }: {
+      file: File | Blob;
+      operations: OcgLayerOp[];
+    }) => pdfService.applyOcgLayers(file, operations),
+  });
+};
+
 /**
  * Hook to bake native paragraph-style / list-level formatting AND/OR table
  * structural edits (add/remove row or column) into a PDF via the engine's

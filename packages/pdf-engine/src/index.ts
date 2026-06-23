@@ -23,6 +23,10 @@ export type {
 // Parse
 export { parseDocument } from './parse';
 export type { ParseOptions } from './parse';
+export {
+  extractLayers,
+  extractDocumentLanguage,
+} from './parse/metadata-extractor';
 
 // Extract — rich standalone APIs
 export { extractTextBlocks } from './parse/text-extractor';
@@ -46,6 +50,7 @@ export {
   convertToPdfA,
   PdfAConversionError,
   addNativeAnnotations,
+  applyOcgOperations,
   engineRenderPage,
   engineRenderPages,
   addWatermark,
@@ -64,6 +69,8 @@ export type {
   NativeAnnotationType,
   NativeAnnotationSpec,
   AddNativeAnnotationsResult,
+  OcgLayerOperation,
+  ApplyOcgOperationsResult,
   EngineRenderPageOptions,
   EngineRenderedPage,
   EngineBatchRenderOptions,

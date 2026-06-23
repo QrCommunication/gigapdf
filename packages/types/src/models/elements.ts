@@ -399,6 +399,13 @@ export interface LayerObject {
   opacity: number;
   print: boolean;
   order: number;
+  /**
+   * Numeric id of the underlying native PDF Optional Content Group (OCG), when
+   * this layer mirrors a real OCG read from the document. Absent on editor-only
+   * "layer groups" (user layers), which have no PDF counterpart. Drives the
+   * native OCG mutators (`/api/pdf/ocg`: setLayerVisibility/Locked/removeLayer).
+   */
+  ocgId?: number;
 }
 
 // ============= Tool Types =============

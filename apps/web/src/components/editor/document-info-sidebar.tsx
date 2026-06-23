@@ -4,15 +4,28 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Info, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@giga-pdf/ui";
-import type { BookmarkObject, Element, LayerObject, EmbeddedFileObject } from "@giga-pdf/types";
+import type {
+  BookmarkObject,
+  DocumentLanguageInfo,
+  Element,
+  LayerObject,
+  EmbeddedFileObject,
+} from "@giga-pdf/types";
 import { cn } from "@/lib/utils";
 import { TOCPanel } from "./toc-panel";
 import { LayersPanel } from "./layers-panel";
+import { AnnotationsPanel } from "./annotations-panel";
+import { DocumentLanguageBadge } from "./document-language-badge";
 import { EmbeddedFilesPanel } from "./embedded-files-panel";
 
 interface DocumentInfoSidebarProps {
   outlines: BookmarkObject[];
   layers: LayerObject[];
+  /**
+   * Direction de lecture / écriture dominante détectée (badge informatif en
+   * tête de barre latérale). Absent ⇒ badge masqué.
+   */
+  documentLanguage?: DocumentLanguageInfo;
   /**
    * Calques utilisateur (Phase 2 "Layer Groups") — éditables, forwardés au
    * LayersPanel. Distincts des OCG `layers` (lecture seule).
@@ -28,6 +41,17 @@ interface DocumentInfoSidebarProps {
   onElementLockChange?: (elementId: string, locked: boolean) => void;
   /** Sélectionner un élément en cliquant sa ligne dans le panneau calques. */
   onElementSelect?: (elementId: string) => void;
+  /**
+   * Supprimer une annotation existante du PDF (panneau Annotations). Absent ⇒
+   * la liste reste consultable sans bouton de suppression.
+   */
+  onAnnotationDelete?: (elementId: string) => void;
+  // --- OCG natifs éditables (LayersPanel). Absents ⇒ section OCG lecture seule. ---
+  onOcgVisibilityChange?: (ocgId: number, visible: boolean) => void;
+  onOcgLockChange?: (ocgId: number, locked: boolean) => void;
+  onOcgRemove?: (ocgId: number) => void;
+  /** OCG en cours de mutation (bake) — id → true ; désactive ses contrôles. */
+  ocgBusyIds?: number[];
   /** Sélectionner sur le canvas tous les membres d'un calque (clic ligne-calque). */
   onLayerSelectMembers?: (elementIds: string[]) => void;
   // User-layer actions (Phase 2) forwardés au LayersPanel.
@@ -57,6 +81,7 @@ interface DocumentInfoSidebarProps {
 export function DocumentInfoSidebar({
   outlines,
   layers,
+  documentLanguage,
   userLayers,
   elements,
   selectedElementIds,
@@ -65,6 +90,11 @@ export function DocumentInfoSidebar({
   onElementVisibilityChange,
   onElementLockChange,
   onElementSelect,
+  onAnnotationDelete,
+  onOcgVisibilityChange,
+  onOcgLockChange,
+  onOcgRemove,
+  ocgBusyIds,
   onLayerSelectMembers,
   onLayerCreate,
   onLayerDelete,
@@ -90,6 +120,7 @@ export function DocumentInfoSidebar({
     layers.length > 0 ||
     embeddedFiles.length > 0 ||
     elements.length > 0 ||
+    Boolean(documentLanguage) ||
     Boolean(onLayerCreate) ||
     Boolean(onApplyOutline);
 
@@ -130,6 +161,9 @@ export function DocumentInfoSidebar({
 
       {!collapsed && (
         <div className="flex-1 overflow-y-auto">
+          {/* Langue / écriture détectée (badge lecture seule) */}
+          <DocumentLanguageBadge documentLanguage={documentLanguage} />
+
           {/* Table des matières */}
           <TOCPanel
             outlines={outlines}
@@ -139,7 +173,7 @@ export function DocumentInfoSidebar({
             pageCount={pageCount}
           />
 
-          {/* Calques (éléments de la page + groupes OCG en lecture seule) */}
+          {/* Calques (éléments de la page + groupes OCG natifs éditables) */}
           <LayersPanel
             elements={elements}
             layers={layers}
@@ -156,6 +190,18 @@ export function DocumentInfoSidebar({
             onLayerVisibilityChange={onLayerVisibilityChange}
             onLayerLockChange={onLayerLockChange}
             onAssignElementToLayer={onAssignElementToLayer}
+            onOcgVisibilityChange={onOcgVisibilityChange}
+            onOcgLockChange={onOcgLockChange}
+            onOcgRemove={onOcgRemove}
+            ocgBusyIds={ocgBusyIds}
+          />
+
+          {/* Annotations existantes du PDF (révision + suppression ciblée) */}
+          <AnnotationsPanel
+            elements={elements}
+            selectedElementIds={selectedElementIds}
+            onSelect={onElementSelect}
+            onDelete={onAnnotationDelete}
           />
 
           {/* Fichiers embarqués */}
