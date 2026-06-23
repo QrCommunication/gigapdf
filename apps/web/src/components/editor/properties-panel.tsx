@@ -1168,11 +1168,15 @@ export function PropertiesPanel({
   const renderAnnotationProperties = (element: AnnotationElement) => (
     <div className="space-y-3">
       <div>
-        <label className="text-xs text-muted-foreground block mb-1">Type</label>
+        <label className="text-xs text-muted-foreground block mb-1">
+          {t("annotation.type")}
+        </label>
         <div className="text-sm capitalize">{element.annotationType}</div>
       </div>
       <div>
-        <label className="text-xs text-muted-foreground block mb-1">Contenu</label>
+        <label className="text-xs text-muted-foreground block mb-1">
+          {t("annotation.content")}
+        </label>
         <textarea
           value={element.content ?? ""}
           onChange={(e) =>
@@ -1185,7 +1189,9 @@ export function PropertiesPanel({
         />
       </div>
       <div>
-        <label className="text-xs text-muted-foreground block mb-1">Couleur</label>
+        <label className="text-xs text-muted-foreground block mb-1">
+          {t("annotation.color")}
+        </label>
         <input
           type="color"
           value={element.style?.color ?? "#ffff00"}
@@ -1198,7 +1204,9 @@ export function PropertiesPanel({
         />
       </div>
       <div>
-        <label className="text-xs text-muted-foreground block mb-1">Opacité</label>
+        <label className="text-xs text-muted-foreground block mb-1">
+          {t("annotation.opacity")}
+        </label>
         <input
           type="range"
           value={(element.style?.opacity ?? 1) * 100}
