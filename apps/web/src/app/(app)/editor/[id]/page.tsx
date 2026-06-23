@@ -415,6 +415,15 @@ export default function EditorPage() {
   // Canvas handle (via callback) — kept local: transient imperative handle
   const [canvasHandle, setCanvasHandle] = useState<EditorCanvasHandle | null>(null);
 
+  // Continuous mode: a layer-panel selection that targets an element on a
+  // NON-active page. We activate the owner page (which mounts ITS EditorCanvas
+  // and re-fires onCanvasReady → setCanvasHandle on the next render), and stash
+  // the element id here so the canvasHandle effect (below) can retry the
+  // selectElement once the new page's canvas is mounted. Cleared on success or
+  // when the user navigates elsewhere. A ref (not state) avoids a render and
+  // the retry is driven by the canvasHandle dependency, not by this value.
+  const pendingLayerSelectRef = useRef<string | null>(null);
+
   // Word-like partial formatting: live style of the character sub-selection
   // inside the text element being inline-edited. `null` when no text is being
   // edited (or only a caret is placed). Drives the formatting toolbar's active
@@ -3325,12 +3334,55 @@ export default function EditorPage() {
   // Sélectionner un élément depuis le panneau calques : le canvas le passe en
   // objet actif et forwarde la sélection au store + panneau propriétés. Pas de
   // mutation ni de save — purement une sélection (comme un clic sur le canvas).
+  //
+  // Mode continu : `canvasHandle` ne pilote QUE la page active. Si l'élément
+  // vit sur une AUTRE page, `selectElement` y échoue (l'objet n'est pas rendu
+  // sur le canvas actif). On localise alors la page propriétaire dans le scene
+  // graph, on l'active (navigateToPage monte son EditorCanvas + re-fire
+  // onCanvasReady → setCanvasHandle) et on diffère la sélection : l'effet sur
+  // `canvasHandle` (plus bas) re-tente une fois le nouveau canvas monté.
   const handleSelectElementFromLayer = useCallback(
     (elementId: string) => {
-      canvasHandle?.selectElement(elementId);
+      // Page propriétaire de l'élément (le scene graph est la source de vérité,
+      // indépendamment du layout single/continu).
+      const ownerPageIndex = pages.findIndex((p) =>
+        p.elements.some((e) => e.elementId === elementId),
+      );
+      // Inconnu du scene graph : tenter quand même sur le canvas courant (ne
+      // régresse pas le mode single-page où tout vit sur l'unique canvas).
+      if (ownerPageIndex < 0) {
+        canvasHandle?.selectElement(elementId);
+        return;
+      }
+      // Déjà sur la page affichée → sélection directe (chemin synchrone, mode
+      // single ET page active du mode continu).
+      if (ownerPageIndex === effectivePageIndex) {
+        pendingLayerSelectRef.current = null;
+        canvasHandle?.selectElement(elementId);
+        return;
+      }
+      // Autre page (continu) : activer la page propriétaire puis différer la
+      // sélection jusqu'au montage de son canvas (effet sur canvasHandle).
+      pendingLayerSelectRef.current = elementId;
+      navigateToPage(ownerPageIndex, "center");
     },
-    [canvasHandle],
+    [pages, effectivePageIndex, canvasHandle, navigateToPage],
   );
+
+  // Rejoue une sélection de calque différée (mode continu) dès que le canvas de
+  // la page nouvellement active est prêt. `canvasHandle` change quand la page
+  // active monte son EditorCanvas (onCanvasReady), ce qui déclenche cet effet.
+  // `selectElement` renvoie `true` quand l'élément est trouvé sur la page
+  // affichée : on ne vide le pending qu'à ce moment (un canvasHandle transitoire
+  // d'une page intermédiaire ne consomme pas la demande). Si l'élément n'est
+  // jamais rendu, le pending reste simplement inerte — aucune boucle.
+  useEffect(() => {
+    const pendingId = pendingLayerSelectRef.current;
+    if (!pendingId || !canvasHandle) return;
+    if (canvasHandle.selectElement(pendingId)) {
+      pendingLayerSelectRef.current = null;
+    }
+  }, [canvasHandle]);
 
   // Sélectionner sur le canvas tous les membres d'un calque (clic ligne-calque
   // dans LayersPanel). Route vers la sélection multi du canvas, qui met les
