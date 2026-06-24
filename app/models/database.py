@@ -9,6 +9,11 @@ from decimal import Decimal
 from typing import Optional
 from uuid import uuid4
 
+# pgvector SQLAlchemy column type (provided by the `vector` extension,
+# migration 019). Imported lazily-tolerant: the model is only used by the
+# semantic-search path; environments that never import pgvector still load
+# the rest of the models. See app/services/embeddings.py.
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     BigInteger,
@@ -26,12 +31,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
-# pgvector SQLAlchemy column type (provided by the `vector` extension,
-# migration 019). Imported lazily-tolerant: the model is only used by the
-# semantic-search path; environments that never import pgvector still load
-# the rest of the models. See app/services/embeddings.py.
-from pgvector.sqlalchemy import Vector
 
 # Embedding dimensionality — must match EmbeddingService.DIMENSION
 # (intfloat/multilingual-e5-small = 384) and the vector(384) column in
