@@ -168,7 +168,10 @@ describe('makeEditableOcrPdf — mask + text wiring (mocked)', () => {
       loadBundledOcrModels: vi.fn(async () => []),
     };
 
-    vi.doMock('../../src/wasm', () => ({ getEngine: vi.fn(async () => engine) }));
+    // ocr-editable.ts loads the dedicated OCR engine from `../wasm-ocr`
+    // (getOcrEngine), not the main `../wasm` engine — mock that module so the
+    // real gigapdf-lib-ocr is never opened on the dummy bytes below.
+    vi.doMock('../../src/wasm-ocr', () => ({ getOcrEngine: vi.fn(async () => engine) }));
     // The page has NO extractable text → it is selected for OCR.
     vi.doMock('../../src/parse/structured-text', () => ({
       extractPlainText: vi.fn(async () => [{ pageNumber: 1, text: '' }]),
@@ -222,7 +225,7 @@ describe('makeEditableOcrPdf — mask + text wiring (mocked)', () => {
       loadBundledOcrModels: vi.fn(async () => []),
     };
 
-    vi.doMock('../../src/wasm', () => ({ getEngine: vi.fn(async () => engine) }));
+    vi.doMock('../../src/wasm-ocr', () => ({ getOcrEngine: vi.fn(async () => engine) }));
     vi.doMock('../../src/parse/structured-text', () => ({
       extractPlainText: vi.fn(async () => [{ pageNumber: 1, text: '' }]),
     }));
