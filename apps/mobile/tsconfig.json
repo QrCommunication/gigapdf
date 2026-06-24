@@ -2,6 +2,10 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    // Expo's base tsconfig still sets `baseUrl`, which TS 6.0 deprecates (TS5101).
+    // Mirror the repo-wide mitigation from @giga-pdf/typescript-config/base.json.
+    // Mobile extends expo/tsconfig.base (not the shared base) so it needs this here.
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
