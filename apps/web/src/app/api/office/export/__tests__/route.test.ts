@@ -53,10 +53,21 @@ class OfficeConversionErrorMock extends Error {
   }
 }
 
+// The route imports `PDFEngineError` (base engine error) and tests it via
+// `err instanceof PDFEngineError` in the catch block. The mock must export it
+// or `instanceof undefined` throws a TypeError before the 500 branch is reached.
+class PDFEngineErrorMock extends Error {
+  constructor(msg: string) {
+    super(msg);
+    this.name = 'PDFEngineError';
+  }
+}
+
 vi.mock('@giga-pdf/pdf-engine', () => ({
   convertPdfToOffice: mockConvertPdfToOffice,
   convertPdfToXlsx: mockConvertPdfToXlsx,
   OfficeConversionError: OfficeConversionErrorMock,
+  PDFEngineError: PDFEngineErrorMock,
 }));
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
