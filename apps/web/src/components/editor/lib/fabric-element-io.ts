@@ -31,6 +31,9 @@ import type {
 // Shared run<->Fabric-styles mapping (single source of truth with
 // render-elements.ts) so character-level styling round-trips identically.
 import { fabricStylesToRuns, type FabricStylesMap } from "./text-runs";
+// Single source of truth for the text-baseline geometry, shared with the
+// forward transform in render-elements.ts (was a bare `0.22` copied here).
+import { boundsYFromBaselineTop } from "./text-baseline";
 // Shared list/indent marker composition (single source of truth with
 // render-elements.ts) so the decorative marker prefix is stripped back off
 // IDENTICALLY to how it was prepended.
@@ -243,14 +246,18 @@ export function fabricObjectToElement(
       unshiftStylesForMarker(textObjWithStyles.styles ?? {}, strippedLen),
     );
 
-    // Inverse of the renderer transform: Fabric IText was created with
-    //   top = bounds.y + fontSize + descenderOffset, originY = 'bottom'
-    // so the PDF baseline = top - descenderOffset = bounds.y + fontSize.
-    // To recover the original bounds.y (= top of glyph in browser coords)
-    // we therefore subtract (fontSize + descenderOffset) from obj.top.
+    // Inverse of the renderer transform (baselineTopFromBoundsY): Fabric IText
+    // was created with top = bounds.y + fontSize + descenderOffset and
+    // originY = 'bottom', so the PDF baseline = top - descenderOffset =
+    // bounds.y + fontSize. Recover the original bounds.y (= glyph top in browser
+    // coords) via the shared single-source geometry; for originY='top' there is
+    // no baseline offset.
     const isOriginYBottom = textObj.originY === "bottom";
-    const descenderOffset = isOriginYBottom ? fontSize * 0.22 : 0;
-    const topOfGlyphY = (obj.top || 0) - descenderOffset - fontSize;
+    const topOfGlyphY = boundsYFromBaselineTop(
+      obj.top || 0,
+      fontSize,
+      isOriginYBottom,
+    );
     // The renderer shifted `left` right by the combined indent (explicit
     // indentLeft + one step per list level). Recover the original bounds.x by
     // subtracting the SAME offset, so a list/indented run keeps its in-place
