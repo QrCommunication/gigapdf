@@ -236,6 +236,12 @@ done
 section "Handing ownership back to \$APP_USER:\$APP_GROUP"
 sudo chown -R "\$APP_USER":"\$APP_GROUP" "\$VPS_PATH"
 sudo chmod 640 "\$VPS_PATH/.env"
+# Keep .git owned by the deploy user (ubuntu) so the CI auto-deploy's
+# `git fetch` can write .git/FETCH_HEAD on the next push. The service user
+# (\$APP_USER) never reads .git; only the ubuntu deploy user does. Without this,
+# a manual redeploy chowns .git to \$APP_USER and the next CI deploy fails with
+# "cannot open '.git/FETCH_HEAD': Permission denied".
+sudo chown -R ubuntu:ubuntu "\$VPS_PATH/.git" 2>/dev/null || true
 
 # ── 2.11 Restart services (api/celery first, then next-js apps) ──────────
 section "Restarting systemd services"
