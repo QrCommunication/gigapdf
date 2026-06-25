@@ -22,6 +22,7 @@ export type {
 } from "./collaboration-overlay";
 
 export { TOCPanel } from "./toc-panel";
+export type { BookmarkInput } from "./toc-panel";
 export { LayersPanel } from "./layers-panel";
 export { EmbeddedFilesPanel } from "./embedded-files-panel";
 export { DocumentInfoSidebar } from "./document-info-sidebar";

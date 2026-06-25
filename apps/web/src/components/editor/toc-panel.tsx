@@ -29,6 +29,20 @@ import {
   type FlatBookmark,
 } from "./lib/outline-edit";
 
+/**
+ * A flat, level-encoded bookmark — the exact `Bookmark` input shape the engine
+ * `setBookmarks` takes (a `page` becomes a GoTo destination). Emitted by
+ * {@link TOCPanelProps.onApplyBookmarks} so a host can persist the outline via
+ * `POST /api/pdf/links` (action `setBookmarks`).
+ */
+export interface BookmarkInput {
+  title: string;
+  /** Nesting depth, 0 = top-level. */
+  level: number;
+  /** 1-based destination page (>= 1). */
+  page: number;
+}
+
 interface TOCPanelProps {
   outlines: BookmarkObject[];
   onNavigateToPage?: (pageNumber: number, position?: { x: number; y: number } | null) => void;
@@ -39,6 +53,13 @@ interface TOCPanelProps {
    * (read-only viewers) ⇒ navigation-only, identical to the legacy behaviour.
    */
   onApplyOutline?: (outline: BookmarkObject[]) => void;
+  /**
+   * Like {@link onApplyOutline} but emits the edited outline as a flat,
+   * level-encoded {@link BookmarkInput}[] — the engine `setBookmarks` shape —
+   * for hosts that persist via `POST /api/pdf/links`. Fired alongside
+   * `onApplyOutline`; providing either enables edit mode.
+   */
+  onApplyBookmarks?: (bookmarks: BookmarkInput[]) => void;
   /** Number of pages — bounds the destination page input in edit mode. */
   pageCount?: number;
   className?: string;
@@ -134,7 +155,8 @@ interface OutlineEditorProps {
   currentPageIndex?: number;
   pageCount?: number;
   onCancel: () => void;
-  onSave: (outline: BookmarkObject[]) => void;
+  /** Receives both the rebuilt tree and the edited flat list (for `setBookmarks`). */
+  onSave: (outline: BookmarkObject[], flat: FlatBookmark[]) => void;
 }
 
 /** Flat, level-encoded outline editor (add / rename / delete / move / indent). */
@@ -253,7 +275,7 @@ function OutlineEditor({ initial, currentPageIndex, pageCount, onCancel, onSave 
         </button>
         <button
           type="button"
-          onClick={() => onSave(flatToTree(flat))}
+          onClick={() => onSave(flatToTree(flat), flat)}
           className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
         >
           <Check className="h-3 w-3" />
@@ -274,6 +296,7 @@ export function TOCPanel({
   onNavigateToPage,
   currentPageIndex,
   onApplyOutline,
+  onApplyBookmarks,
   pageCount,
   className,
 }: TOCPanelProps) {
@@ -281,7 +304,7 @@ export function TOCPanel({
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
 
-  const canEdit = Boolean(onApplyOutline);
+  const canEdit = Boolean(onApplyOutline) || Boolean(onApplyBookmarks);
 
   // Leaving edit mode whenever the document outline changes underneath us
   // (e.g. a bake reload) avoids editing a stale snapshot.
@@ -300,8 +323,11 @@ export function TOCPanel({
     return null;
   }
 
-  const handleSave = (next: BookmarkObject[]) => {
+  const handleSave = (next: BookmarkObject[], flat: FlatBookmark[]) => {
     onApplyOutline?.(next);
+    onApplyBookmarks?.(
+      flat.map((b) => ({ title: b.title, level: b.level, page: b.page })),
+    );
     setEditing(false);
   };
 
