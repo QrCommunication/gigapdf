@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { X, FileCode, Globe, Download, Loader2, AlertCircle } from "lucide-react";
 import { useConvertToPdf, downloadBlob } from "@giga-pdf/api";
 import { clientLogger } from "@/lib/client-logger";
@@ -23,10 +24,7 @@ interface MarginValues {
 }
 
 const PAGE_FORMATS: PageFormat[] = ["A4", "Letter", "Legal"];
-const ORIENTATIONS: { value: Orientation; label: string }[] = [
-  { value: "portrait", label: "Portrait" },
-  { value: "landscape", label: "Landscape" },
-];
+const ORIENTATIONS: Orientation[] = ["portrait", "landscape"];
 
 function buildMarginString(margins: MarginValues): string {
   const top = margins.top.trim() || "0";
@@ -75,6 +73,7 @@ function MarginInput({
 }
 
 export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
+  const t = useTranslations("editor.convert");
   const [mode, setMode] = useState<ConvertMode>("html");
   const [htmlContent, setHtmlContent] = useState("");
   const [urlInput, setUrlInput] = useState("");
@@ -107,20 +106,20 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
     setError(null);
 
     if (mode === "html" && !htmlContent.trim()) {
-      setError("Please paste some HTML content to convert.");
+      setError(t("errors.htmlRequired"));
       return;
     }
 
     if (mode === "url") {
       const trimmedUrl = urlInput.trim();
       if (!trimmedUrl) {
-        setError("Please enter a URL to convert.");
+        setError(t("errors.urlRequired"));
         return;
       }
       try {
         new URL(trimmedUrl);
       } catch {
-        setError("Please enter a valid URL (e.g. https://example.com).");
+        setError(t("errors.urlInvalid"));
         return;
       }
     }
@@ -141,10 +140,10 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
       setError(
         err instanceof Error
           ? err.message
-          : "Conversion failed. Please check your input and try again.",
+          : t("errors.conversionFailed"),
       );
     }
-  }, [mode, htmlContent, urlInput, outputName, pageFormat, orientation, margins, convertToPdf]);
+  }, [mode, htmlContent, urlInput, outputName, pageFormat, orientation, margins, convertToPdf, t]);
 
   const handleClose = useCallback(() => {
     if (isPending) return;
@@ -177,14 +176,14 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
               id="convert-dialog-title"
               className="text-base font-semibold text-foreground"
             >
-              Convert to PDF
+              {t("title")}
             </h2>
           </div>
           <button
             type="button"
             onClick={handleClose}
             disabled={isPending}
-            aria-label="Close dialog"
+            aria-label={t("closeAria")}
             className="rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <X size={18} />
@@ -237,7 +236,7 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
                   htmlFor="convert-html-content"
                   className="text-sm font-medium text-foreground"
                 >
-                  HTML content
+                  {t("htmlLabel")}
                 </label>
                 <textarea
                   id="convert-html-content"
@@ -247,7 +246,7 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
                     setError(null);
                   }}
                   disabled={isPending}
-                  placeholder="Paste your HTML here…"
+                  placeholder={t("htmlPlaceholder")}
                   rows={8}
                   className="w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-mono"
                   spellCheck={false}
@@ -262,7 +261,7 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
                   htmlFor="convert-url-input"
                   className="text-sm font-medium text-foreground"
                 >
-                  URL
+                  {t("urlLabel")}
                 </label>
                 <input
                   id="convert-url-input"
@@ -277,7 +276,7 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
                   className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <p className="text-xs text-muted-foreground">
-                  The page at this URL will be rendered and saved as a PDF.
+                  {t("urlHint")}
                 </p>
               </div>
             )}
@@ -288,7 +287,7 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
                 htmlFor="convert-output-name"
                 className="text-sm font-medium text-foreground"
               >
-                Output filename
+                {t("outputLabel")}
               </label>
               <input
                 id="convert-output-name"
@@ -303,7 +302,7 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
 
             {/* Page options */}
             <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 px-4 py-4">
-              <span className="text-sm font-medium text-foreground">Page options</span>
+              <span className="text-sm font-medium text-foreground">{t("pageOptions")}</span>
 
               <div className="grid grid-cols-2 gap-3">
                 {/* Page format */}
@@ -312,7 +311,7 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
                     htmlFor="convert-page-format"
                     className="text-sm font-medium text-foreground"
                   >
-                    Format
+                    {t("formatLabel")}
                   </label>
                   <select
                     id="convert-page-format"
@@ -331,9 +330,9 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
 
                 {/* Orientation */}
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-foreground">Orientation</span>
+                  <span className="text-sm font-medium text-foreground">{t("orientationLabel")}</span>
                   <div className="flex gap-3 pt-1">
-                    {ORIENTATIONS.map(({ value, label }) => (
+                    {ORIENTATIONS.map((value) => (
                       <label
                         key={value}
                         className="flex items-center gap-2 cursor-pointer select-none"
@@ -347,7 +346,7 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
                           disabled={isPending}
                           className="accent-primary"
                         />
-                        <span className="text-sm text-foreground">{label}</span>
+                        <span className="text-sm text-foreground">{t(`orientations.${value}`)}</span>
                       </label>
                     ))}
                   </div>
@@ -357,33 +356,33 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
               {/* Margins */}
               <div className="flex flex-col gap-2">
                 <span className="text-sm font-medium text-foreground">
-                  Margins (mm)
+                  {t("marginsLabel")}
                 </span>
                 <div className="grid grid-cols-4 gap-2">
                   <MarginInput
                     id="convert-margin-top"
-                    label="Top"
+                    label={t("margins.top")}
                     value={margins.top}
                     onChange={handleMarginChange("top")}
                     disabled={isPending}
                   />
                   <MarginInput
                     id="convert-margin-right"
-                    label="Right"
+                    label={t("margins.right")}
                     value={margins.right}
                     onChange={handleMarginChange("right")}
                     disabled={isPending}
                   />
                   <MarginInput
                     id="convert-margin-bottom"
-                    label="Bottom"
+                    label={t("margins.bottom")}
                     value={margins.bottom}
                     onChange={handleMarginChange("bottom")}
                     disabled={isPending}
                   />
                   <MarginInput
                     id="convert-margin-left"
-                    label="Left"
+                    label={t("margins.left")}
                     value={margins.left}
                     onChange={handleMarginChange("left")}
                     disabled={isPending}
@@ -413,7 +412,7 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
             disabled={isPending}
             className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Cancel
+            {t("cancel")}
           </button>
           <button
             type="button"
@@ -424,12 +423,12 @@ export function ConvertDialog({ isOpen, onClose }: ConvertDialogProps) {
             {isPending ? (
               <>
                 <Loader2 size={15} className="animate-spin" />
-                Converting…
+                {t("converting")}
               </>
             ) : (
               <>
                 <Download size={15} />
-                Convert to PDF
+                {t("title")}
               </>
             )}
           </button>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,7 @@ interface PdfEntry {
 }
 
 export function MergeDialog({ open, onClose }: MergeDialogProps) {
+  const t = useTranslations("editor.merge");
   const [entries, setEntries] = useState<PdfEntry[]>([]);
   const [outputName, setOutputName] = useState("merged.pdf");
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export function MergeDialog({ open, onClose }: MergeDialogProps) {
 
   const handleMerge = async () => {
     if (entries.length < 2) {
-      setError("Please add at least two PDF files to merge.");
+      setError(t("errorMinFiles"));
       return;
     }
 
@@ -92,7 +94,7 @@ export function MergeDialog({ open, onClose }: MergeDialogProps) {
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to merge PDF files. Please verify the files are valid PDFs."
+          : t("errorMergeFailed")
       );
     }
   };
@@ -109,16 +111,14 @@ export function MergeDialog({ open, onClose }: MergeDialogProps) {
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Merge PDF Files</DialogTitle>
-          <DialogDescription>
-            Select two or more PDF files to combine into a single document.
-          </DialogDescription>
+          <DialogTitle>{t("title")}</DialogTitle>
+          <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 py-2">
           {/* File picker */}
           <div className="space-y-2">
-            <Label htmlFor="merge-file-input">Add PDF files</Label>
+            <Label htmlFor="merge-file-input">{t("addFilesLabel")}</Label>
             <input
               ref={fileInputRef}
               id="merge-file-input"
@@ -137,14 +137,14 @@ export function MergeDialog({ open, onClose }: MergeDialogProps) {
               disabled={isPending}
             >
               <FilePlus className="mr-2 h-4 w-4" />
-              Choose PDF files
+              {t("choosePdfFiles")}
             </Button>
           </div>
 
           {/* File list */}
           {entries.length > 0 && (
             <div className="space-y-2">
-              <Label>Selected files ({entries.length})</Label>
+              <Label>{t("selectedFiles", { count: entries.length })}</Label>
               <ul className="space-y-2">
                 {entries.map((entry, index) => (
                   <li
@@ -169,7 +169,7 @@ export function MergeDialog({ open, onClose }: MergeDialogProps) {
                       <div className="pl-7">
                         <Input
                           type="text"
-                          placeholder="Page range, e.g. 1-5 (optional)"
+                          placeholder={t("rangePlaceholder")}
                           value={entry.range}
                           onChange={(e) =>
                             handleRangeChange(entry.id, e.target.value)
@@ -184,7 +184,7 @@ export function MergeDialog({ open, onClose }: MergeDialogProps) {
                       onClick={() => handleRemove(entry.id)}
                       disabled={isPending}
                       className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      aria-label={`Remove ${entry.file.name}`}
+                      aria-label={t("removeFile", { name: entry.file.name })}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -196,7 +196,7 @@ export function MergeDialog({ open, onClose }: MergeDialogProps) {
 
           {/* Output filename */}
           <div className="space-y-2">
-            <Label htmlFor="merge-output-name">Output filename (optional)</Label>
+            <Label htmlFor="merge-output-name">{t("outputNameLabel")}</Label>
             <Input
               id="merge-output-name"
               type="text"
@@ -222,7 +222,7 @@ export function MergeDialog({ open, onClose }: MergeDialogProps) {
             onClick={handleClose}
             disabled={isPending}
           >
-            Cancel
+            {t("cancel")}
           </Button>
           <Button
             type="button"
@@ -232,10 +232,10 @@ export function MergeDialog({ open, onClose }: MergeDialogProps) {
             {isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Merging…
+                {t("merging")}
               </>
             ) : (
-              "Merge PDFs"
+              t("merge")
             )}
           </Button>
         </DialogFooter>
