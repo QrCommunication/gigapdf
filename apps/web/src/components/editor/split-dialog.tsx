@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { X, Scissors, Download, Loader2, FileUp, AlertCircle } from "lucide-react";
 import { useSplitPdf, downloadBlob } from "@giga-pdf/api";
 import type { SplitPdfResult } from "@giga-pdf/api";
@@ -49,6 +50,7 @@ function parseRanges(raw: string): string[] | null {
 }
 
 export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
+  const t = useTranslations("editor.split");
   const [mode, setMode] = useState<SplitMode>("splitPoints");
   const [splitPointsInput, setSplitPointsInput] = useState("");
   const [rangesInput, setRangesInput] = useState("");
@@ -90,16 +92,14 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
       reset();
 
       if (!activeFile) {
-        setValidationError("Please select a PDF file.");
+        setValidationError(t("errorNoFile"));
         return;
       }
 
       if (mode === "splitPoints") {
         const points = parseSplitPoints(splitPointsInput);
         if (!points) {
-          setValidationError(
-            "Invalid split points. Enter positive page numbers separated by commas (e.g. 5, 10, 15).",
-          );
+          setValidationError(t("errorInvalidSplitPoints"));
           return;
         }
         splitPdf(
@@ -111,9 +111,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
       } else {
         const ranges = parseRanges(rangesInput);
         if (!ranges) {
-          setValidationError(
-            "Invalid ranges. Use the format start-end separated by commas (e.g. 1-5, 6-10, 11-20).",
-          );
+          setValidationError(t("errorInvalidRanges"));
           return;
         }
         splitPdf(
@@ -124,7 +122,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
         );
       }
     },
-    [activeFile, mode, splitPointsInput, rangesInput, splitPdf, reset],
+    [activeFile, mode, splitPointsInput, rangesInput, splitPdf, reset, t],
   );
 
   const handleDownloadPart = useCallback((base64: string, filename: string) => {
@@ -172,13 +170,13 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
               id="split-dialog-title"
               className="text-base font-semibold text-foreground"
             >
-              Split PDF
+              {t("title")}
             </h2>
           </div>
           <button
             type="button"
             onClick={handleClose}
-            aria-label="Close dialog"
+            aria-label={t("closeDialog")}
             className="rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
             <X size={18} />
@@ -196,7 +194,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                     htmlFor="split-file-input"
                     className="text-sm font-medium text-foreground"
                   >
-                    PDF file
+                    {t("fileLabel")}
                   </label>
                   <div
                     role="button"
@@ -211,7 +209,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                   >
                     <FileUp size={18} className="text-muted-foreground shrink-0" />
                     <span className="text-sm text-muted-foreground truncate">
-                      {selectedFile ? selectedFile.name : "Click to choose a PDF file"}
+                      {selectedFile ? selectedFile.name : t("filePlaceholder")}
                     </span>
                   </div>
                   <input
@@ -221,7 +219,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                     accept=".pdf,application/pdf"
                     className="sr-only"
                     onChange={handleFileChange}
-                    aria-label="Select PDF file"
+                    aria-label={t("fileInputAria")}
                   />
                 </div>
               )}
@@ -239,7 +237,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
               {/* Mode toggle */}
               <div className="flex flex-col gap-2">
                 <span className="text-sm font-medium text-foreground">
-                  Split mode
+                  {t("modeLabel")}
                 </span>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -251,7 +249,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                       onChange={() => handleModeChange("splitPoints")}
                       className="accent-primary"
                     />
-                    <span className="text-sm text-foreground">By page numbers</span>
+                    <span className="text-sm text-foreground">{t("modeByPages")}</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
@@ -262,7 +260,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                       onChange={() => handleModeChange("ranges")}
                       className="accent-primary"
                     />
-                    <span className="text-sm text-foreground">By ranges</span>
+                    <span className="text-sm text-foreground">{t("modeByRanges")}</span>
                   </label>
                 </div>
               </div>
@@ -274,7 +272,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                     htmlFor="split-points-input"
                     className="text-sm font-medium text-foreground"
                   >
-                    Split at page numbers
+                    {t("splitPointsLabel")}
                   </label>
                   <input
                     id="split-points-input"
@@ -284,7 +282,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                       setSplitPointsInput(e.target.value);
                       setValidationError(null);
                     }}
-                    placeholder="e.g. 5, 10, 15"
+                    placeholder={t("splitPointsPlaceholder")}
                     className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
                     aria-describedby="split-points-hint"
                   />
@@ -292,8 +290,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                     id="split-points-hint"
                     className="text-xs text-muted-foreground"
                   >
-                    The PDF will be split before each page number. For example,
-                    "5, 10" creates parts 1–4, 5–9, and 10–end.
+                    {t("splitPointsHint")}
                   </p>
                 </div>
               ) : (
@@ -302,7 +299,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                     htmlFor="ranges-input"
                     className="text-sm font-medium text-foreground"
                   >
-                    Page ranges
+                    {t("rangesLabel")}
                   </label>
                   <input
                     id="ranges-input"
@@ -312,7 +309,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                       setRangesInput(e.target.value);
                       setValidationError(null);
                     }}
-                    placeholder="e.g. 1-5, 6-10, 11-20"
+                    placeholder={t("rangesPlaceholder")}
                     className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
                     aria-describedby="ranges-hint"
                   />
@@ -320,8 +317,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                     id="ranges-hint"
                     className="text-xs text-muted-foreground"
                   >
-                    Each range produces one output file. Use "start-end" format
-                    (e.g. 1-5, 6-10, 11-20).
+                    {t("rangesHint")}
                   </p>
                 </div>
               )}
@@ -345,7 +341,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-foreground">
-                      {result.partsCount} part{result.partsCount !== 1 ? "s" : ""} created
+                      {t("partsCreated", { count: result.partsCount })}
                     </span>
                     {result.parts.length > 1 && (
                       <button
@@ -354,7 +350,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                         className="flex items-center gap-1.5 text-xs text-primary hover:underline"
                       >
                         <Download size={13} />
-                        Download all
+                        {t("downloadAll")}
                       </button>
                     )}
                   </div>
@@ -368,7 +364,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                           {part.filename}
                           {part.pageCount !== null && (
                             <span className="ml-1.5 text-xs text-muted-foreground">
-                              ({part.pageCount} page{part.pageCount !== 1 ? "s" : ""})
+                              {t("pageCount", { count: part.pageCount })}
                             </span>
                           )}
                         </span>
@@ -377,11 +373,11 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
                           onClick={() =>
                             handleDownloadPart(part.data, part.filename)
                           }
-                          aria-label={`Download ${part.filename}`}
+                          aria-label={t("downloadPart", { filename: part.filename })}
                           className="flex items-center gap-1.5 shrink-0 rounded-md px-2.5 py-1 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                         >
                           <Download size={13} />
-                          Download
+                          {t("download")}
                         </button>
                       </li>
                     ))}
@@ -399,7 +395,7 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
             onClick={handleClose}
             className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
-            {result ? "Close" : "Cancel"}
+            {result ? t("closeButton") : t("cancel")}
           </button>
           {!result && (
             <button
@@ -411,12 +407,12 @@ export function SplitDialog({ open, onClose, currentFile }: SplitDialogProps) {
               {isPending ? (
                 <>
                   <Loader2 size={15} className="animate-spin" />
-                  Splitting…
+                  {t("splitting")}
                 </>
               ) : (
                 <>
                   <Scissors size={15} />
-                  Split PDF
+                  {t("submit")}
                 </>
               )}
             </button>

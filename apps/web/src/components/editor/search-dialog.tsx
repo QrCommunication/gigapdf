@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Search, X, ChevronUp, ChevronDown, Loader2 } from "lucide-react";
 import { useSearchPdf } from "@giga-pdf/api";
 
@@ -33,6 +34,7 @@ export function SearchDialog({
   currentFile,
   onGoToPage,
 }: SearchDialogProps) {
+  const t = useTranslations("editor.search");
   const [needle, setNeedle] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -90,16 +92,16 @@ export function SearchDialog({
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
           <Search size={18} className="text-muted-foreground shrink-0" />
           <h2 id="search-dialog-title" className="sr-only">
-            Rechercher dans le PDF
+            {t("title")}
           </h2>
           <form onSubmit={submit} className="flex-1">
             <input
               ref={inputRef}
               value={needle}
               onChange={(e) => setNeedle(e.target.value)}
-              placeholder="Rechercher dans le document…"
+              placeholder={t("placeholder")}
               className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              aria-label="Texte à rechercher"
+              aria-label={t("inputAria")}
             />
           </form>
           {hits.length > 0 && (
@@ -114,7 +116,7 @@ export function SearchDialog({
             type="button"
             onClick={() => goTo(activeIndex - 1)}
             disabled={hits.length === 0}
-            aria-label="Résultat précédent"
+            aria-label={t("previousResult")}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
           >
             <ChevronUp size={16} />
@@ -123,7 +125,7 @@ export function SearchDialog({
             type="button"
             onClick={() => goTo(activeIndex + 1)}
             disabled={hits.length === 0}
-            aria-label="Résultat suivant"
+            aria-label={t("nextResult")}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
           >
             <ChevronDown size={16} />
@@ -131,7 +133,7 @@ export function SearchDialog({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={t("close")}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <X size={16} />
@@ -141,14 +143,14 @@ export function SearchDialog({
         <div className="overflow-y-auto px-2 py-2 max-h-[60vh]">
           {search.isError && (
             <p className="px-3 py-4 text-sm text-destructive">
-              {(search.error as Error)?.message ?? "La recherche a échoué."}
+              {(search.error as Error)?.message ?? t("searchFailed")}
             </p>
           )}
           {!search.isPending &&
             search.isSuccess &&
             hits.length === 0 && (
               <p className="px-3 py-4 text-sm text-muted-foreground">
-                Aucun résultat trouvé pour « {needle} ».
+                {t("noResults", { needle })}
               </p>
             )}
           {hits.length > 0 && (
@@ -164,7 +166,7 @@ export function SearchDialog({
                         : "hover:bg-muted text-foreground/80"
                     }`}
                   >
-                    <span className="font-medium">Page {h.pageNumber}</span>
+                    <span className="font-medium">{t("page", { pageNumber: h.pageNumber })}</span>
                     <span className="ml-2 text-xs text-muted-foreground">
                       bbox {h.bbox.map((n) => n.toFixed(0)).join(", ")}
                     </span>
@@ -176,7 +178,7 @@ export function SearchDialog({
         </div>
 
         <div className="px-4 py-2 border-t border-border text-xs text-muted-foreground">
-          Astuce : Entrée pour rechercher, ↑ ↓ pour naviguer, Échap pour fermer.
+          {t("hint")}
         </div>
       </div>
     </div>
