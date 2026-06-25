@@ -2,11 +2,30 @@
 
 import React, { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Link2, X } from "lucide-react";
+import { Globe, Link2, Mail, Phone, X } from "lucide-react";
 
 export type InsertLinkValue =
   | { kind: "url"; url: string }
   | { kind: "page"; page: number };
+
+/** Hyperlink URI schemes offered as quick-pick chips in the URL field. */
+const URL_SCHEMES = [
+  { id: "web", prefix: "https://", icon: Globe },
+  { id: "email", prefix: "mailto:", icon: Mail },
+  { id: "phone", prefix: "tel:", icon: Phone },
+] as const;
+
+// Matches any of the known scheme prefixes at the start of a URL.
+const KNOWN_SCHEME = /^(https?:\/\/|mailto:|tel:)/i;
+
+/**
+ * Swap the leading scheme of `current` for `prefix`, preserving everything
+ * after the existing scheme (so toggling Web → Email keeps the typed address).
+ */
+function applyScheme(current: string, prefix: string): string {
+  const rest = current.replace(KNOWN_SCHEME, "");
+  return `${prefix}${rest}`;
+}
 
 export interface InsertLinkDialogProps {
   open: boolean;
@@ -41,6 +60,7 @@ export function InsertLinkDialog({
   onRemove,
 }: InsertLinkDialogProps) {
   const t = useTranslations("editor.insert.linkDialog");
+  const tl = useTranslations("editor.links");
   const [mode, setMode] = useState<"url" | "page">("url");
   const [url, setUrl] = useState("");
   const [page, setPage] = useState(1);
@@ -67,7 +87,7 @@ export function InsertLinkDialog({
   if (!open) return null;
 
   const hasExistingLink = Boolean(initialUrl) || Boolean(initialPage);
-  const urlValid = /^(https?:\/\/|mailto:)/i.test(url.trim());
+  const urlValid = /^(https?:\/\/|mailto:|tel:)/i.test(url.trim());
   const pageValid = Number.isFinite(page) && page >= 1 && page <= pageCount;
   const canApply =
     hasTextTarget && (mode === "url" ? urlValid : pageValid);
@@ -155,6 +175,31 @@ export function InsertLinkDialog({
               >
                 {t("urlLabel")}
               </label>
+              <div
+                className="flex flex-wrap gap-1.5 mb-2"
+                role="group"
+                aria-label={tl("schemeLabel")}
+              >
+                {URL_SCHEMES.map(({ id, prefix, icon: Icon }) => {
+                  const active = url.trim().toLowerCase().startsWith(prefix);
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setUrl((prev) => applyScheme(prev, prefix))}
+                      aria-pressed={active}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors ${
+                        active
+                          ? "border-primary bg-primary/5 text-foreground"
+                          : "border-input text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      <Icon size={13} />
+                      {tl(`scheme_${id}`)}
+                    </button>
+                  );
+                })}
+              </div>
               <input
                 id="insert-link-url"
                 value={url}

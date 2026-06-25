@@ -1272,6 +1272,679 @@ function PageBoxesSection({
   );
 }
 
+// ============= Couleur prépresse (#86) & Dégradé (#85) =============
+
+/**
+ * Local mirror of the engine's `Color` union (ISO 32000-1 §8.6) — the prepress
+ * spaces surfaced in the panel. Declared here so this client component never
+ * imports the WASM package (same rule as {@link PageBoxesData}). The `icc`
+ * colour space is route-only (it needs an uploaded profile); the panel exposes
+ * an ICC **output intent** uploader instead.
+ */
+type PrepressColorSpace = "rgb" | "cmyk" | "gray" | "separation";
+type PrepressColor =
+  | { space: "rgb"; rgb: number }
+  | { space: "cmyk"; c: number; m: number; y: number; k: number }
+  | { space: "gray"; gray: number }
+  | { space: "separation"; name: string; tint: number; cmyk: [number, number, number, number] };
+
+/** A `{ x, y, w, h }` bake rect in PDF user space (origin bottom-left). */
+interface PdfRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Editable origin+size draft for a bake rect (strings — they back inputs). */
+type RectDraft = { x: string; y: string; w: string; h: string };
+
+interface PageGeo {
+  width: number;
+  height: number;
+  rotation: number;
+}
+
+/**
+ * Lower a web element rect (origin top-left, Y-down — PDF points at scale 1) to
+ * a PDF user-space rect (origin bottom-left, Y-up), honouring the page
+ * `/Rotate`. The same flip as `@giga-pdf/pdf-engine`'s `webToPdf` (used by the
+ * redaction/render helpers), inlined to keep the panel free of the heavy
+ * pdf-engine barrel. Used only to PRE-FILL the editable rect fields — the user
+ * sees and can adjust the result before baking.
+ */
+function webBoundsToPdfRect(
+  bounds: { x: number; y: number; width: number; height: number },
+  geo: PageGeo | undefined,
+): PdfRect {
+  const { x, width: w, height: h } = bounds;
+  if (!geo) return { x, y: bounds.y, w, h };
+  if ((geo.rotation ?? 0) === 180) return { x: geo.width - x - w, y: bounds.y, w, h };
+  // rotation 0 / 90 / 270 → plain Y-flip against the displayed page height.
+  return { x, y: geo.height - bounds.y - h, w, h };
+}
+
+/** Round to 2 decimals for display (points can be fractional). */
+function fmtRect(n: number): string {
+  return String(Math.round(n * 100) / 100);
+}
+
+function pdfRectToDraft(r: PdfRect): RectDraft {
+  return { x: fmtRect(r.x), y: fmtRect(r.y), w: fmtRect(r.w), h: fmtRect(r.h) };
+}
+
+/** Parse a rect draft; `null` if any field is non-finite or the area is ≤ 0. */
+function draftToRect(d: RectDraft): PdfRect | null {
+  const x = Number(d.x);
+  const y = Number(d.y);
+  const w = Number(d.w);
+  const h = Number(d.h);
+  if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) return null;
+  return { x, y, w, h };
+}
+
+function hexToRgbInt(hex: string): number {
+  return parseInt(hex.replace(/^#/, ""), 16) & 0xffffff;
+}
+
+/** Clamp a 0…100 percentage input to the engine's normalised 0…1 component. */
+function pctToUnit(pct: number): number {
+  return Math.min(1, Math.max(0, pct / 100));
+}
+
+/** POST a bake to /api/pdf/color and resolve the modified PDF bytes. */
+async function postColorBake(
+  getDocumentBytes: () => Promise<Blob | null>,
+  fields: { key: string; value: string | Blob }[],
+): Promise<Uint8Array> {
+  const blob = await getDocumentBytes();
+  if (!blob) throw new Error("no-document-bytes");
+  const form = new FormData();
+  form.append("file", new File([blob], "document.pdf", { type: "application/pdf" }));
+  for (const { key, value } of fields) form.append(key, value);
+  const res = await fetch("/api/pdf/color", { method: "POST", body: form });
+  if (!res.ok) throw new Error(`bake-failed-${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+const BAKE_INPUT_CLASS = "w-full rounded-md border border-input bg-background px-2 py-1 text-xs";
+
+/** Shared X/Y/W/H point editor for the colour + gradient bake rects. */
+function RectFields({
+  rect,
+  onChange,
+  labels,
+}: {
+  rect: RectDraft;
+  onChange: (field: keyof RectDraft, value: string) => void;
+  labels: { x: string; y: string; width: string; height: string; unit: string };
+}) {
+  const fields: ReadonlyArray<{ key: keyof RectDraft; label: string }> = [
+    { key: "x", label: labels.x },
+    { key: "y", label: labels.y },
+    { key: "w", label: labels.width },
+    { key: "h", label: labels.height },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-1.5">
+      {fields.map(({ key, label }) => (
+        <label key={key} className="block">
+          <span className="block text-[10px] text-muted-foreground mb-0.5">
+            {label} ({labels.unit})
+          </span>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={rect[key]}
+            onChange={(e) => onChange(key, e.target.value)}
+            className={BAKE_INPUT_CLASS}
+          />
+        </label>
+      ))}
+    </div>
+  );
+}
+
+interface BakeSectionProps {
+  element: Element;
+  pageInfo?: PageGeo;
+  pageNumber: number;
+  getDocumentBytes: () => Promise<Blob | null>;
+  /** Adopt the modified PDF bytes returned by the bake (editor reloads). */
+  onApplied?: (bytes: Uint8Array) => void;
+}
+
+/** One labelled 0…100 component input (CMYK / gray / tint), shown as a percent. */
+function PercentField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="block text-[10px] text-muted-foreground mb-0.5">{label}</span>
+      <input
+        type="number"
+        min={0}
+        max={100}
+        value={value}
+        onChange={(e) => {
+          const parsed = parseFloat(e.target.value);
+          onChange(Number.isFinite(parsed) ? Math.min(100, Math.max(0, parsed)) : 0);
+        }}
+        className={BAKE_INPUT_CLASS}
+      />
+    </label>
+  );
+}
+
+/**
+ * "Couleur (prépresse)" — #86. Bakes a press-ready filled rectangle over the
+ * selected element's area in any authored colour space (RGB / CMYK / spot
+ * `Separation` / gray), with optional overprint (trapping) and an independent
+ * ICC output-intent embed. Self-contained like {@link PageBoxesSection}: given
+ * the active page + a way to read the document bytes, it owns its bake +
+ * adopt-bytes lifecycle via `/api/pdf/color`. Mounted with `key={elementId}`,
+ * so the draft resets on every selection change.
+ */
+function PrepressColorSection({
+  element,
+  pageInfo,
+  pageNumber,
+  getDocumentBytes,
+  onApplied,
+}: BakeSectionProps) {
+  const t = useTranslations("editor.colors");
+  const [space, setSpace] = useState<PrepressColorSpace>("cmyk");
+  const [hex, setHex] = useState("#1d4ed8");
+  const [cmyk, setCmyk] = useState({ c: 100, m: 66, y: 0, k: 2 });
+  const [gray, setGray] = useState(0);
+  const [spotName, setSpotName] = useState("PANTONE 286 C");
+  const [spotTint, setSpotTint] = useState(100);
+  const [spotCmyk, setSpotCmyk] = useState({ c: 100, m: 66, y: 0, k: 2 });
+  const [opacity, setOpacity] = useState(100);
+  const [overprintFill, setOverprintFill] = useState(false);
+  const [overprintStroke, setOverprintStroke] = useState(false);
+  const [overprintMode, setOverprintMode] = useState(false);
+  const [rect, setRect] = useState<RectDraft>(() =>
+    pdfRectToDraft(webBoundsToPdfRect(element.bounds, pageInfo)),
+  );
+  const [status, setStatus] = useState<"idle" | "applying" | "error">("idle");
+
+  // ICC output intent (addOutputIntent) — an independent document-level action.
+  const [iccFile, setIccFile] = useState<File | null>(null);
+  const [iccCondition, setIccCondition] = useState("");
+  const [iccStatus, setIccStatus] = useState<"idle" | "applying" | "error">("idle");
+
+  const buildColor = (): PrepressColor => {
+    switch (space) {
+      case "rgb":
+        return { space: "rgb", rgb: hexToRgbInt(hex) };
+      case "cmyk":
+        return { space: "cmyk", c: pctToUnit(cmyk.c), m: pctToUnit(cmyk.m), y: pctToUnit(cmyk.y), k: pctToUnit(cmyk.k) };
+      case "gray":
+        return { space: "gray", gray: pctToUnit(gray) };
+      case "separation":
+        return {
+          space: "separation",
+          name: spotName.trim() || "Spot",
+          tint: pctToUnit(spotTint),
+          cmyk: [pctToUnit(spotCmyk.c), pctToUnit(spotCmyk.m), pctToUnit(spotCmyk.y), pctToUnit(spotCmyk.k)] as [
+            number,
+            number,
+            number,
+            number,
+          ],
+        };
+    }
+  };
+
+  const parsedRect = draftToRect(rect);
+
+  const apply = async () => {
+    if (!parsedRect) return;
+    setStatus("applying");
+    try {
+      const fields: { key: string; value: string | Blob }[] = [
+        { key: "page", value: String(pageNumber) },
+        { key: "operation", value: "fill" },
+        {
+          key: "payload",
+          value: JSON.stringify({ rect: parsedRect, color: buildColor(), opacity: pctToUnit(opacity) }),
+        },
+      ];
+      if (overprintFill || overprintStroke) {
+        fields.push({
+          key: "overprint",
+          value: JSON.stringify({ fill: overprintFill, stroke: overprintStroke, mode: overprintMode ? 1 : 0 }),
+        });
+      }
+      const bytes = await postColorBake(getDocumentBytes, fields);
+      onApplied?.(bytes);
+      setStatus("idle");
+    } catch {
+      setStatus("error");
+    }
+  };
+
+  const embedIcc = async () => {
+    if (!iccFile || iccCondition.trim() === "") return;
+    setIccStatus("applying");
+    try {
+      const bytes = await postColorBake(getDocumentBytes, [
+        { key: "page", value: String(pageNumber) },
+        { key: "operation", value: "output-intent" },
+        { key: "iccProfile", value: iccFile },
+        { key: "condition", value: iccCondition.trim() },
+      ]);
+      onApplied?.(bytes);
+      setIccStatus("idle");
+    } catch {
+      setIccStatus("error");
+    }
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t">
+      <h4 className="font-medium text-sm mb-1">{t("title")}</h4>
+      <p className="text-[11px] text-muted-foreground mb-2">{t("description")}</p>
+
+      <div className="space-y-3">
+        {/* Colour space */}
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">{t("space")}</label>
+          <select
+            value={space}
+            onChange={(e) => setSpace(e.target.value as PrepressColorSpace)}
+            className="w-full h-8 px-2 rounded border bg-background text-sm"
+            aria-label={t("space")}
+          >
+            <option value="cmyk">{t("spaceCmyk")}</option>
+            <option value="separation">{t("spaceSeparation")}</option>
+            <option value="gray">{t("spaceGray")}</option>
+            <option value="rgb">{t("spaceRgb")}</option>
+          </select>
+        </div>
+
+        {/* Space-specific components */}
+        {space === "rgb" && (
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">{t("color")}</label>
+            <input
+              type="color"
+              value={hex}
+              onChange={(e) => setHex(e.target.value)}
+              aria-label={t("color")}
+              className="w-full h-8 rounded border bg-background"
+            />
+          </div>
+        )}
+
+        {space === "cmyk" && (
+          <div className="grid grid-cols-2 gap-2">
+            <PercentField label={t("cyan")} value={cmyk.c} onChange={(v) => setCmyk((p) => ({ ...p, c: v }))} />
+            <PercentField label={t("magenta")} value={cmyk.m} onChange={(v) => setCmyk((p) => ({ ...p, m: v }))} />
+            <PercentField label={t("yellow")} value={cmyk.y} onChange={(v) => setCmyk((p) => ({ ...p, y: v }))} />
+            <PercentField label={t("black")} value={cmyk.k} onChange={(v) => setCmyk((p) => ({ ...p, k: v }))} />
+          </div>
+        )}
+
+        {space === "gray" && (
+          <PercentField label={t("gray")} value={gray} onChange={setGray} />
+        )}
+
+        {space === "separation" && (
+          <div className="space-y-2">
+            <label className="block">
+              <span className="block text-[10px] text-muted-foreground mb-0.5">{t("spotName")}</span>
+              <input
+                type="text"
+                value={spotName}
+                onChange={(e) => setSpotName(e.target.value)}
+                placeholder={t("spotNamePlaceholder")}
+                className={BAKE_INPUT_CLASS}
+              />
+            </label>
+            <PercentField label={t("tint")} value={spotTint} onChange={setSpotTint} />
+            <span className="block text-[10px] text-muted-foreground">{t("approxCmyk")}</span>
+            <div className="grid grid-cols-2 gap-2">
+              <PercentField label={t("cyan")} value={spotCmyk.c} onChange={(v) => setSpotCmyk((p) => ({ ...p, c: v }))} />
+              <PercentField label={t("magenta")} value={spotCmyk.m} onChange={(v) => setSpotCmyk((p) => ({ ...p, m: v }))} />
+              <PercentField label={t("yellow")} value={spotCmyk.y} onChange={(v) => setSpotCmyk((p) => ({ ...p, y: v }))} />
+              <PercentField label={t("black")} value={spotCmyk.k} onChange={(v) => setSpotCmyk((p) => ({ ...p, k: v }))} />
+            </div>
+          </div>
+        )}
+
+        {/* Rect (pre-filled from the selected element, editable) */}
+        <div>
+          <label className="text-[10px] text-muted-foreground block mb-1">{t("rect")}</label>
+          <RectFields
+            rect={rect}
+            onChange={(field, value) => setRect((prev) => ({ ...prev, [field]: value }))}
+            labels={{ x: t("x"), y: t("y"), width: t("width"), height: t("height"), unit: t("unit") }}
+          />
+        </div>
+
+        {/* Opacity */}
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">{t("opacity")}</label>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={opacity}
+            onChange={(e) => setOpacity(parseInt(e.target.value, 10))}
+            aria-label={t("opacity")}
+            className="w-full"
+          />
+        </div>
+
+        {/* Overprint (trapping) */}
+        <div className="space-y-1.5">
+          <span className="text-xs text-muted-foreground block">{t("overprint")}</span>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={overprintFill}
+              onChange={(e) => setOverprintFill(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <span className="text-xs text-muted-foreground">{t("overprintFill")}</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={overprintStroke}
+              onChange={(e) => setOverprintStroke(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <span className="text-xs text-muted-foreground">{t("overprintStroke")}</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={overprintMode}
+              onChange={(e) => setOverprintMode(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <span className="text-xs text-muted-foreground">{t("overprintMode")}</span>
+          </label>
+        </div>
+
+        {!parsedRect && <p className="text-[10px] text-destructive">{t("invalidRect")}</p>}
+        {status === "error" && <p className="text-[10px] text-destructive">{t("error")}</p>}
+
+        <button
+          type="button"
+          disabled={!parsedRect || status === "applying"}
+          onClick={() => void apply()}
+          className="w-full px-2 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          {status === "applying" ? t("applying") : t("apply")}
+        </button>
+
+        {/* ICC output intent — independent document-level embed */}
+        <div className="pt-2 border-t">
+          <h5 className="text-xs font-medium mb-0.5">{t("outputIntent")}</h5>
+          <p className="text-[10px] text-muted-foreground mb-1.5">{t("outputIntentDescription")}</p>
+          <label className="block mb-1.5">
+            <span className="block text-[10px] text-muted-foreground mb-0.5">{t("iccProfile")}</span>
+            <input
+              type="file"
+              accept=".icc,.icm,application/vnd.iccprofile"
+              onChange={(e) => setIccFile(e.target.files?.[0] ?? null)}
+              className="w-full text-[11px]"
+            />
+          </label>
+          <label className="block mb-1.5">
+            <span className="block text-[10px] text-muted-foreground mb-0.5">{t("condition")}</span>
+            <input
+              type="text"
+              value={iccCondition}
+              onChange={(e) => setIccCondition(e.target.value)}
+              placeholder={t("conditionPlaceholder")}
+              className={BAKE_INPUT_CLASS}
+            />
+          </label>
+          {iccStatus === "error" && <p className="text-[10px] text-destructive mb-1">{t("embedError")}</p>}
+          <button
+            type="button"
+            disabled={!iccFile || iccCondition.trim() === "" || iccStatus === "applying"}
+            onClick={() => void embedIcc()}
+            className="w-full px-2 py-1 text-xs rounded-md border bg-background hover:bg-accent disabled:opacity-50"
+          >
+            {iccStatus === "applying" ? t("embedding") : t("embed")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type GradientKind = "linear" | "radial";
+type LinearDirection = "horizontal" | "vertical" | "diagonal";
+interface GradientStopDraft {
+  offset: number;
+  hex: string;
+}
+
+/** Derive the shading axis (`coords`) from the rect + kind/direction. */
+function deriveGradientCoords(kind: GradientKind, direction: LinearDirection, r: PdfRect): number[] {
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2;
+  if (kind === "radial") return [cx, cy, 0, cx, cy, Math.max(r.w, r.h) / 2];
+  switch (direction) {
+    case "horizontal":
+      return [r.x, cy, r.x + r.w, cy];
+    case "vertical":
+      return [cx, r.y, cx, r.y + r.h];
+    case "diagonal":
+      return [r.x, r.y, r.x + r.w, r.y + r.h];
+  }
+}
+
+/**
+ * "Dégradé" — #85. Bakes an axial (linear) or radial gradient over the selected
+ * element's area via `addGradient`. The user sets the kind, direction (linear),
+ * ≥ 2 colour stops, the rect, opacity and `/Extend`; the shading axis is derived
+ * from the rect. Self-contained like {@link PrepressColorSection}; mounted with
+ * `key={elementId}` so the draft resets on each selection change.
+ */
+function GradientSection({ element, pageInfo, pageNumber, getDocumentBytes, onApplied }: BakeSectionProps) {
+  const t = useTranslations("editor.gradients");
+  const [kind, setKind] = useState<GradientKind>("linear");
+  const [direction, setDirection] = useState<LinearDirection>("horizontal");
+  const [stops, setStops] = useState<GradientStopDraft[]>([
+    { offset: 0, hex: "#1d4ed8" },
+    { offset: 1, hex: "#9333ea" },
+  ]);
+  const [opacity, setOpacity] = useState(100);
+  const [extend, setExtend] = useState(true);
+  const [rect, setRect] = useState<RectDraft>(() =>
+    pdfRectToDraft(webBoundsToPdfRect(element.bounds, pageInfo)),
+  );
+  const [status, setStatus] = useState<"idle" | "applying" | "error">("idle");
+
+  const updateStop = (index: number, patch: Partial<GradientStopDraft>) =>
+    setStops((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  const addStop = () => setStops((prev) => [...prev, { offset: 1, hex: "#ffffff" }]);
+  const removeStop = (index: number) =>
+    setStops((prev) => (prev.length > 2 ? prev.filter((_, i) => i !== index) : prev));
+
+  const parsedRect = draftToRect(rect);
+  const canApply = parsedRect !== null && stops.length >= 2;
+
+  const apply = async () => {
+    if (!parsedRect || stops.length < 2) return;
+    setStatus("applying");
+    try {
+      const spec = {
+        kind,
+        coords: deriveGradientCoords(kind, direction, parsedRect),
+        stops: stops.map((s) => ({
+          offset: Math.min(1, Math.max(0, s.offset)),
+          rgb: hexToRgbInt(s.hex),
+        })),
+        rect: parsedRect,
+        extend: [extend, extend] as [boolean, boolean],
+        opacity: pctToUnit(opacity),
+      };
+      const bytes = await postColorBake(getDocumentBytes, [
+        { key: "page", value: String(pageNumber) },
+        { key: "operation", value: "gradient" },
+        { key: "payload", value: JSON.stringify(spec) },
+      ]);
+      onApplied?.(bytes);
+      setStatus("idle");
+    } catch {
+      setStatus("error");
+    }
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t">
+      <h4 className="font-medium text-sm mb-1">{t("title")}</h4>
+      <p className="text-[11px] text-muted-foreground mb-2">{t("description")}</p>
+
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">{t("kind")}</label>
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as GradientKind)}
+              className="w-full h-8 px-2 rounded border bg-background text-sm"
+              aria-label={t("kind")}
+            >
+              <option value="linear">{t("linear")}</option>
+              <option value="radial">{t("radial")}</option>
+            </select>
+          </div>
+          {kind === "linear" && (
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">{t("direction")}</label>
+              <select
+                value={direction}
+                onChange={(e) => setDirection(e.target.value as LinearDirection)}
+                className="w-full h-8 px-2 rounded border bg-background text-sm"
+                aria-label={t("direction")}
+              >
+                <option value="horizontal">{t("horizontal")}</option>
+                <option value="vertical">{t("vertical")}</option>
+                <option value="diagonal">{t("diagonal")}</option>
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* Colour stops (≥ 2) */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs text-muted-foreground">{t("stops")}</label>
+            <button
+              type="button"
+              onClick={addStop}
+              title={t("addStop")}
+              aria-label={t("addStop")}
+              className="h-6 w-6 flex items-center justify-center rounded border hover:bg-accent transition-colors"
+            >
+              <Plus size={12} />
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            {stops.map((stop, index) => (
+              <div key={index} className="flex items-center gap-1.5">
+                <input
+                  type="color"
+                  value={stop.hex}
+                  onChange={(e) => updateStop(index, { hex: e.target.value })}
+                  aria-label={t("color")}
+                  className="h-7 w-8 rounded border bg-background shrink-0"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={stop.offset}
+                  onChange={(e) => {
+                    const parsed = parseFloat(e.target.value);
+                    updateStop(index, {
+                      offset: Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : 0,
+                    });
+                  }}
+                  aria-label={t("offset")}
+                  className="flex-1 h-7 px-2 rounded border bg-background text-xs min-w-0"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeStop(index)}
+                  disabled={stops.length <= 2}
+                  title={t("removeStop")}
+                  aria-label={t("removeStop")}
+                  className="h-7 w-6 flex items-center justify-center rounded border hover:bg-accent text-destructive transition-colors disabled:opacity-40"
+                >
+                  <Trash2 size={11} />
+                </button>
+              </div>
+            ))}
+          </div>
+          {stops.length < 2 && <p className="mt-1 text-[10px] text-destructive">{t("minStops")}</p>}
+        </div>
+
+        {/* Rect (pre-filled from the selected element, editable) */}
+        <div>
+          <label className="text-[10px] text-muted-foreground block mb-1">{t("rect")}</label>
+          <RectFields
+            rect={rect}
+            onChange={(field, value) => setRect((prev) => ({ ...prev, [field]: value }))}
+            labels={{ x: t("x"), y: t("y"), width: t("width"), height: t("height"), unit: t("unit") }}
+          />
+        </div>
+
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">{t("opacity")}</label>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={opacity}
+            onChange={(e) => setOpacity(parseInt(e.target.value, 10))}
+            aria-label={t("opacity")}
+            className="w-full"
+          />
+        </div>
+
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={extend}
+            onChange={(e) => setExtend(e.target.checked)}
+            className="w-4 h-4"
+          />
+          <span className="text-xs text-muted-foreground">{t("extend")}</span>
+        </label>
+
+        {status === "error" && <p className="text-[10px] text-destructive">{t("error")}</p>}
+
+        <button
+          type="button"
+          disabled={!canApply || status === "applying"}
+          onClick={() => void apply()}
+          className="w-full px-2 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          {status === "applying" ? t("applying") : t("apply")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function PropertiesPanel({
   selectedElements,
   onElementUpdate,
@@ -1706,6 +2379,33 @@ export function PropertiesPanel({
                 />
               )}
             </div>
+
+            {/* Couleur prépresse (#86) + Dégradé (#85) — bake une couleur prête
+                pour l'impression / un dégradé sur la zone de l'élément
+                sélectionné. Affichées uniquement quand l'appelant fournit le
+                numéro de page actif ET un accès aux octets du document (même
+                gating que la section "Boîtes de page" ; le résultat est adopté
+                via le même canal `onPageBoxesApplied`). */}
+            {pageNumber != null && getDocumentBytes && (
+              <>
+                <PrepressColorSection
+                  key={`color-${selectedElement.elementId}`}
+                  element={selectedElement}
+                  pageInfo={pageInfo}
+                  pageNumber={pageNumber}
+                  getDocumentBytes={getDocumentBytes}
+                  onApplied={onPageBoxesApplied}
+                />
+                <GradientSection
+                  key={`gradient-${selectedElement.elementId}`}
+                  element={selectedElement}
+                  pageInfo={pageInfo}
+                  pageNumber={pageNumber}
+                  getDocumentBytes={getDocumentBytes}
+                  onApplied={onPageBoxesApplied}
+                />
+              </>
+            )}
           </div>
         ) : null}
 

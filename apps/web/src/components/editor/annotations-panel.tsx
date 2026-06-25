@@ -17,10 +17,36 @@ import {
   ArrowUpRight,
   Link2,
   Squircle,
+  Circle,
+  Hexagon,
+  Spline,
+  ChevronUp,
+  Shapes,
 } from "lucide-react";
 import { Button } from "@giga-pdf/ui";
 import type { AnnotationElement, AnnotationType, Element } from "@giga-pdf/types";
 import { cn } from "@/lib/utils";
+
+/**
+ * Geometric annotation kinds the panel can create. Each maps 1:1 to a
+ * `GigaPdfDoc` add method behind `POST /api/pdf/annotations` (`action`):
+ * circle → addCircleAnnotation, polygon → addPolygonAnnotation,
+ * polyline → addPolylineAnnotation, caret → addCaretAnnotation.
+ */
+export type GeometricAnnotationType = "circle" | "polygon" | "polyline" | "caret";
+
+/** Add-toolbar entries: icon + i18n key suffix, in display order. */
+const GEOMETRIC_ADD_ACTIONS: ReadonlyArray<{
+  type: GeometricAnnotationType;
+  icon: typeof Circle;
+  /** i18n key under `editor.annotations` (e.g. "addCircle"). */
+  labelKey: string;
+}> = [
+  { type: "circle", icon: Circle, labelKey: "addCircle" },
+  { type: "polygon", icon: Hexagon, labelKey: "addPolygon" },
+  { type: "polyline", icon: Spline, labelKey: "addPolyline" },
+  { type: "caret", icon: ChevronUp, labelKey: "addCaret" },
+];
 
 interface AnnotationsPanelProps {
   /**
@@ -41,6 +67,16 @@ interface AnnotationsPanelProps {
    * sans bouton de suppression (lecture seule).
    */
   onDelete?: (elementId: string) => void;
+  /**
+   * Ajouter une annotation géométrique (cercle / polygone / ligne brisée /
+   * caret) à la page courante. Le backend la place avec une géométrie par défaut
+   * centrée sur la page ; l'utilisateur la repositionne ensuite via le système de
+   * sélection existant (pas d'outil de dessin libre). Absent ⇒ la barre d'ajout
+   * est masquée (le panneau reste en lecture/suppression seule).
+   */
+  onAdd?: (type: GeometricAnnotationType) => void;
+  /** Une création est en cours — désactive la barre d'ajout. */
+  addBusy?: boolean;
   className?: string;
 }
 
@@ -97,15 +133,20 @@ export function AnnotationsPanel({
   selectedElementIds = [],
   onSelect,
   onDelete,
+  onAdd,
+  addBusy = false,
   className,
 }: AnnotationsPanelProps) {
   const t = useTranslations("editor.annotations");
   const [expanded, setExpanded] = useState(true);
 
   const annotations = annotationsOf(elements);
+  const canAdd = Boolean(onAdd);
 
-  // Hide entirely when there is nothing to review on this page.
-  if (annotations.length === 0) return null;
+  // Hide entirely only when there is nothing to review AND no way to add — keep
+  // the panel reachable when the add toolbar is wired, even on a page with no
+  // existing annotations.
+  if (annotations.length === 0 && !canAdd) return null;
 
   return (
     <div className={cn("border-b", className)}>
@@ -129,6 +170,40 @@ export function AnnotationsPanel({
 
       {expanded && (
         <div className="px-2 pb-2 space-y-1">
+          {/* Add a geometric annotation (centred default geometry; the user then
+              repositions it with the selection tool). */}
+          {canAdd && (
+            <div className="mb-1 space-y-1.5">
+              <div className="flex items-center gap-1">
+                {GEOMETRIC_ADD_ACTIONS.map(({ type, icon: Icon, labelKey }) => {
+                  const label = t(labelKey);
+                  return (
+                    <Button
+                      key={type}
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      disabled={addBusy}
+                      onClick={() => onAdd?.(type)}
+                      title={label}
+                      aria-label={label}
+                    >
+                      <Icon className="h-3.5 w-3.5" aria-hidden />
+                    </Button>
+                  );
+                })}
+              </div>
+              <p className="flex items-start gap-1 text-[10px] leading-snug text-muted-foreground">
+                <Shapes className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+                <span>{t("addHint")}</span>
+              </p>
+            </div>
+          )}
+
+          {annotations.length === 0 && (
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">{t("empty")}</p>
+          )}
+
           {annotations.map((annotation) => {
             const selected = selectedElementIds.includes(annotation.elementId);
             const TypeIconCmp = TYPE_ICONS[annotation.annotationType] ?? Squircle;
