@@ -117,7 +117,7 @@ function makeFakeDoc(opts: { saved?: Uint8Array; deletedPerCall?: number } = {})
       calls.redactPii.push({ page, rects, opts: o });
       return opts.deletedPerCall ?? rects.length;
     },
-    save: (): Uint8Array => opts.saved ?? new Uint8Array([1, 2, 3]),
+    saveCompressed: (): Uint8Array => opts.saved ?? new Uint8Array([1, 2, 3]),
     close: () => {
       calls.closed += 1;
     },

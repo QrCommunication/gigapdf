@@ -30,7 +30,7 @@ function makeFakeDoc(opts: {
       calls.setPageMargins.push({ page, m });
       return opts.setOk ?? true;
     },
-    save: (): Uint8Array => opts.saved ?? new Uint8Array([1, 2, 3]),
+    saveCompressed: (): Uint8Array => opts.saved ?? new Uint8Array([1, 2, 3]),
     close: () => {
       calls.closed += 1;
     },

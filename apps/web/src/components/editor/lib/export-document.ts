@@ -71,6 +71,7 @@ interface ExportableDoc {
   toHtml(): string;
   toRtf(): string;
   save(): Uint8Array;
+  saveCompressed(): Uint8Array;
   toModel(): Model;
   close(): void;
 }
@@ -106,7 +107,7 @@ function serialise(
     case "rtf":
       return doc.toRtf();
     case "pdf":
-      return freshCopy(doc.save());
+      return freshCopy(doc.saveCompressed());
     case "markdown":
       return engine.modelToMarkdown(doc.toModel());
     case "csv":

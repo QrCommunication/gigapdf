@@ -148,6 +148,7 @@ interface RedactableDoc {
     opts?: { cover?: boolean; coverRgb?: number },
   ): number;
   save(): Uint8Array;
+  saveCompressed(): Uint8Array;
   close(): void;
 }
 
@@ -179,7 +180,7 @@ export async function redactDocument(
       // `cover` defaults to true for PII; pass it explicitly for intent.
       deleted += doc.redactPii(pageNumber, rects, { cover: true });
     }
-    return { bytes: freshCopy(doc.save()), deleted };
+    return { bytes: freshCopy(doc.saveCompressed()), deleted };
   } finally {
     doc.close();
   }

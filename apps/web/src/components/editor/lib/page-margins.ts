@@ -85,7 +85,7 @@ export async function applyPageMargins(
     if (!ok) {
       throw new Error(`setPageMargins failed for page ${pageIndex + 1}`);
     }
-    const saved = doc.save();
+    const saved = doc.saveCompressed();
     const copy = new Uint8Array(saved.byteLength);
     copy.set(saved);
     return copy;

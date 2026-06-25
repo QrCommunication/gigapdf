@@ -36,6 +36,7 @@ interface FlatOutlineEntry {
 interface OutlineWritableDoc {
   setOutline(entries: FlatOutlineEntry[]): boolean;
   save(): Uint8Array;
+  saveCompressed(): Uint8Array;
   close(): void;
 }
 
@@ -88,7 +89,7 @@ export async function bakeOutline(
   const doc = engine.open(toBytes(source)) as unknown as OutlineWritableDoc;
   try {
     doc.setOutline(flat);
-    return { bytes: freshCopy(doc.save()), entries: flat.length };
+    return { bytes: freshCopy(doc.saveCompressed()), entries: flat.length };
   } finally {
     doc.close();
   }

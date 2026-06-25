@@ -114,7 +114,7 @@ function makeFakeDoc() {
     toOdp: record("toOdp", new Uint8Array([6])),
     toHtml: record("toHtml", "<html></html>"),
     toRtf: record("toRtf", "{\\rtf1}"),
-    save: record("save", new Uint8Array([9])),
+    saveCompressed: record("saveCompressed", new Uint8Array([9])),
     // The reflowable targets (markdown/csv/epub) lower via the model: the helper
     // calls toModel() on the doc, then the engine's modelTo*() raisers.
     toModel: () => {
@@ -152,7 +152,7 @@ describe("exportDocumentAs", () => {
     { format: "odp", method: "toOdp" },
     { format: "html", method: "toHtml" },
     { format: "rtf", method: "toRtf" },
-    { format: "pdf", method: "save" },
+    { format: "pdf", method: "saveCompressed" },
     // Reflowable targets go through the model: doc.toModel() is the last method
     // recorded on the doc; the engine's modelTo*() raiser produces the bytes.
     { format: "markdown", method: "toModel" },
