@@ -2245,7 +2245,14 @@
     },
     "attachments": {
       "title": "Pièces jointes",
-      "download": "Télécharger le fichier"
+      "download": "Télécharger le fichier",
+      "add": "Ajouter une pièce jointe",
+      "remove": "Supprimer la pièce jointe",
+      "empty": "Aucune pièce jointe. Ajoutez-en une (PDF, XML Factur-X/ZUGFeRD, image…).",
+      "toasts.added": "{count} pièce(s) jointe(s) ajoutée(s)",
+      "toasts.addFailed": "Échec de l'ajout de la pièce jointe",
+      "toasts.removed": "Pièce jointe supprimée",
+      "toasts.removeFailed": "Échec de la suppression de la pièce jointe"
     },
     "exportDialog": {
       "title": "Exporter le document",
@@ -2570,6 +2577,154 @@
         "assemble": "Assembler le document",
         "printHighQuality": "Imprimer en haute qualité"
       }
+    },
+    "pageLabels": {
+      "toolbarLabel": "Étiquettes",
+      "title": "Étiquettes de page",
+      "subtitle": "Numérotez les pages par plages : chiffres romains, lettres, préfixes…",
+      "close": "Fermer",
+      "noFile": "Aucun document ouvert.",
+      "loading": "Chargement des étiquettes…",
+      "loadFailed": "Impossible de charger les étiquettes de page.",
+      "intro": "Le document compte {count} page(s). Définissez une ou plusieurs plages de numérotation.",
+      "empty": "Aucune étiquette de page définie. Ajoutez une plage pour commencer.",
+      "addRange": "Ajouter une plage",
+      "removeRange": "Supprimer la plage {index}",
+      "rangeN": "Plage {index}",
+      "fields": {
+        "startPage": "Page de début",
+        "style": "Style",
+        "prefix": "Préfixe",
+        "startNumber": "Première valeur"
+      },
+      "placeholders": {
+        "prefix": "ex. A-"
+      },
+      "styleOptions": {
+        "decimal": "Chiffres (1, 2, 3…)",
+        "romanLower": "Romains minuscules (i, ii, iii…)",
+        "romanUpper": "Romains majuscules (I, II, III…)",
+        "alphaLower": "Lettres minuscules (a, b, c…)",
+        "alphaUpper": "Lettres majuscules (A, B, C…)",
+        "none": "Préfixe seul (sans numéro)"
+      },
+      "preview": {
+        "title": "Aperçu",
+        "pageTitle": "Page {page}",
+        "emptyLabel": "(vide)",
+        "more": "… et {count} page(s) de plus"
+      },
+      "removeAll": "Tout supprimer",
+      "apply": "Appliquer et télécharger",
+      "saving": "Enregistrement…",
+      "updateSuccess": "Étiquettes de page mises à jour.",
+      "updateFailed": "Échec de la mise à jour des étiquettes de page.",
+      "noFileSelected": "Aucun document sélectionné."
+    },
+    "pageBoxes": {
+      "title": "Boîtes de page",
+      "description": "Limites de la page active, en points.",
+      "loading": "Chargement des boîtes…",
+      "error": "Impossible de charger les boîtes de page.",
+      "retry": "Réessayer",
+      "kinds": {
+        "media": "Boîte média (MediaBox)",
+        "crop": "Boîte de rognage (CropBox)",
+        "bleed": "Fond perdu (BleedBox)",
+        "trim": "Coupe finale (TrimBox)",
+        "art": "Zone graphique (ArtBox)"
+      },
+      "fields": {
+        "x": "X",
+        "y": "Y",
+        "width": "Largeur",
+        "height": "Hauteur"
+      },
+      "declared": "défini",
+      "inherited": "hérité",
+      "unit": "pt",
+      "invalid": "La largeur et la hauteur doivent être positives.",
+      "apply": "Appliquer",
+      "applying": "Application…"
+    },
+    "presentation": {
+      "title": "Présentation et mise en page",
+      "close": "Fermer",
+      "cancel": "Annuler",
+      "apply": "Appliquer",
+      "failed": "L'opération a échoué.",
+      "tabs": {
+        "transitions": "Transitions",
+        "scale": "Échelle",
+        "portfolio": "Portfolio",
+        "figures": "Figures"
+      },
+      "transitions": {
+        "styleLabel": "Effet de transition",
+        "style": {
+          "split": "Séparation",
+          "blinds": "Stores",
+          "box": "Boîte",
+          "wipe": "Balayage",
+          "dissolve": "Fondu enchaîné",
+          "glitter": "Scintillement",
+          "fly": "Vol",
+          "push": "Poussée",
+          "cover": "Recouvrement",
+          "uncover": "Découvrement",
+          "fade": "Fondu",
+          "replace": "Remplacement"
+        },
+        "durationLabel": "Durée de l'effet (s)",
+        "displayDurationLabel": "Avance auto (s)",
+        "displayDurationPlaceholder": "manuel",
+        "directionLabel": "Direction",
+        "directionAuto": "Par défaut",
+        "directionNone": "Aucune",
+        "allPagesNote": "Appliqué à toutes les pages du document.",
+        "remove": "Supprimer les transitions"
+      },
+      "scale": {
+        "modeLabel": "Mode de mise à l'échelle",
+        "mode": {
+          "uniform": "Uniforme",
+          "xy": "Horizontale / verticale",
+          "fit": "Ajuster à une taille",
+          "userUnit": "Unité utilisateur"
+        },
+        "modeHint": {
+          "uniform": "Met à l'échelle le contenu de la page par un facteur unique.",
+          "xy": "Met à l'échelle séparément en largeur et en hauteur.",
+          "fit": "Réduit ou agrandit le contenu pour tenir dans la taille cible, sans déformation.",
+          "userUnit": "Modifie l'unité d'espace utilisateur (grand format), sans redimensionner le contenu."
+        },
+        "factorLabel": "Facteur",
+        "sxLabel": "Facteur horizontal",
+        "syLabel": "Facteur vertical",
+        "widthLabel": "Largeur (pt)",
+        "heightLabel": "Hauteur (pt)",
+        "unitLabel": "Unité (1 = défaut)",
+        "allPagesNote": "Appliqué à toutes les pages du document."
+      },
+      "portfolio": {
+        "viewLabel": "Affichage initial",
+        "view": {
+          "details": "Liste détaillée",
+          "tile": "Vignettes",
+          "hidden": "Masqué"
+        },
+        "columnsLabel": "Colonnes (facultatif)",
+        "columnsPlaceholder": "clé|En-tête affiché\nservice|Service",
+        "columnsHint": "Une colonne par ligne, au format « clé|En-tête ». L'en-tête est facultatif.",
+        "note": "Marque le PDF comme portfolio (collection de fichiers joints)."
+      },
+      "figures": {
+        "note": "Le texte alternatif décrit les figures pour les lecteurs d'écran (accessibilité).",
+        "label": "Texte alternatif des figures",
+        "placeholder": "Une description par ligne (figure 1, figure 2, …)",
+        "hint": "Une ligne par figure, dans l'ordre. Les lignes vides conservent le texte par défaut du moteur."
+      },
+      "toolbarLabel": "Présentation"
     }
   },
   "errors": {

@@ -2245,7 +2245,14 @@
     },
     "attachments": {
       "title": "Attachments",
-      "download": "Download file"
+      "download": "Download file",
+      "add": "Add attachment",
+      "remove": "Remove attachment",
+      "empty": "No attachments. Add one (PDF, Factur-X/ZUGFeRD XML, image…).",
+      "toasts.added": "{count} attachment(s) added",
+      "toasts.addFailed": "Could not add the attachment",
+      "toasts.removed": "Attachment removed",
+      "toasts.removeFailed": "Could not remove the attachment"
     },
     "exportDialog": {
       "title": "Export Document",
@@ -2570,6 +2577,154 @@
         "assemble": "Assemble document",
         "printHighQuality": "Print in high quality"
       }
+    },
+    "pageLabels": {
+      "toolbarLabel": "Labels",
+      "title": "Page labels",
+      "subtitle": "Number pages by range: roman numerals, letters, prefixes…",
+      "close": "Close",
+      "noFile": "No document open.",
+      "loading": "Loading page labels…",
+      "loadFailed": "Could not load page labels.",
+      "intro": "This document has {count} page(s). Define one or more numbering ranges.",
+      "empty": "No page labels defined. Add a range to get started.",
+      "addRange": "Add range",
+      "removeRange": "Remove range {index}",
+      "rangeN": "Range {index}",
+      "fields": {
+        "startPage": "Start page",
+        "style": "Style",
+        "prefix": "Prefix",
+        "startNumber": "First value"
+      },
+      "placeholders": {
+        "prefix": "e.g. A-"
+      },
+      "styleOptions": {
+        "decimal": "Digits (1, 2, 3…)",
+        "romanLower": "Lowercase roman (i, ii, iii…)",
+        "romanUpper": "Uppercase roman (I, II, III…)",
+        "alphaLower": "Lowercase letters (a, b, c…)",
+        "alphaUpper": "Uppercase letters (A, B, C…)",
+        "none": "Prefix only (no number)"
+      },
+      "preview": {
+        "title": "Preview",
+        "pageTitle": "Page {page}",
+        "emptyLabel": "(empty)",
+        "more": "… and {count} more page(s)"
+      },
+      "removeAll": "Remove all",
+      "apply": "Apply & download",
+      "saving": "Saving…",
+      "updateSuccess": "Page labels updated.",
+      "updateFailed": "Failed to update page labels.",
+      "noFileSelected": "No document selected."
+    },
+    "pageBoxes": {
+      "title": "Page boxes",
+      "description": "Active page boundaries, in points.",
+      "loading": "Loading boxes…",
+      "error": "Could not load the page boxes.",
+      "retry": "Retry",
+      "kinds": {
+        "media": "Media box (MediaBox)",
+        "crop": "Crop box (CropBox)",
+        "bleed": "Bleed box (BleedBox)",
+        "trim": "Trim box (TrimBox)",
+        "art": "Art box (ArtBox)"
+      },
+      "fields": {
+        "x": "X",
+        "y": "Y",
+        "width": "Width",
+        "height": "Height"
+      },
+      "declared": "set",
+      "inherited": "inherited",
+      "unit": "pt",
+      "invalid": "Width and height must be positive.",
+      "apply": "Apply",
+      "applying": "Applying…"
+    },
+    "presentation": {
+      "title": "Presentation & page setup",
+      "close": "Close",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "failed": "The operation failed.",
+      "tabs": {
+        "transitions": "Transitions",
+        "scale": "Scale",
+        "portfolio": "Portfolio",
+        "figures": "Figures"
+      },
+      "transitions": {
+        "styleLabel": "Transition effect",
+        "style": {
+          "split": "Split",
+          "blinds": "Blinds",
+          "box": "Box",
+          "wipe": "Wipe",
+          "dissolve": "Dissolve",
+          "glitter": "Glitter",
+          "fly": "Fly",
+          "push": "Push",
+          "cover": "Cover",
+          "uncover": "Uncover",
+          "fade": "Fade",
+          "replace": "Replace"
+        },
+        "durationLabel": "Effect duration (s)",
+        "displayDurationLabel": "Auto-advance (s)",
+        "displayDurationPlaceholder": "manual",
+        "directionLabel": "Direction",
+        "directionAuto": "Default",
+        "directionNone": "None",
+        "allPagesNote": "Applied to every page in the document.",
+        "remove": "Remove transitions"
+      },
+      "scale": {
+        "modeLabel": "Scaling mode",
+        "mode": {
+          "uniform": "Uniform",
+          "xy": "Horizontal / vertical",
+          "fit": "Fit to size",
+          "userUnit": "User unit"
+        },
+        "modeHint": {
+          "uniform": "Scales page content by a single factor.",
+          "xy": "Scales width and height independently.",
+          "fit": "Shrinks or grows content to fit the target size, preserving aspect ratio.",
+          "userUnit": "Changes the user-space unit (large format) without rescaling content."
+        },
+        "factorLabel": "Factor",
+        "sxLabel": "Horizontal factor",
+        "syLabel": "Vertical factor",
+        "widthLabel": "Width (pt)",
+        "heightLabel": "Height (pt)",
+        "unitLabel": "Unit (1 = default)",
+        "allPagesNote": "Applied to every page in the document."
+      },
+      "portfolio": {
+        "viewLabel": "Initial view",
+        "view": {
+          "details": "Detailed list",
+          "tile": "Tiles",
+          "hidden": "Hidden"
+        },
+        "columnsLabel": "Columns (optional)",
+        "columnsPlaceholder": "key|Displayed header\ndept|Department",
+        "columnsHint": "One column per line, as \"key|Header\". The header is optional.",
+        "note": "Marks the PDF as a portfolio (a collection of attached files)."
+      },
+      "figures": {
+        "note": "Alt text describes figures for screen readers (accessibility).",
+        "label": "Figure alt text",
+        "placeholder": "One description per line (figure 1, figure 2, …)",
+        "hint": "One line per figure, in order. Blank lines keep the engine's default text."
+      },
+      "toolbarLabel": "Presentation"
     }
   },
   "errors": {

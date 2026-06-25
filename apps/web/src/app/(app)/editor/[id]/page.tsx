@@ -13,6 +13,7 @@ import type {
   UUID,
   PageObject,
   BookmarkObject,
+  EmbeddedFileObject,
 } from "@giga-pdf/types";
 import { Button, useToast } from "@giga-pdf/ui";
 import {
@@ -3600,6 +3601,112 @@ export default function EditorPage() {
     document.body.removeChild(link);
   }, []);
 
+  // ── Document attachments + associated files (issue #78) ─────────────────────
+  // Add / remove embedded file attachments and ISO 32000-2 associated files
+  // (Factur-X / ZUGFeRD / Order-X) through /api/pdf/attachments, then adopt the
+  // returned binary. No re-parse: attachments don't move any page element. The
+  // panel list is overridden optimistically until the next reload, when
+  // useDocument re-parses `embeddedFiles` from the saved binary (authoritative).
+  const [attachmentsOverride, setAttachmentsOverride] = useState<
+    EmbeddedFileObject[] | null
+  >(null);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
+
+  // A fresh parse (document reload / page-op re-parse) is authoritative — drop
+  // the optimistic override so the panel reflects the re-parsed attachments.
+  useEffect(() => {
+    setAttachmentsOverride(null);
+  }, [embeddedFiles]);
+
+  const displayedEmbeddedFiles = attachmentsOverride ?? embeddedFiles;
+
+  /** Build an optimistic panel entry for a just-embedded local file. */
+  const toAttachmentView = useCallback((file: File): EmbeddedFileObject => {
+    const id = globalThis.crypto?.randomUUID?.() ?? `att-${file.name}-${file.size}`;
+    return {
+      fileId: id,
+      name: file.name,
+      mimeType: file.type || "application/octet-stream",
+      sizeBytes: file.size,
+      description: null,
+      creationDate: null,
+      modificationDate: null,
+      // Object URL keeps the file immediately downloadable from the panel; it is
+      // released when the editor page unloads.
+      dataUrl: URL.createObjectURL(file),
+    };
+  }, []);
+
+  const handleAddAttachments = useCallback(
+    async (newFiles: File[]) => {
+      if (newFiles.length === 0) return;
+      const base = await getPreparedBlob();
+      const source = base ?? currentPdfFileRef.current;
+      if (!source) return;
+      setAttachmentBusy(true);
+      try {
+        const docName = currentPdfFileRef.current?.name ?? "document.pdf";
+        let working: Blob = source;
+        const added: EmbeddedFileObject[] = [];
+        for (const f of newFiles) {
+          const fd = new FormData();
+          fd.append("file", new File([working], docName, { type: "application/pdf" }));
+          fd.append("action", "add");
+          fd.append("attachment", f);
+          const resp = await fetch("/api/pdf/attachments", {
+            method: "POST",
+            body: fd,
+          });
+          if (!resp.ok) throw new Error(`add attachment failed: ${resp.status}`);
+          working = await resp.blob();
+          added.push(toAttachmentView(f));
+        }
+        adoptModifiedPdf(working, { reparse: false });
+        setAttachmentsOverride((prev) => [...(prev ?? embeddedFiles), ...added]);
+        toast({ title: t("attachments.toasts.added", { count: newFiles.length }) });
+      } catch (err) {
+        clientLogger.error("[editor] add attachment failed", err);
+        toast({ variant: "destructive", title: t("attachments.toasts.addFailed") });
+      } finally {
+        setAttachmentBusy(false);
+      }
+    },
+    [getPreparedBlob, adoptModifiedPdf, embeddedFiles, toAttachmentView, toast, t],
+  );
+
+  const handleRemoveAttachment = useCallback(
+    async (file: EmbeddedFileObject) => {
+      const base = await getPreparedBlob();
+      const source = base ?? currentPdfFileRef.current;
+      if (!source) return;
+      setAttachmentBusy(true);
+      try {
+        const docName = currentPdfFileRef.current?.name ?? "document.pdf";
+        const fd = new FormData();
+        fd.append("file", new File([source], docName, { type: "application/pdf" }));
+        fd.append("action", "remove");
+        fd.append("name", file.name);
+        const resp = await fetch("/api/pdf/attachments", {
+          method: "POST",
+          body: fd,
+        });
+        if (!resp.ok) throw new Error(`remove attachment failed: ${resp.status}`);
+        const working = await resp.blob();
+        adoptModifiedPdf(working, { reparse: false });
+        setAttachmentsOverride((prev) =>
+          (prev ?? embeddedFiles).filter((f) => f.fileId !== file.fileId),
+        );
+        toast({ title: t("attachments.toasts.removed") });
+      } catch (err) {
+        clientLogger.error("[editor] remove attachment failed", err);
+        toast({ variant: "destructive", title: t("attachments.toasts.removeFailed") });
+      } finally {
+        setAttachmentBusy(false);
+      }
+    },
+    [getPreparedBlob, adoptModifiedPdf, embeddedFiles, toast, t],
+  );
+
   // Handler pour les clics sur les liens hypertexte
   const handleHyperlinkClick = useCallback((linkUrl?: string | null, linkPage?: number | null) => {
     if (linkUrl) {
@@ -4462,6 +4569,15 @@ export default function EditorPage() {
           allFieldNames={allFieldNames}
           userLayers={userLayers}
           onAssignElementToLayer={handleAssignElementToLayer}
+          pageNumber={effectivePageIndex + 1}
+          getDocumentBytes={getPreparedBlob}
+          onPageBoxesApplied={(bytes) =>
+            updateCurrentPdfFile(
+              new File([new Uint8Array(bytes)], currentPdfFile?.name ?? "document.pdf", {
+                type: "application/pdf",
+              })
+            )
+          }
         />
 
         {/* Document info sidebar (TOC, Layers, Embedded Files). Layers reflect
@@ -4473,7 +4589,7 @@ export default function EditorPage() {
           userLayers={userLayers}
           elements={effectivePage?.elements ?? []}
           selectedElementIds={selectedElementIds}
-          embeddedFiles={embeddedFiles}
+          embeddedFiles={displayedEmbeddedFiles}
           onNavigateToPage={handleNavigateToPage}
           onElementVisibilityChange={handleElementVisibilityChange}
           onElementLockChange={handleElementLockChange}
@@ -4492,6 +4608,9 @@ export default function EditorPage() {
           onOcgRemove={handleOcgRemove}
           ocgBusyIds={ocgBusyIds}
           onDownloadFile={handleDownloadFile}
+          onAddAttachments={handleAddAttachments}
+          onRemoveAttachment={handleRemoveAttachment}
+          attachmentBusy={attachmentBusy}
           currentPageIndex={effectivePageIndex}
           onApplyOutline={handleApplyOutline}
           pageCount={pages.length}

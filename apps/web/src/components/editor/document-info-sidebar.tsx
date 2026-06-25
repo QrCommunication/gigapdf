@@ -63,6 +63,16 @@ interface DocumentInfoSidebarProps {
   onLayerLockChange?: (layerId: string, locked: boolean) => void;
   onAssignElementToLayer?: (elementId: string, layerId: string | null) => void;
   onDownloadFile?: (file: EmbeddedFileObject) => void;
+  /**
+   * Embed one or more files as attachments (incl. Factur-X / ZUGFeRD associated
+   * files). When provided, the embedded-files panel exposes an "add" control and
+   * stays reachable even on a document with no attachments yet.
+   */
+  onAddAttachments?: (files: File[]) => void | Promise<void>;
+  /** Remove an existing attachment. When provided, each file row shows a delete button. */
+  onRemoveAttachment?: (file: EmbeddedFileObject) => void | Promise<void>;
+  /** True while an attachment add/remove is in flight — disables those controls. */
+  attachmentBusy?: boolean;
   currentPageIndex?: number;
   /**
    * Bake an edited outline (TOC). When provided, the TOC panel exposes its
@@ -104,6 +114,9 @@ export function DocumentInfoSidebar({
   onLayerLockChange,
   onAssignElementToLayer,
   onDownloadFile,
+  onAddAttachments,
+  onRemoveAttachment,
+  attachmentBusy,
   currentPageIndex,
   onApplyOutline,
   pageCount,
@@ -122,7 +135,8 @@ export function DocumentInfoSidebar({
     elements.length > 0 ||
     Boolean(documentLanguage) ||
     Boolean(onLayerCreate) ||
-    Boolean(onApplyOutline);
+    Boolean(onApplyOutline) ||
+    Boolean(onAddAttachments);
 
   if (!hasContent) {
     return null;
@@ -208,6 +222,9 @@ export function DocumentInfoSidebar({
           <EmbeddedFilesPanel
             files={embeddedFiles}
             onDownload={onDownloadFile}
+            onAddFiles={onAddAttachments}
+            onRemoveFile={onRemoveAttachment}
+            busy={attachmentBusy}
           />
         </div>
       )}

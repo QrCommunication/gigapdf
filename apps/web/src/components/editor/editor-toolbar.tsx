@@ -57,6 +57,7 @@ import {
   FileText,
   Layers,
   FileSearch,
+  Hash,
   FileCode,
   SquareDashedMousePointer,
   Search,
@@ -80,17 +81,20 @@ import {
   Eraser,
   Check,
   X,
+  Presentation,
 } from "lucide-react";
 import { MergeDialog } from "./merge-dialog";
 import { SplitDialog } from "./split-dialog";
 import { EncryptDialog } from "./encrypt-dialog";
 import { SignDialog } from "./sign-dialog";
 import { MetadataDialog } from "./metadata-dialog";
+import { PageLabelsDialog } from "./page-labels-dialog";
 import { ConvertDialog } from "./convert-dialog";
 import { SearchDialog } from "./search-dialog";
 import { WatermarkDialog } from "./watermark-dialog";
 import { OcrDialog } from "./ocr-dialog";
 import { PdfADialog } from "./pdfa-dialog";
+import { PresentationDialog } from "./presentation-dialog";
 import { CompressDialog } from "./compress-dialog";
 import { HeadersFootersDialog } from "./headers-footers-dialog";
 import { FormattingToolbar } from "./formatting-toolbar";
@@ -609,6 +613,8 @@ export function EditorToolbar({
   const tProperties = useTranslations("editor.properties.text");
   const tHeadersFooters = useTranslations("editor.headersFooters");
   const tRedact = useTranslations("editor.redact");
+  const tPageLabels = useTranslations("editor.pageLabels");
+  const tPresentation = useTranslations("editor.presentation");
   const [showShapeDropdown, setShowShapeDropdown] = useState(false);
   const [showAnnotationDropdown, setShowAnnotationDropdown] = useState(false);
   const [showFieldDropdown, setShowFieldDropdown] = useState(false);
@@ -620,11 +626,13 @@ export function EditorToolbar({
   const [showEncryptDialog, setShowEncryptDialog] = useState(false);
   const [showSignDialog, setShowSignDialog] = useState(false);
   const [showMetadataDialog, setShowMetadataDialog] = useState(false);
+  const [showPageLabelsDialog, setShowPageLabelsDialog] = useState(false);
   const [showConvertDialog, setShowConvertDialog] = useState(false);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [showWatermarkDialog, setShowWatermarkDialog] = useState(false);
   const [showOcrDialog, setShowOcrDialog] = useState(false);
   const [showPdfADialog, setShowPdfADialog] = useState(false);
+  const [showPresentationDialog, setShowPresentationDialog] = useState(false);
   const [showCompressDialog, setShowCompressDialog] = useState(false);
   const [showHeadersFootersDialog, setShowHeadersFootersDialog] =
     useState(false);
@@ -1427,6 +1435,11 @@ export function EditorToolbar({
         onClick={() => setShowMetadataDialog(true)}
       />
       <ToolButton
+        icon={<Hash size={20} />}
+        label={tPageLabels("toolbarLabel")}
+        onClick={() => setShowPageLabelsDialog(true)}
+      />
+      <ToolButton
         icon={<FileCode size={20} />}
         label={t("convert")}
         onClick={() => setShowConvertDialog(true)}
@@ -1468,6 +1481,11 @@ export function EditorToolbar({
         icon={<FileCheck2 size={20} />}
         label="PDF/A"
         onClick={() => setShowPdfADialog(true)}
+      />
+      <ToolButton
+        icon={<Presentation size={20} />}
+        label={tPresentation("toolbarLabel")}
+        onClick={() => setShowPresentationDialog(true)}
       />
       {/* Word-style running headers & footers — a continuous-view feature, so
           the toggle only appears there. The button is active when bands are on;
@@ -1513,6 +1531,11 @@ export function EditorToolbar({
         onClose={() => setShowMetadataDialog(false)}
         currentFile={currentFile ?? null}
       />
+      <PageLabelsDialog
+        isOpen={showPageLabelsDialog}
+        onClose={() => setShowPageLabelsDialog(false)}
+        currentFile={currentFile ?? null}
+      />
       <ConvertDialog
         isOpen={showConvertDialog}
         onClose={() => setShowConvertDialog(false)}
@@ -1547,6 +1570,12 @@ export function EditorToolbar({
         currentFile={currentFile ?? null}
         baseFilename={currentFile?.name}
         documentLanguage={documentLanguage}
+      />
+      <PresentationDialog
+        open={showPresentationDialog}
+        onClose={() => setShowPresentationDialog(false)}
+        currentFile={currentFile ?? null}
+        baseFilename={currentFile?.name}
       />
       <CompressDialog
         open={showCompressDialog}
