@@ -176,8 +176,21 @@ export { flattenForms as flattenFormXObjects } from './forms';
 export type { FormFieldInfo, FillResult, FlattenFormsResult } from './forms';
 
 // Encrypt
-export { encryptPDF, decryptPDF, getPermissions, setPermissions } from './encrypt';
-export type { EncryptOptions, EncryptionAlgorithm, PermissionsResult } from './encrypt';
+export {
+  encryptPDF,
+  decryptPDF,
+  getPermissions,
+  setPermissions,
+  encryptPDFForCertificates,
+  decryptPDFWithPrivateKey,
+  normalizeToDer,
+} from './encrypt';
+export type {
+  EncryptOptions,
+  EncryptionAlgorithm,
+  PermissionsResult,
+  EncryptForCertificatesOptions,
+} from './encrypt';
 
 // Sign — PKCS#7 detached digital signature with a user-provided P12/PFX,
 // optionally PAdES-B-T (RFC 3161 trusted timestamp) via FreeTSA, or PAdES-LTV
@@ -186,12 +199,23 @@ export {
   signPdf,
   signPdfTimestamped,
   signPdfLtv,
+  verifyPdfSignatures,
+  certifyPdf,
   PdfSignInvalidCertificateError,
   PdfSignTimestampError,
   PdfSignLtvError,
   FREETSA_TSA_URL,
 } from './sign';
-export type { SignPdfOptions, SignPdfLtvOptions, SignPdfResult } from './sign';
+export type {
+  SignPdfOptions,
+  SignPdfLtvOptions,
+  SignPdfResult,
+  VerifySignaturesResult,
+  CertifyPdfOptions,
+  DocMdpLevel,
+  SignatureInfo,
+  SignatureReport,
+} from './sign';
 
 // Preview
 export { renderPage, renderThumbnail, renderAllThumbnails } from './preview';
@@ -268,6 +292,7 @@ export {
   PDFInvalidPasswordError,
   PDFPageOutOfRangeError,
   PDFUnsupportedOperationError,
+  PDFInvalidCertificateError,
 } from './errors';
 
 // Coordinate conversion (web ↔ PDF user space, with rotation handling)

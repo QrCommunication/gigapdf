@@ -1483,6 +1483,99 @@
     }
   },
   "editor": {
+    "metadata": {
+      "title": "Métadonnées du PDF",
+      "subtitle": "Consultez ou modifiez les propriétés du document : titre, auteur, mots-clés, préférences d'affichage et XMP.",
+      "close": "Fermer la boîte de dialogue",
+      "tablistLabel": "Options de métadonnées",
+      "tabs": {
+        "view": "Consulter",
+        "edit": "Modifier"
+      },
+      "noFile": "Aucun fichier sélectionné",
+      "loading": "Chargement des métadonnées…",
+      "noFileSelected": "Aucun fichier sélectionné.",
+      "loadFailed": "Échec du chargement des métadonnées.",
+      "updateFailed": "Échec de la mise à jour des métadonnées.",
+      "updateSuccess": "Métadonnées mises à jour. Le téléchargement a démarré.",
+      "saving": "Enregistrement…",
+      "saveDownload": "Enregistrer et télécharger",
+      "readOnlyFields": "Champs en lecture seule",
+      "yes": "Oui",
+      "no": "Non",
+      "fields": {
+        "title": "Titre",
+        "author": "Auteur",
+        "subject": "Sujet",
+        "creator": "Créateur",
+        "producer": "Producteur",
+        "pageCount": "Nombre de pages",
+        "pdfVersion": "Version PDF",
+        "encrypted": "Chiffré",
+        "creationDate": "Date de création",
+        "modificationDate": "Date de modification",
+        "keywords": "Mots-clés"
+      },
+      "placeholders": {
+        "title": "Titre du document",
+        "author": "Nom de l'auteur",
+        "subject": "Sujet du document",
+        "creator": "Application ayant créé le PDF"
+      },
+      "keywords": {
+        "placeholder": "Saisissez puis appuyez sur Entrée ou virgule…",
+        "addAria": "Ajouter un mot-clé",
+        "removeAria": "Supprimer le mot-clé « {keyword} »",
+        "hint": "Appuyez sur Entrée ou virgule pour ajouter. Retour arrière pour supprimer le dernier."
+      },
+      "display": {
+        "title": "Préférences d'affichage",
+        "description": "Indications que le lecteur PDF applique à l'ouverture du document.",
+        "pageLayout": "Disposition des pages",
+        "pageMode": "Mode d'affichage",
+        "direction": "Sens de lecture",
+        "unchanged": "— Inchangé —",
+        "viewerOptions": "Options de la fenêtre",
+        "viewerHint": "Seules les options cochées sont écrites ; les autres restent inchangées."
+      },
+      "layoutOptions": {
+        "SinglePage": "Une seule page",
+        "OneColumn": "Une colonne",
+        "TwoColumnLeft": "Deux colonnes (à gauche)",
+        "TwoColumnRight": "Deux colonnes (à droite)",
+        "TwoPageLeft": "Deux pages (à gauche)",
+        "TwoPageRight": "Deux pages (à droite)"
+      },
+      "modeOptions": {
+        "UseNone": "Aucun panneau",
+        "UseOutlines": "Signets",
+        "UseThumbs": "Miniatures",
+        "FullScreen": "Plein écran",
+        "UseOC": "Calques",
+        "UseAttachments": "Pièces jointes"
+      },
+      "direction": {
+        "L2R": "De gauche à droite",
+        "R2L": "De droite à gauche"
+      },
+      "viewerPrefs": {
+        "hideToolbar": "Masquer la barre d'outils",
+        "hideMenubar": "Masquer la barre de menus",
+        "hideWindowUI": "Masquer les contrôles de la fenêtre",
+        "fitWindow": "Ajuster la fenêtre à la première page",
+        "centerWindow": "Centrer la fenêtre à l'écran",
+        "displayDocTitle": "Afficher le titre du document"
+      },
+      "xmp": {
+        "label": "Métadonnées XMP",
+        "none": "Aucune métadonnée XMP",
+        "title": "XMP avancé",
+        "description": "Modifiez directement le paquet XMP brut. À utiliser avec précaution.",
+        "fieldLabel": "Paquet XMP",
+        "placeholder": "<?xpacket begin … ?> … </x:xmpmeta> <?xpacket end ?>",
+        "hint": "Si renseigné, ce paquet XMP brut remplace les champs synchronisés ci-dessus."
+      }
+    },
     "title": "Éditeur PDF",
     "loading": "Chargement du document...",
     "untitled": "Sans titre",
@@ -1636,9 +1729,16 @@
     },
     "sign": {
       "title": "Signer le document",
+      "headerTitle": "Signature numérique",
       "close": "Fermer",
       "cancel": "Annuler",
+      "done": "Terminé",
       "submit": "Signer",
+      "tabSign": "Signer",
+      "tabCertify": "Certifier",
+      "tabVerify": "Vérifier",
+      "signerNameLabel": "Nom du signataire (optionnel)",
+      "signerNamePlaceholder": "ex. Jean Dupont",
       "certificateLabel": "Certificat (.p12 / .pfx)",
       "passphraseLabel": "Mot de passe du certificat",
       "reasonLabel": "Raison (optionnel)",
@@ -1664,11 +1764,36 @@
       "levelLtv": "Validation long-terme (PAdES-LTV)",
       "levelLtvHint": "Embarque la chaîne de certificats et les preuves de révocation (OCSP/CRL) dans un /DSS ; reste vérifiable après expiration ou révocation du certificat. Implique l'horodatage.",
       "ltvCaHint": "La validation long-terme est surtout utile pour un certificat émis par une autorité de certification (AIA/CDP) ; un certificat auto-signé n'ajoute que l'horodatage du document.",
+      "certifyIntro": "La certification (DocMDP) appose une signature d'auteur et déclare quelles modifications ultérieures sont autorisées.",
+      "certifyButton": "Certifier",
+      "docmdpLabel": "Modifications autorisées après certification (DocMDP)",
+      "docmdpLevel1": "Aucune modification",
+      "docmdpLevel1Hint": "Toute modification ultérieure invalide la certification.",
+      "docmdpLevel2": "Remplissage de formulaire et signatures",
+      "docmdpLevel2Hint": "Autorise le remplissage des champs et l'ajout de signatures.",
+      "docmdpLevel3": "Formulaire, signatures et annotations",
+      "docmdpLevel3Hint": "Autorise aussi l'ajout d'annotations.",
+      "certifySelfSignedHint": "La certification utilise une identité auto-signée générée. Pour une valeur juridique, signez avec un certificat (.p12) émis par une autorité de certification.",
+      "verifyIntro": "Vérifie l'intégrité cryptographique de chaque signature présente dans le document.",
+      "verifyButton": "Vérifier les signatures",
+      "verifyEmpty": "Ce document ne contient aucune signature.",
+      "verifyUnknownSigner": "Signataire inconnu",
+      "verifyValid": "Valide",
+      "verifyValidModified": "Valide — document modifié après signature",
+      "verifyInvalid": "Invalide",
+      "verifyReason": "Raison",
+      "verifyDate": "Date",
+      "verifyAlgorithm": "Algorithme",
+      "verifyCoverage": "Couverture",
+      "verifyCoversWhole": "Tout le document",
+      "verifyCoversPartial": "Partielle (modifié après signature)",
       "errors": {
         "invalidCertificate": "Certificat ou mot de passe invalide.",
         "certificateTooLarge": "Le certificat dépasse la limite de 1 Mo.",
         "tsaUnreachable": "Autorité d'horodatage injoignable. Réessayez ou signez sans horodatage.",
         "ltvUnreachable": "Validation long-terme indisponible : infrastructure d'horodatage/révocation injoignable. Réessayez.",
+        "certifyFailed": "Échec de la certification du document.",
+        "verifyFailed": "Échec de la vérification des signatures.",
         "generic": "Échec de la signature du document."
       },
       "appliedTitle": "Document signé",
@@ -1685,6 +1810,15 @@
       "applyToDocumentHint": "Le document en cours d'édition est remplacé par la version compressée",
       "downloadOnly": "Télécharger seulement",
       "downloadOnlyHint": "Télécharge une copie compressée sans modifier le document",
+      "structureLabel": "Format de sortie",
+      "structureStandard": "Compression standard",
+      "structureStandardHint": "Normalisation + recompression de tous les flux (réduction de taille maximale)",
+      "structureOptimize": "Optimisé (flux d'objets)",
+      "structureOptimizeHint": "Flux d'objets + table de références croisées compacte (ISO 32000, fichier plus léger)",
+      "structureLinearize": "Fast Web View (linéarisé)",
+      "structureLinearizeHint": "Affiche la première page avant la fin du téléchargement (lecture web progressive)",
+      "versionLabel": "Version PDF",
+      "versionHint": "Bannière d'en-tête %PDF appliquée à la sortie optimisée ou linéarisée",
       "resultSmaller": "Document compressé : {before} → {after} (−{percent} %)",
       "resultNotSmaller": "Aucun gain de compression ({before} → {after}) — le document est déjà optimisé",
       "failed": "Échec de la compression.",
@@ -1733,6 +1867,48 @@
       "appliedDescription": "Le texte reconnu a été ajouté au document.",
       "appliedEditableTitle": "Texte OCR éditable appliqué",
       "appliedEditableDescription": "Le texte scanné a été remplacé par du texte éditable : vous pouvez maintenant le corriger."
+    },
+    "pdfa": {
+      "title": "Convertir en PDF/A (archivage)",
+      "close": "Fermer",
+      "variantLabel": "Niveau de conformité",
+      "variantDisabledByUa": "Le PDF/UA produit un PDF balisé accessible (pas un PDF/A) ; le niveau ci-dessus n'est pas appliqué.",
+      "level": {
+        "pdfa-2u": {
+          "label": "PDF/A-2u (recommandé)",
+          "desc": "PDF 1.7 avec chaque glyphe mappé en Unicode (/ToUnicode). Idéal pour l'archivage légal et la recherche plein texte."
+        },
+        "pdfa-2b": {
+          "label": "PDF/A-2b",
+          "desc": "PDF 1.7, fidélité visuelle uniquement. Compatible avec la plupart des PDF modernes."
+        },
+        "pdfa-2a": {
+          "label": "PDF/A-2a (accessible, balisé)",
+          "desc": "Niveau A : PDF/A-2 plus un arbre de structure logique (Tagged PDF) et /Lang pour l'accessibilité."
+        },
+        "pdfa-1b": {
+          "label": "PDF/A-1b (basique)",
+          "desc": "PDF 1.4, le plus contraint : pas de transparence ni JavaScript."
+        },
+        "pdfa-1a": {
+          "label": "PDF/A-1a (accessible, balisé)",
+          "desc": "Niveau A : PDF/A-1b plus un arbre de structure logique (Tagged PDF). Requis pour l'accessibilité."
+        },
+        "pdfa-3b": {
+          "label": "PDF/A-3b",
+          "desc": "PDF/A-2 plus fichiers embarqués (ZUGFeRD, factures électroniques)."
+        }
+      },
+      "pdfUaLabel": "PDF/UA (accessibilité universelle)",
+      "pdfUaHint": "Produit un PDF balisé estampillé de l'identifiant PDF/UA-1 (ISO 14289) pour les technologies d'assistance — à la place du PDF/A.",
+      "languageDetected": "Langue du document pour l'accessibilité : {lang} — inscrite dans /Lang automatiquement.",
+      "languageAuto": "La langue du document est détectée automatiquement et inscrite dans /Lang pour l'accessibilité.",
+      "figureAltsLabel": "Texte alternatif des images (facultatif)",
+      "figureAltsPlaceholder": "Une description par image, dans l'ordre…",
+      "figureAltsHint": "Une ligne par image (figure 1, 2, 3…). Laissez une ligne vide pour conserver un texte par défaut.",
+      "cancel": "Annuler",
+      "convert": "Convertir",
+      "failed": "La conversion a échoué."
     },
     "redact": {
       "apply": "Appliquer la rédaction",

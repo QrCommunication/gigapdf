@@ -13,6 +13,22 @@ import {
 
 type TabId = "encrypt" | "decrypt" | "permissions";
 type Algorithm = "AES-128" | "AES-256";
+/** How a document is protected on the Encrypt tab. */
+type EncryptMethod = "password" | "certificates";
+/** How a protected document is unlocked on the Decrypt tab. */
+type DecryptMethod = "password" | "certificate";
+
+/**
+ * `accept` filter for X.509 recipient certificates (DER or PEM).
+ */
+const CERTIFICATE_ACCEPT =
+  ".cer,.crt,.pem,.der,application/x-x509-ca-cert,application/x-x509-user-cert,application/pkix-cert";
+
+/**
+ * `accept` filter for a PKCS#1 RSA private key (DER or PEM).
+ */
+const PRIVATE_KEY_ACCEPT =
+  ".key,.pem,.der,application/x-pem-file,application/pkcs8";
 
 interface DocumentPermissions {
   print: boolean;
@@ -217,6 +233,214 @@ function FilePicker({ file, onFileChange, disabled }: FilePickerProps) {
   );
 }
 
+interface SegmentedOption<T extends string> {
+  id: T;
+  label: string;
+}
+
+interface SegmentedControlProps<T extends string> {
+  value: T;
+  options: SegmentedOption<T>[];
+  onChange: (value: T) => void;
+  ariaLabel: string;
+  disabled?: boolean;
+}
+
+/** Small radio-group segmented control used to pick the encryption method. */
+function SegmentedControl<T extends string>({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+  disabled,
+}: SegmentedControlProps<T>) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      className="inline-flex rounded-md border border-input bg-background p-0.5"
+    >
+      {options.map((option) => {
+        const isActive = option.id === value;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            role="radio"
+            aria-checked={isActive}
+            disabled={disabled}
+            onClick={() => onChange(option.id)}
+            className={[
+              "px-3 py-1.5 text-sm font-medium rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+              isActive
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            ].join(" ")}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+interface SingleFilePickerProps {
+  id: string;
+  label: string;
+  accept: string;
+  file: File | null;
+  onFileChange: (file: File | null) => void;
+  disabled?: boolean;
+  hint?: string;
+}
+
+/** Generic single-file picker (used for the certificate and the private key). */
+function SingleFilePicker({
+  id,
+  label,
+  accept,
+  file,
+  onFileChange,
+  disabled,
+  hint,
+}: SingleFilePickerProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onFileChange(e.target.files?.[0] ?? null);
+      if (inputRef.current) inputRef.current.value = "";
+    },
+    [onFileChange]
+  );
+
+  return (
+    <div>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={disabled}
+          className="h-10 px-3 rounded-md border border-input bg-background text-sm text-muted-foreground hover:bg-muted transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Choose file
+        </button>
+        <span className="text-sm text-muted-foreground truncate max-w-[240px]">
+          {file ? file.name : "No file selected"}
+        </span>
+      </div>
+      <input
+        ref={inputRef}
+        id={id}
+        type="file"
+        accept={accept}
+        onChange={handleChange}
+        className="sr-only"
+        aria-label={label}
+      />
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+interface MultiFilePickerProps {
+  id: string;
+  label: string;
+  accept: string;
+  files: File[];
+  onFilesChange: (files: File[]) => void;
+  disabled?: boolean;
+  hint?: string;
+}
+
+/** Multi-file picker accumulating the recipient certificates for encryption. */
+function MultiFilePicker({
+  id,
+  label,
+  accept,
+  files,
+  onFilesChange,
+  disabled,
+  hint,
+}: MultiFilePickerProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const picked = Array.from(e.target.files ?? []);
+      if (picked.length > 0) onFilesChange([...files, ...picked]);
+      if (inputRef.current) inputRef.current.value = "";
+    },
+    [files, onFilesChange]
+  );
+
+  const removeAt = useCallback(
+    (index: number) => {
+      onFilesChange(files.filter((_, i) => i !== index));
+    },
+    [files, onFilesChange]
+  );
+
+  return (
+    <div>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={disabled}
+        className="h-10 px-3 rounded-md border border-input bg-background text-sm text-muted-foreground hover:bg-muted transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        Add certificate(s)
+      </button>
+      <input
+        ref={inputRef}
+        id={id}
+        type="file"
+        accept={accept}
+        multiple
+        onChange={handleChange}
+        className="sr-only"
+        aria-label={label}
+      />
+      {files.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {files.map((f, i) => (
+            <li
+              key={`${f.name}-${i}`}
+              className="flex items-center justify-between gap-2 rounded-md border border-input bg-muted/40 px-2.5 py-1.5 text-sm"
+            >
+              <span className="truncate text-foreground">{f.name}</span>
+              <button
+                type="button"
+                onClick={() => removeAt(i)}
+                disabled={disabled}
+                aria-label={`Remove ${f.name}`}
+                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <svg
+                  className="h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
 interface ErrorBannerProps {
   message: string;
 }
@@ -320,8 +544,10 @@ interface EncryptPanelProps {
 }
 
 function EncryptPanel({ file, onFileChange, showFilePicker }: EncryptPanelProps) {
+  const [method, setMethod] = useState<EncryptMethod>("password");
   const [userPassword, setUserPassword] = useState("");
   const [ownerPassword, setOwnerPassword] = useState("");
+  const [recipientCerts, setRecipientCerts] = useState<File[]>([]);
   const [algorithm, setAlgorithm] = useState<Algorithm>("AES-256");
   const [permissions, setPermissions] =
     useState<DocumentPermissions>(ALL_PERMISSIONS);
@@ -350,20 +576,36 @@ function EncryptPanel({ file, onFileChange, showFilePicker }: EncryptPanelProps)
         return;
       }
 
-      if (!userPassword.trim() && !ownerPassword.trim()) {
+      if (
+        method === "password" &&
+        !userPassword.trim() &&
+        !ownerPassword.trim()
+      ) {
         setError("At least one password (user or owner) is required.");
+        return;
+      }
+
+      if (method === "certificates" && recipientCerts.length === 0) {
+        setError("Add at least one recipient certificate.");
         return;
       }
 
       try {
         const blob = await encryptPdf.mutateAsync({
           file: activeFile,
-          options: {
-            userPassword: userPassword.trim() || undefined,
-            ownerPassword: ownerPassword.trim() || undefined,
-            algorithm,
-            permissions: { ...permissions },
-          },
+          options:
+            method === "certificates"
+              ? {
+                  certificates: recipientCerts,
+                  algorithm,
+                  permissions: { ...permissions },
+                }
+              : {
+                  userPassword: userPassword.trim() || undefined,
+                  ownerPassword: ownerPassword.trim() || undefined,
+                  algorithm,
+                  permissions: { ...permissions },
+                },
         });
 
         const filename = activeFile.name.replace(/\.pdf$/i, "") + "_encrypted.pdf";
@@ -371,13 +613,23 @@ function EncryptPanel({ file, onFileChange, showFilePicker }: EncryptPanelProps)
         setSuccess(true);
         setUserPassword("");
         setOwnerPassword("");
+        setRecipientCerts([]);
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Encryption failed.";
         setError(message);
       }
     },
-    [activeFile, userPassword, ownerPassword, algorithm, permissions, encryptPdf]
+    [
+      activeFile,
+      method,
+      userPassword,
+      ownerPassword,
+      recipientCerts,
+      algorithm,
+      permissions,
+      encryptPdf,
+    ]
   );
 
   return (
@@ -391,40 +643,72 @@ function EncryptPanel({ file, onFileChange, showFilePicker }: EncryptPanelProps)
       )}
 
       <div>
-        <FieldLabel htmlFor="encrypt-user-password">
-          User password{" "}
-          <span className="text-muted-foreground font-normal">(optional)</span>
-        </FieldLabel>
-        <TextInput
-          id="encrypt-user-password"
-          type="password"
-          value={userPassword}
-          onChange={setUserPassword}
-          placeholder="Password required to open the PDF"
+        <FieldLabel htmlFor="encrypt-method">Protection method</FieldLabel>
+        <SegmentedControl<EncryptMethod>
+          value={method}
+          onChange={setMethod}
+          ariaLabel="Protection method"
           disabled={encryptPdf.isPending}
+          options={[
+            { id: "password", label: "Password" },
+            { id: "certificates", label: "Certificates" },
+          ]}
         />
-        <p className="mt-1 text-xs text-muted-foreground">
-          Required to open the document.
-        </p>
       </div>
 
-      <div>
-        <FieldLabel htmlFor="encrypt-owner-password">
-          Owner password{" "}
-          <span className="text-muted-foreground font-normal">(optional)</span>
-        </FieldLabel>
-        <TextInput
-          id="encrypt-owner-password"
-          type="password"
-          value={ownerPassword}
-          onChange={setOwnerPassword}
-          placeholder="Password required to change permissions"
+      {method === "password" ? (
+        <>
+          <div>
+            <FieldLabel htmlFor="encrypt-user-password">
+              User password{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </FieldLabel>
+            <TextInput
+              id="encrypt-user-password"
+              type="password"
+              value={userPassword}
+              onChange={setUserPassword}
+              placeholder="Password required to open the PDF"
+              disabled={encryptPdf.isPending}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Required to open the document.
+            </p>
+          </div>
+
+          <div>
+            <FieldLabel htmlFor="encrypt-owner-password">
+              Owner password{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </FieldLabel>
+            <TextInput
+              id="encrypt-owner-password"
+              type="password"
+              value={ownerPassword}
+              onChange={setOwnerPassword}
+              placeholder="Password required to change permissions"
+              disabled={encryptPdf.isPending}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Required to change security settings.
+            </p>
+          </div>
+        </>
+      ) : (
+        <MultiFilePicker
+          id="encrypt-recipient-certs"
+          label="Recipient certificates"
+          accept={CERTIFICATE_ACCEPT}
+          files={recipientCerts}
+          onFilesChange={setRecipientCerts}
           disabled={encryptPdf.isPending}
+          hint="Add the X.509 certificate (.cer, .crt, .pem, .der) of every recipient who should be able to open the document. No shared password is used — only a matching private key can open it."
         />
-        <p className="mt-1 text-xs text-muted-foreground">
-          Required to change security settings.
-        </p>
-      </div>
+      )}
 
       <div>
         <FieldLabel htmlFor="encrypt-algorithm">Encryption algorithm</FieldLabel>
@@ -477,7 +761,10 @@ interface DecryptPanelProps {
 }
 
 function DecryptPanel({ file, onFileChange, showFilePicker }: DecryptPanelProps) {
+  const [method, setMethod] = useState<DecryptMethod>("password");
   const [password, setPassword] = useState("");
+  const [certFile, setCertFile] = useState<File | null>(null);
+  const [keyFile, setKeyFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -494,29 +781,43 @@ function DecryptPanel({ file, onFileChange, showFilePicker }: DecryptPanelProps)
         return;
       }
 
-      if (!password.trim()) {
-        setError("Password is required to decrypt the PDF.");
-        return;
-      }
-
       try {
-        const blob = await decryptPdf.mutateAsync({
-          file,
-          password: password.trim(),
-        });
+        let blob: Blob;
+        if (method === "password") {
+          if (!password.trim()) {
+            setError("Password is required to decrypt the PDF.");
+            return;
+          }
+          blob = await decryptPdf.mutateAsync({ file, password: password.trim() });
+        } else {
+          if (!certFile || !keyFile) {
+            setError("Both a certificate and a private key are required.");
+            return;
+          }
+          blob = await decryptPdf.mutateAsync({
+            file,
+            certificate: certFile,
+            privateKey: keyFile,
+          });
+        }
 
         const filename = file.name.replace(/\.pdf$/i, "") + "_decrypted.pdf";
         downloadBlob(blob, filename);
         setSuccess(true);
         setPassword("");
+        setCertFile(null);
+        setKeyFile(null);
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Decryption failed.";
         setError(message);
       }
     },
-    [file, password, decryptPdf]
+    [file, method, password, certFile, keyFile, decryptPdf]
   );
+
+  const submitDisabled =
+    method === "password" ? !password.trim() : !certFile || !keyFile;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -529,23 +830,60 @@ function DecryptPanel({ file, onFileChange, showFilePicker }: DecryptPanelProps)
       )}
 
       <div>
-        <FieldLabel htmlFor="decrypt-password">Password</FieldLabel>
-        <TextInput
-          id="decrypt-password"
-          type="password"
-          value={password}
-          onChange={setPassword}
-          placeholder="Enter the document password"
+        <FieldLabel htmlFor="decrypt-method">Unlock method</FieldLabel>
+        <SegmentedControl<DecryptMethod>
+          value={method}
+          onChange={setMethod}
+          ariaLabel="Unlock method"
           disabled={decryptPdf.isPending}
+          options={[
+            { id: "password", label: "Password" },
+            { id: "certificate", label: "Certificate" },
+          ]}
         />
       </div>
+
+      {method === "password" ? (
+        <div>
+          <FieldLabel htmlFor="decrypt-password">Password</FieldLabel>
+          <TextInput
+            id="decrypt-password"
+            type="password"
+            value={password}
+            onChange={setPassword}
+            placeholder="Enter the document password"
+            disabled={decryptPdf.isPending}
+          />
+        </div>
+      ) : (
+        <>
+          <SingleFilePicker
+            id="decrypt-certificate"
+            label="Recipient certificate"
+            accept={CERTIFICATE_ACCEPT}
+            file={certFile}
+            onFileChange={setCertFile}
+            disabled={decryptPdf.isPending}
+            hint="Your X.509 certificate (.cer, .crt, .pem, .der)."
+          />
+          <SingleFilePicker
+            id="decrypt-private-key"
+            label="Private key"
+            accept={PRIVATE_KEY_ACCEPT}
+            file={keyFile}
+            onFileChange={setKeyFile}
+            disabled={decryptPdf.isPending}
+            hint="Your PKCS#1 RSA private key (.key, .pem, .der). It is sent with the request only — never stored."
+          />
+        </>
+      )}
 
       {error && <ErrorBanner message={error} />}
       {success && (
         <SuccessBanner message="PDF decrypted successfully. Download started." />
       )}
 
-      <SubmitButton loading={decryptPdf.isPending} disabled={!password.trim()}>
+      <SubmitButton loading={decryptPdf.isPending} disabled={submitDisabled}>
         {decryptPdf.isPending ? "Decrypting…" : "Decrypt & download"}
       </SubmitButton>
     </form>

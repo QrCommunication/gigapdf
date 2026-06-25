@@ -32,6 +32,18 @@ export class PDFInvalidPasswordError extends PDFEngineError {
   }
 }
 
+/**
+ * Raised for public-key (certificate) encryption failures: an unparseable
+ * recipient X.509 certificate (encrypt) or a certificate/private-key pair that
+ * is not a recipient of the document (decrypt). Deliberately generic — callers
+ * must NOT reveal which half of the credential was at fault.
+ */
+export class PDFInvalidCertificateError extends PDFEngineError {
+  constructor(message = 'Invalid certificate or private key') {
+    super(message, 'PDF_INVALID_CERTIFICATE');
+  }
+}
+
 export class PDFPageOutOfRangeError extends PDFEngineError {
   constructor(pageNumber: number, pageCount: number) {
     super(

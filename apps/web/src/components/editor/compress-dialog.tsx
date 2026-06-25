@@ -22,6 +22,17 @@ export interface CompressDialogProps {
 /** What to do with the compressed PDF once produced. */
 type OutputMode = "apply" | "download";
 
+/**
+ * How to serialise the output:
+ *   standard  — default recompression pipeline (maximum size reduction)
+ *   optimize  — compact object streams + xref stream (ISO 32000)
+ *   linearize — linearized / Fast Web View (progressive web rendering)
+ */
+type StructureMode = "standard" | "optimize" | "linearize";
+
+/** %PDF header banner for the optimized / linearized output. */
+type PdfVersion = "1.7" | "2.0";
+
 /** Human-readable byte size (fr-style separator handled by toLocaleString). */
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
@@ -45,6 +56,8 @@ export function CompressDialog({
 }: CompressDialogProps) {
   const t = useTranslations("editor.compress");
   const [outputMode, setOutputMode] = useState<OutputMode>("apply");
+  const [structure, setStructure] = useState<StructureMode>("standard");
+  const [version, setVersion] = useState<PdfVersion>("1.7");
   const compress = useCompressPdf();
 
   // Without an onApplied callback there is nothing to apply the result to —
@@ -54,7 +67,12 @@ export function CompressDialog({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentFile || compress.isPending) return;
-    const result = await compress.mutateAsync({ file: currentFile });
+    const result = await compress.mutateAsync({
+      file: currentFile,
+      optimize: structure === "optimize",
+      linearize: structure === "linearize",
+      version,
+    });
     if (canApplyToDocument && outputMode === "apply") {
       // Hand the compressed binary to the editor so it replaces the live
       // document (and gets persisted) instead of only producing a download.
@@ -122,6 +140,82 @@ export function CompressDialog({
               size: currentFile ? formatBytes(currentFile.size) : "—",
             })}
           </p>
+
+          <fieldset>
+            <legend className="block text-sm font-medium text-foreground mb-1">
+              {t("structureLabel")}
+            </legend>
+            <div className="space-y-2">
+              {(
+                [
+                  {
+                    value: "standard",
+                    label: t("structureStandard"),
+                    hint: t("structureStandardHint"),
+                  },
+                  {
+                    value: "optimize",
+                    label: t("structureOptimize"),
+                    hint: t("structureOptimizeHint"),
+                  },
+                  {
+                    value: "linearize",
+                    label: t("structureLinearize"),
+                    hint: t("structureLinearizeHint"),
+                  },
+                ] as const
+              ).map((option) => (
+                <label
+                  key={option.value}
+                  className={`flex items-start gap-3 px-3 py-2 rounded-md border cursor-pointer transition-colors ${
+                    structure === option.value
+                      ? "border-primary bg-primary/5"
+                      : "border-input hover:bg-muted"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="compress-structure"
+                    value={option.value}
+                    checked={structure === option.value}
+                    onChange={() => setStructure(option.value)}
+                    className="mt-0.5 accent-primary"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-foreground">
+                      {option.label}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {option.hint}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {structure !== "standard" && (
+            <div>
+              <label
+                htmlFor="compress-version"
+                className="block text-sm font-medium text-foreground mb-1"
+              >
+                {t("versionLabel")}
+              </label>
+              <select
+                id="compress-version"
+                value={version}
+                onChange={(e) => setVersion(e.target.value as PdfVersion)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+              >
+                <option value="1.7">PDF 1.7</option>
+                <option value="2.0">PDF 2.0</option>
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("versionHint")}
+              </p>
+            </div>
+          )}
 
           {canApplyToDocument && (
             <fieldset>

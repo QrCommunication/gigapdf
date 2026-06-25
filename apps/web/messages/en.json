@@ -1483,6 +1483,99 @@
     }
   },
   "editor": {
+    "metadata": {
+      "title": "PDF Metadata",
+      "subtitle": "View or edit document properties such as title, author, keywords, display preferences and XMP.",
+      "close": "Close dialog",
+      "tablistLabel": "Metadata options",
+      "tabs": {
+        "view": "View",
+        "edit": "Edit"
+      },
+      "noFile": "No file selected",
+      "loading": "Loading metadata…",
+      "noFileSelected": "No file selected.",
+      "loadFailed": "Failed to load metadata.",
+      "updateFailed": "Failed to update metadata.",
+      "updateSuccess": "Metadata updated successfully. Download started.",
+      "saving": "Saving…",
+      "saveDownload": "Save & download",
+      "readOnlyFields": "Read-only fields",
+      "yes": "Yes",
+      "no": "No",
+      "fields": {
+        "title": "Title",
+        "author": "Author",
+        "subject": "Subject",
+        "creator": "Creator",
+        "producer": "Producer",
+        "pageCount": "Page count",
+        "pdfVersion": "PDF version",
+        "encrypted": "Encrypted",
+        "creationDate": "Creation date",
+        "modificationDate": "Modification date",
+        "keywords": "Keywords"
+      },
+      "placeholders": {
+        "title": "Document title",
+        "author": "Author name",
+        "subject": "Document subject",
+        "creator": "Application that created the PDF"
+      },
+      "keywords": {
+        "placeholder": "Type and press Enter or comma…",
+        "addAria": "Add keyword",
+        "removeAria": "Remove keyword \"{keyword}\"",
+        "hint": "Press Enter or comma to add. Backspace to remove the last tag."
+      },
+      "display": {
+        "title": "Display preferences",
+        "description": "Hints a PDF reader honours when it opens the document.",
+        "pageLayout": "Page layout",
+        "pageMode": "Page mode",
+        "direction": "Reading direction",
+        "unchanged": "— Unchanged —",
+        "viewerOptions": "Window options",
+        "viewerHint": "Only ticked options are written; the others stay unchanged."
+      },
+      "layoutOptions": {
+        "SinglePage": "Single page",
+        "OneColumn": "One column",
+        "TwoColumnLeft": "Two columns (left)",
+        "TwoColumnRight": "Two columns (right)",
+        "TwoPageLeft": "Two pages (left)",
+        "TwoPageRight": "Two pages (right)"
+      },
+      "modeOptions": {
+        "UseNone": "No panel",
+        "UseOutlines": "Bookmarks",
+        "UseThumbs": "Thumbnails",
+        "FullScreen": "Full screen",
+        "UseOC": "Layers",
+        "UseAttachments": "Attachments"
+      },
+      "direction": {
+        "L2R": "Left to right",
+        "R2L": "Right to left"
+      },
+      "viewerPrefs": {
+        "hideToolbar": "Hide the tool bar",
+        "hideMenubar": "Hide the menu bar",
+        "hideWindowUI": "Hide window controls",
+        "fitWindow": "Resize window to the first page",
+        "centerWindow": "Centre the window on screen",
+        "displayDocTitle": "Show the document title"
+      },
+      "xmp": {
+        "label": "XMP metadata",
+        "none": "No XMP metadata",
+        "title": "Advanced XMP",
+        "description": "Edit the raw XMP packet directly. Use with care.",
+        "fieldLabel": "XMP packet",
+        "placeholder": "<?xpacket begin … ?> … </x:xmpmeta> <?xpacket end ?>",
+        "hint": "When set, this raw XMP packet overrides the synced fields above."
+      }
+    },
     "title": "PDF Editor",
     "loading": "Loading document...",
     "untitled": "Untitled",
@@ -1636,9 +1729,16 @@
     },
     "sign": {
       "title": "Sign document",
+      "headerTitle": "Digital signature",
       "close": "Close",
       "cancel": "Cancel",
+      "done": "Done",
       "submit": "Sign",
+      "tabSign": "Sign",
+      "tabCertify": "Certify",
+      "tabVerify": "Verify",
+      "signerNameLabel": "Signer name (optional)",
+      "signerNamePlaceholder": "e.g. Jane Doe",
       "certificateLabel": "Certificate (.p12 / .pfx)",
       "passphraseLabel": "Certificate password",
       "reasonLabel": "Reason (optional)",
@@ -1664,11 +1764,36 @@
       "levelLtv": "Long-term validation (PAdES-LTV)",
       "levelLtvHint": "Embeds the certificate chain and revocation proof (OCSP/CRL) in a /DSS; stays verifiable after the certificate expires or is revoked. Implies timestamping.",
       "ltvCaHint": "Long-term validation is most useful for a certificate issued by a certificate authority (AIA/CDP); a self-signed certificate only adds the document timestamp.",
+      "certifyIntro": "Certifying (DocMDP) applies an author signature and declares which later changes are permitted.",
+      "certifyButton": "Certify",
+      "docmdpLabel": "Changes permitted after certification (DocMDP)",
+      "docmdpLevel1": "No changes",
+      "docmdpLevel1Hint": "Any later change invalidates the certification.",
+      "docmdpLevel2": "Form filling and signatures",
+      "docmdpLevel2Hint": "Allows filling form fields and adding signatures.",
+      "docmdpLevel3": "Form filling, signatures and annotations",
+      "docmdpLevel3Hint": "Also allows adding annotations.",
+      "certifySelfSignedHint": "Certification uses a generated self-signed identity. For legal-grade trust, sign with a certificate (.p12) issued by a certificate authority.",
+      "verifyIntro": "Cryptographically verifies the integrity of every signature in the document.",
+      "verifyButton": "Verify signatures",
+      "verifyEmpty": "This document has no signatures.",
+      "verifyUnknownSigner": "Unknown signer",
+      "verifyValid": "Valid",
+      "verifyValidModified": "Valid — document modified after signing",
+      "verifyInvalid": "Invalid",
+      "verifyReason": "Reason",
+      "verifyDate": "Date",
+      "verifyAlgorithm": "Algorithm",
+      "verifyCoverage": "Coverage",
+      "verifyCoversWhole": "Whole document",
+      "verifyCoversPartial": "Partial (modified after signing)",
       "errors": {
         "invalidCertificate": "Invalid certificate or password.",
         "certificateTooLarge": "The certificate exceeds the 1 MB limit.",
         "tsaUnreachable": "Timestamp authority unreachable. Try again or sign without a timestamp.",
         "ltvUnreachable": "Long-term validation unavailable: the timestamp/revocation infrastructure was unreachable. Try again.",
+        "certifyFailed": "Failed to certify the document.",
+        "verifyFailed": "Failed to verify the signatures.",
         "generic": "Failed to sign the document."
       },
       "appliedTitle": "Document signed",
@@ -1685,6 +1810,15 @@
       "applyToDocumentHint": "The document you are editing is replaced with the compressed version",
       "downloadOnly": "Download only",
       "downloadOnlyHint": "Downloads a compressed copy without modifying the document",
+      "structureLabel": "Output format",
+      "structureStandard": "Standard compression",
+      "structureStandardHint": "Normalization + recompression of every stream (maximum size reduction)",
+      "structureOptimize": "Optimized (object streams)",
+      "structureOptimizeHint": "Object streams + a compact cross-reference stream (ISO 32000, smaller file)",
+      "structureLinearize": "Fast Web View (linearized)",
+      "structureLinearizeHint": "Shows the first page before the full download completes (progressive web viewing)",
+      "versionLabel": "PDF version",
+      "versionHint": "%PDF header banner applied to the optimized or linearized output",
       "resultSmaller": "Document compressed: {before} → {after} (−{percent}%)",
       "resultNotSmaller": "No compression gain ({before} → {after}) — the document is already optimized",
       "failed": "Compression failed.",
@@ -1733,6 +1867,48 @@
       "appliedDescription": "The recognized text has been added to the document.",
       "appliedEditableTitle": "Editable OCR text applied",
       "appliedEditableDescription": "The scanned text has been replaced with editable text: you can now correct it."
+    },
+    "pdfa": {
+      "title": "Convert to PDF/A (archiving)",
+      "close": "Close",
+      "variantLabel": "Conformance level",
+      "variantDisabledByUa": "PDF/UA produces an accessible Tagged PDF (not PDF/A); the level above is not applied.",
+      "level": {
+        "pdfa-2u": {
+          "label": "PDF/A-2u (recommended)",
+          "desc": "PDF 1.7 with every glyph Unicode-mapped (/ToUnicode). Best default for legal archiving and full-text search."
+        },
+        "pdfa-2b": {
+          "label": "PDF/A-2b",
+          "desc": "PDF 1.7, visual fidelity only. Compatible with most modern PDFs."
+        },
+        "pdfa-2a": {
+          "label": "PDF/A-2a (accessible, tagged)",
+          "desc": "Level A: PDF/A-2 plus a logical structure tree (Tagged PDF) and /Lang for accessibility."
+        },
+        "pdfa-1b": {
+          "label": "PDF/A-1b (basic)",
+          "desc": "PDF 1.4, the most constrained: no transparency or JavaScript."
+        },
+        "pdfa-1a": {
+          "label": "PDF/A-1a (accessible, tagged)",
+          "desc": "Level A: PDF/A-1b plus a logical structure tree (Tagged PDF). Required for accessibility."
+        },
+        "pdfa-3b": {
+          "label": "PDF/A-3b",
+          "desc": "PDF/A-2 plus embedded file attachments (ZUGFeRD, electronic invoices)."
+        }
+      },
+      "pdfUaLabel": "PDF/UA (universal accessibility)",
+      "pdfUaHint": "Produce a Tagged PDF stamped with the PDF/UA-1 identifier (ISO 14289) for assistive technology — instead of PDF/A.",
+      "languageDetected": "Document language for accessibility: {lang} — written to /Lang automatically.",
+      "languageAuto": "Document language is detected automatically and written to /Lang for accessibility.",
+      "figureAltsLabel": "Image alternate text (optional)",
+      "figureAltsPlaceholder": "One description per image, in order…",
+      "figureAltsHint": "One line per image (figure 1, 2, 3…). Leave a line blank to keep a generic placeholder.",
+      "cancel": "Cancel",
+      "convert": "Convert",
+      "failed": "Conversion failed."
     },
     "redact": {
       "apply": "Apply redaction",

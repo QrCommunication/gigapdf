@@ -16,7 +16,11 @@
  * {@link PdfSignInvalidCertificateError} — nothing about the credential leaks.
  */
 
-import type { GigaPdfDoc } from '@qrcommunication/gigapdf-lib';
+import type {
+  GigaPdfDoc,
+  SignatureInfo,
+  SignatureReport,
+} from '@qrcommunication/gigapdf-lib';
 import { getEngine } from '../wasm';
 import { isBlockedFetchUrl } from '../convert/html-to-pdf';
 import { PDFCorruptedError, PDFEngineError } from '../errors';
@@ -431,6 +435,156 @@ export async function signPdfLtv(
       throw new PdfSignInvalidCertificateError();
     }
     throw new PDFEngineError('Failed to sign PDF', 'PDF_SIGN_FAILED');
+  } finally {
+    doc.close();
+  }
+}
+
+// ── List & verify signatures ───────────────────────────────────────────────────
+
+/** Re-exported lib types so callers can stay on `@giga-pdf/pdf-engine`. */
+export type { SignatureInfo, SignatureReport };
+
+export interface VerifySignaturesResult {
+  /** Metadata for every signature field (`/T`, `/Name`, `/Reason`, `/M`, `/ByteRange`…). */
+  signatures: SignatureInfo[];
+  /** The cryptographic verdict for every signature (integrity, RSA check, coverage). */
+  reports: SignatureReport[];
+}
+
+/**
+ * Lists every signature on a PDF and cryptographically verifies each one.
+ *
+ * `signatures()` returns the per-field metadata (signer name, reason, location,
+ * date, sub-filter, byte range); `verifySignatures()` returns the verdict
+ * (`byteRangeOk`, `digestOk`, `signatureOk`, `coversWholeDocument`, signer CN,
+ * algorithm). The two arrays are keyed by `fieldName` so a caller can join them.
+ *
+ * Read-only and fully offline: no TSA, OCSP or CRL round trip happens here, so
+ * there is NO SSRF surface (unlike {@link signPdfLtv}). A document with no
+ * signatures yields two empty arrays.
+ *
+ * @throws {PDFCorruptedError} input bytes are not a loadable PDF
+ * @throws {PDFEngineError} internal verification failure (code PDF_VERIFY_FAILED)
+ */
+export async function verifyPdfSignatures(
+  pdfBytes: Uint8Array,
+): Promise<VerifySignaturesResult> {
+  const giga = await getEngine();
+
+  let doc: GigaPdfDoc;
+  try {
+    doc = giga.open(pdfBytes);
+  } catch (err) {
+    throw new PDFCorruptedError(
+      `Failed to load PDF for signature verification: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  try {
+    const signatures = doc.signatures();
+    // verifySignatures() must receive the ORIGINAL bytes the document was opened
+    // from — it recomputes the SHA-256 of each /ByteRange against them.
+    const reports = doc.verifySignatures(pdfBytes);
+    return { signatures, reports };
+  } catch (err) {
+    if (err instanceof PDFEngineError) throw err;
+    throw new PDFEngineError('Failed to verify PDF signatures', 'PDF_VERIFY_FAILED');
+  } finally {
+    doc.close();
+  }
+}
+
+// ── Certify (DocMDP) ───────────────────────────────────────────────────────────
+
+/** Certify random seed: ≥ 256 bytes per the engine's self-signed-ID contract. */
+const CERTIFY_RANDOM_BYTES = 256;
+/** Self-signed certification ID validity window, in years. */
+const CERTIFY_VALIDITY_YEARS = 10;
+
+/**
+ * DocMDP permission level declared by a certifying signature:
+ * - `1` — no changes are permitted after certification.
+ * - `2` — form filling and further signing are permitted.
+ * - `3` — form filling, signing and annotations are permitted.
+ */
+export type DocMdpLevel = 1 | 2 | 3;
+
+export interface CertifyPdfOptions {
+  /** DocMDP level: which later changes the certification permits (1 | 2 | 3). */
+  docmdpLevel: DocMdpLevel;
+  /** `/Reason` — why the document is being certified. */
+  reason?: string;
+  /** `/Name` — human-readable certifier name. */
+  signerName?: string;
+}
+
+/** ASN.1 UTCTime (`YYMMDDHHMMSSZ`, two-digit year) for the self-signed cert validity. */
+function utcTime(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${p(d.getUTCFullYear() % 100)}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}` +
+    `${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`
+  );
+}
+
+/**
+ * Builds the engine's tab-separated certify field string
+ * `name⇥reason⇥date⇥notBefore⇥notAfter` (the same layout `sign`/`certify` parse).
+ * Tabs and newlines are stripped from the free-text values so they can't break
+ * the field delimiter.
+ */
+function buildCertifyFields(name: string, reason: string): string {
+  const clean = (s: string) => s.replace(/[\t\r\n]/g, ' ');
+  const now = new Date();
+  const notAfter = new Date(now);
+  notAfter.setUTCFullYear(notAfter.getUTCFullYear() + CERTIFY_VALIDITY_YEARS);
+  return [clean(name), clean(reason), pdfDateNow(), utcTime(now), utcTime(notAfter)].join(
+    '\t',
+  );
+}
+
+/**
+ * **Certifies** a PDF (DocMDP / author signature): like {@link signPdf} but also
+ * declares, via the `/DocMDP` transform parameters, which later modifications are
+ * permitted ({@link CertifyPdfOptions.docmdpLevel}). A viewer flags any change
+ * that violates the declared level as invalidating the certification.
+ *
+ * The signing identity is a freshly generated **self-signed** digital ID (the
+ * engine's `certify` takes no PKCS#12), so the certification carries no chain of
+ * trust to a CA — use {@link signPdf} with a real `.p12` when legal-grade trust is
+ * required. Like every signature here it covers the whole document via /ByteRange
+ * and MUST be the last operation in a workflow.
+ *
+ * Fully offline (self-signed, no TSA/OCSP/CRL) → NO SSRF surface.
+ *
+ * @throws {PDFCorruptedError} input bytes are not a loadable PDF
+ * @throws {PDFEngineError} internal certification failure (code PDF_CERTIFY_FAILED)
+ */
+export async function certifyPdf(
+  pdfBytes: Uint8Array,
+  opts: CertifyPdfOptions,
+): Promise<SignPdfResult> {
+  const giga = await getEngine();
+
+  let doc: GigaPdfDoc;
+  try {
+    doc = giga.open(pdfBytes);
+  } catch (err) {
+    throw new PDFCorruptedError(
+      `Failed to load PDF for certification: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  try {
+    const random = new Uint8Array(CERTIFY_RANDOM_BYTES);
+    globalThis.crypto.getRandomValues(random);
+    const fields = buildCertifyFields(opts.signerName ?? '', opts.reason ?? '');
+    const signed = doc.certify(fields, random, opts.docmdpLevel);
+    return { bytes: signed };
+  } catch (err) {
+    if (err instanceof PDFEngineError) throw err;
+    throw new PDFEngineError('Failed to certify PDF', 'PDF_CERTIFY_FAILED');
   } finally {
     doc.close();
   }
