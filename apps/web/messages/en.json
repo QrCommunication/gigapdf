@@ -2196,7 +2196,11 @@
       "addPolygon": "Add polygon",
       "addPolyline": "Add polyline",
       "addCaret": "Add caret",
-      "addHint": "The shape is placed at the center of the page — move it with the selection tool."
+      "addHint": "The shape is placed at the center of the page — move it with the selection tool.",
+      "addedTitle": "Annotation added",
+      "addedDescription": "Shape placed at the center — move and resize it.",
+      "addErrorTitle": "Add failed",
+      "addErrorDescription": "The annotation could not be added."
     },
     "toc": {
       "title": "Table of Contents",
@@ -2216,7 +2220,16 @@
       "appliedTitle": "Table of contents updated",
       "appliedDescription": "The bookmarks were saved to the document.",
       "errorTitle": "Update failed",
-      "errorDescription": "The table of contents could not be saved. Please try again."
+      "errorDescription": "The table of contents could not be saved. Please try again.",
+      "detectChapters": "Detect chapters",
+      "detecting": "Detecting…",
+      "detectHint": "No embedded bookmarks. Detect chapters from the document's headings.",
+      "detectedTitle": "Detected chapters",
+      "saveAsBookmarks": "Save as bookmarks",
+      "redetect": "Detect again",
+      "clearDetected": "Clear",
+      "detectEmpty": "No chapters detected. This document has no recognizable headings.",
+      "detectError": "Chapter detection failed. Please try again."
     },
     "layers": {
       "title": "Layers",

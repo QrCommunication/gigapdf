@@ -23,7 +23,16 @@
  */
 
 import React from "react";
-import type { PageObject, Element, Bounds, Tool, TextStyle } from "@giga-pdf/types";
+import type {
+  PageObject,
+  Element,
+  Bounds,
+  Tool,
+  TextStyle,
+  ShapeType,
+  AnnotationType,
+  FieldCreationKind,
+} from "@giga-pdf/types";
 import { PageChrome } from "./page-chrome";
 import { PageCanvasHost } from "./page-canvas-host";
 import { EditorCanvas, type EditorCanvasHandle } from "./editor-canvas";
@@ -77,6 +86,22 @@ export interface PageSlotProps {
     wantVariant?: { bold?: boolean; italic?: boolean },
     text?: string,
   ) => string | null;
+  /** Forwarded to the active page's EditorCanvas: shape-tool variant. */
+  shapeType?: ShapeType;
+  /** Forwarded to the active page's EditorCanvas: annotation-tool variant. */
+  annotationType?: AnnotationType;
+  /** Forwarded to the active page's EditorCanvas: form-field creation variant. */
+  fieldKind?: FieldCreationKind;
+  /** Forwarded to the active page's EditorCanvas: stroke colour for new shapes/annotations. */
+  strokeColor?: string;
+  /** Forwarded to the active page's EditorCanvas: fill colour for new shapes. */
+  fillColor?: string;
+  /** Forwarded to the active page's EditorCanvas: stroke width for new shapes/annotations. */
+  strokeWidth?: number;
+  /** Forwarded to the active page's EditorCanvas: hyperlink click. */
+  onHyperlinkClick?: (linkUrl?: string | null, linkPage?: number | null) => void;
+  /** Forwarded to the active page's EditorCanvas: live redaction-marker count. */
+  onRedactionMarksChanged?: (count: number) => void;
   /** Forwarded to the active page's EditorCanvas: element created at mouse. */
   onElementAdded?: (element: Element) => void;
   /** Forwarded to the active page's EditorCanvas: element moved/resized/retyped. */
@@ -133,6 +158,14 @@ function PageSlotImpl({
   onMarginsCommit,
   onActivate,
   getFontFaceName,
+  shapeType,
+  annotationType,
+  fieldKind,
+  strokeColor,
+  fillColor,
+  strokeWidth,
+  onHyperlinkClick,
+  onRedactionMarksChanged,
   onElementAdded,
   onElementModified,
   onElementReordered,
@@ -182,6 +215,14 @@ function PageSlotImpl({
             height={slot.height}
             tool={tool ?? "select"}
             {...(getFontFaceName ? { getFontFaceName } : {})}
+            {...(shapeType !== undefined ? { shapeType } : {})}
+            {...(annotationType !== undefined ? { annotationType } : {})}
+            {...(fieldKind !== undefined ? { fieldKind } : {})}
+            {...(strokeColor !== undefined ? { strokeColor } : {})}
+            {...(fillColor !== undefined ? { fillColor } : {})}
+            {...(strokeWidth !== undefined ? { strokeWidth } : {})}
+            {...(onHyperlinkClick ? { onHyperlinkClick } : {})}
+            {...(onRedactionMarksChanged ? { onRedactionMarksChanged } : {})}
             {...(onElementAdded ? { onElementAdded } : {})}
             {...(onElementModified ? { onElementModified } : {})}
             {...(onElementReordered ? { onElementReordered } : {})}

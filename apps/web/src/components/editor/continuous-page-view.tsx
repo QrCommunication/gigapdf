@@ -39,13 +39,26 @@ import React, {
   useState,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { PageObject, Element, Bounds, Tool, TextStyle } from "@giga-pdf/types";
+import type {
+  PageObject,
+  Element,
+  Bounds,
+  Tool,
+  TextStyle,
+  ShapeType,
+  AnnotationType,
+  FieldCreationKind,
+} from "@giga-pdf/types";
 import { useViewStore } from "@giga-pdf/editor";
 import { clientLogger } from "@/lib/client-logger";
 import { PageSlot } from "./page-slot";
 import type { EditorCanvasHandle } from "./editor-canvas";
 import { PageRenderPool } from "./lib/page-render-pool";
-import { computePageLayout, pageIndexAtScroll } from "./lib/page-layout";
+import {
+  computePageLayout,
+  effectivePagePoints,
+  pageIndexAtScroll,
+} from "./lib/page-layout";
 import { readAllPageMargins, type PageMargins } from "./lib/page-margins";
 import type { RulerUnit } from "./lib/ruler-ticks";
 
@@ -57,6 +70,12 @@ const SETTLE_MS = 120;
 
 /** px/ms scroll speed above which we treat the motion as a fast fling. */
 const FAST_SCROLL_VELOCITY = 1.5;
+
+/** Zoom hard bounds (10%–800%), matching the single-page EditorCanvas. */
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 8;
+/** Comfortable breathing room around the page when computing a fit zoom (px). */
+const FIT_PADDING_PX = 32;
 
 /** Vertical alignment of a page when programmatically scrolled into view. */
 export type ScrollAlign = "start" | "center";
@@ -100,6 +119,39 @@ export interface ContinuousPageViewProps {
     wantVariant?: { bold?: boolean; italic?: boolean },
     text?: string,
   ) => string | null;
+  /** Shape variant for the shape tool — forwarded to the ACTIVE page's EditorCanvas. */
+  shapeType?: ShapeType;
+  /** Annotation variant for the annotate tool — forwarded to the ACTIVE page's EditorCanvas. */
+  annotationType?: AnnotationType;
+  /** Form-field creation variant — forwarded to the ACTIVE page's EditorCanvas. */
+  fieldKind?: FieldCreationKind;
+  /** Stroke colour for new shapes/annotations — forwarded to the ACTIVE page's EditorCanvas. */
+  strokeColor?: string;
+  /** Fill colour for new shapes — forwarded to the ACTIVE page's EditorCanvas. */
+  fillColor?: string;
+  /** Stroke width for new shapes/annotations — forwarded to the ACTIVE page's EditorCanvas. */
+  strokeWidth?: number;
+  /**
+   * Hyperlink clicked on the ACTIVE page — forwarded to the ACTIVE page's
+   * EditorCanvas (same contract as the single-page editor).
+   */
+  onHyperlinkClick?: (linkUrl?: string | null, linkPage?: number | null) => void;
+  /**
+   * Live redaction-marker count on the ACTIVE page — forwarded to the ACTIVE
+   * page's EditorCanvas so the toolbar can reflect the count / enable Apply.
+   */
+  onRedactionMarksChanged?: (count: number) => void;
+  /**
+   * Adaptive fit-zoom mode (page/width). Unlike the single-page editor — where
+   * EditorCanvas owns the scroll viewport — the continuous SCROLLER owns the
+   * viewport here, so the fit zoom is computed in THIS component against the
+   * active page's points and reported via onFitZoomChange. It is deliberately
+   * NOT forwarded to the embedded EditorCanvas, whose `embedded` mode forces
+   * fitMode=null (forwarding it there would be a no-op).
+   */
+  fitMode?: "page" | "width" | null;
+  /** Zoom recomputed by a fit mode — same contract as EditorCanvas.onFitZoomChange. */
+  onFitZoomChange?: (zoom: number) => void;
   /**
    * Element CREATED at mouse on the ACTIVE page. Wired to the same page.tsx
    * handler as the single-page editor (scene graph + queue + apply-elements
@@ -158,6 +210,16 @@ function ContinuousPageViewImpl(
     rulerUnit = "mm",
     onMarginsCommit,
     getFontFaceName,
+    shapeType,
+    annotationType,
+    fieldKind,
+    strokeColor,
+    fillColor,
+    strokeWidth,
+    onHyperlinkClick,
+    onRedactionMarksChanged,
+    fitMode,
+    onFitZoomChange,
     onElementAdded,
     onElementModified,
     onElementReordered,
@@ -170,6 +232,14 @@ function ContinuousPageViewImpl(
   ref: React.ForwardedRef<ContinuousPageViewHandle>,
 ) {
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Mirror of the current zoom so the fit-zoom effect can compare against it
+  // without re-subscribing its ResizeObserver on every zoom change (same
+  // pattern the single-page EditorCanvas uses for its own fit logic).
+  const zoomRef = useRef(zoom);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
 
   // Layout is pure geometry: recompute only when the page set or zoom changes.
   const { slots, totalHeight } = useMemo(
@@ -374,6 +444,52 @@ function ContinuousPageViewImpl(
     return () => ro.disconnect();
   }, [setViewport]);
 
+  // ── Adaptive fit-zoom (page/width) for the CONTINUOUS scroller ─────────────
+  // The single-page editor lets EditorCanvas fit itself, but in embedded mode
+  // that is disabled (the scroller owns zoom). So when a fit mode is active we
+  // compute the zoom HERE — from the scroller viewport and the ACTIVE page's
+  // points — and report it via onFitZoomChange (page.tsx routes it to setZoom).
+  // Recomputed on viewport resize and when the active page / page set changes;
+  // a manual zoom clears fitMode upstream, which unsubscribes this effect.
+  useEffect(() => {
+    if (!fitMode || !onFitZoomChange) {
+      return;
+    }
+    const root = scrollRef.current;
+    const activePage = pages[activePageIndex];
+    if (!root || !activePage) {
+      return;
+    }
+    const recompute = () => {
+      const { w: pageW, h: pageH } = effectivePagePoints(activePage);
+      if (pageW <= 0 || pageH <= 0) {
+        return;
+      }
+      const availW = root.clientWidth - FIT_PADDING_PX * 2;
+      const availH = root.clientHeight - FIT_PADDING_PX * 2;
+      if (availW <= 0 || availH <= 0) {
+        return;
+      }
+      const raw =
+        fitMode === "width"
+          ? availW / pageW
+          : Math.min(availW / pageW, availH / pageH);
+      const fit = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, raw));
+      // Compare against the live zoom (ref) to avoid a feedback loop: only push
+      // a change when it actually differs.
+      if (Math.abs(fit - zoomRef.current) > 0.001) {
+        onFitZoomChange(fit);
+      }
+    };
+    recompute();
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const ro = new ResizeObserver(recompute);
+    ro.observe(root);
+    return () => ro.disconnect();
+  }, [fitMode, onFitZoomChange, pages, activePageIndex]);
+
   // ── rAF-throttled scroll handler: focus page + fling detection ─────────────
   const rafRef = useRef<number | null>(null);
   const lastScrollTopRef = useRef(0);
@@ -509,6 +625,16 @@ function ContinuousPageViewImpl(
                   margins={pageMargins[index] ?? null}
                   {...(onMarginsCommit ? { onMarginsCommit } : {})}
                   {...(getFontFaceName ? { getFontFaceName } : {})}
+                  {...(isActive ? { shapeType } : {})}
+                  {...(isActive ? { annotationType } : {})}
+                  {...(isActive ? { fieldKind } : {})}
+                  {...(isActive ? { strokeColor } : {})}
+                  {...(isActive ? { fillColor } : {})}
+                  {...(isActive ? { strokeWidth } : {})}
+                  {...(isActive && onHyperlinkClick ? { onHyperlinkClick } : {})}
+                  {...(isActive && onRedactionMarksChanged
+                    ? { onRedactionMarksChanged }
+                    : {})}
                   {...(isActive ? { documentId } : {})}
                   {...(isActive && tool ? { tool } : {})}
                   {...(isActive && onElementAdded ? { onElementAdded } : {})}
