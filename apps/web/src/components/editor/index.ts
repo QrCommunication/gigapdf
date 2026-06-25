@@ -29,6 +29,8 @@ export { FormsPanel } from "./forms-panel";
 export type { FormsPanelProps } from "./forms-panel";
 export { MetadataDialog } from "./metadata-dialog";
 export type { MetadataDialogProps } from "./metadata-dialog";
+export { PageLabelsDialog } from "./page-labels-dialog";
+export type { PageLabelsDialogProps } from "./page-labels-dialog";
 export { ConvertDialog } from "./convert-dialog";
 export { ContentEditLayer } from "./content-edit-layer";
 export type { ContentEditLayerProps, ElementModification } from "./content-edit-layer";

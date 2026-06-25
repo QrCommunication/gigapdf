@@ -60,6 +60,26 @@ export interface PropertiesPanelProps {
    * rendu 1:1 avec le PDF.
    */
   documentFonts?: DocumentFontOption[];
+  /**
+   * 1-based number of the active page. When provided together with
+   * {@link getDocumentBytes}, the panel shows the "Page boxes" section — an
+   * editor for the five PDF boundary boxes (Media/Crop/Bleed/Trim/Art) of this
+   * page. Absent ⇒ section hidden (backward-compatible default).
+   */
+  pageNumber?: number;
+  /**
+   * Returns the current PDF bytes (the editor's prepared blob), or `null` when
+   * none is available. Used by the "Page boxes" section to read (`mode=get`) and
+   * write (`mode=set`) the page boundary boxes via `/api/pdf/page-boxes`.
+   * Absent ⇒ section hidden.
+   */
+  getDocumentBytes?: () => Promise<Blob | null>;
+  /**
+   * Called with the modified PDF bytes after a page box is written, so the
+   * editor can adopt the new document. Absent ⇒ the box is still written
+   * server-side, but the editor keeps its current bytes until the next reload.
+   */
+  onPageBoxesApplied?: (bytes: Uint8Array) => void;
 }
 
 /** Charset AcroForm sûr pour un nom de champ (lettres, chiffres, _ . -). */
@@ -973,6 +993,285 @@ function FormFieldProperties({
 /**
  * Panel affichant les propriétés de l'élément sélectionné.
  */
+// ============= Boîtes de page (Media/Crop/Bleed/Trim/Art) =============
+
+/** One of the five PDF page boundary boxes (ISO 32000-1 §14.11.2). */
+type PageBoxKindLocal = "media" | "crop" | "bleed" | "trim" | "art";
+/** An effective box rect `[x0, y0, x1, y1]` in user-space points. */
+type Rect4 = [number, number, number, number];
+/** Editable origin+size draft for one box (strings, since they back inputs). */
+type BoxDraft = { x: string; y: string; w: string; h: string };
+
+/**
+ * The route's `get` payload shape: the five effective rects plus the per-box
+ * `declared` flags. Mirrors {@link import("@qrcommunication/gigapdf-lib").PageBoxes}
+ * (declared locally so this client component never imports the WASM package).
+ */
+interface PageBoxesData {
+  media: Rect4;
+  crop: Rect4;
+  bleed: Rect4;
+  trim: Rect4;
+  art: Rect4;
+  declared: Record<PageBoxKindLocal, boolean>;
+}
+
+/** Display + apply order, matching ISO 32000-1 §14.11.2 / PAGE_BOX_KINDS. */
+const PAGE_BOX_KIND_ORDER: readonly PageBoxKindLocal[] = [
+  "media",
+  "crop",
+  "bleed",
+  "trim",
+  "art",
+] as const;
+
+/** Draft field → i18n key under `editor.pageBoxes.fields`. */
+const PAGE_BOX_FIELD_KEY: Record<keyof BoxDraft, string> = {
+  x: "x",
+  y: "y",
+  w: "width",
+  h: "height",
+};
+
+/** Round to 2 decimals for display (points can be fractional). */
+function fmtPoint(n: number): string {
+  return String(Math.round(n * 100) / 100);
+}
+
+/** Effective rect `[x0,y0,x1,y1]` → an origin+size draft `{x,y,w,h}`. */
+function rectToDraft([x0, y0, x1, y1]: Rect4): BoxDraft {
+  return {
+    x: fmtPoint(x0),
+    y: fmtPoint(y0),
+    w: fmtPoint(x1 - x0),
+    h: fmtPoint(y1 - y0),
+  };
+}
+
+function boxesToDrafts(boxes: PageBoxesData): Record<PageBoxKindLocal, BoxDraft> {
+  return {
+    media: rectToDraft(boxes.media),
+    crop: rectToDraft(boxes.crop),
+    bleed: rectToDraft(boxes.bleed),
+    trim: rectToDraft(boxes.trim),
+    art: rectToDraft(boxes.art),
+  };
+}
+
+/** A draft is applyable when x/y/w/h are finite and the box has positive area. */
+function isDraftValid(d: BoxDraft): boolean {
+  const x = Number(d.x);
+  const y = Number(d.y);
+  const w = Number(d.w);
+  const h = Number(d.h);
+  return [x, y, w, h].every(Number.isFinite) && w > 0 && h > 0;
+}
+
+/**
+ * "Boîtes de page" — reads the five boundary boxes of the active page
+ * (`/api/pdf/page-boxes` `mode=get`) and lets the user rewrite any of them
+ * (`mode=set`). Self-contained: given the active page number and a way to read
+ * the document bytes, it owns its fetch + apply lifecycle. Each box is edited as
+ * origin + size in points (the engine's `setPageBox` shape); the `declared`
+ * badge distinguishes a real box from one inherited/defaulted by the ISO chain.
+ */
+function PageBoxesSection({
+  pageNumber,
+  getDocumentBytes,
+  onPageBoxesApplied,
+}: {
+  pageNumber: number;
+  getDocumentBytes: () => Promise<Blob | null>;
+  onPageBoxesApplied?: (bytes: Uint8Array) => void;
+}) {
+  const t = useTranslations("editor.pageBoxes");
+  const [boxes, setBoxes] = useState<PageBoxesData | null>(null);
+  const [drafts, setDrafts] = useState<Record<PageBoxKindLocal, BoxDraft> | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [savingKind, setSavingKind] = useState<PageBoxKindLocal | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  // `getDocumentBytes` may change identity each render (the editor recreates its
+  // prepared-blob callback); read it through a ref so the load effect only
+  // re-runs on page change or an explicit retry — never on unrelated re-renders.
+  const getBytesRef = useRef(getDocumentBytes);
+  useEffect(() => {
+    getBytesRef.current = getDocumentBytes;
+  }, [getDocumentBytes]);
+
+  useEffect(() => {
+    let aborted = false;
+    setStatus("loading");
+    void (async () => {
+      try {
+        const blob = await getBytesRef.current();
+        if (!blob) {
+          if (!aborted) setStatus("error");
+          return;
+        }
+        const form = new FormData();
+        form.append("file", new File([blob], "document.pdf", { type: "application/pdf" }));
+        form.append("page", String(pageNumber));
+        form.append("mode", "get");
+        const res = await fetch("/api/pdf/page-boxes", { method: "POST", body: form });
+        if (aborted) return;
+        if (!res.ok) {
+          setStatus("error");
+          return;
+        }
+        const json = (await res.json()) as { success?: boolean; boxes?: PageBoxesData };
+        if (aborted) return;
+        if (!json.success || !json.boxes) {
+          setStatus("error");
+          return;
+        }
+        setBoxes(json.boxes);
+        setDrafts(boxesToDrafts(json.boxes));
+        setStatus("ready");
+      } catch {
+        if (!aborted) setStatus("error");
+      }
+    })();
+    return () => {
+      aborted = true;
+    };
+  }, [pageNumber, reloadToken]);
+
+  const updateDraft = (kind: PageBoxKindLocal, field: keyof BoxDraft, value: string) =>
+    setDrafts((prev) =>
+      prev ? { ...prev, [kind]: { ...prev[kind], [field]: value } } : prev,
+    );
+
+  const applyBox = async (kind: PageBoxKindLocal) => {
+    if (!drafts) return;
+    const d = drafts[kind];
+    if (!isDraftValid(d)) return;
+    const x = Number(d.x);
+    const y = Number(d.y);
+    const w = Number(d.w);
+    const h = Number(d.h);
+
+    setSavingKind(kind);
+    try {
+      const blob = await getBytesRef.current();
+      if (!blob) {
+        setStatus("error");
+        return;
+      }
+      const form = new FormData();
+      form.append("file", new File([blob], "document.pdf", { type: "application/pdf" }));
+      form.append("page", String(pageNumber));
+      form.append("mode", "set");
+      form.append("kind", kind);
+      form.append("x", String(x));
+      form.append("y", String(y));
+      form.append("w", String(w));
+      form.append("h", String(h));
+      const res = await fetch("/api/pdf/page-boxes", { method: "POST", body: form });
+      if (!res.ok) {
+        setStatus("error");
+        return;
+      }
+      const applied = new Uint8Array(await res.arrayBuffer());
+      onPageBoxesApplied?.(applied);
+      // Optimistic local sync: the set response is binary (no JSON to re-read),
+      // so reflect the written rect + mark the box declared. A page change or
+      // retry re-fetches the authoritative state from the new bytes.
+      setBoxes((prev) =>
+        prev
+          ? {
+              ...prev,
+              [kind]: [x, y, x + w, y + h] as Rect4,
+              declared: { ...prev.declared, [kind]: true },
+            }
+          : prev,
+      );
+    } catch {
+      setStatus("error");
+    } finally {
+      setSavingKind(null);
+    }
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t">
+      <h4 className="font-medium text-sm mb-1">{t("title")}</h4>
+      <p className="text-[11px] text-muted-foreground mb-2">{t("description")}</p>
+
+      {status === "loading" && (
+        <p className="text-xs text-muted-foreground py-1">{t("loading")}</p>
+      )}
+
+      {status === "error" && (
+        <div className="text-xs text-muted-foreground py-1">
+          <p>{t("error")}</p>
+          <button
+            type="button"
+            onClick={() => setReloadToken((n) => n + 1)}
+            className="mt-1 text-primary hover:underline"
+          >
+            {t("retry")}
+          </button>
+        </div>
+      )}
+
+      {status === "ready" && drafts && boxes && (
+        <div className="space-y-3">
+          {PAGE_BOX_KIND_ORDER.map((kind) => {
+            const draft = drafts[kind];
+            const valid = isDraftValid(draft);
+            const declared = boxes.declared[kind];
+            const saving = savingKind === kind;
+            return (
+              <div key={kind} className="rounded-md border border-border p-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-medium">{t(`kinds.${kind}`)}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded ${
+                      declared
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {declared ? t("declared") : t("inherited")}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(["x", "y", "w", "h"] as const).map((field) => (
+                    <label key={field} className="block">
+                      <span className="block text-[10px] text-muted-foreground mb-0.5">
+                        {t(`fields.${PAGE_BOX_FIELD_KEY[field]}`)} ({t("unit")})
+                      </span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={draft[field]}
+                        onChange={(e) => updateDraft(kind, field, e.target.value)}
+                        className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+                      />
+                    </label>
+                  ))}
+                </div>
+                {!valid && (
+                  <p className="mt-1 text-[10px] text-destructive">{t("invalid")}</p>
+                )}
+                <button
+                  type="button"
+                  disabled={savingKind !== null || !valid}
+                  onClick={() => void applyBox(kind)}
+                  className="mt-1.5 w-full px-2 py-1 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {saving ? t("applying") : t("apply")}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PropertiesPanel({
   selectedElements,
   onElementUpdate,
@@ -982,6 +1281,9 @@ export function PropertiesPanel({
   userLayers = [],
   onAssignElementToLayer,
   documentFonts = [],
+  pageNumber,
+  getDocumentBytes,
+  onPageBoxesApplied,
 }: PropertiesPanelProps) {
   const t = useTranslations("editor.properties");
 
@@ -1418,6 +1720,17 @@ export function PropertiesPanel({
               <div>{t("zoom")}: {Math.round(zoom * 100)}%</div>
             </div>
           </div>
+        )}
+
+        {/* Boîtes de page (Media/Crop/Bleed/Trim/Art) — affichée uniquement quand
+            l'appelant fournit le numéro de page actif ET un accès aux octets du
+            document (sinon masquée, comportement historique préservé). */}
+        {pageNumber != null && getDocumentBytes && (
+          <PageBoxesSection
+            pageNumber={pageNumber}
+            getDocumentBytes={getDocumentBytes}
+            onPageBoxesApplied={onPageBoxesApplied}
+          />
         )}
       </div>
     </div>
