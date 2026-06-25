@@ -15,6 +15,8 @@ import {
   IndentIncrease,
   IndentDecrease,
   Check,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import type { BookmarkObject } from "@giga-pdf/types";
 import { cn } from "@/lib/utils";
@@ -60,6 +62,15 @@ interface TOCPanelProps {
    * `onApplyOutline`; providing either enables edit mode.
    */
   onApplyBookmarks?: (bookmarks: BookmarkInput[]) => void;
+  /**
+   * Detect chapters from the document's headings when it ships no embedded
+   * outline. The host fetches `POST /api/pdf/structure` (action `detect`) with
+   * the current PDF and resolves the flat, level-encoded chapter list. When
+   * provided, the panel surfaces a "detect chapters" affordance on an
+   * outline-less document and renders the result as a navigable list that can be
+   * baked into real bookmarks (via {@link onApplyOutline}/{@link onApplyBookmarks}).
+   */
+  onDetectChapters?: () => Promise<BookmarkInput[]>;
   /** Number of pages — bounds the destination page input in edit mode. */
   pageCount?: number;
   className?: string;
@@ -297,19 +308,30 @@ export function TOCPanel({
   currentPageIndex,
   onApplyOutline,
   onApplyBookmarks,
+  onDetectChapters,
   pageCount,
   className,
 }: TOCPanelProps) {
   const t = useTranslations("editor.toc");
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
+  // Chapter detection (outline-less documents): `null` = not yet detected,
+  // `[]` = detected but nothing found, otherwise the navigable preview list.
+  const [detected, setDetected] = useState<BookmarkInput[] | null>(null);
+  const [detecting, setDetecting] = useState(false);
+  const [detectFailed, setDetectFailed] = useState(false);
 
   const canEdit = Boolean(onApplyOutline) || Boolean(onApplyBookmarks);
+  const canDetect = Boolean(onDetectChapters);
 
-  // Leaving edit mode whenever the document outline changes underneath us
-  // (e.g. a bake reload) avoids editing a stale snapshot.
+  // Reset transient edit/detect state whenever the document outline changes
+  // underneath us (e.g. a bake reload repopulates `outlines`) so we never edit
+  // or preview a stale snapshot.
   useEffect(() => {
     setEditing(false);
+    setDetected(null);
+    setDetecting(false);
+    setDetectFailed(false);
   }, [outlines]);
 
   const totalCount = useMemo(() => {
@@ -318,8 +340,39 @@ export function TOCPanel({
     return countBookmarks(outlines);
   }, [outlines]);
 
-  // Hide entirely only when there is nothing to show AND no way to add one.
-  if (outlines.length === 0 && !canEdit) {
+  const handleDetect = useCallback(async () => {
+    if (!onDetectChapters) return;
+    setDetecting(true);
+    setDetectFailed(false);
+    try {
+      setDetected(await onDetectChapters());
+    } catch {
+      setDetected(null);
+      setDetectFailed(true);
+    } finally {
+      setDetecting(false);
+    }
+  }, [onDetectChapters]);
+
+  // Bake detected chapters through the same pipeline as the manual editor: a
+  // flat, level-encoded list rebuilt into a tree for `onApplyOutline` and passed
+  // straight to `onApplyBookmarks` (both already the persistence contract).
+  const handleSaveDetected = useCallback(() => {
+    if (!detected || detected.length === 0) return;
+    const flat: FlatBookmark[] = detected.map((c, i) => ({
+      id: `detected-${i}`,
+      title: c.title,
+      page: c.page,
+      level: c.level,
+    }));
+    onApplyOutline?.(flatToTree(flat));
+    onApplyBookmarks?.(detected);
+    setDetected(null);
+  }, [detected, onApplyOutline, onApplyBookmarks]);
+
+  // Hide entirely only when there is nothing to show AND no way to add or
+  // detect one.
+  if (outlines.length === 0 && !canEdit && !canDetect) {
     return null;
   }
 
@@ -378,9 +431,7 @@ export function TOCPanel({
 
       {expanded && !editing && (
         <div className="pb-2 max-h-64 overflow-y-auto">
-          {outlines.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-muted-foreground">{t("emptyEdit")}</p>
-          ) : (
+          {outlines.length > 0 ? (
             outlines.map((bookmark, index) => (
               <BookmarkItem
                 key={bookmark.bookmarkId || index}
@@ -390,6 +441,84 @@ export function TOCPanel({
                 currentPageIndex={currentPageIndex}
               />
             ))
+          ) : detected && detected.length > 0 ? (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 px-3 pt-1 pb-0.5">
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                <span className="text-xs font-medium">{t("detectedTitle")}</span>
+                <span className="text-xs text-muted-foreground">({detected.length})</span>
+              </div>
+              <div>
+                {detected.map((chapter, index) => (
+                  <button
+                    key={`${index}-${chapter.page}`}
+                    type="button"
+                    onClick={() => onNavigateToPage?.(chapter.page)}
+                    className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left hover:bg-accent transition-colors"
+                    style={{ paddingLeft: `${chapter.level * 12 + 8}px` }}
+                    title={`${chapter.title} (Page ${chapter.page})`}
+                  >
+                    <FileText className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                    <span className="flex-1 truncate text-sm">{chapter.title}</span>
+                    <span className="text-xs text-muted-foreground flex-shrink-0">
+                      {chapter.page}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 px-2 pt-1">
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={handleSaveDetected}
+                    className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90"
+                  >
+                    <Check className="h-3 w-3" />
+                    {t("saveAsBookmarks")}
+                  </button>
+                )}
+                <div className="flex-1" />
+                <button
+                  type="button"
+                  onClick={handleDetect}
+                  disabled={detecting}
+                  className="rounded-md border border-input px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
+                >
+                  {t("redetect")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetected(null)}
+                  className="rounded-md border border-input px-2 py-1 text-xs hover:bg-muted"
+                >
+                  {t("clearDetected")}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 px-3 py-2">
+              <p className="text-xs text-muted-foreground">
+                {detected ? t("detectEmpty") : canDetect ? t("detectHint") : t("emptyEdit")}
+              </p>
+              {canDetect && (
+                <button
+                  type="button"
+                  onClick={handleDetect}
+                  disabled={detecting}
+                  className="flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
+                >
+                  {detecting ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3 w-3" />
+                  )}
+                  {detecting ? t("detecting") : detected ? t("redetect") : t("detectChapters")}
+                </button>
+              )}
+              {detectFailed && (
+                <p className="text-xs text-destructive">{t("detectError")}</p>
+              )}
+            </div>
           )}
         </div>
       )}

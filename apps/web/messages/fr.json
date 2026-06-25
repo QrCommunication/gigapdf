@@ -2196,7 +2196,11 @@
       "addPolygon": "Ajouter un polygone",
       "addPolyline": "Ajouter une ligne brisée",
       "addCaret": "Ajouter un caret",
-      "addHint": "La forme est placée au centre de la page — déplacez-la avec l'outil de sélection."
+      "addHint": "La forme est placée au centre de la page — déplacez-la avec l'outil de sélection.",
+      "addedTitle": "Annotation ajoutée",
+      "addedDescription": "Forme placée au centre — déplacez-la et ajustez-la.",
+      "addErrorTitle": "Échec de l'ajout",
+      "addErrorDescription": "Impossible d'ajouter l'annotation."
     },
     "toc": {
       "title": "Table des matières",
@@ -2216,7 +2220,16 @@
       "appliedTitle": "Table des matières mise à jour",
       "appliedDescription": "Les signets ont été enregistrés dans le document.",
       "errorTitle": "Échec de la mise à jour",
-      "errorDescription": "La table des matières n'a pas pu être enregistrée. Veuillez réessayer."
+      "errorDescription": "La table des matières n'a pas pu être enregistrée. Veuillez réessayer.",
+      "detectChapters": "Détecter les chapitres",
+      "detecting": "Détection…",
+      "detectHint": "Aucun signet intégré. Détectez les chapitres à partir des titres du document.",
+      "detectedTitle": "Chapitres détectés",
+      "saveAsBookmarks": "Enregistrer comme signets",
+      "redetect": "Relancer",
+      "clearDetected": "Effacer",
+      "detectEmpty": "Aucun chapitre détecté. Ce document ne contient pas de titres reconnaissables.",
+      "detectError": "La détection des chapitres a échoué. Veuillez réessayer."
     },
     "layers": {
       "title": "Calques",

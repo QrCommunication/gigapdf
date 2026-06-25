@@ -12,9 +12,9 @@ import type {
   EmbeddedFileObject,
 } from "@giga-pdf/types";
 import { cn } from "@/lib/utils";
-import { TOCPanel } from "./toc-panel";
+import { TOCPanel, type BookmarkInput } from "./toc-panel";
 import { LayersPanel } from "./layers-panel";
-import { AnnotationsPanel } from "./annotations-panel";
+import { AnnotationsPanel, type GeometricAnnotationType } from "./annotations-panel";
 import { DocumentLanguageBadge } from "./document-language-badge";
 import { EmbeddedFilesPanel } from "./embedded-files-panel";
 
@@ -79,6 +79,20 @@ interface DocumentInfoSidebarProps {
    * edit mode (add / rename / delete / reorder / indent bookmarks).
    */
   onApplyOutline?: (outline: BookmarkObject[]) => void;
+  /**
+   * Detect chapters from the document's headings when it ships no embedded
+   * outline. Forwarded to the TOC panel, which previews the result and bakes the
+   * chosen chapters via {@link onApplyOutline}. Absent ⇒ no detect affordance.
+   */
+  onDetectChapters?: () => Promise<BookmarkInput[]>;
+  /**
+   * Add a geometric annotation (circle / polygon / polyline / caret) to the
+   * current page — forwarded to the annotations panel's add toolbar. Absent ⇒
+   * the add toolbar is hidden (annotations panel stays review/delete-only).
+   */
+  onAddAnnotation?: (type: GeometricAnnotationType) => void;
+  /** True while an annotation add is in flight — disables the add toolbar. */
+  annotationAddBusy?: boolean;
   /** Total page count — bounds the destination page input in outline edit. */
   pageCount?: number;
   className?: string;
@@ -119,6 +133,9 @@ export function DocumentInfoSidebar({
   attachmentBusy,
   currentPageIndex,
   onApplyOutline,
+  onDetectChapters,
+  onAddAnnotation,
+  annotationAddBusy,
   pageCount,
   className,
 }: DocumentInfoSidebarProps) {
@@ -136,6 +153,8 @@ export function DocumentInfoSidebar({
     Boolean(documentLanguage) ||
     Boolean(onLayerCreate) ||
     Boolean(onApplyOutline) ||
+    Boolean(onDetectChapters) ||
+    Boolean(onAddAnnotation) ||
     Boolean(onAddAttachments);
 
   if (!hasContent) {
@@ -184,6 +203,7 @@ export function DocumentInfoSidebar({
             onNavigateToPage={onNavigateToPage}
             currentPageIndex={currentPageIndex}
             onApplyOutline={onApplyOutline}
+            onDetectChapters={onDetectChapters}
             pageCount={pageCount}
           />
 
@@ -216,6 +236,8 @@ export function DocumentInfoSidebar({
             selectedElementIds={selectedElementIds}
             onSelect={onElementSelect}
             onDelete={onAnnotationDelete}
+            onAdd={onAddAnnotation}
+            addBusy={annotationAddBusy}
           />
 
           {/* Fichiers embarqués */}

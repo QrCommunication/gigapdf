@@ -82,7 +82,8 @@ import {
   DocumentInfoSidebar,
   ContinuousPageView,
 } from "@/components/editor";
-import type { ContinuousPageViewHandle } from "@/components/editor";
+import type { ContinuousPageViewHandle, BookmarkInput } from "@/components/editor";
+import type { GeometricAnnotationType } from "@/components/editor/annotations-panel";
 import type { InsertLinkValue } from "@/components/editor/insert-link-dialog";
 import { EditorEditTools } from "@/components/editor/editor-edit-tools";
 import { FindReplaceDialog } from "@/components/editor/find-replace-dialog";
@@ -3245,6 +3246,83 @@ export default function EditorPage() {
     [adoptModifiedPdf, toast, t],
   );
 
+  // --- Chapter detection (#96) ----------------------------------------------
+  // Recover a navigable chapter list from a document that ships no embedded
+  // outline: POST the current binary to /api/pdf/structure (action `detect`).
+  // The TOC panel previews the returned flat, level-encoded chapters and bakes
+  // the chosen ones through the existing onApplyOutline pipeline.
+  const handleDetectChapters = useCallback(async (): Promise<BookmarkInput[]> => {
+    const file = currentPdfFileRef.current;
+    if (!file) {
+      throw new Error("No document loaded");
+    }
+    const form = new FormData();
+    form.append("file", file, file.name);
+    form.append("action", "detect");
+
+    const res = await fetch("/api/pdf/structure", {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+    if (!res.ok) {
+      toast({ title: t("toc.detectError"), variant: "destructive" });
+      throw new Error(`Structure route returned ${res.status}`);
+    }
+    const json = (await res.json()) as {
+      success: boolean;
+      data?: { chapters?: BookmarkInput[] };
+    };
+    return json.data?.chapters ?? [];
+  }, [toast, t]);
+
+  // --- Geometric annotation creation (#94 Wave 2) ---------------------------
+  // Add a circle / polygon / polyline / caret to the active page via
+  // /api/pdf/annotations (action = kind). The backend places a default-sized
+  // shape centred on the page; we adopt the new binary and re-parse so the
+  // annotation surfaces in the scene graph (and the annotations panel list).
+  const [annotationAddBusy, setAnnotationAddBusy] = useState(false);
+  const handleAddAnnotation = useCallback(
+    (kind: GeometricAnnotationType) => {
+      const file = currentPdfFileRef.current;
+      if (!file) return;
+      void (async () => {
+        setAnnotationAddBusy(true);
+        try {
+          const form = new FormData();
+          form.append("file", file, file.name);
+          form.append("pageNumber", String(effectivePageIndex + 1));
+          form.append("action", kind);
+
+          const res = await fetch("/api/pdf/annotations", {
+            method: "POST",
+            credentials: "include",
+            body: form,
+          });
+          if (!res.ok) {
+            throw new Error(`Annotations route returned ${res.status}`);
+          }
+          const blob = await res.blob();
+          adoptModifiedPdf(blob, { reparse: true });
+          toast({
+            title: t("annotations.addedTitle"),
+            description: t("annotations.addedDescription"),
+          });
+        } catch (err) {
+          clientLogger.error("[editor] add annotation failed:", err);
+          toast({
+            title: t("annotations.addErrorTitle"),
+            description: t("annotations.addErrorDescription"),
+            variant: "destructive",
+          });
+        } finally {
+          setAnnotationAddBusy(false);
+        }
+      })();
+    },
+    [effectivePageIndex, adoptModifiedPdf, toast, t],
+  );
+
   // --- PII auto-detect redaction --------------------------------------------
   const [showRedactPiiDialog, setShowRedactPiiDialog] = useState(false);
 
@@ -4479,6 +4557,16 @@ export default function EditorPage() {
               rulerUnit={rulerUnit}
               onMarginsCommit={handleMarginsCommit}
               getFontFaceName={getFontFaceName}
+              shapeType={shapeType}
+              annotationType={annotationType}
+              fieldKind={fieldKind}
+              strokeColor={strokeColor}
+              fillColor={fillColor}
+              strokeWidth={strokeWidth}
+              onHyperlinkClick={handleHyperlinkClick}
+              onRedactionMarksChanged={setRedactionMarkCount}
+              fitMode={fitMode}
+              onFitZoomChange={setZoom}
               onElementAdded={handleElementAdded}
               onElementModified={handleElementModified}
               onElementReordered={handleElementReordered}
@@ -4486,7 +4574,33 @@ export default function EditorPage() {
               onSelectionChanged={handleSelectionChanged}
               onTextSelectionStyleChanged={handleTextSelectionStyleChanged}
               onCanvasReady={setCanvasHandle}
-              renderActiveOverlay={() => renderTableEditOverlay()}
+              renderActiveOverlay={(index) => (
+                <>
+                  {/* P1 — form-fill overlay for the ACTIVE page (parity with the
+                      single-page editor's EditorCanvas `overlay`). PageSlot renders
+                      this inside the active page's sheet (page×zoom space), so the
+                      field rects line up exactly as in single-page mode. */}
+                  {showFormsPanel &&
+                  formsMode === "fill" &&
+                  loadedFormFields.length > 0 ? (
+                    <FormFillOverlay
+                      fields={loadedFormFields}
+                      currentPageIndex={index}
+                      zoom={zoom}
+                      focusedFieldName={focusedFormField}
+                      onFieldClick={setFocusedFormField}
+                    />
+                  ) : null}
+                  {/* Collaborator cursors for the ACTIVE page only (cursors on
+                      non-active visible pages are intentionally out of scope). */}
+                  <CollaborationOverlay
+                    cursors={cursors}
+                    currentPageId={pages[index]?.pageId}
+                    zoom={zoom}
+                  />
+                  {renderTableEditOverlay()}
+                </>
+              )}
             />
           ) : (
             <>
@@ -4613,6 +4727,9 @@ export default function EditorPage() {
           attachmentBusy={attachmentBusy}
           currentPageIndex={effectivePageIndex}
           onApplyOutline={handleApplyOutline}
+          onDetectChapters={handleDetectChapters}
+          onAddAnnotation={handleAddAnnotation}
+          annotationAddBusy={annotationAddBusy}
           pageCount={pages.length}
         />
 
