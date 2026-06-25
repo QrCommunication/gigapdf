@@ -20,6 +20,11 @@ import {
   ArrowUp,
   ArrowDown,
   Layers,
+  Trash2,
+  RefreshCw,
+  Code,
+  Sigma,
+  Plus,
 } from "lucide-react";
 import {
   useGetFormFields,
@@ -99,6 +104,44 @@ function isFieldFilled(field: FormFieldElement): boolean {
   if (typeof field.value === "boolean") return field.value;
   if (Array.isArray(field.value)) return field.value.length > 0;
   return field.value !== "";
+}
+
+/** Field-level JavaScript triggers accepted by the engine (`/AA` actions). */
+type FieldScriptTrigger = "keystroke" | "format" | "validate" | "calculate";
+
+const FIELD_SCRIPT_TRIGGERS: readonly FieldScriptTrigger[] = [
+  "keystroke",
+  "format",
+  "validate",
+  "calculate",
+];
+
+/**
+ * POST one operation to `/api/pdf/forms` (multipart/form-data) and return the
+ * mutated PDF as a Blob. Throws with the route's JSON `error` message on a
+ * non-2xx response so callers can surface it. Same-origin → the session cookie
+ * is sent automatically (the route is guarded by `requireSession`).
+ */
+async function postFormsAction(
+  file: File,
+  params: Record<string, string>,
+): Promise<Blob> {
+  const fd = new FormData();
+  fd.append("file", file);
+  for (const [key, value] of Object.entries(params)) fd.append(key, value);
+
+  const res = await fetch("/api/pdf/forms", { method: "POST", body: fd });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body?.error) message = body.error;
+    } catch {
+      // Non-JSON error body — keep the status-code message.
+    }
+    throw new Error(message);
+  }
+  return res.blob();
 }
 
 // ─── Field Input Components ───────────────────────────────────────────────────
@@ -264,11 +307,36 @@ interface FieldRowProps {
   editedValue: string | boolean | string[];
   onChange: (fieldName: string, value: string | boolean | string[]) => void;
   highlighted: boolean;
+  /** Delete the field from the AcroForm (removeField). */
+  onDeleteField: (name: string) => void;
+  /** Rebuild the field's appearance stream (regenerateFieldAppearance). */
+  onRegenerateField: (name: string) => void;
+  /** Attach field-level JavaScript for a trigger (setFieldScript). */
+  onAttachScript: (
+    name: string,
+    trigger: FieldScriptTrigger,
+    js: string,
+  ) => void;
+  /** Disable the document-mutating actions while another op is in flight. */
+  actionsDisabled: boolean;
 }
 
-function FieldRow({ field, editedValue, onChange, highlighted }: FieldRowProps) {
+function FieldRow({
+  field,
+  editedValue,
+  onChange,
+  highlighted,
+  onDeleteField,
+  onRegenerateField,
+  onAttachScript,
+  actionsDisabled,
+}: FieldRowProps) {
   const t = useTranslations("editor.forms");
   const [expanded, setExpanded] = useState(true);
+  const [scriptOpen, setScriptOpen] = useState(false);
+  const [scriptTrigger, setScriptTrigger] =
+    useState<FieldScriptTrigger>("calculate");
+  const [scriptJs, setScriptJs] = useState("");
   const rowRef = useRef<HTMLDivElement>(null);
   const filled = isFieldFilled(field);
   // Dérivé (pas de setState dans l'effet) : un champ ciblé depuis l'overlay
@@ -341,6 +409,317 @@ function FieldRow({ field, editedValue, onChange, highlighted }: FieldRowProps) 
               {t("maxChars", { count: field.properties.maxLength })}
             </p>
           )}
+
+          {/* Per-field document operations (mutate the AcroForm). */}
+          <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-border/60 pt-2">
+            <button
+              type="button"
+              onClick={() => setScriptOpen((open) => !open)}
+              disabled={actionsDisabled}
+              className="flex items-center gap-1 rounded border px-1.5 py-1 text-[10px] hover:bg-accent transition-colors disabled:opacity-40"
+              title={t("attachScript")}
+            >
+              <Code size={11} />
+              {t("attachScript")}
+            </button>
+            <button
+              type="button"
+              onClick={() => onRegenerateField(field.fieldName)}
+              disabled={actionsDisabled}
+              className="flex items-center gap-1 rounded border px-1.5 py-1 text-[10px] hover:bg-accent transition-colors disabled:opacity-40"
+              title={t("regenerateAppearance")}
+            >
+              <RefreshCw size={11} />
+              {t("regenerate")}
+            </button>
+            <button
+              type="button"
+              onClick={() => onDeleteField(field.fieldName)}
+              disabled={actionsDisabled}
+              className="flex items-center gap-1 rounded border border-destructive/40 px-1.5 py-1 text-[10px] text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40"
+              title={t("deleteField")}
+            >
+              <Trash2 size={11} />
+              {t("delete")}
+            </button>
+          </div>
+
+          {scriptOpen && (
+            <div className="mt-2 space-y-1.5 rounded-md border border-border bg-muted/30 p-2">
+              <label className="block text-[10px] font-medium text-muted-foreground">
+                {t("scriptTriggerLabel")}
+              </label>
+              <select
+                value={scriptTrigger}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setScriptTrigger(e.target.value as FieldScriptTrigger)
+                }
+                className="w-full rounded border border-input bg-background px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                {FIELD_SCRIPT_TRIGGERS.map((trigger) => (
+                  <option key={trigger} value={trigger}>
+                    {t(`scriptTriggers.${trigger}`)}
+                  </option>
+                ))}
+              </select>
+              <textarea
+                value={scriptJs}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setScriptJs(e.target.value)
+                }
+                rows={3}
+                spellCheck={false}
+                className="w-full resize-none rounded border border-input bg-background px-1.5 py-1 font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-ring"
+                placeholder={t("scriptPlaceholder")}
+              />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onAttachScript(field.fieldName, scriptTrigger, scriptJs);
+                    setScriptOpen(false);
+                    setScriptJs("");
+                  }}
+                  disabled={actionsDisabled || scriptJs.trim().length === 0}
+                  className="flex-1 rounded bg-primary px-2 py-1 text-[10px] font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40"
+                >
+                  {t("applyScript")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScriptOpen(false)}
+                  className="rounded border px-2 py-1 text-[10px] hover:bg-accent transition-colors"
+                >
+                  {t("cancel")}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Advanced field tools (mode Remplir) ──────────────────────────────────────
+
+interface AdvancedFieldToolsProps {
+  /** Names of the loaded AcroForm fields (for the calculation-order editor). */
+  fieldNames: string[];
+  disabled: boolean;
+  onAddSignatureField: (
+    name: string,
+    pageNumber: number,
+    rect: [number, number, number, number],
+  ) => void;
+  onSetCalculationOrder: (names: string[]) => void;
+}
+
+/**
+ * Document-level field operations that are not tied to a single row:
+ *  - Add a (visible) signature field at an explicit page + rect.
+ *  - Reorder the AcroForm calculation order (`/CO`).
+ *
+ * Local state is seeded from `fieldNames`; the parent remounts this component
+ * (keyed on the field set) whenever the loaded fields change, so the editable
+ * calculation order always starts from the current document.
+ */
+function AdvancedFieldTools({
+  fieldNames,
+  disabled,
+  onAddSignatureField,
+  onSetCalculationOrder,
+}: AdvancedFieldToolsProps) {
+  const t = useTranslations("editor.forms");
+  const [open, setOpen] = useState(false);
+
+  // Add-signature form state.
+  const [sigName, setSigName] = useState("");
+  const [sigPage, setSigPage] = useState("1");
+  const [sigRect, setSigRect] = useState({
+    x0: "72",
+    y0: "72",
+    x1: "252",
+    y1: "144",
+  });
+
+  // Editable calculation order (seeded from the loaded field set).
+  const [calcOrder, setCalcOrder] = useState<string[]>(fieldNames);
+
+  const moveCalc = (index: number, direction: "up" | "down") => {
+    setCalcOrder((order) => {
+      const target = direction === "up" ? index - 1 : index + 1;
+      if (target < 0 || target >= order.length) return order;
+      const item = order[index];
+      if (item === undefined) return order;
+      const next = [...order];
+      next.splice(index, 1);
+      next.splice(target, 0, item);
+      return next;
+    });
+  };
+
+  const sigNameTrimmed = sigName.trim();
+  const sigPageNum = Number(sigPage);
+  const rectNums = {
+    x0: Number(sigRect.x0),
+    y0: Number(sigRect.y0),
+    x1: Number(sigRect.x1),
+    y1: Number(sigRect.y1),
+  };
+  const rectValid =
+    Object.values(rectNums).every((n) => Number.isFinite(n)) &&
+    rectNums.x1 > rectNums.x0 &&
+    rectNums.y1 > rectNums.y0;
+  const canAddSignature =
+    !disabled &&
+    sigNameTrimmed.length > 0 &&
+    Number.isInteger(sigPageNum) &&
+    sigPageNum >= 1 &&
+    rectValid;
+
+  return (
+    <div className="rounded-md border border-border bg-background/50">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 px-2.5 py-2 text-xs font-medium hover:bg-accent transition-colors"
+      >
+        <PenLine className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="flex-1 text-left">{t("advancedTitle")}</span>
+        {open ? (
+          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-3 w-3 text-muted-foreground" />
+        )}
+      </button>
+
+      {open && (
+        <div className="space-y-3 border-t border-border px-2.5 py-2.5">
+          {/* Add signature field */}
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-medium text-foreground">
+              {t("addSignatureTitle")}
+            </p>
+            <input
+              type="text"
+              value={sigName}
+              onChange={(e) => setSigName(e.target.value)}
+              placeholder={t("signatureNamePlaceholder")}
+              className="w-full rounded border border-input bg-background px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <div className="flex items-center gap-1.5">
+              <label className="text-[10px] text-muted-foreground">
+                {t("pageLabel")}
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={sigPage}
+                onChange={(e) => setSigPage(e.target.value)}
+                className="w-14 rounded border border-input bg-background px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            <div className="grid grid-cols-4 gap-1">
+              {(["x0", "y0", "x1", "y1"] as const).map((key) => (
+                <div key={key} className="flex flex-col gap-0.5">
+                  <label className="text-[9px] uppercase text-muted-foreground">
+                    {key}
+                  </label>
+                  <input
+                    type="number"
+                    value={sigRect[key]}
+                    onChange={(e) =>
+                      setSigRect((r) => ({ ...r, [key]: e.target.value }))
+                    }
+                    className="w-full rounded border border-input bg-background px-1 py-1 text-[10px] focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-[9px] text-muted-foreground">
+              {t("rectHint")}
+            </p>
+            <button
+              type="button"
+              onClick={() =>
+                onAddSignatureField(sigNameTrimmed, sigPageNum, [
+                  rectNums.x0,
+                  rectNums.y0,
+                  rectNums.x1,
+                  rectNums.y1,
+                ])
+              }
+              disabled={!canAddSignature}
+              className="flex w-full items-center justify-center gap-1 rounded bg-primary px-2 py-1 text-[10px] font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40"
+            >
+              <Plus size={11} />
+              {t("addSignatureField")}
+            </button>
+          </div>
+
+          {/* Calculation order */}
+          <div className="space-y-1.5 border-t border-border/60 pt-2">
+            <p className="flex items-center gap-1 text-[11px] font-medium text-foreground">
+              <Sigma size={11} />
+              {t("calcOrderTitle")}
+            </p>
+            {calcOrder.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground">
+                {t("calcOrderEmpty")}
+              </p>
+            ) : (
+              <>
+                <p className="text-[9px] text-muted-foreground">
+                  {t("calcOrderHint")}
+                </p>
+                <div className="space-y-1">
+                  {calcOrder.map((name, index) => (
+                    <div
+                      key={name}
+                      className="flex items-center gap-1.5 rounded border border-border px-1.5 py-1"
+                    >
+                      <span className="w-4 text-right text-[10px] text-muted-foreground">
+                        {index + 1}
+                      </span>
+                      <span
+                        className="flex-1 truncate text-[11px]"
+                        title={name}
+                      >
+                        {name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => moveCalc(index, "up")}
+                        disabled={index === 0}
+                        aria-label={t("moveUp")}
+                        className="flex h-5 w-5 items-center justify-center rounded border hover:bg-accent transition-colors disabled:opacity-40"
+                      >
+                        <ArrowUp size={10} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveCalc(index, "down")}
+                        disabled={index >= calcOrder.length - 1}
+                        aria-label={t("moveDown")}
+                        className="flex h-5 w-5 items-center justify-center rounded border hover:bg-accent transition-colors disabled:opacity-40"
+                      >
+                        <ArrowDown size={10} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onSetCalculationOrder(calcOrder)}
+                  disabled={disabled}
+                  className="w-full rounded bg-primary px-2 py-1 text-[10px] font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40"
+                >
+                  {t("applyCalcOrder")}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -378,36 +757,135 @@ export function FormsPanel({
   const [fillError, setFillError] = useState<string | null>(null);
   const [fillSuccess, setFillSuccess] = useState(false);
   const [flattenAfterFill, setFlattenAfterFill] = useState(false);
+  // Advanced field operations (add signature / scripts / calc order / delete /
+  // regenerate) call /api/pdf/forms directly and share one busy/feedback state.
+  const [advBusy, setAdvBusy] = useState(false);
+  const [advError, setAdvError] = useState<string | null>(null);
+  const [advSuccess, setAdvSuccess] = useState<string | null>(null);
+
+  // Synchronous mirror of the current PDF: each mutation returns a new blob and
+  // the parent updates `currentFile` asynchronously, so back-to-back ops must
+  // chain off the freshest bytes (mirrors the editor's currentPdfFileRef rule).
+  const latestFileRef = useRef<File | null>(currentFile);
+  useEffect(() => {
+    latestFileRef.current = currentFile;
+  }, [currentFile]);
 
   const getFields = useGetFormFields();
   const fillFields = useFillFormFields();
   const flattenPdf = useFlattenPdf();
 
-  const handleLoadFields = useCallback(async () => {
-    if (!currentFile) return;
+  const loadFieldsFrom = useCallback(
+    async (file: File) => {
+      setFormData(null);
+      setEditedValues({});
+      setFillError(null);
+      setFillSuccess(false);
 
-    setFormData(null);
-    setEditedValues({});
-    setFillError(null);
-    setFillSuccess(false);
+      try {
+        const result = await getFields.mutateAsync(file);
+        setFormData(result);
 
-    try {
-      const result = await getFields.mutateAsync(currentFile);
-      setFormData(result);
-
-      // Seed edited values from current field values
-      const initial: Record<string, string | boolean | string[]> = {};
-      for (const field of result.fields) {
-        initial[field.fieldName] = field.value;
+        // Seed edited values from current field values
+        const initial: Record<string, string | boolean | string[]> = {};
+        for (const field of result.fields) {
+          initial[field.fieldName] = field.value;
+        }
+        setEditedValues(initial);
+        // Remonte les champs (avec bounds + pageNumber) au parent pour
+        // l'overlay de surlignage sur le canvas.
+        onFieldsLoaded?.(result.fields as LoadedFormField[]);
+      } catch {
+        // error surfaced via getFields.error
       }
-      setEditedValues(initial);
-      // Remonte les champs (avec bounds + pageNumber) au parent pour
-      // l'overlay de surlignage sur le canvas.
-      onFieldsLoaded?.(result.fields as LoadedFormField[]);
-    } catch {
-      // error surfaced via getFields.error
-    }
-  }, [currentFile, getFields, onFieldsLoaded]);
+    },
+    [getFields, onFieldsLoaded],
+  );
+
+  const handleLoadFields = useCallback(() => {
+    if (!currentFile) return;
+    return loadFieldsFrom(currentFile);
+  }, [currentFile, loadFieldsFrom]);
+
+  /**
+   * Run one AcroForm field operation against /api/pdf/forms, push the mutated
+   * PDF up to the parent, and reload the field list from the new bytes so the
+   * panel reflects the change. Errors surface in `advError`.
+   */
+  const runDocOp = useCallback(
+    async (params: Record<string, string>, successMsg: string) => {
+      const file = latestFileRef.current;
+      if (!file) return;
+
+      setAdvBusy(true);
+      setAdvError(null);
+      setAdvSuccess(null);
+      try {
+        const blob = await postFormsAction(file, params);
+        const next = new File([blob], file.name, { type: "application/pdf" });
+        // Update the ref synchronously so a follow-up op chains off these bytes.
+        latestFileRef.current = next;
+        onPdfUpdated?.(blob);
+        await loadFieldsFrom(next);
+        setAdvSuccess(successMsg);
+      } catch (err) {
+        setAdvError(err instanceof Error ? err.message : t("actionFailed"));
+      } finally {
+        setAdvBusy(false);
+      }
+    },
+    [onPdfUpdated, loadFieldsFrom, t],
+  );
+
+  const handleDeleteField = useCallback(
+    (name: string) =>
+      runDocOp(
+        { action: "removeField", name },
+        t("deleteSuccess", { field: name }),
+      ),
+    [runDocOp, t],
+  );
+
+  const handleRegenerateField = useCallback(
+    (name: string) =>
+      runDocOp(
+        { action: "regenerateFieldAppearance", name },
+        t("regenerateSuccess", { field: name }),
+      ),
+    [runDocOp, t],
+  );
+
+  const handleAttachScript = useCallback(
+    (name: string, trigger: FieldScriptTrigger, js: string) =>
+      runDocOp(
+        { action: "setFieldScript", name, trigger, js },
+        t("scriptSuccess", { field: name }),
+      ),
+    [runDocOp, t],
+  );
+
+  const handleAddSignatureField = useCallback(
+    (name: string, pageNumber: number, rect: [number, number, number, number]) =>
+      runDocOp(
+        {
+          action: "addSignatureField",
+          name,
+          pageNumber: String(pageNumber),
+          rect: JSON.stringify(rect),
+        },
+        t("signatureFieldSuccess", { field: name }),
+      ),
+    [runDocOp, t],
+  );
+
+  const handleSetCalculationOrder = useCallback(
+    (names: string[]) =>
+      runDocOp(
+        { action: "setCalculationOrder", names: JSON.stringify(names) },
+        t("calcOrderSuccess"),
+      ),
+    [runDocOp, t],
+  );
 
   const handleFieldChange = useCallback(
     (fieldName: string, value: string | boolean | string[]) => {
@@ -701,8 +1179,43 @@ export function FormsPanel({
                     editedValue={editedValues[field.fieldName] ?? field.value}
                     onChange={handleFieldChange}
                     highlighted={focusedFieldName === field.fieldName}
+                    onDeleteField={handleDeleteField}
+                    onRegenerateField={handleRegenerateField}
+                    onAttachScript={handleAttachScript}
+                    actionsDisabled={advBusy}
                   />
                 ))}
+              </div>
+            )}
+
+            {/* Advanced field operations (add signature / scripts / calc order) */}
+            {currentFile && formData !== null && (
+              <AdvancedFieldTools
+                key={formData.fields.map((f) => f.fieldName).join("|")}
+                fieldNames={formData.fields.map((f) => f.fieldName)}
+                disabled={advBusy}
+                onAddSignatureField={handleAddSignatureField}
+                onSetCalculationOrder={handleSetCalculationOrder}
+              />
+            )}
+
+            {/* Advanced op feedback */}
+            {advBusy && (
+              <div className="flex items-center gap-2 rounded-md bg-muted/50 px-2.5 py-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 flex-shrink-0 animate-spin" />
+                <span>{t("applying")}</span>
+              </div>
+            )}
+            {advError !== null && (
+              <div className="flex items-start gap-2 rounded-md bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
+                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                <span>{advError}</span>
+              </div>
+            )}
+            {advSuccess !== null && (
+              <div className="flex items-center gap-2 rounded-md bg-emerald-500/10 px-2.5 py-2 text-xs text-emerald-700 dark:text-emerald-400">
+                <CheckSquare className="h-3.5 w-3.5 flex-shrink-0" />
+                <span>{advSuccess}</span>
               </div>
             )}
 

@@ -2313,7 +2313,38 @@
         "listbox": "Liste multiple",
         "signature": "Signature",
         "button": "Bouton"
-      }
+      },
+      "attachScript": "Script JS",
+      "regenerate": "Régénérer",
+      "regenerateAppearance": "Régénérer l'apparence du champ",
+      "delete": "Supprimer",
+      "deleteField": "Supprimer le champ",
+      "scriptTriggerLabel": "Déclencheur",
+      "scriptTriggers": {
+        "keystroke": "Frappe (filtrer la saisie)",
+        "format": "Format (affichage)",
+        "validate": "Validation",
+        "calculate": "Calcul"
+      },
+      "scriptPlaceholder": "JavaScript du champ (ex. event.value = …)",
+      "applyScript": "Attacher le script",
+      "cancel": "Annuler",
+      "advancedTitle": "Outils avancés",
+      "addSignatureTitle": "Ajouter un champ de signature",
+      "signatureNamePlaceholder": "Nom du champ (ex. Signature1)",
+      "pageLabel": "Page",
+      "rectHint": "Rectangle [x0, y0, x1, y1] en points PDF (origine en bas à gauche).",
+      "addSignatureField": "Ajouter le champ",
+      "calcOrderTitle": "Ordre de calcul",
+      "calcOrderEmpty": "Chargez les champs pour définir l'ordre de calcul.",
+      "calcOrderHint": "Ordre de recalcul des champs ayant un script « Calcul ».",
+      "applyCalcOrder": "Appliquer l'ordre",
+      "actionFailed": "Échec de l'opération.",
+      "deleteSuccess": "Champ « {field} » supprimé.",
+      "regenerateSuccess": "Apparence du champ « {field} » régénérée.",
+      "scriptSuccess": "Script attaché au champ « {field} ».",
+      "signatureFieldSuccess": "Champ de signature « {field} » ajouté.",
+      "calcOrderSuccess": "Ordre de calcul mis à jour."
     },
     "editTools": {
       "findReplace": {
@@ -2806,6 +2837,81 @@
       "applying": "Application…",
       "error": "Échec de l'application du dégradé.",
       "minStops": "Au moins deux arrêts sont requis."
+    },
+    "imposition": {
+      "toolbarLabel": "Imposition",
+      "headerTitle": "Imposition & contenu",
+      "subtitle": "Imposition N-up, JavaScript du document et calques de contenu optionnel.",
+      "close": "Fermer",
+      "cancel": "Fermer",
+      "noFile": "Aucun document ouvert.",
+      "loading": "Chargement…",
+      "downloaded": "Le PDF modifié a été téléchargé.",
+      "tabs": {
+        "nup": "N-up",
+        "js": "JavaScript",
+        "ocg": "Calques"
+      },
+      "errors": {
+        "generic": "L'opération a échoué. Le PDF est peut-être corrompu ou les paramètres invalides.",
+        "noFile": "Aucun document sélectionné."
+      },
+      "nup": {
+        "title": "Imposition N-up",
+        "intro": "Disposez toutes les pages en grille (2-up, 4-up, planches contact). Les pages d'origine sont remplacées par les planches.",
+        "cols": "Colonnes",
+        "rows": "Lignes",
+        "sheet": "Format de planche",
+        "sheetA4Portrait": "A4 portrait",
+        "sheetA4Landscape": "A4 paysage",
+        "sheetLetter": "Letter",
+        "margin": "Marge (pt)",
+        "gutter": "Gouttière (pt)",
+        "submit": "Créer le PDF imposé"
+      },
+      "placePage": {
+        "title": "Placer une page",
+        "intro": "Dessinez le contenu d'une page source sur une page cible (tampon, page-sur-page), mise à l'échelle et positionnée.",
+        "target": "Page cible",
+        "source": "Page source",
+        "x": "X (pt)",
+        "y": "Y (pt)",
+        "scaleX": "Échelle X",
+        "scaleY": "Échelle Y",
+        "submit": "Placer la page"
+      },
+      "js": {
+        "title": "JavaScript du document",
+        "intro": "Scripts exécutés à l'ouverture du document (ISO 32000-1 §12.6.4.16), par ordre de nom.",
+        "listTitle": "Scripts installés",
+        "empty": "Aucun JavaScript de document.",
+        "name": "Nom",
+        "namePlaceholder": "ex. AFInit",
+        "script": "Source",
+        "scriptPlaceholder": "app.alert('Bonjour');",
+        "add": "Ajouter le script",
+        "remove": "Supprimer {name}",
+        "loadFailed": "Impossible de charger les scripts du document."
+      },
+      "ocg": {
+        "title": "Contenu optionnel (calques)",
+        "intro": "Encadrez le contenu d'une page sous un calque (OCG) que le lecteur peut afficher ou masquer.",
+        "layersTitle": "Calques existants",
+        "emptyLayers": "Aucun calque dans ce document.",
+        "page": "Page",
+        "layer": "Calque",
+        "newLayer": "Nouveau calque…",
+        "layerName": "Nom du calque",
+        "layerNamePlaceholder": "ex. Annotations",
+        "begin": "Démarrer le calque",
+        "end": "Terminer le calque",
+        "beginHint": "Ouvre une séquence de contenu optionnel sur la page : le contenu ajouté ensuite est rattaché au calque.",
+        "endHint": "Ferme la dernière séquence de contenu optionnel ouverte sur la page.",
+        "visible": "Visible",
+        "hidden": "Masqué",
+        "locked": "Verrouillé",
+        "loadFailed": "Impossible de charger les calques."
+      }
     }
   },
   "errors": {
@@ -3908,7 +4014,12 @@
     "removeFile": "Retirer",
     "removeFileNamed": "Retirer le fichier {name}",
     "toastSuccess": "PDF fusionné",
-    "toastError": "Échec de la fusion"
+    "toastError": "Échec de la fusion",
+    "pageRangeLabel": "Pages",
+    "pageRangePlaceholder": "ex : 1-5,8",
+    "pageRangeHint": "Indiquez les pages à inclure (ex : 1-5,8). Laissez vide pour tout le fichier.",
+    "pageRangeAria": "Plage de pages pour {name}",
+    "pageRangeAllPages": "Toutes les pages"
   },
   "toolRunner": {
     "dropNow": "Déposez pour ajouter",
