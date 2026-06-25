@@ -19,6 +19,7 @@ import type {
   ParagraphStyleEdit,
   ListEdit,
   TableEdit,
+  CompressPdfOptions,
 } from '../services/pdf';
 import type { DocumentMetadata, FormFieldElement } from '@giga-pdf/types';
 
@@ -127,12 +128,24 @@ export const useEncryptPdf = () => {
 };
 
 /**
- * Hook to decrypt a PDF
+ * Hook to decrypt a PDF — either with a password or, for public-key
+ * (certificate) encrypted documents, with the recipient's certificate +
+ * PKCS#1 RSA private key.
  */
 export const useDecryptPdf = () => {
   return useMutation({
-    mutationFn: ({ file, password }: { file: File | Blob; password: string }) =>
-      pdfService.decryptPdf(file, password),
+    mutationFn: (
+      params:
+        | { file: File | Blob; password: string }
+        | { file: File | Blob; certificate: File; privateKey: File },
+    ) =>
+      'password' in params
+        ? pdfService.decryptPdf(params.file, params.password)
+        : pdfService.decryptPdfWithCertificate(
+            params.file,
+            params.certificate,
+            params.privateKey,
+          ),
   });
 };
 
@@ -469,10 +482,17 @@ export const useMakeEditableOcrPdf = () => {
 /**
  * Compress a PDF (native normalisation + garbage collection).
  * Resolves with the compressed Blob and the before/after sizes in bytes.
+ *
+ * Pass `optimize` (compact object/xref streams), `linearize` (Fast Web View)
+ * and/or `version` ("1.7" | "2.0") to switch the output serializer.
  */
 export const useCompressPdf = () => {
   return useMutation({
-    mutationFn: ({ file }: { file: File | Blob }) => pdfService.compressPdf(file),
+    mutationFn: ({
+      file,
+      ...options
+    }: { file: File | Blob } & CompressPdfOptions) =>
+      pdfService.compressPdf(file, options),
   });
 };
 

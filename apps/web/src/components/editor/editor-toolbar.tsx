@@ -1546,6 +1546,7 @@ export function EditorToolbar({
         onClose={() => setShowPdfADialog(false)}
         currentFile={currentFile ?? null}
         baseFilename={currentFile?.name}
+        documentLanguage={documentLanguage}
       />
       <CompressDialog
         open={showCompressDialog}

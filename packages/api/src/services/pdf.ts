@@ -115,13 +115,20 @@ interface AllThumbnailsResult {
 }
 
 /**
- * Encrypt options
+ * Encrypt options. Supply `certificates` for public-key (certificate)
+ * encryption; otherwise the user/owner passwords drive password encryption.
+ * When `certificates` is non-empty the password fields are ignored.
  */
 interface EncryptOptions {
   userPassword?: string;
   ownerPassword?: string;
   algorithm?: 'AES-128' | 'AES-256';
   permissions?: Record<string, boolean>;
+  /**
+   * Recipient X.509 certificate files (DER or PEM). When non-empty, the PDF is
+   * encrypted to these recipients (public-key security) instead of a password.
+   */
+  certificates?: File[];
 }
 
 /**
@@ -176,6 +183,69 @@ interface MetadataResult {
 interface FlattenOptions {
   flattenAnnotations?: boolean;
   flattenForms?: boolean;
+}
+
+/**
+ * One signature's metadata (a `/Sig` field's `/V`), mirrored from the engine's
+ * `SignatureInfo`. Returned by {@link pdfService.verifyPdfSignatures}.
+ */
+export interface PdfSignatureInfo {
+  /** The signature field's `/T` name. */
+  fieldName: string;
+  /** The signer name (`/Name`), or `null`. */
+  signerName: string | null;
+  /** The stated reason (`/Reason`), or `null`. */
+  reason: string | null;
+  /** The stated location (`/Location`), or `null`. */
+  location: string | null;
+  /** The signing date string (`/M`, e.g. `D:20260624…`), or `null`. */
+  date: string | null;
+  /** The `/SubFilter` (e.g. `adbe.pkcs7.detached`), or `null`. */
+  subFilter: string | null;
+  /** The `/ByteRange` `[a, b, c, d]` the signature covers. */
+  byteRange: [number, number, number, number];
+}
+
+/**
+ * The cryptographic verdict for one signature, mirrored from the engine's
+ * `SignatureReport`. Returned by {@link pdfService.verifyPdfSignatures}.
+ */
+export interface PdfSignatureReport {
+  /** The signature field's `/T` name (joins to {@link PdfSignatureInfo.fieldName}). */
+  fieldName: string;
+  /** The `/ByteRange` is well-formed and within the file bounds. */
+  byteRangeOk: boolean;
+  /** The CMS `messageDigest` equals SHA-256 of the covered bytes (integrity). */
+  digestOk: boolean;
+  /** The SignerInfo signature validates under the signer certificate's key. */
+  signatureOk: boolean;
+  /** The signature covers the whole current file (nothing appended after it). */
+  coversWholeDocument: boolean;
+  /** The signer certificate's Common Name, or `null`. */
+  signerCommonName: string | null;
+  /** Number of certificates embedded in the CMS. */
+  certCount: number;
+  /** The recognised signature algorithm (`RSA+SHA-256`) or an unsupported note. */
+  algorithm: string;
+}
+
+/** Result of {@link pdfService.verifyPdfSignatures} — metadata + verdict, keyed by `fieldName`. */
+export interface VerifyPdfSignaturesResult {
+  signatures: PdfSignatureInfo[];
+  reports: PdfSignatureReport[];
+}
+
+/** DocMDP permission level for {@link pdfService.certifyPdf}. */
+export type DocMdpLevel = 1 | 2 | 3;
+
+/** Options for {@link pdfService.certifyPdf} (DocMDP author certification). */
+export interface CertifyPdfOptions {
+  /** Which later changes the certification permits: 1 = none, 2 = form-fill + sign, 3 = also annotate. */
+  docmdpLevel: DocMdpLevel;
+  /** `/Reason` — why the document is being certified. */
+  reason?: string;
+  /** `/Name` — human-readable certifier name. */
+  signerName?: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -357,10 +427,18 @@ export const pdfService = {
   encryptPdf: async (file: File | Blob, options: EncryptOptions): Promise<Blob> => {
     const form = new FormData();
     appendFileToForm(form, file);
-    form.append('action', 'encrypt');
 
-    if (options.userPassword) form.append('userPassword', options.userPassword);
-    if (options.ownerPassword) form.append('ownerPassword', options.ownerPassword);
+    if (options.certificates && options.certificates.length > 0) {
+      // Public-key (certificate) encryption — no password is sent.
+      form.append('action', 'encryptCertificate');
+      for (const cert of options.certificates) {
+        form.append('certificates[]', cert, cert.name);
+      }
+    } else {
+      form.append('action', 'encrypt');
+      if (options.userPassword) form.append('userPassword', options.userPassword);
+      if (options.ownerPassword) form.append('ownerPassword', options.ownerPassword);
+    }
     if (options.algorithm) form.append('algorithm', options.algorithm);
     if (options.permissions) form.append('permissions', JSON.stringify(options.permissions));
 
@@ -381,6 +459,32 @@ export const pdfService = {
     appendFileToForm(form, file);
     form.append('action', 'decrypt');
     form.append('password', password);
+
+    const response = await fetch('/api/pdf/encrypt', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+
+    return handleBlobResponse(response);
+  },
+
+  /**
+   * Decrypt a public-key (certificate) encrypted PDF with the recipient's
+   * X.509 certificate + PKCS#1 RSA private key (each DER or PEM). The
+   * certificate and key transit only in the request body — never stored nor
+   * logged server-side.
+   */
+  decryptPdfWithCertificate: async (
+    file: File | Blob,
+    certificate: File,
+    privateKey: File,
+  ): Promise<Blob> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+    form.append('action', 'decryptCertificate');
+    form.append('certificate', certificate, certificate.name);
+    form.append('privateKey', privateKey, privateKey.name);
 
     const response = await fetch('/api/pdf/encrypt', {
       method: 'POST',
@@ -981,6 +1085,49 @@ export const pdfService = {
   },
 
   /**
+   * List every signature on a PDF and cryptographically verify each one
+   * (`POST /api/pdf/sign` with `action=verify`). Returns the per-field metadata
+   * plus the per-field verdict (integrity, RSA check, whole-document coverage,
+   * signer CN, algorithm), keyed by `fieldName`. Read-only — no network call
+   * leaves the server. An unsigned document yields two empty arrays.
+   */
+  verifyPdfSignatures: async (file: File | Blob): Promise<VerifyPdfSignaturesResult> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+    form.append('action', 'verify');
+
+    const response = await fetch('/api/pdf/sign', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+    return handleJsonResponse<VerifyPdfSignaturesResult>(response);
+  },
+
+  /**
+   * Certify a PDF (DocMDP author certification) via `POST /api/pdf/sign` with
+   * `action=certify`. Declares which later changes are permitted
+   * (`options.docmdpLevel`: 1 = none, 2 = form-fill + sign, 3 = also annotate)
+   * using a generated self-signed identity (no certificate upload). Returns the
+   * certified PDF binary.
+   */
+  certifyPdf: async (file: File | Blob, options: CertifyPdfOptions): Promise<Blob> => {
+    const form = new FormData();
+    appendFileToForm(form, file);
+    form.append('action', 'certify');
+    form.append('docmdpLevel', String(options.docmdpLevel));
+    if (options.reason) form.append('reason', options.reason);
+    if (options.signerName) form.append('signerName', options.signerName);
+
+    const response = await fetch('/api/pdf/sign', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+    return handleBlobResponse(response);
+  },
+
+  /**
    * Run OCR on each rasterised page (verified by GET /api/pdf/ocr).
    */
   ocrPdf: async (
@@ -1033,10 +1180,22 @@ export const pdfService = {
    * Compress a PDF (native normalisation + garbage collection / compression).
    * Returns the compressed binary plus the before/after sizes reported by
    * the route headers (X-Original-Size / X-Compressed-Size).
+   *
+   * `options` switch the serializer used:
+   *   - optimize  → compact object/xref streams (saveOptimized)
+   *   - linearize → Fast Web View / linearized output (saveLinearized)
+   *   - version   → "1.7" | "2.0" %PDF header banner for the above
+   * Omitting them keeps the default recompression pipeline.
    */
-  compressPdf: async (file: File | Blob): Promise<CompressPdfResult> => {
+  compressPdf: async (
+    file: File | Blob,
+    options: CompressPdfOptions = {},
+  ): Promise<CompressPdfResult> => {
     const form = new FormData();
     appendFileToForm(form, file);
+    if (options.optimize) form.append('optimize', 'true');
+    if (options.linearize) form.append('linearize', 'true');
+    if (options.version) form.append('version', options.version);
 
     const response = await fetch('/api/pdf/compress', {
       method: 'POST',
@@ -1204,6 +1363,22 @@ export const pdfService = {
     return handleBlobResponse(response);
   },
 };
+
+/** PDF file-version banner for the optimized / linearized output. */
+export type PdfVersion = '1.7' | '2.0';
+
+/**
+ * Output controls for compressPdf. When neither `optimize` nor `linearize` is
+ * set, the default recompression pipeline runs (backward compatible).
+ */
+export interface CompressPdfOptions {
+  /** Re-serialise with PDF object streams + a cross-reference stream (most compact ISO output). */
+  optimize?: boolean;
+  /** Serialise as a linearized ("Fast Web View") PDF for progressive web rendering. */
+  linearize?: boolean;
+  /** %PDF header banner applied to the optimized / linearized output (default "1.7"). */
+  version?: PdfVersion;
+}
 
 /**
  * Result of compressPdf — compressed binary + before/after sizes (bytes).
