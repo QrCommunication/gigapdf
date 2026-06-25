@@ -69,8 +69,23 @@ vi.mock('@giga-pdf/pdf-engine', () => {
     openDocument: vi.fn(),
     closeDocument: vi.fn(),
     renderPage: vi.fn(),
+    parsePageRange: vi.fn(),
     PDFEngineError,
     PDFCorruptedError,
+  };
+});
+
+// The merge-universal route loads the zero-dependency engine directly for the
+// page-range path (`GigaPdfEngine.loadDefault().mergePdfs([{ pdf, pages }])`).
+// The vi.fns live INSIDE the factory (no out-of-scope reference → no TDZ trap);
+// tests retrieve them via `await GigaPdfEngine.loadDefault()`.
+vi.mock('@qrcommunication/gigapdf-lib', () => {
+  const open = vi.fn();
+  const mergePdfs = vi.fn();
+  return {
+    GigaPdfEngine: {
+      loadDefault: vi.fn(() => Promise.resolve({ open, mergePdfs })),
+    },
   };
 });
 
@@ -96,9 +111,11 @@ import {
   openDocument,
   closeDocument,
   renderPage,
+  parsePageRange,
   PDFEngineError,
   PDFCorruptedError,
 } from '@giga-pdf/pdf-engine';
+import { GigaPdfEngine } from '@qrcommunication/gigapdf-lib';
 import { requireSession } from '@/lib/auth-helpers';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -266,6 +283,111 @@ describe('POST /api/pdf/merge-universal', () => {
       { key: 'outputName', value: 'combined.pdf' },
     ]));
     expect(res.headers.get('Content-Disposition')).toContain('combined.pdf');
+  });
+});
+
+// ── /api/pdf/merge-universal — page ranges (issue #93) ────────────────────────
+
+describe('POST /api/pdf/merge-universal — page ranges', () => {
+  // The engine vi.fns live inside the lib mock; `loadDefault()` resolves to a
+  // fresh wrapper each call but always closes over the SAME `open` / `mergePdfs`
+  // — so the handle obtained test-side is the very one the route invokes.
+  let engine: {
+    open: ReturnType<typeof vi.fn>;
+    mergePdfs: ReturnType<typeof vi.fn>;
+  };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.mocked(requireSession).mockResolvedValue(mockAuthOk);
+    // Per-file conversion returns a PDF; the engine assembles the parts.
+    vi.mocked(mergeUniversal).mockResolvedValue(FAKE_PDF);
+    vi.mocked(parsePageRange).mockReturnValue([{ start: 1, end: 2 }]);
+
+    engine = (await GigaPdfEngine.loadDefault()) as unknown as typeof engine;
+    engine.open.mockReturnValue({ pageCount: () => 5, close: vi.fn() });
+    engine.mergePdfs.mockReturnValue(FAKE_PDF);
+  });
+
+  it('assembles via mergePdfs([{ pdf, pages }]) when a range is supplied', async () => {
+    const res = await mergeUniversalPOST(makeRequest([
+      { key: 'files', value: makeFile('a.pdf', FAKE_PDF, 'application/pdf') },
+      { key: 'ranges', value: '1-2' },
+      { key: 'files', value: makeFile('b.pdf', FAKE_PDF, 'application/pdf') },
+      { key: 'ranges', value: '' },
+    ]));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/pdf');
+    expect(await bodyStartsWithPdf(res)).toBe(true);
+
+    // Each file converted in isolation, then assembled once.
+    expect(vi.mocked(mergeUniversal)).toHaveBeenCalledTimes(2);
+    expect(engine.mergePdfs).toHaveBeenCalledTimes(1);
+
+    const parts = engine.mergePdfs.mock.calls[0]![0] as Array<
+      Uint8Array | { pdf: Uint8Array; pages: number[] }
+    >;
+    expect(parts).toHaveLength(2);
+    // File with a range → MergePart { pdf, pages }; empty range → raw bytes.
+    expect(parts[0]).toMatchObject({ pages: [1, 2] });
+    expect((parts[0] as { pdf: Uint8Array }).pdf).toBeInstanceOf(Uint8Array);
+    expect(parts[1]).toBeInstanceOf(Uint8Array);
+  });
+
+  it('honours a range on a single file (extract through mergePdfs)', async () => {
+    const res = await mergeUniversalPOST(makeRequest([
+      { key: 'files', value: makeFile('only.pdf', FAKE_PDF, 'application/pdf') },
+      { key: 'ranges', value: '1-2' },
+    ]));
+
+    expect(res.status).toBe(200);
+    expect(engine.mergePdfs).toHaveBeenCalledTimes(1);
+    const parts = engine.mergePdfs.mock.calls[0]![0] as Array<unknown>;
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toMatchObject({ pages: [1, 2] });
+  });
+
+  it('returns 400 with a precise message for an invalid range', async () => {
+    vi.mocked(parsePageRange).mockImplementation(() => {
+      throw new Error('Invalid page range: "9" (document has 5 pages)');
+    });
+
+    const res = await mergeUniversalPOST(makeRequest([
+      { key: 'files', value: makeFile('doc.pdf', FAKE_PDF, 'application/pdf') },
+      { key: 'ranges', value: '9' },
+    ]));
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.error).toMatch(/invalid page range/i);
+    expect(body.error).toMatch(/doc\.pdf/);
+    expect(engine.mergePdfs).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the legacy bulk path when NO range field is sent', async () => {
+    const res = await mergeUniversalPOST(makeRequest([
+      { key: 'files', value: makeFile('a.pdf', FAKE_PDF, 'application/pdf') },
+      { key: 'files', value: makeFile('b.pdf', FAKE_PDF, 'application/pdf') },
+    ]));
+
+    expect(res.status).toBe(200);
+    expect(engine.mergePdfs).not.toHaveBeenCalled();
+    // One bulk call with both inputs — not the per-file conversion of the range path.
+    expect(vi.mocked(mergeUniversal)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(mergeUniversal).mock.calls[0]![0]).toHaveLength(2);
+  });
+
+  it('treats all-blank ranges as the legacy bulk path', async () => {
+    const res = await mergeUniversalPOST(makeRequest([
+      { key: 'files', value: makeFile('a.pdf', FAKE_PDF, 'application/pdf') },
+      { key: 'ranges', value: '' },
+      { key: 'files', value: makeFile('b.pdf', FAKE_PDF, 'application/pdf') },
+      { key: 'ranges', value: '   ' },
+    ]));
+
+    expect(res.status).toBe(200);
+    expect(engine.mergePdfs).not.toHaveBeenCalled();
   });
 });
 

@@ -82,6 +82,7 @@ import {
   Check,
   X,
   Presentation,
+  Grid2x2,
 } from "lucide-react";
 import { MergeDialog } from "./merge-dialog";
 import { SplitDialog } from "./split-dialog";
@@ -89,6 +90,7 @@ import { EncryptDialog } from "./encrypt-dialog";
 import { SignDialog } from "./sign-dialog";
 import { MetadataDialog } from "./metadata-dialog";
 import { PageLabelsDialog } from "./page-labels-dialog";
+import { ImpositionDialog } from "./imposition-dialog";
 import { ConvertDialog } from "./convert-dialog";
 import { SearchDialog } from "./search-dialog";
 import { WatermarkDialog } from "./watermark-dialog";
@@ -615,6 +617,7 @@ export function EditorToolbar({
   const tRedact = useTranslations("editor.redact");
   const tPageLabels = useTranslations("editor.pageLabels");
   const tPresentation = useTranslations("editor.presentation");
+  const tImposition = useTranslations("editor.imposition");
   const [showShapeDropdown, setShowShapeDropdown] = useState(false);
   const [showAnnotationDropdown, setShowAnnotationDropdown] = useState(false);
   const [showFieldDropdown, setShowFieldDropdown] = useState(false);
@@ -633,6 +636,7 @@ export function EditorToolbar({
   const [showOcrDialog, setShowOcrDialog] = useState(false);
   const [showPdfADialog, setShowPdfADialog] = useState(false);
   const [showPresentationDialog, setShowPresentationDialog] = useState(false);
+  const [showImpositionDialog, setShowImpositionDialog] = useState(false);
   const [showCompressDialog, setShowCompressDialog] = useState(false);
   const [showHeadersFootersDialog, setShowHeadersFootersDialog] =
     useState(false);
@@ -1487,6 +1491,11 @@ export function EditorToolbar({
         label={tPresentation("toolbarLabel")}
         onClick={() => setShowPresentationDialog(true)}
       />
+      <ToolButton
+        icon={<Grid2x2 size={20} />}
+        label={tImposition("toolbarLabel")}
+        onClick={() => setShowImpositionDialog(true)}
+      />
       {/* Word-style running headers & footers — a continuous-view feature, so
           the toggle only appears there. The button is active when bands are on;
           clicking it opens the editor (turning the feature on if it was off). */}
@@ -1574,6 +1583,12 @@ export function EditorToolbar({
       <PresentationDialog
         open={showPresentationDialog}
         onClose={() => setShowPresentationDialog(false)}
+        currentFile={currentFile ?? null}
+        baseFilename={currentFile?.name}
+      />
+      <ImpositionDialog
+        open={showImpositionDialog}
+        onClose={() => setShowImpositionDialog(false)}
         currentFile={currentFile ?? null}
         baseFilename={currentFile?.name}
       />

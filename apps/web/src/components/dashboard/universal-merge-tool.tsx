@@ -55,6 +55,8 @@ const ACCEPT =
 interface QueuedFile {
   id: string;
   file: File;
+  /** Page-range string ("1-5,8", 1-based). Empty = the whole file. */
+  range: string;
 }
 
 let queueSeq = 0;
@@ -109,7 +111,7 @@ export function UniversalMergeTool() {
     if (incoming.length === 0) return;
     setQueue((prev) => [
       ...prev,
-      ...incoming.map((file) => ({ id: nextQueueId(), file })),
+      ...incoming.map((file) => ({ id: nextQueueId(), file, range: "" })),
     ]);
   }, []);
 
@@ -142,6 +144,10 @@ export function UniversalMergeTool() {
 
   const removeFile = useCallback((id: string) => {
     setQueue((prev) => prev.filter((q) => q.id !== id));
+  }, []);
+
+  const setRange = useCallback((id: string, range: string) => {
+    setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, range } : q)));
   }, []);
 
   const moveFile = useCallback((index: number, direction: -1 | 1) => {
@@ -180,9 +186,11 @@ export function UniversalMergeTool() {
     setMerging(true);
     try {
       const form = new FormData();
-      // Repeat the `files` key per file, IN ORDER — the backend preserves it.
-      for (const { file } of queue) {
+      // Repeat `files` (and the parallel `ranges`) per file, IN ORDER — the
+      // backend aligns them 1:1 by position. An empty range = the whole file.
+      for (const { file, range } of queue) {
         form.append("files", file, file.name);
+        form.append("ranges", range.trim());
       }
       form.append("outputName", finalName);
 
@@ -347,6 +355,21 @@ export function UniversalMergeTool() {
                         {formatBytes(item.file.size)}
                       </p>
                     </div>
+                    <Input
+                      value={item.range}
+                      onChange={(e) => setRange(item.id, e.target.value)}
+                      placeholder={t("pageRangePlaceholder")}
+                      aria-label={t("pageRangeAria", { name: item.file.name })}
+                      title={
+                        item.range.trim()
+                          ? t("pageRangeLabel")
+                          : t("pageRangeAllPages")
+                      }
+                      disabled={merging}
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="h-8 w-24 shrink-0 text-sm sm:w-32"
+                    />
                     <div className="flex shrink-0 items-center gap-1">
                       <Button
                         variant="ghost"
@@ -386,6 +409,11 @@ export function UniversalMergeTool() {
                 );
               })}
             </ol>
+
+            {/* Per-file page-range format hint */}
+            <p className="pt-1 text-xs text-muted-foreground">
+              {t("pageRangeHint")}
+            </p>
 
             {/* Total size + over-limit warning */}
             <div

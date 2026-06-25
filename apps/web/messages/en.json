@@ -2313,7 +2313,38 @@
         "listbox": "List box",
         "signature": "Signature",
         "button": "Button"
-      }
+      },
+      "attachScript": "JS script",
+      "regenerate": "Regenerate",
+      "regenerateAppearance": "Regenerate field appearance",
+      "delete": "Delete",
+      "deleteField": "Delete field",
+      "scriptTriggerLabel": "Trigger",
+      "scriptTriggers": {
+        "keystroke": "Keystroke (filter input)",
+        "format": "Format (display)",
+        "validate": "Validate",
+        "calculate": "Calculate"
+      },
+      "scriptPlaceholder": "Field JavaScript (e.g. event.value = …)",
+      "applyScript": "Attach script",
+      "cancel": "Cancel",
+      "advancedTitle": "Advanced tools",
+      "addSignatureTitle": "Add a signature field",
+      "signatureNamePlaceholder": "Field name (e.g. Signature1)",
+      "pageLabel": "Page",
+      "rectHint": "Rectangle [x0, y0, x1, y1] in PDF points (bottom-left origin).",
+      "addSignatureField": "Add field",
+      "calcOrderTitle": "Calculation order",
+      "calcOrderEmpty": "Load the fields to set the calculation order.",
+      "calcOrderHint": "Order in which fields with a Calculate script recompute.",
+      "applyCalcOrder": "Apply order",
+      "actionFailed": "Operation failed.",
+      "deleteSuccess": "Field “{field}” deleted.",
+      "regenerateSuccess": "Field “{field}” appearance regenerated.",
+      "scriptSuccess": "Script attached to field “{field}”.",
+      "signatureFieldSuccess": "Signature field “{field}” added.",
+      "calcOrderSuccess": "Calculation order updated."
     },
     "editTools": {
       "findReplace": {
@@ -2806,6 +2837,81 @@
       "applying": "Applying…",
       "error": "Failed to apply the gradient.",
       "minStops": "At least two stops are required."
+    },
+    "imposition": {
+      "toolbarLabel": "Imposition",
+      "headerTitle": "Imposition & content",
+      "subtitle": "N-up imposition, document JavaScript and optional-content layers.",
+      "close": "Close",
+      "cancel": "Close",
+      "noFile": "No document open.",
+      "loading": "Loading…",
+      "downloaded": "The modified PDF has been downloaded.",
+      "tabs": {
+        "nup": "N-up",
+        "js": "JavaScript",
+        "ocg": "Layers"
+      },
+      "errors": {
+        "generic": "The operation failed. The PDF may be corrupted or the parameters invalid.",
+        "noFile": "No document selected."
+      },
+      "nup": {
+        "title": "N-up imposition",
+        "intro": "Lay all pages out in a grid (2-up, 4-up, contact sheets). The original pages are replaced by the imposed sheets.",
+        "cols": "Columns",
+        "rows": "Rows",
+        "sheet": "Sheet size",
+        "sheetA4Portrait": "A4 portrait",
+        "sheetA4Landscape": "A4 landscape",
+        "sheetLetter": "Letter",
+        "margin": "Margin (pt)",
+        "gutter": "Gutter (pt)",
+        "submit": "Create imposed PDF"
+      },
+      "placePage": {
+        "title": "Place a page",
+        "intro": "Draw a source page's content onto a target page (stamp, page-on-page), scaled and positioned.",
+        "target": "Target page",
+        "source": "Source page",
+        "x": "X (pt)",
+        "y": "Y (pt)",
+        "scaleX": "Scale X",
+        "scaleY": "Scale Y",
+        "submit": "Place page"
+      },
+      "js": {
+        "title": "Document JavaScript",
+        "intro": "Scripts run when the document opens (ISO 32000-1 §12.6.4.16), in name order.",
+        "listTitle": "Installed scripts",
+        "empty": "No document-level JavaScript.",
+        "name": "Name",
+        "namePlaceholder": "e.g. AFInit",
+        "script": "Source",
+        "scriptPlaceholder": "app.alert('Hello');",
+        "add": "Add script",
+        "remove": "Remove {name}",
+        "loadFailed": "Could not load the document scripts."
+      },
+      "ocg": {
+        "title": "Optional content (layers)",
+        "intro": "Bracket a page's content under a layer (OCG) the reader can show or hide.",
+        "layersTitle": "Existing layers",
+        "emptyLayers": "No layers in this document.",
+        "page": "Page",
+        "layer": "Layer",
+        "newLayer": "New layer…",
+        "layerName": "Layer name",
+        "layerNamePlaceholder": "e.g. Annotations",
+        "begin": "Begin layer",
+        "end": "End layer",
+        "beginHint": "Opens an optional-content sequence on the page: content added afterwards is attached to the layer.",
+        "endHint": "Closes the most recently opened optional-content sequence on the page.",
+        "visible": "Visible",
+        "hidden": "Hidden",
+        "locked": "Locked",
+        "loadFailed": "Could not load the layers."
+      }
     }
   },
   "errors": {
@@ -3908,7 +4014,12 @@
     "removeFile": "Remove",
     "removeFileNamed": "Remove file {name}",
     "toastSuccess": "PDF merged",
-    "toastError": "Merge failed"
+    "toastError": "Merge failed",
+    "pageRangeLabel": "Pages",
+    "pageRangePlaceholder": "e.g. 1-5,8",
+    "pageRangeHint": "Choose which pages to include (e.g. 1-5,8). Leave empty for the whole file.",
+    "pageRangeAria": "Page range for {name}",
+    "pageRangeAllPages": "All pages"
   },
   "toolRunner": {
     "dropNow": "Drop to add",
