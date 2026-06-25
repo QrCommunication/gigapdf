@@ -48,6 +48,9 @@ import { clientLogger } from "@/lib/client-logger";
 // Shared run<->Fabric-styles mapping (single source of truth with
 // fabric-element-io.ts) so character-level styling round-trips identically.
 import { runsToFabricStyles } from "./lib/text-runs";
+// Single source of truth for the text-baseline anchoring geometry, shared with
+// the save-time inverse in fabric-element-io.ts (was a bare `0.22` copied here).
+import { baselineTopFromBoundsY } from "./lib/text-baseline";
 import {
   composeDisplayText,
   leftIndentOffset,
@@ -955,13 +958,15 @@ export async function renderElementsOverlay(
         // of the glyph bbox (= baseline - fontSize approximated as ascender).
         // For Fabric's baseline to land on the PDF baseline (= bounds.y +
         // fontSize), use originY='bottom' with top = bounds.y + fontSize +
-        // descender. Without the descender (~22% of fontSize), Fabric
-        // would put its bbox bottom (= baseline + descender) at the PDF
-        // baseline, overshooting by descender — visible as a "léger
-        // décalage vers le bas" of the editable overlay.
+        // descender (~22% of fontSize). Geometry + constant live in the shared
+        // text-baseline module (single source of truth with the save-time
+        // inverse boundsYFromBaselineTop in fabric-element-io.ts), so the
+        // place → save → reload round-trip can never drift.
         const _fontSize = textElement.style.fontSize ?? 12;
-        const _descenderOffset = _fontSize * 0.22;
-        const _baselineY = textElement.bounds.y + _fontSize;
+        const _baselineTop = baselineTopFromBoundsY(
+          textElement.bounds.y,
+          _fontSize,
+        );
         // Resolve the embedded PDF font WEIGHT/STYLE-AWARE: pick the subset that
         // matches this run's bold/italic so a regular run never lands on the
         // first-loaded BOLD subset (the "gras parasite" + wrong-metrics overlap).
@@ -986,7 +991,7 @@ export async function renderElementsOverlay(
         const textObj = new IText(_displayText, {
           ...baseOptions,
           left: baseOptions.left + _indentOffset,
-          top: _baselineY + _descenderOffset,
+          top: _baselineTop,
           originY: "bottom" as const,
           width: textElement.bounds.width,
           fontSize: _fontSize,
