@@ -40,7 +40,7 @@ function makeFakeDoc(opts: {
       calls.removeFooters += 1;
       return opts.removeFootersOk ?? true;
     },
-    save: (): Uint8Array => opts.saved ?? new Uint8Array([1, 2, 3]),
+    saveCompressed: (): Uint8Array => opts.saved ?? new Uint8Array([1, 2, 3]),
     close: () => {
       calls.closed += 1;
     },

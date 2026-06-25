@@ -68,7 +68,7 @@ export async function applyHeaderFooter(
     if (!ok) {
       throw new Error(`set ${kind} failed`);
     }
-    return freshCopy(doc.save());
+    return freshCopy(doc.saveCompressed());
   } finally {
     doc.close();
   }
@@ -135,7 +135,7 @@ export async function removeHeaderFooter(
     if (!ok) {
       throw new Error(`remove ${kind}s failed`);
     }
-    return freshCopy(doc.save());
+    return freshCopy(doc.saveCompressed());
   } finally {
     doc.close();
   }
