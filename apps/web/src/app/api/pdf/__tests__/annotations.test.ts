@@ -118,6 +118,35 @@ function makeDoc() {
     addPolylineAnnotation: vi.fn(() => true),
     addCaretAnnotation: vi.fn(() => true),
     regenerateAppearance: vi.fn(() => true),
+    // Native list/remove paths. annotations(page) returns one stub annotation
+    // for page 1 only, so `list` walks all pages and surfaces page-scoped indices.
+    annotations: vi.fn((page: number) =>
+      page === 1
+        ? [
+            {
+              index: 0,
+              subtype: 'Highlight',
+              x0: 0,
+              y0: 0,
+              x1: 10,
+              y1: 10,
+              contents: 'hello',
+              author: 'alice',
+              subject: '',
+              created: '',
+              modified: '',
+              name: '',
+              opacity: 1,
+              color: [],
+              quadPoints: [],
+              inkList: [],
+              linkUri: '',
+              linkPage: 0,
+            },
+          ]
+        : [],
+    ),
+    removeAnnotation: vi.fn(() => true),
   };
 }
 
@@ -456,5 +485,95 @@ describe('POST /api/pdf/annotations', () => {
       ]),
     );
     expect(res.status).toBe(422);
+  });
+
+  // ── Inventory (action="list") ────────────────────────────────────────────────
+
+  it('list: walks every page and returns annotations with per-page index (no pageNumber)', async () => {
+    const res = await annotationsPOST(
+      makeRequest([
+        { key: 'file', value: makeFile() },
+        { key: 'action', value: 'list' },
+      ]),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toMatch(/application\/json/);
+    const body = (await res.json()) as {
+      success: boolean;
+      annotations: Array<{ page: number; index: number; subtype: string }>;
+    };
+    expect(body.success).toBe(true);
+    expect(body.annotations).toEqual([
+      { page: 1, index: 0, subtype: 'Highlight', contents: 'hello', author: 'alice' },
+    ]);
+    // annotations(page) was probed for every page.
+    expect(doc.annotations).toHaveBeenCalledTimes(PAGE_COUNT);
+  });
+
+  // ── Native removal (action="remove") ─────────────────────────────────────────
+
+  it('remove: calls removeAnnotation(page, index) and returns the PDF', async () => {
+    const res = await annotationsPOST(
+      makeRequest([
+        { key: 'file', value: makeFile() },
+        { key: 'action', value: 'remove' },
+        { key: 'page', value: '2' },
+        { key: 'index', value: '1' },
+      ]),
+    );
+    expect(res.status).toBe(200);
+    expect(await bodyStartsWithPdf(res)).toBe(true);
+    expect(doc.removeAnnotation).toHaveBeenCalledWith(2, 1);
+  });
+
+  it('remove: rejects a missing page with 400', async () => {
+    const res = await annotationsPOST(
+      makeRequest([
+        { key: 'file', value: makeFile() },
+        { key: 'action', value: 'remove' },
+        { key: 'index', value: '0' },
+      ]),
+    );
+    expect(res.status).toBe(400);
+    expect(doc.removeAnnotation).not.toHaveBeenCalled();
+  });
+
+  it('remove: rejects a missing index with 400', async () => {
+    const res = await annotationsPOST(
+      makeRequest([
+        { key: 'file', value: makeFile() },
+        { key: 'action', value: 'remove' },
+        { key: 'page', value: '1' },
+      ]),
+    );
+    expect(res.status).toBe(400);
+    expect(doc.removeAnnotation).not.toHaveBeenCalled();
+  });
+
+  it('remove: maps an engine false (no annotation at index) to 422', async () => {
+    doc.removeAnnotation.mockReturnValueOnce(false);
+    const res = await annotationsPOST(
+      makeRequest([
+        { key: 'file', value: makeFile() },
+        { key: 'action', value: 'remove' },
+        { key: 'page', value: '1' },
+        { key: 'index', value: '99' },
+      ]),
+    );
+    expect(res.status).toBe(422);
+    expect(vi.mocked(saveDocument)).not.toHaveBeenCalled();
+  });
+
+  it('remove: rejects a page beyond the page count with 400', async () => {
+    const res = await annotationsPOST(
+      makeRequest([
+        { key: 'file', value: makeFile() },
+        { key: 'action', value: 'remove' },
+        { key: 'page', value: '7' }, // pageCount is 6
+        { key: 'index', value: '0' },
+      ]),
+    );
+    expect(res.status).toBe(400);
+    expect(doc.removeAnnotation).not.toHaveBeenCalled();
   });
 });

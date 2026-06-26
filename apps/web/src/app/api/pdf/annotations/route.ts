@@ -3,7 +3,7 @@
  *
  * POST /api/pdf/annotations
  *
- * Two paradigms share this endpoint, discriminated by the `action` field:
+ * Four paradigms share this endpoint, discriminated by the `action` field:
  *
  * 1. Text-markup annotations (legacy, `action` ABSENT) — adds a highlight /
  *    underline / strikeout / note / link / squiggly annotation described by a
@@ -17,13 +17,26 @@
  *    repositions it with the existing annotation move/select system (no free
  *    canvas drawing tool).
  *
+ * 3. Inventory (`action="list"`) — walks every page and returns a JSON list of
+ *    the document's existing annotations with their per-page `index`
+ *    (`{ page, index, subtype, contents, author }[]`). No `pageNumber`; returns
+ *    JSON, not a PDF. Feeds the annotations panel's review list.
+ *
+ * 4. Native removal (`action="remove"`, `page` + `index`) — removes the page's
+ *    annotation at `index` from its `/Annots` array via
+ *    `GigaPdfDoc.removeAnnotation` (clean structural removal, not a pixel
+ *    redaction). Returns the modified PDF.
+ *
  * Form fields (multipart/form-data):
  *   file       — PDF file (required)
- *   pageNumber — 1-based page number (required)
+ *   pageNumber — 1-based page number (required for paradigms 1 & 2)
  *   action     — "circle" | "polygon" | "polyline" | "caret"
- *                | "regenerateAppearance"  (optional; omit for text-markup)
+ *                | "regenerateAppearance" | "list" | "remove"
+ *                (optional; omit for text-markup)
  *   element    — JSON AnnotationElement (required when `action` is ABSENT)
  *   params     — JSON geometry/colour options (geometric actions, optional)
+ *   page       — 1-based page (action="remove" only)
+ *   index      — 0-based per-page annotation index (action="remove" only)
  *
  * AnnotationElement schema (text-markup path, subset of @giga-pdf/types):
  * {
@@ -213,6 +226,82 @@ export async function POST(request: Request): Promise<Response> {
     if (!fileValidation.ok) return fileValidation.response;
     const file = fileValidation.file;
 
+    const action = formData.get('action');
+
+    // ── Document-wide annotation inventory (action="list") ─────────────────────
+    // No pageNumber — walks every page and surfaces each annotation's per-page
+    // index (the index `removeAnnotation` needs), returning JSON (not a PDF).
+    if (action === 'list') {
+      const arrayBuffer = await file.arrayBuffer();
+      const handle = await openDocument(Buffer.from(arrayBuffer));
+      const doc = handle._doc;
+      const pageCount = doc.pageCount();
+      const annotations: Array<{
+        page: number;
+        index: number;
+        subtype: string;
+        contents: string;
+        author: string;
+      }> = [];
+      for (let p = 1; p <= pageCount; p++) {
+        for (const a of doc.annotations(p)) {
+          annotations.push({
+            page: p,
+            index: a.index,
+            subtype: a.subtype,
+            contents: a.contents,
+            author: a.author,
+          });
+        }
+      }
+      return NextResponse.json({ success: true, annotations });
+    }
+
+    // ── Native annotation removal (action="remove", page + index) ──────────────
+    // Removes the page's annotation at `index` from its `/Annots` array (clean
+    // structural removal, not a pixel redaction). Returns the modified PDF.
+    if (action === 'remove') {
+      const pageRaw = formData.get('page');
+      const removePage = Number(pageRaw);
+      if (!pageRaw || !Number.isInteger(removePage) || removePage < 1) {
+        return NextResponse.json(
+          { success: false, error: 'page must be a positive integer.' },
+          { status: 400 },
+        );
+      }
+      const indexRaw = formData.get('index');
+      const removeIndex = Number(indexRaw);
+      if (indexRaw === null || !Number.isInteger(removeIndex) || removeIndex < 0) {
+        return NextResponse.json(
+          { success: false, error: 'index must be an integer >= 0.' },
+          { status: 400 },
+        );
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const handle = await openDocument(Buffer.from(arrayBuffer));
+      const doc = handle._doc;
+      const pageCount = doc.pageCount();
+      if (removePage > pageCount) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `page ${removePage} is out of range (document has ${pageCount} pages).`,
+          },
+          { status: 400 },
+        );
+      }
+      const removed = doc.removeAnnotation(removePage, removeIndex);
+      if (!removed) {
+        // false = no annotation at that position on the page.
+        return NextResponse.json(
+          { success: false, error: 'No annotation at the given page/index.' },
+          { status: 422 },
+        );
+      }
+      const savedBytes = await saveDocument(handle);
+      return pdfResponse(savedBytes, file.name);
+    }
+
     const pageNumberRaw = formData.get('pageNumber');
     const pageNumber = Number(pageNumberRaw);
     if (!pageNumberRaw || !Number.isInteger(pageNumber) || pageNumber < 1) {
@@ -221,8 +310,6 @@ export async function POST(request: Request): Promise<Response> {
         { status: 400 },
       );
     }
-
-    const action = formData.get('action');
 
     // ── Geometric annotations + appearance regeneration (GigaPdfDoc direct) ────
     if (typeof action === 'string' && action.length > 0) {
