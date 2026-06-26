@@ -2752,6 +2752,37 @@ export default function EditorPage() {
     [adoptModifiedPdf, toast, t],
   );
 
+  // Apply presentation edits (page transitions / auto-advance, set or cleared
+  // per page by the PresentationDialog) onto the live document. The dialog runs
+  // in editor mode (onApply) and hands us the produced PDF bytes; we adopt them
+  // in place. The dialog serves all of its tabs through onApply (transitions,
+  // scale, portfolio, figure-alt); the `scale` tab changes page geometry, so we
+  // re-parse to keep the Fabric overlay aligned with the new binary. (Transitions
+  // alone wouldn't need it, but a single reparse keeps every tab correct.)
+  const handleApplyPresentation = useCallback(
+    async (bytes: Uint8Array) => {
+      try {
+        const adopted = adoptModifiedPdf(
+          new Blob([new Uint8Array(bytes)], { type: "application/pdf" }),
+          { reparse: true },
+        );
+        if (!adopted) return;
+        toast({
+          title: t("presentation.applied.title"),
+          description: t("presentation.applied.description"),
+        });
+      } catch (err) {
+        clientLogger.error("[editor] apply presentation failed:", err);
+        toast({
+          title: t("presentation.applied.errorTitle"),
+          description: t("presentation.applied.errorDescription"),
+          variant: "destructive",
+        });
+      }
+    },
+    [adoptModifiedPdf, toast, t],
+  );
+
   // Remove every header (or footer) band of the current PDF, adopting the new
   // bytes without re-parsing (the page content is unchanged).
   const handleHeaderFooterRemove = useCallback(
@@ -4471,6 +4502,7 @@ export default function EditorPage() {
         onToggleHeadersFooters={handleToggleHeadersFooters}
         onHeaderFooterApply={handleHeaderFooterApply}
         onHeaderFooterRemove={handleHeaderFooterRemove}
+        onPresentationApplied={handleApplyPresentation}
         headerFooterInitialHeader={headerFooterInitialHeader}
         headerFooterInitialFooter={headerFooterInitialFooter}
         headerFooterBusy={headerFooterBusy}

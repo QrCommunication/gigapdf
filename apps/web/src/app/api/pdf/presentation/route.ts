@@ -12,8 +12,9 @@
  *                "figureAlt"   bake author alt-text onto figures (a11y)
  *
  * ── action="transition" ───────────────────────────────────────────────────────
- *   op             "set" (default) | "clear"
+ *   op             "set" (default) | "clear" | "get"
  *   pages          optional JSON array of 1-based page numbers; absent/empty = all
+ *                  (ignored for op="get", which always reads every page)
  *   style          (set) one of PAGE_TRANSITION_STYLES
  *   duration       (set) transition effect duration, seconds (> 0)
  *   dimension      (set) "horizontal" | "vertical"   (split/blinds)
@@ -38,7 +39,9 @@
  *   figureAlts     JSON array of strings: alt text per document-global figure index
  *
  * Returns the modified PDF as application/pdf, or 400 on bad input / 422 when the
- * engine cannot process the source.
+ * engine cannot process the source. The read-only `action="transition"` +
+ * `op="get"` instead returns JSON `{ success, data: { transitions } }`, where
+ * `transitions[i]` is the `PageTransition | null` of page `i+1`.
  *
  * The engine is called directly here (rather than via @giga-pdf/pdf-engine)
  * because this presentation/page surface is exposed by GigaPdfDoc;
@@ -291,6 +294,21 @@ function buildCollectionConfig(raw: string | null): { config: CollectionConfig }
   return { config };
 }
 
+/**
+ * Read the current page-transition of every page (1-based) into a dense array.
+ * `transitions[i]` is the {@link PageTransition} of page `i+1`, or `null` when
+ * that page carries no transition. Used by the editor to pre-fill the dialog
+ * with the document's existing presentation state (read-only, no save).
+ */
+function readTransitions(doc: GigaPdfDoc): Response {
+  const count = doc.pageCount();
+  const transitions: (PageTransition | null)[] = [];
+  for (let page = 1; page <= count; page++) {
+    transitions.push(doc.getPageTransition(page));
+  }
+  return NextResponse.json({ success: true, data: { transitions } });
+}
+
 /** Apply a transition set/clear across the resolved pages. */
 function applyTransition(doc: GigaPdfDoc, form: FormData, pages: number[]): Response | null {
   const op = str(form, 'op') ?? 'set';
@@ -382,15 +400,23 @@ export async function POST(request: Request): Promise<Response> {
       // Each handler validates its own fields, mutates the doc in place, and
       // returns a 4xx Response on bad input (or null to proceed to save).
       let failure: Response | null = null;
-      if (action === 'transition' || action === 'scale') {
+      if (action === 'transition') {
+        // Read-only path: return the existing per-page transitions as JSON
+        // (no mutation, no save) so the editor can pre-fill its dialog.
+        if ((str(formData, 'op') ?? 'set') === 'get') {
+          return readTransitions(doc);
+        }
         const pages = parsePages(str(formData, 'pages'), doc.pageCount());
         if (pages === null) {
           return badRequest('pages must be a JSON array of valid 1-based page numbers.');
         }
-        failure =
-          action === 'transition'
-            ? applyTransition(doc, formData, pages)
-            : applyScale(doc, formData, pages);
+        failure = applyTransition(doc, formData, pages);
+      } else if (action === 'scale') {
+        const pages = parsePages(str(formData, 'pages'), doc.pageCount());
+        if (pages === null) {
+          return badRequest('pages must be a JSON array of valid 1-based page numbers.');
+        }
+        failure = applyScale(doc, formData, pages);
       } else if (action === 'collection') {
         const built = buildCollectionConfig(str(formData, 'config'));
         if ('error' in built) return badRequest(built.error);
