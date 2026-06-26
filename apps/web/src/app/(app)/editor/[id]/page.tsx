@@ -125,7 +125,12 @@ import {
   type ListEdit,
   type TableStructureInfo,
 } from "@giga-pdf/api";
-import { ContentEditLayer, type ElementModification } from "@/components/editor/content-edit-layer";
+import {
+  ContentEditProvider,
+  ContentEditToolbar,
+  ContentEditZones,
+  type ElementModification,
+} from "@/components/editor/content-edit-layer";
 import {
   splitTextStylePatch,
   buildListEdits,
@@ -507,9 +512,6 @@ export default function EditorPage() {
     },
     [contentModsStorageKey],
   );
-
-  // Ref for the PDF canvas element (for background capture in content edit)
-  const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Charger le document
   const {
@@ -4056,18 +4058,6 @@ export default function EditorPage() {
     clipboard,
   ]);
 
-  // Find the PDF canvas element for content edit background capture
-  useEffect(() => {
-    if (!isContentEditActive) return;
-    // The EditorCanvas renders a canvas element — find it within the main area
-    const mainEl = canvasRef.current;
-    if (!mainEl) return;
-    const canvas = mainEl.querySelector('canvas');
-    if (canvas) {
-      (pdfCanvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = canvas;
-    }
-  }, [isContentEditActive, currentPageIndex]);
-
   // Rendu conditionnel pour chargement/erreur
   if (loading) {
     return (
@@ -4543,7 +4533,24 @@ export default function EditorPage() {
           }
           onMouseMove={isContinuous ? undefined : handleMouseMove}
         >
-          {isContinuous ? (
+          {/* Deep content-edit (#98): one provider wraps BOTH views so the
+              viewport-level toolbar and the in-sheet editable zones share a
+              single state instance (context flows by fiber position, so the
+              zones reach it even when mounted deep inside PageSlot via
+              `renderActiveOverlay`). The toolbar is a viewport sibling pinned to
+              the top of the canvas area; the zones mount in the page sheet
+              (EditorCanvas `overlay` single / `renderActiveOverlay` continuous)
+              — the proven FormFillOverlay model — so they align with the glyphs
+              at `bounds*zoom` from the sheet top-left in BOTH modes. */}
+          <ContentEditProvider
+            currentFile={currentPdfFile}
+            pageIndex={effectivePageIndex}
+            zoom={zoom}
+            isActive={isContentEditActive}
+            onModificationsChange={handleContentModificationsChange}
+          >
+            <ContentEditToolbar />
+            {isContinuous ? (
             <ContinuousPageView
               ref={continuousViewRef}
               pages={pages}
@@ -4599,6 +4606,14 @@ export default function EditorPage() {
                     zoom={zoom}
                   />
                   {renderTableEditOverlay()}
+                  {/* Deep content-edit zones for the ACTIVE page — same sheet
+                      space (PageChrome) as the FormFillOverlay above, so they
+                      line up with the glyphs. Background is sampled from the
+                      active page's Fabric canvas via the imperative handle. */}
+                  <ContentEditZones
+                    pageIndex={index}
+                    getPdfCanvas={() => canvasHandle?.getPdfCanvas() ?? null}
+                  />
                 </>
               )}
             />
@@ -4649,18 +4664,17 @@ export default function EditorPage() {
                       />
                     ) : null}
                     {renderTableEditOverlay()}
+                    {/* Deep content-edit zones in the page sheet (#98) — same
+                        `overlay` slot as FormFillOverlay so they align with the
+                        glyphs; the toolbar lives at the viewport level above.
+                        Was a `<main>`-cover sibling before, which offset the
+                        zones off the centered sheet. */}
+                    <ContentEditZones
+                      pageIndex={currentPageIndex}
+                      getPdfCanvas={() => canvasHandle?.getPdfCanvas() ?? null}
+                    />
                   </>
                 }
-              />
-
-              {/* Content edit layer (deep PDF editing overlay) */}
-              <ContentEditLayer
-                currentFile={currentPdfFile}
-                currentPageIndex={currentPageIndex}
-                zoom={zoom}
-                isActive={isContentEditActive}
-                onModificationsChange={handleContentModificationsChange}
-                canvasRef={pdfCanvasRef as React.RefObject<HTMLCanvasElement>}
               />
 
               {/* Overlay des curseurs des collaborateurs */}
@@ -4670,7 +4684,8 @@ export default function EditorPage() {
                 zoom={zoom}
               />
             </>
-          )}
+            )}
+          </ContentEditProvider>
         </main>
 
         {/* Properties panel */}
