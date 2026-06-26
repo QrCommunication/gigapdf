@@ -43,7 +43,7 @@ const COPY: Record<
   fr: {
     metaTitle: "Outils PDF en ligne gratuits : éditer, signer, convertir",
     metaDescription:
-      "36 outils PDF gratuits et open source : édition, fusion, signature numérique, OCR, compression, conversion Office et plus. Sans filigrane, auto-hébergeable.",
+      "38 outils PDF gratuits et open source : édition, fusion, signature numérique, OCR, compression, conversion Office et plus. Sans filigrane, auto-hébergeable.",
     ogTitle: "Outils PDF en ligne gratuits | GigaPDF",
     ogDescription:
       "Tous les outils PDF dont vous avez besoin, gratuits et open source : édition, signature, OCR, conversion, protection.",
@@ -51,7 +51,7 @@ const COPY: Record<
     listAria: "Liste des outils PDF",
     h1: "Outils PDF en ligne : tout faire sur vos documents, gratuitement",
     intro:
-      "GigaPDF réunit en une seule plateforme les trente-six opérations qui composent la vie réelle d'un document PDF : éditer le texte et les tableaux avec les polices d'origine, fusionner et diviser des dossiers, signer numériquement avec votre certificat, reconnaître le texte des scans, protéger par chiffrement AES-256, convertir depuis et vers Word, Excel, PowerPoint, OpenDocument, Markdown, RTF, HTML, EPUB et images. Chaque outil est complet dans le plan gratuit — pas de version bridée, pas de filigrane publicitaire — et le code, open source sous licence PolyForm Noncommercial, peut tourner sur vos propres serveurs.",
+      "GigaPDF réunit en une seule plateforme les trente-huit opérations qui composent la vie réelle d'un document PDF : éditer le texte et les tableaux avec les polices d'origine, fusionner et diviser des dossiers, signer numériquement avec votre certificat, reconnaître le texte des scans, protéger par chiffrement AES-256, convertir depuis et vers Word, Excel, PowerPoint, OpenDocument, Markdown, RTF, HTML, EPUB et images. Chaque outil est complet dans le plan gratuit — pas de version bridée, pas de filigrane publicitaire — et le code, open source sous licence PolyForm Noncommercial, peut tourner sur vos propres serveurs.",
     solutionsTitle: "Des outils pensés pour votre métier",
     solutionsText:
       "Au-delà des opérations unitaires, GigaPDF s'organise en workflows métiers : caviardage à valeur probante pour les avocats, OCR de pièces comptables pour les cabinets, signature de contrats pour les RH, dossiers de subvention pour les associations. Découvrez comment les outils s'assemblent pour votre activité.",
@@ -60,7 +60,7 @@ const COPY: Record<
   en: {
     metaTitle: "Free Online PDF Tools: Edit, Sign, Convert",
     metaDescription:
-      "36 free, open-source PDF tools: editing, merging, digital signing, OCR, compression, Office conversion and more. No watermark, self-hostable.",
+      "38 free, open-source PDF tools: editing, merging, digital signing, OCR, compression, Office conversion and more. No watermark, self-hostable.",
     ogTitle: "Free Online PDF Tools | GigaPDF",
     ogDescription:
       "Every PDF tool you need, free and open source: editing, signing, OCR, conversion, protection.",
@@ -68,7 +68,7 @@ const COPY: Record<
     listAria: "List of PDF tools",
     h1: "Online PDF tools: do everything with your documents, for free",
     intro:
-      "GigaPDF brings together, on a single platform, the thirty-six operations that make up the real life of a PDF document: editing text and tables with the original fonts, merging and splitting files, signing digitally with your certificate, recognizing text in scans, protecting with AES-256 encryption, converting to and from Word, Excel, PowerPoint, OpenDocument, Markdown, RTF, HTML, EPUB and images. Every tool is complete in the free plan — no crippled version, no advertising watermark — and the code, open source under the PolyForm Noncommercial license, can run on your own servers.",
+      "GigaPDF brings together, on a single platform, the thirty-eight operations that make up the real life of a PDF document: editing text and tables with the original fonts, merging and splitting files, signing digitally with your certificate, recognizing text in scans, protecting with AES-256 encryption, converting to and from Word, Excel, PowerPoint, OpenDocument, Markdown, RTF, HTML, EPUB and images. Every tool is complete in the free plan — no crippled version, no advertising watermark — and the code, open source under the PolyForm Noncommercial license, can run on your own servers.",
     solutionsTitle: "Tools designed around your profession",
     solutionsText:
       "Beyond individual operations, GigaPDF is organized into business workflows: evidence-grade redaction for lawyers, OCR of accounting documents for firms, contract signing for HR teams, grant application files for nonprofits. Discover how the tools fit together for your line of work.",

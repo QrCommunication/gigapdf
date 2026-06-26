@@ -28,9 +28,9 @@ function wordCount(text: string): number {
 }
 
 describe("tools-data", () => {
-  it("contient les 29 outils attendus, sans doublon de slug", () => {
-    expect(TOOLS).toHaveLength(36);
-    expect(TOOL_SLUGS.size).toBe(36);
+  it("contient les 38 outils attendus, sans doublon de slug", () => {
+    expect(TOOLS).toHaveLength(38);
+    expect(TOOL_SLUGS.size).toBe(38);
   });
 
   it.each(TOOLS.map((tool) => [tool.slug, tool] as const))(
@@ -155,9 +155,9 @@ describe("solutions-data", () => {
 });
 
 describe("tools-data.en", () => {
-  it("contient les 29 outils attendus, sans doublon de slug", () => {
-    expect(TOOLS_EN).toHaveLength(36);
-    expect(TOOL_SLUGS_EN.size).toBe(36);
+  it("contient les 38 outils attendus, sans doublon de slug", () => {
+    expect(TOOLS_EN).toHaveLength(38);
+    expect(TOOL_SLUGS_EN.size).toBe(38);
   });
 
   it.each(TOOLS_EN.map((tool) => [tool.slug, tool] as const))(
@@ -287,12 +287,12 @@ describe("solutions-data.en", () => {
 });
 
 describe("slug-map", () => {
-  it("toolSlugMap est une bijection complète FR → EN (36 entrées)", () => {
+  it("toolSlugMap est une bijection complète FR → EN (38 entrées)", () => {
     const keys = Object.keys(toolSlugMap);
     const values = Object.values(toolSlugMap);
 
-    expect(keys).toHaveLength(36);
-    expect(new Set(values).size).toBe(36);
+    expect(keys).toHaveLength(38);
+    expect(new Set(values).size).toBe(38);
     // Toutes les clés sont des slugs FR existants, toutes les valeurs des slugs EN existants
     expect(new Set(keys)).toEqual(TOOL_SLUGS);
     expect(new Set(values)).toEqual(TOOL_SLUGS_EN);

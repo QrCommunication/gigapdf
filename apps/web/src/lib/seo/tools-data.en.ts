@@ -2289,6 +2289,142 @@ export const TOOLS: ToolData[] = [
     relatedSolutions: ["accountants", "freelancers", "students"],
     icon: "file-output",
   },
+  {
+    slug: "change-pdf-password",
+    name: "Change PDF password",
+    category: "secure",
+    metaTitle: "Change a PDF Password Online | GigaPDF",
+    metaDescription:
+      "Change or set the password protecting a PDF: open with the old one, re-encrypt with the new in AES-256. Free, in-house PDF engine, self-hostable.",
+    h1: "Change a PDF password online",
+    intro: [
+      "Rotating the password on a confidential contract, revoking the one a contractor used to know, or simply protecting a file that was never locked: changing a PDF's password shouldn't force you to decrypt it in one tool and re-encrypt it in another. GigaPDF does both in a single step.",
+      "When the document is already protected, you enter its current password — that is what authorises the change — then the new one. GigaPDF opens the file, re-encrypts it with the password you choose, and keeps the original permissions instead of silently granting everything. The user password (asked when opening) and the owner password (which governs permissions) can be set independently.",
+      "If the PDF had no password at all, the same tool sets one: the in-house engine's AES-256 encryption applies directly, with no third-party dependency. Everything happens inside your workspace, the password never leaves the current request, and the resulting file stays readable by any compliant PDF reader.",
+    ],
+    howTo: {
+      title: "How to change a PDF's password",
+      steps: [
+        "Upload the PDF whose password you want to change or set.",
+        "If the file is already protected, enter its current password.",
+        "Type the new user password, and an optional separate owner password if needed.",
+        "Pick the encryption algorithm: AES-256 is recommended.",
+        "Run it and download the PDF re-encrypted with its new password.",
+      ],
+    },
+    capabilities: [
+      "Rotate the password of an already-encrypted PDF in a single step",
+      "Set a password on a PDF that didn't have one",
+      "Separate user (open) and owner (permissions) passwords",
+      "AES-256 or AES-128 re-encryption by the in-house PDF engine",
+      "Original permissions preserved on change, never silently widened",
+      "Password handled in memory for the request only, never stored or logged",
+    ],
+    faq: [
+      {
+        question: "How is this different from the unlock tool?",
+        answer:
+          "Unlocking removes the protection entirely and produces a plaintext PDF. Here you replace the password with another one: the document stays encrypted, but with a new key only you know.",
+      },
+      {
+        question: "Do I need the current password?",
+        answer:
+          "Yes, if the PDF is already protected: it is what authorises the change, and GigaPDF never bypasses a protection. A PDF with no password, however, can receive one with nothing more than the file itself.",
+      },
+      {
+        question: "Can I set only an owner password?",
+        answer:
+          "Yes. The owner password controls permissions — printing, copying, editing — without necessarily requiring a password to open. You can supply one, the other, or both.",
+      },
+      {
+        question: "Are my permissions preserved?",
+        answer:
+          "When you change the password of an already-protected file, GigaPDF reuses the document's existing permissions instead of re-granting everything. The access level stays the one you had set.",
+      },
+      {
+        question: "Is the password sent anywhere?",
+        answer:
+          "No. It is only used to open and re-encrypt the file during the request, then it is gone. Nothing is kept on the server, and GigaPDF is open source and self-hostable for full control.",
+      },
+    ],
+    useCases: [
+      "Rotate the password of a sensitive shared document on a schedule",
+      "Revoke a third party's access by replacing the password they knew",
+      "Protect a PDF received in the clear before sharing it",
+    ],
+    relatedTools: ["protect-pdf", "unlock-pdf", "sign-pdf"],
+    relatedSolutions: ["lawyers", "accountants"],
+    icon: "key-round",
+    appHref: "/change-password",
+  },
+  {
+    slug: "flatten-pdf",
+    name: "Flatten PDF",
+    category: "edit",
+    metaTitle: "Flatten a PDF: Freeze Forms & Annotations | GigaPDF",
+    metaDescription:
+      "Flatten a PDF's form fields and annotations into static content: the look stays identical, but the document becomes non-editable. Free, in-house engine.",
+    h1: "Flatten a PDF: freeze forms and annotations into static content",
+    intro: [
+      "A filled form the recipient could still clear in one click, review comments that show in some readers but not others, a stamp that can be dragged around: as long as a PDF holds interactive elements, its appearance isn't truly fixed. Flattening solves this by merging those elements into the page content.",
+      "GigaPDF turns form fields and annotations into static content: what you see on screen stays exactly the same, but becomes an integral part of the page, impossible to change or remove afterwards. Entered values, checked boxes, highlights and stamps are burned into the document once and for all.",
+      "You choose what gets flattened: forms only, annotations only, or both at once. The operation runs entirely on the in-house PDF engine, with no third-party dependency, and produces a file ready for printing, archiving or distribution — wherever a stable render matters more than editability.",
+    ],
+    howTo: {
+      title: "How to flatten a PDF",
+      steps: [
+        "Upload the PDF holding the forms or annotations you want to freeze.",
+        "Choose the target: the form fields, the annotations, or both.",
+        "Run the flatten: interactive elements become static content.",
+        "Check that the render stays identical to the original.",
+        "Download the flattened PDF, ready to print, archive or share.",
+      ],
+    },
+    capabilities: [
+      "Form-field flattening: entered values are frozen into the page",
+      "Annotation flattening: comments, highlights and stamps burned into the content",
+      "Target choice: forms, annotations, or both",
+      "Visual render strictly preserved, but made non-interactive",
+      "Document finalised for printing, archiving and distribution",
+      "Processed by the in-house PDF engine, with no third-party dependency",
+    ],
+    faq: [
+      {
+        question: "What happens to form fields after flattening?",
+        answer:
+          "Their values are kept as displayed, but the field is gone as an interactive element: it can no longer be cleared or re-edited. The filled form becomes text baked into the page.",
+      },
+      {
+        question: "Does the document's appearance change?",
+        answer:
+          "No. Flattening preserves the render pixel for pixel: the only difference is that the affected elements are no longer editable. That is exactly the point — to freeze what is shown.",
+      },
+      {
+        question: "Can I flatten only the annotations?",
+        answer:
+          "Yes. The tool offers three targets: forms only, annotations only, or both. You keep the interactive fields if you flatten only the annotations, and vice versa.",
+      },
+      {
+        question: "Why flatten a PDF before sending it?",
+        answer:
+          "To guarantee the recipient sees exactly what you approved, with no way to alter a form or make an annotation disappear. It also helps before printing, since some interactive elements print poorly depending on the reader.",
+      },
+      {
+        question: "Does flattening delete content?",
+        answer:
+          "No, it freezes existing content instead of erasing it. The visible values and marks stay present; they simply stop being editable objects. To truly remove content, use editing instead.",
+      },
+    ],
+    useCases: [
+      "Lock a filled form before sending it back signed",
+      "Freeze review annotations before archiving a case file",
+      "Prepare a stable document for printing or public distribution",
+    ],
+    relatedTools: ["pdf-forms", "annotate-pdf", "protect-pdf"],
+    relatedSolutions: ["accountants", "human-resources"],
+    icon: "layers",
+    appHref: "/flatten",
+  },
 ];
 
 /** Index by slug for the dynamic pages. */

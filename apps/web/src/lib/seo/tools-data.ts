@@ -2328,6 +2328,142 @@ export const TOOLS: ToolData[] = [
     relatedSolutions: ["experts-comptables", "freelances", "education-etudiants"],
     icon: "file-output",
   },
+  {
+    slug: "changer-mot-de-passe-pdf",
+    name: "Changer le mot de passe d'un PDF",
+    category: "secure",
+    metaTitle: "Changer le mot de passe d'un PDF | GigaPDF",
+    metaDescription:
+      "Modifiez ou définissez le mot de passe d'un PDF : ouverture avec l'ancien, ré-chiffrement AES-256 avec le nouveau. Gratuit, moteur PDF maison.",
+    h1: "Changer le mot de passe d'un PDF en ligne",
+    intro: [
+      "Faire tourner le mot de passe d'un contrat confidentiel, révoquer celui qu'un prestataire connaissait, ou simplement protéger un fichier qui ne l'était pas encore : changer le mot de passe d'un PDF ne devrait pas obliger à le déchiffrer dans un outil puis à le rechiffrer dans un autre. GigaPDF réalise les deux en une seule étape.",
+      "Quand le document est déjà protégé, vous saisissez son mot de passe actuel — c'est lui qui autorise le changement — puis le nouveau. GigaPDF ouvre le fichier, le rechiffre avec le mot de passe que vous choisissez et conserve les permissions d'origine plutôt que de tout réautoriser à votre insu. Le mot de passe utilisateur (demandé à l'ouverture) et le mot de passe propriétaire (qui régit les permissions) se définissent séparément.",
+      "Si le PDF n'avait aucun mot de passe, le même outil lui en pose un : le chiffrement AES-256 du moteur maison s'applique directement, sans dépendance tierce. Tout se passe dans votre espace, le mot de passe ne quitte jamais la requête en cours, et le fichier produit reste lisible par n'importe quel lecteur PDF conforme.",
+    ],
+    howTo: {
+      title: "Comment changer le mot de passe d'un PDF",
+      steps: [
+        "Importez le PDF dont vous voulez changer ou définir le mot de passe.",
+        "Si le fichier est déjà protégé, saisissez son mot de passe actuel.",
+        "Indiquez le nouveau mot de passe utilisateur, et au besoin un mot de passe propriétaire distinct.",
+        "Choisissez l'algorithme de chiffrement : AES-256 est recommandé.",
+        "Lancez l'opération et téléchargez le PDF rechiffré avec son nouveau mot de passe.",
+      ],
+    },
+    capabilities: [
+      "Rotation du mot de passe d'un PDF déjà chiffré, en une seule étape",
+      "Définition d'un mot de passe sur un PDF qui n'en avait pas",
+      "Mots de passe utilisateur (ouverture) et propriétaire (permissions) distincts",
+      "Ré-chiffrement AES-256 ou AES-128 par le moteur PDF maison",
+      "Permissions d'origine conservées lors du changement, jamais élargies en silence",
+      "Mot de passe traité en mémoire le temps de la requête, jamais stocké ni journalisé",
+    ],
+    faq: [
+      {
+        question: "Quelle différence avec l'outil de déverrouillage ?",
+        answer:
+          "Le déverrouillage retire complètement la protection et produit un PDF en clair. Ici, vous remplacez le mot de passe par un autre : le document reste chiffré, mais avec une nouvelle clé que vous seul connaissez.",
+      },
+      {
+        question: "Dois-je connaître le mot de passe actuel ?",
+        answer:
+          "Oui, si le PDF est déjà protégé : c'est lui qui autorise le changement, GigaPDF ne contourne aucune protection. En revanche, un PDF sans mot de passe peut en recevoir un sans rien fournir d'autre que le fichier.",
+      },
+      {
+        question: "Puis-je définir un mot de passe propriétaire seul ?",
+        answer:
+          "Oui. Le mot de passe propriétaire contrôle les permissions (impression, copie, modification) sans forcément exiger de mot de passe à l'ouverture. Vous pouvez renseigner l'un, l'autre, ou les deux.",
+      },
+      {
+        question: "Mes permissions sont-elles conservées ?",
+        answer:
+          "Quand vous changez le mot de passe d'un fichier déjà protégé, GigaPDF réutilise les permissions existantes du document au lieu de tout réautoriser. Le niveau d'accès reste celui que vous aviez fixé.",
+      },
+      {
+        question: "Le mot de passe est-il transmis quelque part ?",
+        answer:
+          "Non. Il sert uniquement à ouvrir et rechiffrer le fichier pendant la requête, puis il disparaît. Rien n'est conservé côté serveur, et GigaPDF est open source et auto-hébergeable pour un contrôle total.",
+      },
+    ],
+    useCases: [
+      "Faire tourner régulièrement le mot de passe d'un document sensible partagé",
+      "Révoquer l'accès d'un tiers en remplaçant le mot de passe qu'il connaissait",
+      "Protéger un PDF reçu en clair avant de le diffuser",
+    ],
+    relatedTools: ["proteger-pdf", "deverrouiller-pdf", "signer-pdf"],
+    relatedSolutions: ["avocats", "experts-comptables"],
+    icon: "key-round",
+    appHref: "/change-password",
+  },
+  {
+    slug: "aplatir-pdf",
+    name: "Aplatir un PDF",
+    category: "edit",
+    metaTitle: "Aplatir un PDF : figer formulaires et annotations | GigaPDF",
+    metaDescription:
+      "Aplatissez les champs de formulaire et les annotations d'un PDF en contenu statique : le rendu reste identique, mais le document devient non modifiable.",
+    h1: "Aplatir un PDF : figer formulaires et annotations en contenu statique",
+    intro: [
+      "Un formulaire rempli que le destinataire pourrait encore vider d'un clic, des commentaires de relecture qui s'affichent dans certains lecteurs mais pas dans d'autres, un tampon que l'on peut déplacer : tant qu'un PDF contient des éléments interactifs, son apparence n'est pas vraiment figée. L'aplatissement règle ce problème en fusionnant ces éléments dans le contenu de la page.",
+      "GigaPDF transforme les champs de formulaire et les annotations en contenu statique : ce qui est affiché à l'écran reste exactement identique, mais devient une partie intégrante de la page, impossible à modifier ou à supprimer après coup. Les valeurs saisies, les cases cochées, les surlignages et les tampons sont gravés dans le document une fois pour toutes.",
+      "Vous choisissez ce qui est aplati : seulement les formulaires, seulement les annotations, ou les deux à la fois. L'opération est entièrement réalisée par le moteur PDF maison, sans dépendance tierce, et produit un fichier prêt pour l'impression, l'archivage ou la diffusion — là où la stabilité du rendu compte plus que la modifiabilité.",
+    ],
+    howTo: {
+      title: "Comment aplatir un PDF",
+      steps: [
+        "Importez le PDF contenant des formulaires ou des annotations à figer.",
+        "Choisissez la cible : les formulaires, les annotations, ou l'ensemble.",
+        "Lancez l'aplatissement : les éléments interactifs deviennent du contenu statique.",
+        "Vérifiez que le rendu reste identique à l'original.",
+        "Téléchargez le PDF aplati, prêt à être imprimé, archivé ou diffusé.",
+      ],
+    },
+    capabilities: [
+      "Aplatissement des champs de formulaire : les valeurs saisies sont figées dans la page",
+      "Aplatissement des annotations : commentaires, surlignages et tampons gravés dans le contenu",
+      "Choix de la cible : formulaires, annotations, ou les deux",
+      "Rendu visuel strictement préservé, mais document rendu non interactif",
+      "Document finalisé pour l'impression, l'archivage et la diffusion",
+      "Traitement par le moteur PDF maison, sans dépendance tierce",
+    ],
+    faq: [
+      {
+        question: "Que deviennent les champs de formulaire après aplatissement ?",
+        answer:
+          "Leurs valeurs sont conservées telles qu'affichées, mais le champ disparaît en tant qu'élément interactif : on ne peut plus le vider ni le remodifier. Le formulaire rempli devient du texte intégré à la page.",
+      },
+      {
+        question: "L'apparence du document change-t-elle ?",
+        answer:
+          "Non. L'aplatissement préserve le rendu au pixel près : la seule différence est que les éléments concernés ne sont plus modifiables. C'est précisément le but, figer ce qui est affiché.",
+      },
+      {
+        question: "Puis-je aplatir uniquement les annotations ?",
+        answer:
+          "Oui. L'outil propose trois cibles : les formulaires seuls, les annotations seules, ou les deux. Vous gardez les champs interactifs si vous n'aplatissez que les annotations, et inversement.",
+      },
+      {
+        question: "Pourquoi aplatir un PDF avant de l'envoyer ?",
+        answer:
+          "Pour garantir que le destinataire voit exactement ce que vous avez validé, sans pouvoir altérer un formulaire ni faire disparaître une annotation. C'est aussi utile avant impression, car certains éléments interactifs s'impriment mal selon le lecteur.",
+      },
+      {
+        question: "L'aplatissement supprime-t-il du contenu ?",
+        answer:
+          "Non, il fige le contenu existant au lieu de l'effacer. Les valeurs et marques visibles restent présentes ; elles cessent simplement d'être des objets modifiables. Pour retirer réellement du contenu, utilisez plutôt l'édition.",
+      },
+    ],
+    useCases: [
+      "Verrouiller un formulaire rempli avant de le renvoyer signé",
+      "Figer les annotations de relecture avant l'archivage d'un dossier",
+      "Préparer un document stable pour l'impression ou la diffusion publique",
+    ],
+    relatedTools: ["formulaires-pdf", "annoter-pdf", "proteger-pdf"],
+    relatedSolutions: ["experts-comptables", "ressources-humaines"],
+    icon: "layers",
+    appHref: "/flatten",
+  },
 ];
 
 /** Index par slug pour les pages dynamiques. */

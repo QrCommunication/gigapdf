@@ -11,7 +11,7 @@
 
 export type SeoLocale = "fr" | "en";
 
-/** Tool slugs, FR → EN (29 entries, complete bijection). */
+/** Tool slugs, FR → EN (38 entries, complete bijection). */
 export const toolSlugMap: Record<string, string> = {
   "editer-pdf": "edit-pdf",
   "fusionner-pdf": "merge-pdf",
@@ -49,6 +49,8 @@ export const toolSlugMap: Record<string, string> = {
   "pdf-vers-rtf": "pdf-to-rtf",
   "pdf-vers-html": "pdf-to-html",
   "pdf-vers-texte": "pdf-to-text",
+  "changer-mot-de-passe-pdf": "change-pdf-password",
+  "aplatir-pdf": "flatten-pdf",
 };
 
 /** Solution slugs, FR → EN (10 entries, complete bijection). */

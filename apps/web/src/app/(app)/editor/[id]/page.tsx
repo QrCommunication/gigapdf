@@ -2972,6 +2972,124 @@ export default function EditorPage() {
     setRedactionMarkCount(0);
   }, [canvasHandle]);
 
+  // Replace the pixels of the selected image IN PLACE via the engine
+  // (`replaceImage`): the image keeps its position / scale / rotation — only the
+  // raster changes. Flush pending flat edits into the binary first
+  // (getPreparedBlob), POST the current bytes + the engine UNIFIED image index +
+  // the new bitmap to /api/pdf/replace-image, then adopt + re-parse (same
+  // single-source-of-truth path as redaction / page ops). Wired to the
+  // PropertiesPanel "Replace image" action. Works in single + continuous mode
+  // (the selected image lives on the active page → effectivePageIndex).
+  const handleReplaceImage = useCallback(
+    ({ index, file: imageFile }: { index: number; file: File }) => {
+      void (async () => {
+        try {
+          await getPreparedBlob(); // flush queued ops into currentPdfFile
+          const pdfFile = currentPdfFileRef.current;
+          if (!pdfFile) return;
+          const { getAuthToken } = await import("@/lib/api");
+          const token = await getAuthToken();
+          const form = new FormData();
+          form.append("file", pdfFile, pdfFile.name);
+          form.append("page", String(effectivePageIndex + 1));
+          form.append("imageIndex", String(index));
+          form.append("image", imageFile, imageFile.name);
+          const res = await fetch("/api/pdf/replace-image", {
+            method: "POST",
+            credentials: "include",
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            body: form,
+          });
+          if (!res.ok) throw new Error(`replace-image ${res.status}`);
+          const blob = new Blob([await res.arrayBuffer()], {
+            type: "application/pdf",
+          });
+          adoptModifiedPdf(blob, { reparse: true });
+          toast({
+            title: t("replaceImage.appliedTitle"),
+            description: t("replaceImage.appliedDescription"),
+          });
+        } catch (err) {
+          clientLogger.error("[editor] replace image failed:", err);
+          toast({
+            title: t("replaceImage.errorTitle"),
+            description: t("replaceImage.errorDescription"),
+            variant: "destructive",
+          });
+        }
+      })();
+    },
+    [getPreparedBlob, adoptModifiedPdf, effectivePageIndex, toast, t],
+  );
+
+  // Bake a freehand pencil stroke as a real `/Ink` annotation (engine `addInk`).
+  // The canvas hands us the completed polyline ALREADY lowered to PDF user space
+  // (origin bottom-left); we attach the toolbar's stroke colour (packed
+  // 0xRRGGBB) + width, flush pending edits, POST to /api/pdf/ink, then adopt +
+  // re-parse so the ink joins the scene graph. Wired to EditorCanvas.onInkDrawn
+  // in single + continuous mode (the stroke acts on the active page).
+  const handleAddInk = useCallback(
+    (points: number[]) => {
+      if (!Array.isArray(points) || points.length < 4) return;
+      void (async () => {
+        try {
+          await getPreparedBlob();
+          const pdfFile = currentPdfFileRef.current;
+          if (!pdfFile) return;
+          let hex = (strokeColor || "#000000").replace(/^#/, "");
+          if (hex.length === 3) {
+            hex = hex
+              .split("")
+              .map((c) => c + c)
+              .join("");
+          }
+          const rgb = /^[0-9a-fA-F]{6}$/.test(hex) ? parseInt(hex, 16) : 0x000000;
+          const lineWidth =
+            Number.isFinite(strokeWidth) && strokeWidth > 0 ? strokeWidth : 2;
+          const { getAuthToken } = await import("@/lib/api");
+          const token = await getAuthToken();
+          const form = new FormData();
+          form.append("file", pdfFile, pdfFile.name);
+          form.append("page", String(effectivePageIndex + 1));
+          form.append("points", JSON.stringify(points));
+          form.append("rgb", String(rgb));
+          form.append("lineWidth", String(lineWidth));
+          const res = await fetch("/api/pdf/ink", {
+            method: "POST",
+            credentials: "include",
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            body: form,
+          });
+          if (!res.ok) throw new Error(`ink ${res.status}`);
+          const blob = new Blob([await res.arrayBuffer()], {
+            type: "application/pdf",
+          });
+          adoptModifiedPdf(blob, { reparse: true });
+          toast({
+            title: t("ink.appliedTitle"),
+            description: t("ink.appliedDescription"),
+          });
+        } catch (err) {
+          clientLogger.error("[editor] add ink failed:", err);
+          toast({
+            title: t("ink.errorTitle"),
+            description: t("ink.errorDescription"),
+            variant: "destructive",
+          });
+        }
+      })();
+    },
+    [
+      getPreparedBlob,
+      adoptModifiedPdf,
+      effectivePageIndex,
+      strokeColor,
+      strokeWidth,
+      toast,
+      t,
+    ],
+  );
+
   // On-demand OCR + semantic indexing of the document (#85). Runs OCR on the
   // in-memory PDF blob (single source of truth), then ships the resulting
   // blocks to the backend pgvector index. The whole document is indexed because
@@ -4728,6 +4846,7 @@ export default function EditorPage() {
               fitMode={fitMode}
               onFitZoomChange={setZoom}
               onElementAdded={handleElementAdded}
+              onInkDrawn={handleAddInk}
               onElementModified={handleElementModified}
               onElementReordered={handleElementReordered}
               onElementRemoved={handleElementRemoved}
@@ -4794,6 +4913,7 @@ export default function EditorPage() {
                 fillColor={fillColor}
                 strokeWidth={strokeWidth}
                 onElementAdded={handleElementAdded}
+                onInkDrawn={handleAddInk}
                 onElementModified={handleElementModified}
                 onElementReordered={handleElementReordered}
                 onElementRemoved={handleElementRemoved}
@@ -4861,6 +4981,7 @@ export default function EditorPage() {
             )
           }
           onApplyTextStyle={handleApplyTextStyle}
+          onReplaceImage={handleReplaceImage}
         />
 
         {/* Document info sidebar (TOC, Layers, Embedded Files). Layers reflect

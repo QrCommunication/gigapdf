@@ -528,7 +528,7 @@
         "signature": "Signature PKCS#7",
         "ocr": "OCR cherchable",
         "collaboration": "Collaboration live",
-        "tools": "36 outils PDF",
+        "tools": "38 outils PDF",
         "office": "Import Office de nombreux formats"
       },
       "mostPopular": "Populaire",
@@ -2134,7 +2134,9 @@
       },
       "image": {
         "dimensions": "Dimensions",
-        "opacity": "Opacité"
+        "opacity": "Opacité",
+        "replace": "Remplacer l'image",
+        "replacing": "Remplacement…"
       },
       "annotation": {
         "type": "Type",
@@ -2990,6 +2992,18 @@
       "appliedDescription": "Le style du texte a été mis à jour.",
       "errorTitle": "Échec de l'application du style",
       "errorDescription": "Impossible d'appliquer le style à ce texte."
+    },
+    "replaceImage": {
+      "appliedTitle": "Image remplacée",
+      "appliedDescription": "L'image sélectionnée a été remplacée dans le document.",
+      "errorTitle": "Échec du remplacement",
+      "errorDescription": "Impossible de remplacer l'image. Le fichier doit être un PNG ou un JPEG valide."
+    },
+    "ink": {
+      "appliedTitle": "Tracé ajouté",
+      "appliedDescription": "Le tracé au crayon a été ajouté à la page.",
+      "errorTitle": "Échec du tracé",
+      "errorDescription": "Impossible d'ajouter le tracé au crayon."
     }
   },
   "errors": {
@@ -3036,7 +3050,7 @@
         "toolsTitle": "Outils PDF populaires",
         "toolsSubtitle": "Gratuits, sans filigrane, auto-hébergeables.",
         "solutionsTitle": "Des solutions pour votre métier",
-        "viewAllTools": "Voir les 36 outils",
+        "viewAllTools": "Voir les 38 outils",
         "viewAllSolutions": "Voir toutes les solutions",
         "registerCta": "Commencez à travailler vos PDF dès maintenant"
       },
@@ -3596,8 +3610,8 @@
             "title": "Productivité",
             "items": {
               "palette": "Palette de commandes globale (Ctrl/Cmd+K)",
-              "megaMenu": "Méga-menu reprenant les 36 outils par catégorie",
-              "tools": "36 outils PDF dédiés avec pages d'aide",
+              "megaMenu": "Méga-menu reprenant les 38 outils par catégorie",
+              "tools": "38 outils PDF dédiés avec pages d'aide",
               "editor": "Éditeur visuel : zoom, déplacement, vue continue des pages"
             }
           },
@@ -4012,7 +4026,7 @@
   },
   "toolsMenu": {
     "allTools": "Tous les outils",
-    "viewAll": "Voir les 36 outils",
+    "viewAll": "Voir les 38 outils",
     "categories": {
       "organize": "Organiser",
       "convert": "Convertir",
@@ -4474,6 +4488,39 @@
       "actionButton": "Convertir en PDF",
       "toastSuccess": "Document converti",
       "toastError": "Échec de la conversion"
+    },
+    "changePassword": {
+      "title": "Changer le mot de passe d'un PDF",
+      "subtitle": "Modifiez le mot de passe d'un PDF protégé, ou définissez-en un sur un fichier qui n'en a pas.",
+      "formatsHint": "Fichier PDF uniquement.",
+      "actionButton": "Changer le mot de passe",
+      "toastSuccess": "Mot de passe modifié",
+      "toastError": "Échec du changement de mot de passe",
+      "currentPasswordLabel": "Mot de passe actuel",
+      "currentPasswordDescription": "Requis uniquement si le PDF est déjà protégé.",
+      "currentPasswordPlaceholder": "Mot de passe actuel du PDF",
+      "newPasswordLabel": "Nouveau mot de passe",
+      "newPasswordDescription": "Il sera demandé à l'ouverture du document.",
+      "newPasswordPlaceholder": "Choisissez un nouveau mot de passe",
+      "ownerPasswordLabel": "Mot de passe propriétaire (facultatif)",
+      "ownerPasswordDescription": "Contrôle les permissions (impression, copie, modification) sans mot de passe d'ouverture.",
+      "ownerPasswordPlaceholder": "Mot de passe propriétaire",
+      "algorithmLabel": "Chiffrement",
+      "algorithmAes256": "AES 256 bits (recommandé)",
+      "algorithmAes128": "AES 128 bits"
+    },
+    "flatten": {
+      "title": "Aplatir un PDF",
+      "subtitle": "Figez les formulaires et annotations en contenu statique : le rendu reste identique, le document devient non interactif.",
+      "formatsHint": "Fichier PDF uniquement.",
+      "actionButton": "Aplatir le PDF",
+      "toastSuccess": "PDF aplati",
+      "toastError": "Échec de l'aplatissement",
+      "targetLabel": "Éléments à aplatir",
+      "targetDescription": "Choisissez ce qui devient du contenu statique.",
+      "targetAll": "Formulaires et annotations",
+      "targetForms": "Formulaires uniquement",
+      "targetAnnotations": "Annotations uniquement"
     }
   }
 }

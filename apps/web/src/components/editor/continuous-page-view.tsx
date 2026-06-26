@@ -159,6 +159,12 @@ export interface ContinuousPageViewProps {
    */
   onElementAdded?: (element: Element) => void;
   /**
+   * Freehand pencil stroke completed on the ACTIVE page (PDF user-space points).
+   * Wired to the same page.tsx handler as the single-page editor (`addInk` bake
+   * → adopt + re-parse), so the pencil works identically in continuous mode.
+   */
+  onInkDrawn?: (points: number[]) => void;
+  /**
    * Element moved/resized/rotated or text retyped on the ACTIVE page. Wired to
    * the same page.tsx handler as the single-page editor (queueUpdate →
    * apply-elements bake → save), so continuous editing persists identically.
@@ -221,6 +227,7 @@ function ContinuousPageViewImpl(
     fitMode,
     onFitZoomChange,
     onElementAdded,
+    onInkDrawn,
     onElementModified,
     onElementReordered,
     onElementRemoved,
@@ -638,6 +645,7 @@ function ContinuousPageViewImpl(
                   {...(isActive ? { documentId } : {})}
                   {...(isActive && tool ? { tool } : {})}
                   {...(isActive && onElementAdded ? { onElementAdded } : {})}
+                  {...(isActive && onInkDrawn ? { onInkDrawn } : {})}
                   {...(isActive && onElementModified
                     ? { onElementModified }
                     : {})}

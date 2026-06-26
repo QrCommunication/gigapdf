@@ -104,6 +104,8 @@ export interface PageSlotProps {
   onRedactionMarksChanged?: (count: number) => void;
   /** Forwarded to the active page's EditorCanvas: element created at mouse. */
   onElementAdded?: (element: Element) => void;
+  /** Forwarded to the active page's EditorCanvas: freehand pencil stroke (PDF pts). */
+  onInkDrawn?: (points: number[]) => void;
   /** Forwarded to the active page's EditorCanvas: element moved/resized/retyped. */
   onElementModified?: (element: Element, oldBounds?: Bounds) => void;
   /** Forwarded to the active page's EditorCanvas: z-order change (bring/send). */
@@ -167,6 +169,7 @@ function PageSlotImpl({
   onHyperlinkClick,
   onRedactionMarksChanged,
   onElementAdded,
+  onInkDrawn,
   onElementModified,
   onElementReordered,
   onElementRemoved,
@@ -224,6 +227,7 @@ function PageSlotImpl({
             {...(onHyperlinkClick ? { onHyperlinkClick } : {})}
             {...(onRedactionMarksChanged ? { onRedactionMarksChanged } : {})}
             {...(onElementAdded ? { onElementAdded } : {})}
+            {...(onInkDrawn ? { onInkDrawn } : {})}
             {...(onElementModified ? { onElementModified } : {})}
             {...(onElementReordered ? { onElementReordered } : {})}
             {...(onElementRemoved ? { onElementRemoved } : {})}
