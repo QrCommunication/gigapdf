@@ -1324,6 +1324,28 @@
       "loadFailed": "Failed to load documents. Please try again.",
       "pdfOnly": "Please select a PDF file",
       "uploadFailed": "Failed to upload document"
+    },
+    "blank": {
+      "button": "Blank document",
+      "dialogTitle": "New blank document",
+      "dialogDescription": "Choose a page size and orientation, then start editing like a word processor.",
+      "sizeLabel": "Size",
+      "orientationLabel": "Orientation",
+      "size": {
+        "a4": "A4",
+        "letter": "Letter (US)",
+        "legal": "Legal (US)"
+      },
+      "orientation": {
+        "portrait": "Portrait",
+        "landscape": "Landscape"
+      },
+      "create": "Create",
+      "creating": "Creating...",
+      "cancel": "Cancel",
+      "defaultName": "Blank document",
+      "created": "Blank document created",
+      "createFailed": "Failed to create the blank document"
     }
   },
   "trash": {
@@ -2731,7 +2753,30 @@
         "directionAuto": "Default",
         "directionNone": "None",
         "allPagesNote": "Applied to every page in the document.",
-        "remove": "Remove transitions"
+        "remove": "Remove transitions",
+        "dimensionLabel": "Orientation",
+        "dimensionAuto": "Default",
+        "dimension": {
+          "horizontal": "Horizontal",
+          "vertical": "Vertical"
+        },
+        "motionLabel": "Motion",
+        "motionAuto": "Default",
+        "motion": {
+          "inward": "Inward",
+          "outward": "Outward"
+        },
+        "scaleLabel": "Start scale (fly)",
+        "flyAreaOpaqueLabel": "Opaque fly area",
+        "scopeLabel": "Apply to",
+        "scope": {
+          "all": "All pages",
+          "current": "Current page",
+          "custom": "Specific pages"
+        },
+        "pagesLabel": "Pages",
+        "pagesPlaceholder": "e.g. 1, 3, 5-7",
+        "pagesHint": "Comma-separated numbers; ranges with a dash (5-7)."
       },
       "scale": {
         "modeLabel": "Scaling mode",
@@ -2773,7 +2818,13 @@
         "placeholder": "One description per line (figure 1, figure 2, …)",
         "hint": "One line per figure, in order. Blank lines keep the engine's default text."
       },
-      "toolbarLabel": "Presentation"
+      "toolbarLabel": "Presentation",
+      "applied": {
+        "title": "Presentation applied",
+        "description": "The document has been updated.",
+        "errorTitle": "Apply failed",
+        "errorDescription": "Could not apply the changes to the document."
+      }
     },
     "links": {
       "schemeLabel": "Link type",

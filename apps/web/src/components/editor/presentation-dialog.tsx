@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   X,
@@ -19,10 +19,38 @@ export interface PresentationDialogProps {
   onClose: () => void;
   currentFile: File | null;
   baseFilename?: string;
+  /**
+   * 1-based page the editor is currently focused on. Drives the "current page"
+   * scope option and seeds the transitions pre-fill. Defaults to page 1.
+   */
+  currentPageNumber?: number;
+  /**
+   * Editor mode (apply-to-document). When provided, a successful submit hands
+   * the produced PDF bytes to the editor (which adopts them onto the live
+   * document) instead of downloading a copy. When omitted, the dialog keeps its
+   * stand-alone behaviour and downloads the result (back-compat).
+   */
+  onApply?: (bytes: Uint8Array) => void | Promise<void>;
 }
 
 /** Which presentation/page-setup task the dialog is performing. */
 type Tab = "transitions" | "scale" | "portfolio" | "figures";
+
+/**
+ * The shape of a page transition as returned by `op=get` (mirrors the engine's
+ * `PageTransition`). Declared locally so this client bundle never imports the
+ * WASM lib — the route owns the canonical type.
+ */
+interface LoadedTransition {
+  style?: string;
+  duration?: number;
+  dimension?: string;
+  motion?: string;
+  direction?: number | string;
+  scale?: number;
+  flyAreaOpaque?: boolean;
+  displayDuration?: number;
+}
 
 /**
  * The 12 ISO 32000-1 §12.4.4 page-transition styles, in the engine's enum order.
@@ -46,6 +74,48 @@ const TRANSITION_STYLES = [
 
 /** Sweep-direction options for directional transitions (empty = leave unset). */
 const DIRECTIONS = ["", "0", "90", "180", "270", "315", "none"] as const;
+
+/** Orientation options for `split`/`blinds` (empty = leave unset). */
+const DIMENSIONS = ["", "horizontal", "vertical"] as const;
+
+/** Motion options for `split`/`box` (empty = leave unset). */
+const MOTIONS = ["", "inward", "outward"] as const;
+
+/** Which pages a transition set/clear targets. */
+type TransitionScope = "all" | "current" | "custom";
+const SCOPES: TransitionScope[] = ["all", "current", "custom"];
+
+/** Sub-key applicability per transition style (ISO 32000-1 §12.4.4). */
+const DIMENSION_STYLES = new Set(["split", "blinds"]);
+const MOTION_STYLES = new Set(["split", "box"]);
+const DIRECTION_STYLES = new Set(["wipe", "glitter", "fly", "cover", "uncover", "push"]);
+
+/**
+ * Parse a human page list ("1, 3, 5-7") into a sorted, de-duplicated array of
+ * 1-based page numbers. Tolerant: ignores blanks and malformed tokens, and
+ * normalises reversed ranges. The server re-validates against the real page
+ * count, so an out-of-range entry surfaces as a 400 there.
+ */
+function parsePageList(text: string): number[] {
+  const out = new Set<number>();
+  for (const token of text.split(",")) {
+    const part = token.trim();
+    if (part === "") continue;
+    const dash = part.indexOf("-");
+    if (dash === -1) {
+      const n = Number(part);
+      if (Number.isInteger(n) && n >= 1) out.add(n);
+      continue;
+    }
+    const a = Number(part.slice(0, dash).trim());
+    const b = Number(part.slice(dash + 1).trim());
+    if (!Number.isInteger(a) || !Number.isInteger(b)) continue;
+    const lo = Math.max(1, Math.min(a, b));
+    const hi = Math.max(a, b);
+    for (let n = lo; n <= hi; n++) out.add(n);
+  }
+  return Array.from(out).sort((x, y) => x - y);
+}
 
 type ScaleMode = "uniform" | "xy" | "fit" | "userUnit";
 const SCALE_MODES: ScaleMode[] = ["uniform", "xy", "fit", "userUnit"];
@@ -94,6 +164,8 @@ export function PresentationDialog({
   onClose,
   currentFile,
   baseFilename = "document",
+  currentPageNumber = 1,
+  onApply,
 }: PresentationDialogProps) {
   const t = useTranslations("editor.presentation");
   const [tab, setTab] = useState<Tab>("transitions");
@@ -105,6 +177,16 @@ export function PresentationDialog({
   const [duration, setDuration] = useState("1");
   const [displayDuration, setDisplayDuration] = useState("");
   const [direction, setDirection] = useState<(typeof DIRECTIONS)[number]>("");
+  // Style-specific sub-keys (only sent when they apply to the chosen style).
+  const [dimension, setDimension] = useState<(typeof DIMENSIONS)[number]>("");
+  const [motion, setMotion] = useState<(typeof MOTIONS)[number]>("");
+  const [flyScale, setFlyScale] = useState("");
+  const [flyAreaOpaque, setFlyAreaOpaque] = useState(false);
+  // Which pages the set/clear targets (all / current / a custom list).
+  const [scope, setScope] = useState<TransitionScope>("all");
+  const [pagesInput, setPagesInput] = useState("");
+  // Guards the one-shot op=get pre-fill so it runs once per dialog opening.
+  const prefillDoneRef = useRef(false);
 
   // Scale tab.
   const [scaleMode, setScaleMode] = useState<ScaleMode>("uniform");
@@ -127,8 +209,83 @@ export function PresentationDialog({
     if (!open) {
       setError(null);
       setBusy(false);
+      // Re-arm the pre-fill so the next opening reflects the latest document.
+      prefillDoneRef.current = false;
     }
   }, [open]);
+
+  /** Seed the transitions form from a loaded {@link LoadedTransition}. */
+  const prefillFromTransition = (tr: LoadedTransition) => {
+    if (
+      typeof tr.style === "string" &&
+      (TRANSITION_STYLES as readonly string[]).includes(tr.style)
+    ) {
+      setStyle(tr.style as (typeof TRANSITION_STYLES)[number]);
+    }
+    setDuration(tr.duration != null ? String(tr.duration) : "1");
+    setDisplayDuration(tr.displayDuration != null ? String(tr.displayDuration) : "");
+    const dir = tr.direction == null ? "" : String(tr.direction);
+    setDirection(
+      (DIRECTIONS as readonly string[]).includes(dir)
+        ? (dir as (typeof DIRECTIONS)[number])
+        : "",
+    );
+    const dim = tr.dimension == null ? "" : String(tr.dimension);
+    setDimension(
+      (DIMENSIONS as readonly string[]).includes(dim)
+        ? (dim as (typeof DIMENSIONS)[number])
+        : "",
+    );
+    const mot = tr.motion == null ? "" : String(tr.motion);
+    setMotion(
+      (MOTIONS as readonly string[]).includes(mot)
+        ? (mot as (typeof MOTIONS)[number])
+        : "",
+    );
+    setFlyScale(tr.scale != null ? String(tr.scale) : "");
+    setFlyAreaOpaque(Boolean(tr.flyAreaOpaque));
+  };
+
+  // Read the document's existing transitions (op=get) once per opening and
+  // seed the transitions form with the focused page's (or page 1's) effect, so
+  // the dialog reflects what's already in the PDF and lets the user adjust it.
+  // Best-effort: any failure leaves the defaults in place.
+  useEffect(() => {
+    if (!open || tab !== "transitions" || !currentFile) return;
+    if (prefillDoneRef.current) return;
+    prefillDoneRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const form = new FormData();
+        form.append("file", currentFile);
+        form.append("action", "transition");
+        form.append("op", "get");
+        const res = await fetch("/api/pdf/presentation", {
+          method: "POST",
+          headers: authHeaders(),
+          body: form,
+        });
+        if (!res.ok || cancelled) return;
+        const json = (await res.json()) as {
+          data?: { transitions?: (LoadedTransition | null)[] };
+        };
+        const list = json?.data?.transitions;
+        if (cancelled || !Array.isArray(list) || list.length === 0) return;
+        // Prefer the focused page; fall back to the first page that carries one.
+        const idx = Math.min(Math.max(0, currentPageNumber - 1), list.length - 1);
+        const found = list[idx] ?? list.find((tr) => tr != null) ?? null;
+        if (found) prefillFromTransition(found);
+      } catch {
+        // Pre-fill is best-effort; keep the form defaults on any error.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // prefillFromTransition is a stable closure over setters (no extra deps).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, tab, currentFile, currentPageNumber]);
 
   const tabs: { value: Tab; label: string; Icon: typeof Play }[] = [
     { value: "transitions", label: t("tabs.transitions"), Icon: Play },
@@ -137,7 +294,34 @@ export function PresentationDialog({
     { value: "figures", label: t("tabs.figures"), Icon: Accessibility },
   ];
 
-  /** POST one action to the route and download the produced PDF on success. */
+  // Which transition sub-keys apply to the chosen style (the engine writes only
+  // the relevant ones, but we hide the irrelevant inputs to avoid confusion).
+  const showDimension = DIMENSION_STYLES.has(style);
+  const showMotion = MOTION_STYLES.has(style);
+  const showDirection = DIRECTION_STYLES.has(style);
+  const showFlyExtras = style === "fly";
+
+  /**
+   * Resolve the scope selector into the route's optional `pages` field:
+   *  - "all"     → null (omit; the route treats an absent list as every page)
+   *  - "current" → just the focused page
+   *  - "custom"  → the parsed page list (empty/invalid falls back to all)
+   */
+  const pagesField = (): string | null => {
+    if (scope === "current") {
+      return JSON.stringify([Math.max(1, currentPageNumber)]);
+    }
+    if (scope === "custom") {
+      const list = parsePageList(pagesInput);
+      return list.length > 0 ? JSON.stringify(list) : null;
+    }
+    return null;
+  };
+
+  /**
+   * POST one action to the route, then either hand the produced PDF to the
+   * editor (apply mode) or download it (stand-alone mode) — see {@link onApply}.
+   */
   const run = async (fields: Record<string, string>) => {
     if (!currentFile || busy) return;
     setError(null);
@@ -163,8 +347,18 @@ export function PresentationDialog({
         throw new Error(message);
       }
 
-      const blob = await response.blob();
-      downloadBlob(blob, baseFilename.replace(/\.pdf$/i, "") + ".presentation.pdf");
+      if (onApply) {
+        // Editor mode: hand the produced PDF bytes to the editor, which adopts
+        // them onto the live document — no download.
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        await onApply(bytes);
+      } else {
+        const blob = await response.blob();
+        downloadBlob(
+          blob,
+          baseFilename.replace(/\.pdf$/i, "") + ".presentation.pdf",
+        );
+      }
       onClose();
     } catch (err) {
       // Keep the dialog open so the user can adjust and retry.
@@ -180,7 +374,13 @@ export function PresentationDialog({
       const fields: Record<string, string> = { action: "transition", op: "set", style };
       if (duration.trim() !== "") fields.duration = duration.trim();
       if (displayDuration.trim() !== "") fields.displayDuration = displayDuration.trim();
-      if (direction !== "") fields.direction = direction;
+      if (showDirection && direction !== "") fields.direction = direction;
+      if (showDimension && dimension !== "") fields.dimension = dimension;
+      if (showMotion && motion !== "") fields.motion = motion;
+      if (showFlyExtras && flyScale.trim() !== "") fields.scale = flyScale.trim();
+      if (showFlyExtras && flyAreaOpaque) fields.flyAreaOpaque = "true";
+      const pages = pagesField();
+      if (pages !== null) fields.pages = pages;
       void run(fields);
     } else if (tab === "scale") {
       const fields: Record<string, string> = { action: "scale", mode: scaleMode };
@@ -204,9 +404,12 @@ export function PresentationDialog({
     }
   };
 
-  /** Transitions-only: remove every page transition + auto-advance. */
+  /** Transitions-only: remove the page transition + auto-advance on the scoped pages. */
   const clearTransitions = () => {
-    void run({ action: "transition", op: "clear" });
+    const fields: Record<string, string> = { action: "transition", op: "clear" };
+    const pages = pagesField();
+    if (pages !== null) fields.pages = pages;
+    void run(fields);
   };
 
   if (!open) return null;
@@ -327,26 +530,137 @@ export function PresentationDialog({
                   />
                 </div>
               </div>
+              {showDirection && (
+                <div>
+                  <label htmlFor="pres-direction" className={labelClass}>
+                    {t("transitions.directionLabel")}
+                  </label>
+                  <select
+                    id="pres-direction"
+                    value={direction}
+                    onChange={(e) =>
+                      setDirection(e.target.value as (typeof DIRECTIONS)[number])
+                    }
+                    className={inputClass}
+                  >
+                    {DIRECTIONS.map((d) => (
+                      <option key={d || "auto"} value={d}>
+                        {d === "" ? t("transitions.directionAuto") : d === "none" ? t("transitions.directionNone") : `${d}°`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {showDimension && (
+                <div>
+                  <label htmlFor="pres-dimension" className={labelClass}>
+                    {t("transitions.dimensionLabel")}
+                  </label>
+                  <select
+                    id="pres-dimension"
+                    value={dimension}
+                    onChange={(e) =>
+                      setDimension(e.target.value as (typeof DIMENSIONS)[number])
+                    }
+                    className={inputClass}
+                  >
+                    {DIMENSIONS.map((d) => (
+                      <option key={d || "auto"} value={d}>
+                        {d === "" ? t("transitions.dimensionAuto") : t(`transitions.dimension.${d}`)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {showMotion && (
+                <div>
+                  <label htmlFor="pres-motion" className={labelClass}>
+                    {t("transitions.motionLabel")}
+                  </label>
+                  <select
+                    id="pres-motion"
+                    value={motion}
+                    onChange={(e) =>
+                      setMotion(e.target.value as (typeof MOTIONS)[number])
+                    }
+                    className={inputClass}
+                  >
+                    {MOTIONS.map((m) => (
+                      <option key={m || "auto"} value={m}>
+                        {m === "" ? t("transitions.motionAuto") : t(`transitions.motion.${m}`)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {showFlyExtras && (
+                <div className="grid grid-cols-2 gap-3 items-end">
+                  <div>
+                    <label htmlFor="pres-fly-scale" className={labelClass}>
+                      {t("transitions.scaleLabel")}
+                    </label>
+                    <input
+                      id="pres-fly-scale"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={flyScale}
+                      onChange={(e) => setFlyScale(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-foreground pb-2">
+                    <input
+                      type="checkbox"
+                      checked={flyAreaOpaque}
+                      onChange={(e) => setFlyAreaOpaque(e.target.checked)}
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    {t("transitions.flyAreaOpaqueLabel")}
+                  </label>
+                </div>
+              )}
+
               <div>
-                <label htmlFor="pres-direction" className={labelClass}>
-                  {t("transitions.directionLabel")}
+                <label htmlFor="pres-scope" className={labelClass}>
+                  {t("transitions.scopeLabel")}
                 </label>
                 <select
-                  id="pres-direction"
-                  value={direction}
-                  onChange={(e) =>
-                    setDirection(e.target.value as (typeof DIRECTIONS)[number])
-                  }
+                  id="pres-scope"
+                  value={scope}
+                  onChange={(e) => setScope(e.target.value as TransitionScope)}
                   className={inputClass}
                 >
-                  {DIRECTIONS.map((d) => (
-                    <option key={d || "auto"} value={d}>
-                      {d === "" ? t("transitions.directionAuto") : d === "none" ? t("transitions.directionNone") : `${d}°`}
+                  {SCOPES.map((s) => (
+                    <option key={s} value={s}>
+                      {t(`transitions.scope.${s}`)}
                     </option>
                   ))}
                 </select>
               </div>
-              <p className="text-xs text-muted-foreground">{t("transitions.allPagesNote")}</p>
+
+              {scope === "custom" && (
+                <div>
+                  <label htmlFor="pres-pages" className={labelClass}>
+                    {t("transitions.pagesLabel")}
+                  </label>
+                  <input
+                    id="pres-pages"
+                    type="text"
+                    inputMode="numeric"
+                    value={pagesInput}
+                    onChange={(e) => setPagesInput(e.target.value)}
+                    placeholder={t("transitions.pagesPlaceholder")}
+                    className={inputClass}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("transitions.pagesHint")}
+                  </p>
+                </div>
+              )}
             </>
           )}
 

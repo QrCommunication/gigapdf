@@ -300,6 +300,12 @@ export interface EditorToolbarProps {
    */
   onSignApplied?: (blob: Blob) => void;
   /**
+   * Editor-mode callback for the PresentationDialog: receives the produced PDF
+   * bytes (page transitions set/cleared per page) so the editor adopts them onto
+   * the live document instead of downloading a copy.
+   */
+  onPresentationApplied?: (bytes: Uint8Array) => void | Promise<void>;
+  /**
    * Word-style running headers & footers turned on for the document. The toggle
    * button reflects this state. A continuous-view feature only.
    */
@@ -598,6 +604,7 @@ export function EditorToolbar({
   onIndexOcr,
   indexOcrBusy = false,
   onSignApplied,
+  onPresentationApplied,
   headersFootersEnabled = false,
   onToggleHeadersFooters,
   onHeaderFooterApply,
@@ -1585,6 +1592,8 @@ export function EditorToolbar({
         onClose={() => setShowPresentationDialog(false)}
         currentFile={currentFile ?? null}
         baseFilename={currentFile?.name}
+        currentPageNumber={currentPageNumber}
+        onApply={onPresentationApplied}
       />
       <ImpositionDialog
         open={showImpositionDialog}

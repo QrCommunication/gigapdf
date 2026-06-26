@@ -1324,6 +1324,28 @@
       "loadFailed": "Échec du chargement des documents. Veuillez réessayer.",
       "pdfOnly": "Veuillez sélectionner un fichier PDF",
       "uploadFailed": "Échec de l'import du document"
+    },
+    "blank": {
+      "button": "Document vierge",
+      "dialogTitle": "Nouveau document vierge",
+      "dialogDescription": "Choisissez le format et l'orientation, puis commencez à éditer comme dans un traitement de texte.",
+      "sizeLabel": "Format",
+      "orientationLabel": "Orientation",
+      "size": {
+        "a4": "A4",
+        "letter": "Letter (US)",
+        "legal": "Legal (US)"
+      },
+      "orientation": {
+        "portrait": "Portrait",
+        "landscape": "Paysage"
+      },
+      "create": "Créer",
+      "creating": "Création...",
+      "cancel": "Annuler",
+      "defaultName": "Document vierge",
+      "created": "Document vierge créé",
+      "createFailed": "Échec de la création du document vierge"
     }
   },
   "trash": {
@@ -2731,7 +2753,30 @@
         "directionAuto": "Par défaut",
         "directionNone": "Aucune",
         "allPagesNote": "Appliqué à toutes les pages du document.",
-        "remove": "Supprimer les transitions"
+        "remove": "Supprimer les transitions",
+        "dimensionLabel": "Orientation",
+        "dimensionAuto": "Par défaut",
+        "dimension": {
+          "horizontal": "Horizontale",
+          "vertical": "Verticale"
+        },
+        "motionLabel": "Mouvement",
+        "motionAuto": "Par défaut",
+        "motion": {
+          "inward": "Vers l'intérieur",
+          "outward": "Vers l'extérieur"
+        },
+        "scaleLabel": "Échelle de départ (vol)",
+        "flyAreaOpaqueLabel": "Zone de vol opaque",
+        "scopeLabel": "Appliquer à",
+        "scope": {
+          "all": "Toutes les pages",
+          "current": "Page courante",
+          "custom": "Pages spécifiques"
+        },
+        "pagesLabel": "Pages",
+        "pagesPlaceholder": "ex. 1, 3, 5-7",
+        "pagesHint": "Numéros séparés par des virgules ; plages avec un tiret (5-7)."
       },
       "scale": {
         "modeLabel": "Mode de mise à l'échelle",
@@ -2773,7 +2818,13 @@
         "placeholder": "Une description par ligne (figure 1, figure 2, …)",
         "hint": "Une ligne par figure, dans l'ordre. Les lignes vides conservent le texte par défaut du moteur."
       },
-      "toolbarLabel": "Présentation"
+      "toolbarLabel": "Présentation",
+      "applied": {
+        "title": "Présentation appliquée",
+        "description": "Le document a été mis à jour.",
+        "errorTitle": "Échec de l'application",
+        "errorDescription": "Impossible d'appliquer les modifications au document."
+      }
     },
     "links": {
       "schemeLabel": "Type de lien",
