@@ -83,7 +83,11 @@ import {
   ContinuousPageView,
 } from "@/components/editor";
 import type { ContinuousPageViewHandle, BookmarkInput } from "@/components/editor";
-import type { GeometricAnnotationType } from "@/components/editor/annotations-panel";
+import type {
+  GeometricAnnotationType,
+  NativeAnnotationItem,
+} from "@/components/editor/annotations-panel";
+import type { TextRunStyleSpan } from "@/components/editor/properties-panel";
 import type { InsertLinkValue } from "@/components/editor/insert-link-dialog";
 import { EditorEditTools } from "@/components/editor/editor-edit-tools";
 import { FindReplaceDialog } from "@/components/editor/find-replace-dialog";
@@ -3356,6 +3360,123 @@ export default function EditorPage() {
     [effectivePageIndex, adoptModifiedPdf, toast, t],
   );
 
+  // ── Word-like in-place text-run restyle (setTextRunStyle) ───────────────────
+  // Vectorial restyle of an EXISTING parsed run: the original glyph codes are
+  // sliced + re-emitted (positioning preserved), unlike the redact+add path.
+  // Fired by the properties panel for a parsed text element; we adopt + re-parse
+  // so the rebuilt scene graph reflects the new styling. Mode-agnostic — the
+  // panel passes the active page (single + continuous), the engine run `index`,
+  // and the chosen `spans`.
+  const handleApplyTextStyle = useCallback(
+    ({
+      page,
+      index,
+      spans,
+    }: {
+      page: number;
+      index: number;
+      spans: TextRunStyleSpan[];
+    }) => {
+      const file = currentPdfFileRef.current;
+      if (!file) return;
+      void (async () => {
+        try {
+          const form = new FormData();
+          form.append("file", file, file.name);
+          form.append("page", String(page));
+          form.append("index", String(index));
+          form.append("spans", JSON.stringify(spans));
+
+          const res = await fetch("/api/pdf/text-style", {
+            method: "POST",
+            credentials: "include",
+            body: form,
+          });
+          if (!res.ok) {
+            throw new Error(`text-style route returned ${res.status}`);
+          }
+          const blob = await res.blob();
+          adoptModifiedPdf(blob, { reparse: true });
+          toast({
+            title: t("textStyle.appliedTitle"),
+            description: t("textStyle.appliedDescription"),
+          });
+        } catch (err) {
+          clientLogger.error("[editor] apply text style failed:", err);
+          toast({
+            title: t("textStyle.errorTitle"),
+            description: t("textStyle.errorDescription"),
+            variant: "destructive",
+          });
+        }
+      })();
+    },
+    [adoptModifiedPdf, toast, t],
+  );
+
+  // ── Native annotation inventory + removal (annotations / removeAnnotation) ──
+  // List walks every page server-side (action="list") and returns each existing
+  // annotation's `{page, index}`. Remove deletes structurally (action="remove")
+  // then adopts + re-parses the new PDF — the panel re-fetches the list, since
+  // per-page indices shift after a removal.
+  const handleListAnnotations =
+    useCallback(async (): Promise<NativeAnnotationItem[]> => {
+      const file = currentPdfFileRef.current;
+      if (!file) return [];
+      const form = new FormData();
+      form.append("file", file, file.name);
+      form.append("action", "list");
+      const res = await fetch("/api/pdf/annotations", {
+        method: "POST",
+        credentials: "include",
+        body: form,
+      });
+      if (!res.ok) {
+        throw new Error(`annotations list returned ${res.status}`);
+      }
+      const data = (await res.json()) as {
+        success?: boolean;
+        annotations?: NativeAnnotationItem[];
+      };
+      return Array.isArray(data.annotations) ? data.annotations : [];
+    }, []);
+
+  const handleRemoveAnnotation = useCallback(
+    async (page: number, index: number): Promise<void> => {
+      const file = currentPdfFileRef.current;
+      if (!file) return;
+      try {
+        const form = new FormData();
+        form.append("file", file, file.name);
+        form.append("action", "remove");
+        form.append("page", String(page));
+        form.append("index", String(index));
+        const res = await fetch("/api/pdf/annotations", {
+          method: "POST",
+          credentials: "include",
+          body: form,
+        });
+        if (!res.ok) {
+          throw new Error(`annotations remove returned ${res.status}`);
+        }
+        const blob = await res.blob();
+        adoptModifiedPdf(blob, { reparse: true });
+        toast({
+          title: t("annotations.removedTitle"),
+          description: t("annotations.removedDescription"),
+        });
+      } catch (err) {
+        clientLogger.error("[editor] remove annotation failed:", err);
+        toast({
+          title: t("annotations.removeErrorTitle"),
+          description: t("annotations.removeErrorDescription"),
+          variant: "destructive",
+        });
+      }
+    },
+    [adoptModifiedPdf, toast, t],
+  );
+
   // --- PII auto-detect redaction --------------------------------------------
   const [showRedactPiiDialog, setShowRedactPiiDialog] = useState(false);
 
@@ -4739,6 +4860,7 @@ export default function EditorPage() {
               })
             )
           }
+          onApplyTextStyle={handleApplyTextStyle}
         />
 
         {/* Document info sidebar (TOC, Layers, Embedded Files). Layers reflect
@@ -4777,6 +4899,8 @@ export default function EditorPage() {
           onDetectChapters={handleDetectChapters}
           onAddAnnotation={handleAddAnnotation}
           annotationAddBusy={annotationAddBusy}
+          onListAnnotations={handleListAnnotations}
+          onRemoveAnnotation={handleRemoveAnnotation}
           pageCount={pages.length}
         />
 

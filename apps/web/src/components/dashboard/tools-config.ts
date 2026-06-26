@@ -320,7 +320,10 @@ export const TOOL_CONFIGS = {
     id: "unlock",
     namespace: "tools.unlock",
     icon: "unlock",
-    endpoint: "/api/pdf/encrypt",
+    // Dedicated single-responsibility endpoint: opens the PDF with the password
+    // and strips the encryption via GigaPdfDoc.removeEncryption() (a guaranteed
+    // plaintext document), rather than the multi-action /api/pdf/encrypt route.
+    endpoint: "/api/pdf/unlock",
     uploadMode: "single",
     accept: ACCEPT_PDF,
     fileFieldName: "file",
@@ -328,7 +331,6 @@ export const TOOL_CONFIGS = {
     defaultOutputName: "unlocked.pdf",
     allowOutputName: true,
     maxTotalBytes: MAX_250MB,
-    constants: [{ name: "action", value: "decrypt" }],
     fields: [
       {
         type: "password",

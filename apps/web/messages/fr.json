@@ -2115,7 +2115,9 @@
         "systemFonts": "Polices système",
         "fontSize": "Taille",
         "color": "Couleur",
-        "opacity": "Opacité"
+        "opacity": "Opacité",
+        "applyRunStyle": "Appliquer le style au texte",
+        "applyRunStyleHint": "Réapplique la couleur, la taille, le gras/italique et le soulignement choisis directement sur le texte existant, sans le recréer."
       },
       "shape": {
         "type": "Type de forme",
@@ -2222,7 +2224,13 @@
       "addedTitle": "Annotation ajoutée",
       "addedDescription": "Forme placée au centre — déplacez-la et ajustez-la.",
       "addErrorTitle": "Échec de l'ajout",
-      "addErrorDescription": "Impossible d'ajouter l'annotation."
+      "addErrorDescription": "Impossible d'ajouter l'annotation.",
+      "refresh": "Rafraîchir",
+      "pageBadge": "Page {page}",
+      "removedTitle": "Annotation supprimée",
+      "removedDescription": "L'annotation a été retirée du document.",
+      "removeErrorTitle": "Échec de la suppression",
+      "removeErrorDescription": "Impossible de supprimer cette annotation."
     },
     "toc": {
       "title": "Table des matières",
@@ -2976,6 +2984,12 @@
         "locked": "Verrouillé",
         "loadFailed": "Impossible de charger les calques."
       }
+    },
+    "textStyle": {
+      "appliedTitle": "Style appliqué",
+      "appliedDescription": "Le style du texte a été mis à jour.",
+      "errorTitle": "Échec de l'application du style",
+      "errorDescription": "Impossible d'appliquer le style à ce texte."
     }
   },
   "errors": {

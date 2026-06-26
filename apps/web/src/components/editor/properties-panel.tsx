@@ -25,6 +25,22 @@ import type {
 } from "@giga-pdf/types";
 import type { DocumentFontOption } from "@giga-pdf/editor";
 
+/**
+ * One character-range style span for an in-place text-run restyle, matching
+ * `GigaPdfDoc.setTextRunStyle(page, index, spans)`. `start`/`end` are UTF-16
+ * indices into the run's decoded text; `color` is `[r, g, b]` in `0..=1`.
+ */
+export interface TextRunStyleSpan {
+  start: number;
+  end: number;
+  color?: [number, number, number];
+  sizePt?: number;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strike?: boolean;
+}
+
 export interface PropertiesPanelProps {
   /** Élément(s) sélectionné(s) */
   selectedElements: Element[];
@@ -80,6 +96,33 @@ export interface PropertiesPanelProps {
    * server-side, but the editor keeps its current bytes until the next reload.
    */
   onPageBoxesApplied?: (bytes: Uint8Array) => void;
+  /**
+   * Apply a Word-like style to an EXISTING parsed text run **in place**
+   * (vectorial restyle via `setTextRunStyle`, not a redact + re-draw). Shown for
+   * a parsed text element (one carrying an engine run `index >= 0`) together
+   * with {@link PropertiesPanelProps.pageNumber}. `index` is the run index on
+   * `page`; `spans` carry the chosen style over `[start, end)` character ranges.
+   * Absent ⇒ the "apply style to run" action is hidden.
+   */
+  onApplyTextStyle?: (args: {
+    page: number;
+    index: number;
+    spans: TextRunStyleSpan[];
+  }) => void;
+}
+
+/**
+ * Parse a `#rrggbb` (or `#rgb`) hex string into an `[r, g, b]` triple in
+ * `0..=1`, or `undefined` when it isn't a valid hex colour (so the span simply
+ * omits `color` and the run keeps its existing fill).
+ */
+function hexToRgb01(hex: string | null | undefined): [number, number, number] | undefined {
+  if (!hex) return undefined;
+  let h = hex.trim().replace(/^#/, "");
+  if (h.length === 3) h = h[0]! + h[0]! + h[1]! + h[1]! + h[2]! + h[2]!;
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return undefined;
+  const n = parseInt(h, 16);
+  return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
 }
 
 /** Charset AcroForm sûr pour un nom de champ (lettres, chiffres, _ . -). */
@@ -1957,6 +2000,7 @@ export function PropertiesPanel({
   pageNumber,
   getDocumentBytes,
   onPageBoxesApplied,
+  onApplyTextStyle,
 }: PropertiesPanelProps) {
   const t = useTranslations("editor.properties");
 
@@ -2136,6 +2180,47 @@ export function PropertiesPanel({
           className="w-full"
         />
       </div>
+
+      {/* Word-like in-place restyle of the EXISTING parsed run (vectorial,
+          `setTextRunStyle`) — applies the element's CURRENT style (the values
+          edited above) to the whole run. Shown only for a parsed run (engine
+          `index >= 0`) when the page number + handler are wired. */}
+      {onApplyTextStyle &&
+        pageNumber != null &&
+        typeof element.index === "number" &&
+        element.index >= 0 &&
+        (element.content?.length ?? 0) > 0 && (
+          <div className="pt-2 border-t space-y-1">
+            <button
+              type="button"
+              onClick={() => {
+                // Re-narrow inside the closure (the JSX guard above doesn't
+                // flow into this callback's types).
+                if (pageNumber == null) return;
+                const runIndex = element.index;
+                if (typeof runIndex !== "number" || runIndex < 0) return;
+                const end = element.content?.length ?? 0;
+                if (end === 0) return;
+                const style = element.style;
+                const span: TextRunStyleSpan = { start: 0, end };
+                const color = hexToRgb01(style?.color);
+                if (color) span.color = color;
+                if (typeof style?.fontSize === "number") span.sizePt = style.fontSize;
+                if (style?.fontWeight === "bold") span.bold = true;
+                if (style?.fontStyle === "italic") span.italic = true;
+                if (style?.underline) span.underline = true;
+                if (style?.strikethrough) span.strike = true;
+                onApplyTextStyle({ page: pageNumber, index: runIndex, spans: [span] });
+              }}
+              className="w-full px-2 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {t("text.applyRunStyle")}
+            </button>
+            <p className="text-[10px] leading-snug text-muted-foreground">
+              {t("text.applyRunStyleHint")}
+            </p>
+          </div>
+        )}
     </div>
   );
 

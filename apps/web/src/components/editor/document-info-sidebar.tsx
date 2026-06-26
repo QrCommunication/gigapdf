@@ -14,7 +14,11 @@ import type {
 import { cn } from "@/lib/utils";
 import { TOCPanel, type BookmarkInput } from "./toc-panel";
 import { LayersPanel } from "./layers-panel";
-import { AnnotationsPanel, type GeometricAnnotationType } from "./annotations-panel";
+import {
+  AnnotationsPanel,
+  type GeometricAnnotationType,
+  type NativeAnnotationItem,
+} from "./annotations-panel";
 import { DocumentLanguageBadge } from "./document-language-badge";
 import { EmbeddedFilesPanel } from "./embedded-files-panel";
 
@@ -93,6 +97,18 @@ interface DocumentInfoSidebarProps {
   onAddAnnotation?: (type: GeometricAnnotationType) => void;
   /** True while an annotation add is in flight — disables the add toolbar. */
   annotationAddBusy?: boolean;
+  /**
+   * Native annotation inventory (all pages, `{page, index}` per item) via
+   * `GigaPdfDoc.annotations`. When provided, the annotations panel switches to
+   * native mode: it lists this (loaded on mount + refresh) and removes via
+   * {@link onRemoveAnnotation}. Absent ⇒ the panel uses the scene-graph list.
+   */
+  onListAnnotations?: () => Promise<NativeAnnotationItem[]>;
+  /**
+   * Structurally remove the annotation `index` of page `page`
+   * (`removeAnnotation`). Used only in native mode (with {@link onListAnnotations}).
+   */
+  onRemoveAnnotation?: (page: number, index: number) => Promise<void> | void;
   /** Total page count — bounds the destination page input in outline edit. */
   pageCount?: number;
   className?: string;
@@ -136,6 +152,8 @@ export function DocumentInfoSidebar({
   onDetectChapters,
   onAddAnnotation,
   annotationAddBusy,
+  onListAnnotations,
+  onRemoveAnnotation,
   pageCount,
   className,
 }: DocumentInfoSidebarProps) {
@@ -230,7 +248,9 @@ export function DocumentInfoSidebar({
             ocgBusyIds={ocgBusyIds}
           />
 
-          {/* Annotations existantes du PDF (révision + suppression ciblée) */}
+          {/* Annotations existantes du PDF (révision + suppression ciblée).
+              Quand `onListAnnotations` est câblé, le panneau bascule en mode
+              natif (inventaire moteur toutes pages + `removeAnnotation`). */}
           <AnnotationsPanel
             elements={elements}
             selectedElementIds={selectedElementIds}
@@ -238,6 +258,8 @@ export function DocumentInfoSidebar({
             onDelete={onAnnotationDelete}
             onAdd={onAddAnnotation}
             addBusy={annotationAddBusy}
+            onListAnnotations={onListAnnotations}
+            onRemoveAnnotation={onRemoveAnnotation}
           />
 
           {/* Fichiers embarqués */}

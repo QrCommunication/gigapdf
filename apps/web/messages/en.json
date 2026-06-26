@@ -2115,7 +2115,9 @@
         "systemFonts": "System fonts",
         "fontSize": "Size",
         "color": "Color",
-        "opacity": "Opacity"
+        "opacity": "Opacity",
+        "applyRunStyle": "Apply style to text",
+        "applyRunStyleHint": "Reapplies the chosen colour, size, bold/italic and underline directly to the existing text, without recreating it."
       },
       "shape": {
         "type": "Shape type",
@@ -2222,7 +2224,13 @@
       "addedTitle": "Annotation added",
       "addedDescription": "Shape placed at the center — move and resize it.",
       "addErrorTitle": "Add failed",
-      "addErrorDescription": "The annotation could not be added."
+      "addErrorDescription": "The annotation could not be added.",
+      "refresh": "Refresh",
+      "pageBadge": "Page {page}",
+      "removedTitle": "Annotation removed",
+      "removedDescription": "The annotation was removed from the document.",
+      "removeErrorTitle": "Could not remove",
+      "removeErrorDescription": "Failed to remove this annotation."
     },
     "toc": {
       "title": "Table of Contents",
@@ -2976,6 +2984,12 @@
         "locked": "Locked",
         "loadFailed": "Could not load the layers."
       }
+    },
+    "textStyle": {
+      "appliedTitle": "Style applied",
+      "appliedDescription": "The text style was updated.",
+      "errorTitle": "Could not apply style",
+      "errorDescription": "Failed to apply the style to this text."
     }
   },
   "errors": {
