@@ -91,6 +91,15 @@ export interface PDFRenderOptions {
    * `renderPageNoText` behaviour.
    */
   excludeIndices?: number[];
+  /**
+   * Exclude the baked Word-like running header/footer band (the `/GPHF`
+   * marked-content span) from the raster, so the editable header/footer ZONE
+   * overlaid on top never doubles against it. Implemented via the engine's
+   * `renderPageExcludingMarkedContent`. Combine with `skipText` (the default
+   * here) for the editor's text-free background MINUS the band. Takes precedence
+   * over `excludeIndices` when both are set.
+   */
+  excludeMarkedContent?: boolean;
 }
 
 // ─── PDFRenderer ─────────────────────────────────────────────────────────────
@@ -131,11 +140,21 @@ export class PDFRenderer {
     options: PDFRenderOptions = {},
   ): Promise<string> {
     if (!this.doc) throw new Error("PDF document not loaded");
-    const { scale = 1, excludeIndices } = options;
+    const { scale = 1, excludeIndices, excludeMarkedContent } = options;
     const skipText = options.skipText ?? false;
 
     let png: Uint8Array;
-    if (excludeIndices && excludeIndices.length > 0) {
+    if (excludeMarkedContent) {
+      // Drop the baked running header/footer band (`/GPHF` marked content) in a
+      // single raster pass; `skipText` additionally suppresses the page's text
+      // so the editable text overlay never doubles. The editable H/F ZONE is
+      // overlaid on top of this band-free background.
+      png = this.doc.renderPageExcludingMarkedContent(
+        pageNumber,
+        scale,
+        skipText,
+      );
+    } else if (excludeIndices && excludeIndices.length > 0) {
       // ⚠ Combining `skipText` with `excludeIndices` is UNSAFE — do not rely on
       // it for a faithful background. Two engine realities break it:
       //   1. `textElements().index` is a TEXT-RUN ordinal (dense 0..N), NOT the

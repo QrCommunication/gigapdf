@@ -558,3 +558,64 @@ describe("fabricObjectToElement — freetext annotation IText round-trip", () =>
     expect(el?.type).toBe("text");
   });
 });
+
+// --- Image opacity decoupling (parsed hit-targets are displayed at opacity 0)--
+//
+// A PARSED image overlay is shown invisible (opacity 0) because the text-free
+// raster already paints it; its REAL opacity is stashed on data.originalOpacity.
+// Serialising the live `obj.opacity` (0) would bake an invisible image into the
+// PDF on the first move/resize. The save path must prefer data.originalOpacity
+// (mirror of the shape data.originalFill decoupling) and only fall back to the
+// live opacity for a newly-added image that has none.
+describe("fabricObjectToElement — image opacity decoupling", () => {
+  function imageStub(
+    over: Partial<FabricObjectWithData> & { opacity?: number },
+  ): FabricObjectWithData {
+    return fabricStub({
+      type: "image",
+      opacity: 0,
+      // The image branch sniffs the mime from the data URL prefix.
+      ...({
+        getSrc: () => "data:image/png;base64,QUFB",
+      } as unknown as Partial<FabricObjectWithData>),
+      ...over,
+    });
+  }
+
+  it("uses data.originalOpacity, NOT the 0 display opacity, for a parsed image", () => {
+    const obj = imageStub({
+      opacity: 0,
+      data: { elementId: "img1", type: "image", originalOpacity: 1 },
+    });
+    const el = fabricObjectToElement(obj) as unknown as {
+      type: string;
+      style: { opacity: number };
+    };
+    expect(el.type).toBe("image");
+    // The 0 hit-target opacity must NEVER be baked — the real opacity wins.
+    expect(el.style.opacity).toBe(1);
+  });
+
+  it("preserves a parsed image's mixed real opacity from data.originalOpacity", () => {
+    const obj = imageStub({
+      opacity: 0,
+      data: { elementId: "img2", type: "image", originalOpacity: 0.6 },
+    });
+    const el = fabricObjectToElement(obj) as unknown as {
+      style: { opacity: number };
+    };
+    expect(el.style.opacity).toBe(0.6);
+  });
+
+  it("falls back to the live opacity for a NEW image (no data.originalOpacity)", () => {
+    const obj = imageStub({
+      opacity: 0.85,
+      data: { elementId: "img3", type: "image" },
+    });
+    const el = fabricObjectToElement(obj) as unknown as {
+      style: { opacity: number };
+    };
+    // No stash → keep what the (visible) new image is actually drawn at.
+    expect(el.style.opacity).toBe(0.85);
+  });
+});

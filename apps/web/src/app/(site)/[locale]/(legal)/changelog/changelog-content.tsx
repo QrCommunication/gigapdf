@@ -15,6 +15,20 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.13.0",
+    date: "2026-06-27",
+    type: "minor",
+    changes: [
+      { type: "feature", description: "Editor: Word-style editable header & footer zones — place text and images directly on the page, with a contextual toolbar (insert image, page-number/date/title tokens, alignment, font and colour), a different first page and different odd/even pages, all saved with the PDF" },
+      { type: "feature", description: "Editor: insert blank pages in multiple formats — A4, A3, Letter, Legal or custom, in portrait or landscape, from a Word-style Add page menu" },
+      { type: "fix", description: "Editor: text no longer disappears behind background images — page layers now load in the correct stacking order" },
+      { type: "fix", description: "Editor: bring forward / send backward no longer reloads the document or loses your edits — the change applies instantly" },
+      { type: "fix", description: "Editor: Word-style margin rulers no longer blank the page; margins are saved with the document and never crop it" },
+      { type: "fix", description: "Faithful text extraction (engine 0.105.0): subset fonts that repack glyphs (e.g. administrative forms like CERFA) no longer garble accented words and numbers" },
+      { type: "improvement", description: "Editor: opening a document now shows a real progress bar with a page-flip animation instead of a spinner" },
+    ],
+  },
+  {
     version: "1.12.0",
     date: "2026-06-23",
     type: "minor",

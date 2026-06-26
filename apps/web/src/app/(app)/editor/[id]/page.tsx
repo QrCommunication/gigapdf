@@ -91,6 +91,7 @@ import type { TextRunStyleSpan } from "@/components/editor/properties-panel";
 import type { InsertLinkValue } from "@/components/editor/insert-link-dialog";
 import type { InsertSvgValue } from "@/components/editor/insert-svg-dialog";
 import { EditorEditTools } from "@/components/editor/editor-edit-tools";
+import { LoadingScreen } from "@/components/editor/loading-screen";
 import { FindReplaceDialog } from "@/components/editor/find-replace-dialog";
 import type {
   EditorCanvasHandle,
@@ -149,8 +150,38 @@ import {
   applyHeaderFooter,
   removeHeaderFooter,
   detectHeaderFooter,
+  bakeRunningHeaderFooter,
+  readRunningHeaderFooter,
+  documentHasSignatures,
   type HeaderFooterKind,
 } from "@/components/editor/lib/page-headers-footers";
+import {
+  HeaderFooterZone,
+  type HFFocusedTextItem,
+} from "@/components/editor/header-footer-zone";
+import type { HFToken } from "@/components/editor/formatting-toolbar";
+import {
+  HFImageRegistry,
+  emptyRunningHeaderFooter,
+  appendItemToZone,
+  makeImageItem,
+  updateItemInZone,
+  resolveZoneKeyForPage,
+  ensureZone,
+  isRunningHeaderFooterEmpty,
+  applyTextStylePatch,
+  appendTokenToText,
+  hfColorToHex,
+  textAlignFromAnchor,
+  type RunningHeaderFooter,
+} from "@/components/editor/lib/running-header-footer";
+import {
+  addPageParams,
+  type PageFormat,
+  type PageOrientation,
+  type AddPagePosition,
+  type PageFormatPoints,
+} from "@/components/editor/lib/page-formats";
 import {
   exportDocumentAs,
   exportFilename,
@@ -461,6 +492,23 @@ export default function EditorPage() {
   // True while a Word-style header/footer band is being baked onto the PDF —
   // drives the dialog's busy state so the user can't fire overlapping bakes.
   const [headerFooterBusy, setHeaderFooterBusy] = useState(false);
+
+  // SL2 — Word-like editable running header/footer ZONES (default zone only).
+  //   hfEditMode   : the editable bands are active (raster excludes /GPHF).
+  //   hfDef        : the rich definition (source of truth), seeded on load.
+  //   hfFocused    : the text item currently focused → drives the toolbar.
+  //   hfRegistry   : editor-owned image bytes referenced by image items.
+  //   hfDefRef     : sync mirror for the debounced bake closure.
+  //   hfBakeTimer  : the pending debounced bake handle.
+  //   hfSignedWarnedRef: gates the one-shot "editing breaks signatures" warning.
+  const [hfEditMode, setHfEditMode] = useState(false);
+  const [hfDef, setHfDef] = useState<RunningHeaderFooter | null>(null);
+  const [hfFocused, setHfFocused] = useState<HFFocusedTextItem | null>(null);
+  const hfRegistryRef = useRef<HFImageRegistry>(new HFImageRegistry());
+  const hfDefRef = useRef<RunningHeaderFooter | null>(null);
+  const hfBakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hfSignedWarnedRef = useRef(false);
+  const hfImageInputRef = useRef<HTMLInputElement | null>(null);
   // PII redaction tool: live count of zones drawn on the active page (reported
   // by the canvas) + busy flag while the engine bakes the redaction.
   const [redactionMarkCount, setRedactionMarkCount] = useState(0);
@@ -526,6 +574,7 @@ export default function EditorPage() {
     currentPage,
     currentPageIndex,
     loading,
+    loadProgress,
     error,
     documentId,
     goToPage,
@@ -756,6 +805,13 @@ export default function EditorPage() {
             if (header) setHeaderFooterInitialHeader(header);
             if (footer) setHeaderFooterInitialFooter(footer);
             if (header || footer) setHeadersFootersEnabled(true);
+            // SL2 — seed the rich running-H/F definition (source of truth for
+            // the editable zones) from the document's editor-meta sidecar.
+            const richDef = await readRunningHeaderFooter(bytes);
+            if (cancelled) return;
+            const seedDef = richDef ?? emptyRunningHeaderFooter();
+            setHfDef(seedDef);
+            hfDefRef.current = seedDef;
           } catch (err) {
             clientLogger.warn('[editor] header/footer auto-detect failed:', err);
           }
@@ -2666,22 +2722,45 @@ export default function EditorPage() {
     [pageOperation, adoptModifiedPdf],
   );
 
-  // Commit new page margins (PDF points) dropped from a ruler/guide drag. The
-  // GigaPDF engine insets the page's CropBox client-side, producing new bytes
-  // that we adopt exactly like a page op (swap binary + save + re-parse so the
-  // editable overlay re-aligns to the new page box).
+  // ── Word-like per-page content margins (consolidated, pageId-keyed) ────────
+  // Single source of truth for the draggable margin guides in BOTH views. Keyed
+  // by the stable `pageId` so a dragged value survives page insert/delete/
+  // reorder AND the binary swaps that text edits perform; derived below into a
+  // page-aligned array fed to the single-page EditorCanvas and the continuous
+  // ContinuousPageView. Margins are the CONTENT ZONE (guides + header/footer
+  // position) — they never recrop the page, so committing one never blanks it.
+  const [marginsByPageId, setMarginsByPageId] = useState<
+    Record<string, PageMargins | null>
+  >({});
+
+  // Commit new content margins (PDF points) dropped from a ruler/guide drag.
+  // Two independent moves:
+  //   (a) Move the guides IMMEDIATELY by updating the consolidated state for the
+  //       dragged page's stable pageId — instant, no re-parse, no blank.
+  //   (b) PERSIST the margins into the document's editor-metadata sidecar (NOT
+  //       the CropBox) so they survive a reload, then adopt the new bytes with
+  //       `reparse: false`: the sidecar is not page geometry, so nothing blanks
+  //       and the scene graph stays intact. `applyGuideDrag` only changes the
+  //       dragged side, so `margins` already carries the other three unchanged.
   const handleMarginsCommit = useCallback(
     (pageIndex: number, margins: PageMargins) => {
+      const page = pages[pageIndex];
+      if (page) {
+        setMarginsByPageId((prev) => ({ ...prev, [page.pageId]: margins }));
+      }
       const file = currentPdfFileRef.current;
       if (!file) return;
       void (async () => {
         try {
           const bytes = new Uint8Array(await file.arrayBuffer());
           const next = await applyPageMargins(bytes, pageIndex, margins);
-          // `next` is a fresh Uint8Array backed by its own ArrayBuffer.
-          adoptModifiedPdf(new Blob([next], { type: "application/pdf" }));
+          // `next` is a fresh Uint8Array backed by its own ArrayBuffer. The
+          // sidecar write changes no page geometry → adopt WITHOUT re-parsing.
+          adoptModifiedPdf(new Blob([next], { type: "application/pdf" }), {
+            reparse: false,
+          });
         } catch (err) {
-          clientLogger.error("[editor] set page margins failed:", err);
+          clientLogger.error("[editor] set editor margins failed:", err);
           toast({
             title: t("rulers.marginErrorTitle"),
             description: t("rulers.marginErrorDescription"),
@@ -2690,38 +2769,55 @@ export default function EditorPage() {
         }
       })();
     },
-    [adoptModifiedPdf, toast, t],
+    [pages, adoptModifiedPdf, toast, t],
   );
 
-  // Per-page margins (PDF points) of the current binary, for the SINGLE-PAGE
-  // view's draggable ruler/guide markers. The continuous view reads its own
-  // margins inside ContinuousPageView, so we only read here when single — the
-  // single-page EditorCanvas is fed `singlePageMargins[currentPageIndex]`. Read
-  // off the same bytes the editor already holds (cheap: one short-lived doc on
-  // the loaded engine). Failure is non-fatal → no markers for that page.
-  const [singlePageMargins, setSinglePageMargins] = useState<
-    Array<PageMargins | null>
-  >([]);
+  // Seed / refresh the consolidated margins from the current binary's editor
+  // sidecar (written by drags), falling back to the estimated CropBox inset for
+  // legacy docs. Runs whenever the binary changes — the initial open (keyed by
+  // documentId) seeds an empty map, later swaps refresh it. We MERGE preferring
+  // any value already held for a pageId, so a just-dragged margin is never
+  // clobbered by a subsequent text-edit binary swap; a new document brings new
+  // pageIds, so nothing stale survives a document change (the rebuilt map only
+  // carries the current pages' ids). Read off the bytes the editor already holds
+  // (cheap: one short-lived doc on the loaded engine). Failure is non-fatal.
   useEffect(() => {
-    if (isContinuous || !currentPdfFile) {
-      setSinglePageMargins([]);
+    if (!currentPdfFile) {
+      setMarginsByPageId({});
       return;
     }
     let cancelled = false;
     void (async () => {
       try {
         const bytes = new Uint8Array(await currentPdfFile.arrayBuffer());
-        const margins = await readAllPageMargins(bytes);
-        if (!cancelled) setSinglePageMargins(margins);
+        const read = await readAllPageMargins(bytes);
+        if (cancelled) return;
+        const ids = pagesRef.current.map((p) => p.pageId);
+        setMarginsByPageId((prev) => {
+          const next: Record<string, PageMargins | null> = {};
+          ids.forEach((id, i) => {
+            // Keep a dragged in-memory value; else adopt the freshly-read one.
+            next[id] = id in prev ? (prev[id] ?? null) : (read[i] ?? null);
+          });
+          return next;
+        });
       } catch (err) {
-        clientLogger.warn("[editor] single-page margin read failed:", err);
-        if (!cancelled) setSinglePageMargins([]);
+        clientLogger.warn("[editor] page margin read failed:", err);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [isContinuous, currentPdfFile]);
+  }, [currentPdfFile]);
+
+  // Page-aligned margins for the views — the single-page EditorCanvas reads its
+  // current page's entry, the continuous view receives the whole array. Aligned
+  // to `pages` by index but resolved through the pageId-keyed map, so reorders
+  // re-map automatically and dragged values follow their page.
+  const pageMargins = useMemo<Array<PageMargins | null>>(
+    () => pages.map((p) => marginsByPageId[p.pageId] ?? null),
+    [pages, marginsByPageId],
+  );
 
   // Bake a Word-style running header/footer onto the current PDF. The GigaPDF
   // engine draws the band text (with {{page}}/{{pages}} tokens) in the top/
@@ -2855,6 +2951,288 @@ export default function EditorPage() {
     toggleHeadersFooters,
     adoptModifiedPdf,
   ]);
+
+  // ─── SL2 — Word-like editable running header/footer zones ──────────────────
+
+  // Debounced bake: re-render the visible /GPHF band from the current definition
+  // (the source of truth) and adopt the bytes WITHOUT re-parsing (the band lives
+  // outside page content, so the editable overlay is unchanged). Reads the live
+  // file + def via refs so the timer closure never goes stale.
+  const scheduleHfBake = useCallback(() => {
+    if (hfBakeTimerRef.current) clearTimeout(hfBakeTimerRef.current);
+    hfBakeTimerRef.current = setTimeout(() => {
+      hfBakeTimerRef.current = null;
+      const file = currentPdfFileRef.current;
+      const def = hfDefRef.current;
+      if (!file || !def) return;
+      void (async () => {
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const next = await bakeRunningHeaderFooter(bytes, def, {
+            date: new Date().toISOString().slice(0, 10),
+            images: hfRegistryRef.current.toMap(),
+          });
+          adoptModifiedPdf(new Blob([next], { type: "application/pdf" }), {
+            reparse: false,
+          });
+        } catch (err) {
+          clientLogger.error("[editor] header/footer bake failed:", err);
+          toast({
+            title: t("headerFooter.errorTitle"),
+            description: t("headerFooter.errorDescription"),
+            variant: "destructive",
+          });
+        }
+      })();
+    }, 500);
+  }, [adoptModifiedPdf, toast, t]);
+
+  // Non-blocking, one-shot warning before the first H/F edit on a SIGNED
+  // document — any binary edit invalidates existing signatures (a global
+  // concern). Gated by a ref so it fires at most once per session.
+  const warnIfSignedOnce = useCallback(() => {
+    if (hfSignedWarnedRef.current) return;
+    hfSignedWarnedRef.current = true;
+    const file = currentPdfFileRef.current;
+    if (!file) return;
+    void (async () => {
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        if (await documentHasSignatures(bytes)) {
+          toast({
+            title: t("headerFooter.signedWarningTitle"),
+            description: t("headerFooter.signedWarningDescription"),
+          });
+        }
+      } catch {
+        /* best-effort warning — never block editing */
+      }
+    })();
+  }, [toast, t]);
+
+  // Adopt a new running-H/F definition (any zone edit): update state + the sync
+  // mirror, warn once if signed, and schedule a debounced bake.
+  const handleHfDefChange = useCallback(
+    (def: RunningHeaderFooter) => {
+      setHfDef(def);
+      hfDefRef.current = def;
+      warnIfSignedOnce();
+      scheduleHfBake();
+    },
+    [warnIfSignedOnce, scheduleHfBake],
+  );
+
+  // Toggle the editable header/footer zones. Entering seeds an empty definition
+  // when none was detected, and keeps the store flag in sync; leaving clears the
+  // focused item.
+  const handleToggleHeaderFooterZones = useCallback(() => {
+    setHfEditMode((on) => {
+      const next = !on;
+      if (next) {
+        if (!hfDefRef.current) {
+          const seed = emptyRunningHeaderFooter();
+          hfDefRef.current = seed;
+          setHfDef(seed);
+        }
+        setHeadersFootersEnabled(true);
+      } else {
+        setHfFocused(null);
+      }
+      return next;
+    });
+  }, [setHeadersFootersEnabled]);
+
+  // SL3 — toggle "different first page": flip the flag and, when turning it on,
+  // seed the `firstPage` override zone (a copy of `default`) so page 1 starts
+  // from the same content and can diverge. Re-bakes via handleHfDefChange.
+  const handleToggleHfDifferentFirstPage = useCallback(() => {
+    const def = hfDefRef.current ?? emptyRunningHeaderFooter();
+    const nextOn = !def.differentFirstPage;
+    let next: RunningHeaderFooter = { ...def, differentFirstPage: nextOn };
+    if (nextOn) next = ensureZone(next, "firstPage");
+    handleHfDefChange(next);
+  }, [handleHfDefChange]);
+
+  // SL3 — toggle "different odd & even pages": flip the flag and, when turning
+  // it on, seed BOTH the `evenPage` and `oddPage` override zones.
+  const handleToggleHfDifferentOddEven = useCallback(() => {
+    const def = hfDefRef.current ?? emptyRunningHeaderFooter();
+    const nextOn = !def.differentOddEven;
+    let next: RunningHeaderFooter = { ...def, differentOddEven: nextOn };
+    if (nextOn) {
+      next = ensureZone(next, "evenPage");
+      next = ensureZone(next, "oddPage");
+    }
+    handleHfDefChange(next);
+  }, [handleHfDefChange]);
+
+  // The zone reports which text item is focused → drives the FormattingToolbar.
+  const handleHfFocusedChange = useCallback((focus: HFFocusedTextItem | null) => {
+    setHfFocused(focus);
+  }, []);
+
+  // Insert an image item: open the hidden file picker; its change handler reads
+  // the bytes, registers them and appends an image item to the focused band.
+  const handleHfInsertImage = useCallback(() => {
+    hfImageInputRef.current?.click();
+  }, []);
+
+  const handleHfImageInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const input = e.currentTarget;
+      const f = input.files?.[0];
+      input.value = ""; // allow re-selecting the same file later
+      const def = hfDefRef.current;
+      if (!f || !def) return;
+      void (async () => {
+        try {
+          const bytes = new Uint8Array(await f.arrayBuffer());
+          const id = hfRegistryRef.current.add(bytes);
+          // Default 80×24 pt box; inserted into the focused band (else header)
+          // of the ACTIVE page's zone (SL3 — first-page/odd-even aware).
+          const band = hfFocused?.band ?? "header";
+          const key = resolveZoneKeyForPage(def, effectivePageIndex + 1);
+          const next = appendItemToZone(
+            def,
+            key,
+            band,
+            makeImageItem(id, 80, 24, { anchor: "left" }),
+          );
+          handleHfDefChange(next);
+        } catch (err) {
+          clientLogger.error("[editor] header/footer image insert failed:", err);
+        }
+      })();
+    },
+    [hfFocused, effectivePageIndex, handleHfDefChange],
+  );
+
+  // Insert a {{token}} into the focused text item's template.
+  const handleHfInsertToken = useCallback(
+    (token: HFToken) => {
+      const def = hfDefRef.current;
+      if (!def || !hfFocused || hfFocused.item.type !== "text") return;
+      const nextText = appendTokenToText(hfFocused.item.text, token);
+      const key = resolveZoneKeyForPage(def, effectivePageIndex + 1);
+      const next = updateItemInZone(def, key, hfFocused.band, hfFocused.index, {
+        text: nextText,
+      });
+      handleHfDefChange(next);
+    },
+    [hfFocused, effectivePageIndex, handleHfDefChange],
+  );
+
+  const handleHfCloseZone = useCallback(() => {
+    setHfEditMode(false);
+    setHfFocused(null);
+  }, []);
+
+  // Synthetic single-text-element selection so the FormattingToolbar reflects
+  // and edits the FOCUSED H/F text item (B/I/colour/size/align). Null when no
+  // text item is focused.
+  const hfSelectedTextElements = useMemo<TextElement[] | undefined>(() => {
+    if (!hfEditMode || !hfFocused || hfFocused.item.type !== "text") {
+      return undefined;
+    }
+    const it = hfFocused.item;
+    const style: TextStyle = {
+      fontFamily: "Helvetica",
+      fontSize: it.size ?? 10,
+      fontWeight: it.bold ? "bold" : "normal",
+      fontStyle: it.italic ? "italic" : "normal",
+      color: hfColorToHex(it.color),
+      opacity: 1,
+      textAlign: textAlignFromAnchor(it.anchor),
+      lineHeight: 1.2,
+      letterSpacing: 0,
+      writingMode: "horizontal-tb",
+      underline: false,
+      strikethrough: false,
+      backgroundColor: null,
+      verticalAlign: "baseline",
+      originalFont: null,
+    };
+    const el: TextElement = {
+      elementId: `hf-${hfFocused.band}-${hfFocused.index}`,
+      type: "text",
+      bounds: { x: 0, y: 0, width: 0, height: 0 },
+      transform: { rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
+      layerId: null,
+      locked: false,
+      visible: true,
+      content: it.text,
+      style,
+      ocrConfidence: null,
+      linkUrl: null,
+      linkPage: null,
+    };
+    return [el];
+  }, [hfEditMode, hfFocused]);
+
+  // Route FormattingToolbar style patches to the focused H/F text item.
+  const hfOnElementStyleChange = useCallback(
+    (_elementId: string, patch: Partial<TextStyle>) => {
+      const def = hfDefRef.current;
+      if (!def || !hfFocused || hfFocused.item.type !== "text") return;
+      const nextItem = applyTextStylePatch(hfFocused.item, patch);
+      const key = resolveZoneKeyForPage(def, effectivePageIndex + 1);
+      const next = updateItemInZone(
+        def,
+        key,
+        hfFocused.band,
+        hfFocused.index,
+        nextItem,
+      );
+      handleHfDefChange(next);
+    },
+    [hfFocused, effectivePageIndex, handleHfDefChange],
+  );
+
+  // The contextual H/F cluster passed to the toolbar while zone mode is active.
+  const headerFooterContext = useMemo(
+    () =>
+      hfEditMode
+        ? {
+            onInsertImage: handleHfInsertImage,
+            onInsertToken: handleHfInsertToken,
+            onCloseZone: handleHfCloseZone,
+            canInsertToken: hfFocused?.item.type === "text",
+          }
+        : undefined,
+    [
+      hfEditMode,
+      hfFocused,
+      handleHfInsertImage,
+      handleHfInsertToken,
+      handleHfCloseZone,
+    ],
+  );
+
+  // SL3 — localised badge for the active page's zone scope (first page / even /
+  // odd / default), shown atop the editable bands so the user knows which pages
+  // their edit applies to. Only while editing zones AND an override is active.
+  const hfZoneLabel = useMemo<string | undefined>(() => {
+    if (!hfEditMode || !hfDef) return undefined;
+    const key = resolveZoneKeyForPage(hfDef, effectivePageIndex + 1);
+    switch (key) {
+      case "firstPage":
+        return t("headerFooter.zone.firstPage");
+      case "evenPage":
+        return t("headerFooter.zone.evenPage");
+      case "oddPage":
+        return t("headerFooter.zone.oddPage");
+      default:
+        // No badge in the plain `default` case (SL2 behaviour unchanged).
+        return undefined;
+    }
+  }, [hfEditMode, hfDef, effectivePageIndex, t]);
+
+  // Cancel any pending bake on unmount (avoid a late timer firing after teardown).
+  useEffect(() => {
+    return () => {
+      if (hfBakeTimerRef.current) clearTimeout(hfBakeTimerRef.current);
+    };
+  }, []);
 
   // Filigrane appliqué au document courant (mode « Appliquer au document »
   // du WatermarkDialog) : adopte le binaire filigrané exactement comme une
@@ -3192,6 +3570,41 @@ export default function EditorPage() {
     const ok = await runPageOperation('add', { afterPage: pages.length });
     if (ok) addPageLocal();
   }, [runPageOperation, pages.length, addPageLocal]);
+
+  // SL4 — add a page of a chosen format/orientation at a position (after the
+  // active page / at the end). Resolves the size to PDF points + the insertion
+  // point via `addPageParams`, runs the page-add op (binary swap → re-parse
+  // rebuilds the scene graph with the new, possibly-different-sized page), then
+  // RE-BAKES the running header/footer (re-supplying the registered images via
+  // scheduleHfBake) because adding a page shifts every {{page}}/{{pages}} token.
+  const handleAddPageFormat = useCallback(
+    async (
+      format: PageFormat,
+      orientation: PageOrientation,
+      position: AddPagePosition,
+      custom?: PageFormatPoints,
+    ) => {
+      const { afterPage, width, height } = addPageParams(
+        format,
+        orientation,
+        position,
+        { currentPageIndex: effectivePageIndex, pageCount: pages.length },
+        custom,
+      );
+      const ok = await runPageOperation('add', { afterPage, width, height });
+      if (!ok) return;
+      addPageLocal();
+      const def = hfDefRef.current;
+      if (def && !isRunningHeaderFooterEmpty(def)) scheduleHfBake();
+    },
+    [
+      effectivePageIndex,
+      pages.length,
+      runPageOperation,
+      addPageLocal,
+      scheduleHfBake,
+    ],
+  );
 
   // --- Insert menu (Word-like) ------------------------------------------------
 
@@ -4461,12 +4874,12 @@ export default function EditorPage() {
   // Rendu conditionnel pour chargement/erreur
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">{t("loading")}</p>
-        </div>
-      </div>
+      <LoadingScreen
+        value={loadProgress.value}
+        phase={loadProgress.phase}
+        pagesParsed={loadProgress.pagesParsed}
+        pagesTotal={loadProgress.pagesTotal}
+      />
     );
   }
 
@@ -4871,6 +5284,18 @@ export default function EditorPage() {
         onSignApplied={handleSignApplied}
         headersFootersEnabled={headersFootersEnabled}
         onToggleHeadersFooters={handleToggleHeadersFooters}
+        onToggleHeaderFooterZones={handleToggleHeaderFooterZones}
+        headerFooterEditing={hfEditMode}
+        {...(headerFooterContext ? { headerFooterContext } : {})}
+        {...(hfSelectedTextElements ? { hfSelectedTextElements } : {})}
+        hfOnElementStyleChange={hfOnElementStyleChange}
+        headerFooterDifferentFirstPage={hfDef?.differentFirstPage ?? false}
+        headerFooterDifferentOddEven={hfDef?.differentOddEven ?? false}
+        onToggleHeaderFooterDifferentFirstPage={
+          handleToggleHfDifferentFirstPage
+        }
+        onToggleHeaderFooterDifferentOddEven={handleToggleHfDifferentOddEven}
+        onAddPageFormat={handleAddPageFormat}
         onHeaderFooterApply={handleHeaderFooterApply}
         onHeaderFooterRemove={handleHeaderFooterRemove}
         onPresentationApplied={handleApplyPresentation}
@@ -4953,6 +5378,15 @@ export default function EditorPage() {
             onModificationsChange={handleContentModificationsChange}
           >
             <ContentEditToolbar />
+            {/* SL2 — hidden picker for inserting an image into a header/footer
+                band (triggered from the contextual FormattingToolbar). */}
+            <input
+              ref={hfImageInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={handleHfImageInputChange}
+            />
             {isContinuous ? (
             <ContinuousPageView
               ref={continuousViewRef}
@@ -4965,6 +5399,7 @@ export default function EditorPage() {
               onActivatePage={activatePage}
               showRulers={showRulers}
               rulerUnit={rulerUnit}
+              margins={pageMargins}
               onMarginsCommit={handleMarginsCommit}
               getFontFaceName={getFontFaceName}
               shapeType={shapeType}
@@ -4985,8 +5420,24 @@ export default function EditorPage() {
               onSelectionChanged={handleSelectionChanged}
               onTextSelectionStyleChanged={handleTextSelectionStyleChanged}
               onCanvasReady={setCanvasHandle}
+              headerFooterActive={hfEditMode}
               renderActiveOverlay={(index) => (
                 <>
+                  {/* SL2 — Word-like editable running header/footer bands for the
+                      ACTIVE page (default zone). Overlaid in the same sheet space
+                      as the other overlays; the background raster already excludes
+                      the baked /GPHF band (headerFooterActive), so no doubling. */}
+                  {hfEditMode && hfDef ? (
+                    <HeaderFooterZone
+                      def={hfDef}
+                      onChange={handleHfDefChange}
+                      registry={hfRegistryRef.current}
+                      pxPerPt={zoom}
+                      pageNumber={index + 1}
+                      {...(hfZoneLabel ? { zoneLabel: hfZoneLabel } : {})}
+                      onFocusedTextItemChange={handleHfFocusedChange}
+                    />
+                  ) : null}
                   {/* P1 — form-fill overlay for the ACTIVE page (parity with the
                       single-page editor's EditorCanvas `overlay`). PageSlot renders
                       this inside the active page's sheet (page×zoom space), so the
@@ -5036,7 +5487,7 @@ export default function EditorPage() {
                 // from the binary; markers appear only when known.
                 showRulers={showRulers}
                 rulerUnit={rulerUnit}
-                margins={singlePageMargins[currentPageIndex] ?? null}
+                margins={pageMargins[currentPageIndex] ?? null}
                 onMarginsCommit={(m) => handleMarginsCommit(currentPageIndex, m)}
                 shapeType={shapeType}
                 annotationType={annotationType}

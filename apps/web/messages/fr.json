@@ -1600,6 +1600,18 @@
     },
     "title": "Éditeur PDF",
     "loading": "Chargement du document...",
+    "loadingScreen": {
+      "connecting": "Connexion au document…",
+      "analyzing": "Analyse du PDF…",
+      "elements": "Chargement du contenu des pages…",
+      "building": "Préparation de l'éditeur…",
+      "ready": "Prêt",
+      "error": "Échec du chargement",
+      "pages": "Page {parsed} sur {total}",
+      "percent": "{value} %",
+      "aria": "Progression du chargement du document",
+      "srStatus": "{phase} — {value} %"
+    },
     "untitled": "Sans titre",
     "back": "Retour aux documents",
     "share": "Partager",
@@ -1731,6 +1743,52 @@
       "exportPdf": "PDF (.pdf)",
       "exportSuccess": "Export réussi",
       "exportError": "Échec de l'export"
+    },
+    "headerFooter": {
+      "insertImage": "Insérer une image",
+      "closeZone": "Fermer la zone",
+      "token": {
+        "page": "Numéro de page",
+        "pages": "Nombre de pages",
+        "date": "Date",
+        "title": "Titre du document"
+      },
+      "errorTitle": "Impossible de modifier l'en-tête / le pied de page",
+      "errorDescription": "L'en-tête / le pied de page n'a pas pu être mis à jour. Veuillez réessayer.",
+      "signedWarningTitle": "Document signé",
+      "signedWarningDescription": "Ce document est signé : toute modification de l'en-tête ou du pied de page invalidera les signatures existantes.",
+      "differentFirstPage": "Première page différente",
+      "differentOddEven": "Pages paires/impaires différentes",
+      "zone": {
+        "default": "Par défaut",
+        "firstPage": "Première page",
+        "evenPage": "Pages paires",
+        "oddPage": "Pages impaires"
+      }
+    },
+    "addPage": {
+      "toolbarLabel": "Ajouter une page",
+      "formatLabel": "Format",
+      "format": {
+        "a4": "A4",
+        "a3": "A3",
+        "letter": "Letter",
+        "legal": "Legal",
+        "custom": "Personnalisé"
+      },
+      "orientationLabel": "Orientation",
+      "orientation": {
+        "portrait": "Portrait",
+        "landscape": "Paysage"
+      },
+      "positionLabel": "Position",
+      "position": {
+        "after": "Après la page courante",
+        "end": "À la fin"
+      },
+      "customWidth": "Largeur (pt)",
+      "customHeight": "Hauteur (pt)",
+      "add": "Ajouter la page"
     },
     "headersFooters": {
       "toolbarLabel": "En-têtes et pieds de page",

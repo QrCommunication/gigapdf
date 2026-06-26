@@ -25,8 +25,12 @@
  *     excluded from the raster: `renderPageExcluding` honours shape exclusion
  *     only for some vector paths (engine index quirk) and mixing in the
  *     text-run ordinals over-excludes — both blanked whole coloured backgrounds.
- *   - IMAGES — still drawn by the raster; this overlay is an INVISIBLE
- *     (transparent) hit-target sitting exactly on top for click/move/resize.
+ *   - IMAGES — a PARSED image (carries an engine `index`) is still drawn by the
+ *     raster, so its overlay is an INVISIBLE (opacity 0) hit-target sitting
+ *     exactly on top for click/move/resize, revealed while selected (like a
+ *     shape). A NEWLY-ADDED image is NOT in the raster, so its overlay stays
+ *     VISIBLE at its real opacity. The real opacity is stashed on
+ *     `data.originalOpacity` so the 0 display opacity is never baked on save.
  * Text is the only element repainted here, so nothing is drawn twice (no
  * "doubled text" bug). The original colours/styles are stashed on `obj.data.*`
  * for the selection-reveal, the properties panel and the layer-hide toggle.
@@ -1099,6 +1103,15 @@ export async function renderElementsOverlay(
           const targetScaleX = imgElement.bounds.width / (originalWidth || 1);
           const targetScaleY = imgElement.bounds.height / (originalHeight || 1);
 
+          // A PARSED image (carries an engine `index`) is ALREADY baked into the
+          // text-free raster background, so its overlay must be an INVISIBLE
+          // (opacity 0) hit-target — exactly like the shape overlays — otherwise
+          // a full-page parsed background image paints OVER the text and steals
+          // every click. A NEWLY-ADDED image (no `index`) is NOT in the raster,
+          // so it stays VISIBLE at its real opacity.
+          const isParsedImage = imgElement.index !== undefined;
+          const realImageOpacity = imgElement.style?.opacity ?? 1;
+
           const loadPromise = FabricImage.fromURL(imageUrl, {
             crossOrigin: "anonymous",
           })
@@ -1107,7 +1120,8 @@ export async function renderElementsOverlay(
                 ...baseOptions,
                 scaleX: targetScaleX,
                 scaleY: targetScaleY,
-                opacity: imgElement.style?.opacity ?? 1,
+                // Parsed → invisible hit-target; new → visible at real opacity.
+                opacity: isParsedImage ? 0 : realImageOpacity,
               });
               (img as FabricObjectWithData).data = {
                 elementId: imgElement.elementId,
@@ -1116,6 +1130,13 @@ export async function renderElementsOverlay(
                 // transformElement (move/resize) / removeElement (delete).
                 index: imgElement.index,
                 rotation0: imgElement.transform?.rotation ?? 0,
+                // True opacity preserved for save (so the 0 display opacity of a
+                // parsed hit-target is never baked into the PDF — mirrors the
+                // shape `data.originalFill` pattern) AND for selection-reveal.
+                originalOpacity: realImageOpacity,
+                // Parsed images are transparent hit-targets revealed while
+                // selected (like shapes); new images are already visible.
+                isTransparentImageOverlay: isParsedImage,
               };
               canvas.add(img);
             })
@@ -1879,6 +1900,54 @@ export async function renderElementsOverlay(
     await Promise.all(imageLoadPromises);
   }
 
+  // RE-ASSERT Z-ORDER after the async image loads. Image overlays are added in
+  // their `.then` (promise-resolution order), so they land on TOP of the z-stack
+  // regardless of `layerRank` — a full-page parsed background image would then
+  // sit ABOVE the text and steal its clicks. Re-apply the SAME layerRank order
+  // to every non-background object (the PDF background stays at index 0), with
+  // ties broken by the ENGINE PAINT ORDER (the raw `elements` order) so
+  // image-vs-image stacking is deterministic and independent of which image
+  // promise resolved first. Safe in the single-element re-render path too — it
+  // simply re-asserts the same total order. Hide masks are placed afterwards
+  // (just above the background), so they are unaffected.
+  const engineOrderByElementId = new Map<string, number>();
+  elements.forEach((el, i) => {
+    if (!engineOrderByElementId.has(el.elementId)) {
+      engineOrderByElementId.set(el.elementId, i);
+    }
+  });
+  const allObjects = canvas.getObjects();
+  const bgIndex = allObjects.findIndex(
+    (o) => (o as FabricObjectWithData).data?.isPdfBackground === true,
+  );
+  const reorderable = allObjects.filter(
+    (o) => (o as FabricObjectWithData).data?.isPdfBackground !== true,
+  );
+  const moveObjectTo = (
+    canvas as unknown as {
+      moveObjectTo?: (o: FabricObject, i: number) => void;
+    }
+  ).moveObjectTo;
+  if (reorderable.length > 1 && typeof moveObjectTo === "function") {
+    const orderKey = (o: FabricObject): [number, number] => {
+      const data = (o as FabricObjectWithData).data;
+      const rank = layerRank[(data?.type as string) ?? ""] ?? 99;
+      const id = data?.elementId;
+      const engineOrder =
+        typeof id === "string"
+          ? (engineOrderByElementId.get(id) ?? Number.MAX_SAFE_INTEGER)
+          : Number.MAX_SAFE_INTEGER;
+      return [rank, engineOrder];
+    };
+    const ordered = [...reorderable].sort((a, b) => {
+      const ka = orderKey(a);
+      const kb = orderKey(b);
+      return ka[0] - kb[0] || ka[1] - kb[1];
+    });
+    const baseIndex = bgIndex >= 0 ? bgIndex + 1 : 0;
+    ordered.forEach((o, i) => moveObjectTo.call(canvas, o, baseIndex + i));
+  }
+
   canvas.renderAll();
 
   // Repose les masques de visibilité pour les éléments cachés (navigation de
@@ -1977,15 +2046,18 @@ function attachSelectionHandlers(
 }
 
 /**
- * Reveal a shape overlay's real fill/stroke while it is selected, then re-mask
- * it (transparent) on deselection. In view, shapes are shown by the text-free
- * raster background (the overlay is a transparent hit-target, see the `"shape"`
- * case): painting the overlay too would double them and would depend on the
- * unreliable per-index `renderPageExcluding`. Selecting a shape paints the
- * overlay with its stashed `data.original*` so the element the user edits is
- * visible; the move/resize/restyle pipeline bakes the change into the PDF and
- * the page re-renders, after which the raster shows the result. Idempotent per
- * canvas (guarded by a meta flag), so re-renders never stack listeners.
+ * Reveal a transparent overlay's real appearance while it is selected, then
+ * re-mask it on deselection. In view, both shapes AND parsed images are shown by
+ * the text-free raster background; their overlays are invisible hit-targets (a
+ * shape is transparent fill/stroke, a parsed image is opacity 0) so the page is
+ * not doubled. On selection the overlay is made visible — a shape painted with
+ * its stashed `data.original*`, a parsed image flashed at its
+ * `data.originalOpacity` — so the user SEES what they drag/resize; the
+ * move/resize/restyle pipeline bakes the change into the PDF and the page
+ * re-renders, after which the raster shows the result. New images carry no
+ * `isTransparentImageOverlay` and are already visible, so they are left as-is.
+ * Idempotent per canvas (guarded by a meta flag), so re-renders never stack
+ * listeners. (Kept the historical name; it now covers parsed images too.)
  */
 function attachShapeStyleReveal(canvas: FabricCanvas): void {
   const canvasWithMeta = canvas as unknown as {
@@ -1997,12 +2069,27 @@ function attachShapeStyleReveal(canvas: FabricCanvas): void {
   canvasWithMeta._shapeRevealed = [];
 
   const restore = (obj: FabricObjectWithData) => {
+    // A parsed image overlay re-hides to opacity 0 (the raster shows it); a
+    // shape overlay re-masks to a transparent fill/stroke.
+    if (obj.data?.type === "image") {
+      obj.set({ opacity: 0 });
+      return;
+    }
     obj.set({ fill: "transparent", stroke: "transparent", strokeWidth: 0 });
   };
 
   const reveal = (obj: FabricObjectWithData) => {
     const data = obj.data;
-    if (!data || data.type !== "shape") return;
+    if (!data) return;
+    // A parsed image overlay is invisible (opacity 0) in view; while selected,
+    // flash it at its real opacity so the user SEES what they are dragging.
+    if (data.type === "image") {
+      const op =
+        typeof data.originalOpacity === "number" ? data.originalOpacity : 1;
+      obj.set({ opacity: op });
+      return;
+    }
+    if (data.type !== "shape") return;
     const fill =
       typeof data.originalFill === "string" ? data.originalFill : "transparent";
     const stroke =
@@ -2026,13 +2113,21 @@ function attachShapeStyleReveal(canvas: FabricCanvas): void {
   };
 
   const handle = (e: { selected?: FabricObject[] }) => {
-    // Re-mask any shapes revealed by a previous selection (selection change).
+    // Re-mask anything revealed by a previous selection (selection change).
     clearRevealed();
     const selected = (e.selected ?? []) as FabricObjectWithData[];
-    const shapes = selected.filter((o) => o.data?.type === "shape");
-    for (const obj of shapes) reveal(obj);
-    canvasWithMeta._shapeRevealed = shapes;
-    if (shapes.length > 0) canvas.requestRenderAll();
+    // Reveal selected shapes AND parsed-image hit-targets — both are invisible
+    // in view (shown only by the raster). New images carry no
+    // `isTransparentImageOverlay` and stay visible/untouched.
+    const revealable = selected.filter(
+      (o) =>
+        o.data?.type === "shape" ||
+        (o.data?.type === "image" &&
+          o.data?.isTransparentImageOverlay === true),
+    );
+    for (const obj of revealable) reveal(obj);
+    canvasWithMeta._shapeRevealed = revealable;
+    if (revealable.length > 0) canvas.requestRenderAll();
   };
 
   canvas.on("selection:created", handle);

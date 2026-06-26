@@ -99,13 +99,24 @@ import { PdfADialog } from "./pdfa-dialog";
 import { PresentationDialog } from "./presentation-dialog";
 import { CompressDialog } from "./compress-dialog";
 import { HeadersFootersDialog } from "./headers-footers-dialog";
-import { FormattingToolbar } from "./formatting-toolbar";
+import {
+  FormattingToolbar,
+  type HeaderFooterToolbarContext,
+} from "./formatting-toolbar";
 import { InsertMenu } from "./insert-menu";
 import {
   InsertLinkDialog,
   type InsertLinkValue,
 } from "./insert-link-dialog";
 import { InsertSvgDialog, type InsertSvgValue } from "./insert-svg-dialog";
+import { HeaderFooterPageSetup } from "./header-footer-page-setup";
+import { AddPageMenu } from "./add-page-menu";
+import type {
+  PageFormat,
+  PageOrientation,
+  AddPagePosition,
+  PageFormatPoints,
+} from "./lib/page-formats";
 import type { HeaderFooterKind } from "./lib/page-headers-footers";
 import type { HeaderFooterSpec } from "@qrcommunication/gigapdf-lib";
 
@@ -317,6 +328,47 @@ export interface EditorToolbarProps {
   headersFootersEnabled?: boolean;
   /** Toggle Word-style running headers & footers on/off. */
   onToggleHeadersFooters?: () => void;
+  /**
+   * SL2 — enter/leave the Word-like editable header/footer ZONE mode. When set,
+   * the toolbar toggle drives this (editable bands) instead of the legacy flat
+   * dialog; the toggle's active state follows {@link headerFooterEditing}.
+   */
+  onToggleHeaderFooterZones?: () => void;
+  /** SL2 — whether the editable header/footer zones are currently active. */
+  headerFooterEditing?: boolean;
+  /**
+   * SL2 — contextual cluster appended to the FormattingToolbar while editing a
+   * header/footer zone (insert image, `{{token}}` buttons, close zone).
+   */
+  headerFooterContext?: HeaderFooterToolbarContext;
+  /**
+   * SL2 — synthetic selection of the focused header/footer text item, so the
+   * FormattingToolbar's B/I/U/colour/size/align controls style THAT item.
+   */
+  hfSelectedTextElements?: TextElement[];
+  /** SL2 — route FormattingToolbar style edits to the focused H/F text item. */
+  hfOnElementStyleChange?: (elementId: string, style: Partial<TextStyle>) => void;
+  /**
+   * SL3 — "different first page" flag (page 1 gets its own `firstPage` zone).
+   * Drives the page-setup switch shown while editing a header/footer zone.
+   */
+  headerFooterDifferentFirstPage?: boolean;
+  /** SL3 — "different odd & even pages" flag (own `evenPage`/`oddPage` zones). */
+  headerFooterDifferentOddEven?: boolean;
+  /** SL3 — toggle "different first page" (the editor seeds the `firstPage` zone). */
+  onToggleHeaderFooterDifferentFirstPage?: () => void;
+  /** SL3 — toggle "different odd/even" (the editor seeds the even/odd zones). */
+  onToggleHeaderFooterDifferentOddEven?: () => void;
+  /**
+   * SL4 — add a page with a chosen format/orientation at a position (after the
+   * current page / at the end). The button is rendered only when provided.
+   */
+  onAddPageFormat?: (
+    format: PageFormat,
+    orientation: PageOrientation,
+    position: AddPagePosition,
+    custom?: PageFormatPoints,
+  ) => void;
   /**
    * Apply a header/footer band (header or footer) to the current document. The
    * editor bakes the spec onto the live PDF and persists it.
@@ -614,6 +666,16 @@ export function EditorToolbar({
   onPresentationApplied,
   headersFootersEnabled = false,
   onToggleHeadersFooters,
+  onToggleHeaderFooterZones,
+  headerFooterEditing = false,
+  headerFooterContext,
+  hfSelectedTextElements,
+  hfOnElementStyleChange,
+  headerFooterDifferentFirstPage = false,
+  headerFooterDifferentOddEven = false,
+  onToggleHeaderFooterDifferentFirstPage,
+  onToggleHeaderFooterDifferentOddEven,
+  onAddPageFormat,
   onHeaderFooterApply,
   onHeaderFooterRemove,
   headerFooterInitialHeader,
@@ -1063,6 +1125,9 @@ export function EditorToolbar({
         hasTextSelection={(selectedTextElements?.length ?? 0) === 1}
       />
 
+      {/* SL4 — Word-like "Add page" picker (format × orientation × position). */}
+      {onAddPageFormat ? <AddPageMenu onAddPage={onAddPageFormat} /> : null}
+
       <Separator />
 
       {/* Color Picker */}
@@ -1183,12 +1248,38 @@ export function EditorToolbar({
         </>
       )}
 
-      {/* Word-like formatting cluster (B/I/U/S, colour, highlight, alignment,
+      {/* SL2 — Word-like running header/footer mode: the contextual cluster
+          (insert image, {{tokens}}, close zone) is always shown while editing a
+          zone; the B/I/U/colour/size controls style the FOCUSED H/F text item
+          (synthetic selection) and fall back to no-op when none is focused. */}
+      {headerFooterContext ? (
+        <>
+          <FormattingToolbar
+            selectedTextElements={hfSelectedTextElements ?? []}
+            onElementStyleChange={hfOnElementStyleChange ?? (() => {})}
+            textSelectionStyle={null}
+            headerFooterContext={headerFooterContext}
+          />
+          {/* SL3 — Word-like page-setup switches: first page / odd-even
+              different. Toggling seeds the matching override zone editor-side. */}
+          {onToggleHeaderFooterDifferentFirstPage &&
+          onToggleHeaderFooterDifferentOddEven ? (
+            <HeaderFooterPageSetup
+              differentFirstPage={headerFooterDifferentFirstPage}
+              differentOddEven={headerFooterDifferentOddEven}
+              onToggleDifferentFirstPage={
+                onToggleHeaderFooterDifferentFirstPage
+              }
+              onToggleDifferentOddEven={onToggleHeaderFooterDifferentOddEven}
+            />
+          ) : null}
+        </>
+      ) : /* Word-like formatting cluster (B/I/U/S, colour, highlight, alignment,
           line spacing). Reflects the selection's current style and drives the
-          rich TextStyle fields through onElementStyleChange. Only for text. */}
-      {onElementStyleChange &&
-      selectedTextElements &&
-      selectedTextElements.length > 0 ? (
+          rich TextStyle fields through onElementStyleChange. Only for text. */
+      onElementStyleChange &&
+        selectedTextElements &&
+        selectedTextElements.length > 0 ? (
         <FormattingToolbar
           selectedTextElements={selectedTextElements}
           onElementStyleChange={onElementStyleChange}
@@ -1516,19 +1607,29 @@ export function EditorToolbar({
       {/* Word-style running headers & footers — a continuous-view feature, so
           the toggle only appears there. The button is active when bands are on;
           clicking it opens the editor (turning the feature on if it was off). */}
-      {viewMode === "continuous" && onToggleHeadersFooters && (
-        <ToolButton
-          icon={<PanelTop size={20} />}
-          label={tHeadersFooters("toolbarLabel")}
-          isActive={headersFootersEnabled}
-          onClick={() => {
-            if (!headersFootersEnabled) {
-              onToggleHeadersFooters();
-            }
-            setShowHeadersFootersDialog(true);
-          }}
-        />
-      )}
+      {viewMode === "continuous" &&
+        (onToggleHeaderFooterZones ? (
+          // SL2 — the toggle enters/leaves the editable header/footer ZONE mode.
+          <ToolButton
+            icon={<PanelTop size={20} />}
+            label={tHeadersFooters("toolbarLabel")}
+            isActive={headerFooterEditing}
+            onClick={onToggleHeaderFooterZones}
+          />
+        ) : onToggleHeadersFooters ? (
+          // Legacy flat-dialog path (kept when the zone flow isn't wired).
+          <ToolButton
+            icon={<PanelTop size={20} />}
+            label={tHeadersFooters("toolbarLabel")}
+            isActive={headersFootersEnabled}
+            onClick={() => {
+              if (!headersFootersEnabled) {
+                onToggleHeadersFooters();
+              }
+              setShowHeadersFootersDialog(true);
+            }}
+          />
+        ) : null)}
 
       {/* PDF operation dialogs */}
       <MergeDialog

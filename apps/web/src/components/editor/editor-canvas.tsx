@@ -147,15 +147,19 @@ export interface EditorCanvasHandle {
   /**
    * Remonter un élément au premier plan (z-order). Localise l'objet Fabric par
    * `data.elementId`, le passe devant tous les autres (Fabric v6
-   * `canvas.bringObjectToFront`) et persiste l'ordre via le scene graph
-   * (`onElementModified`) ET dans le binaire PDF (`onElementReordered` →
-   * engine `reorderElement`). No-op si l'élément n'est pas sur la page affichée.
+   * `canvas.bringObjectToFront`) et persiste l'ordre UNIQUEMENT via le `reorder`
+   * op dédié (`onElementReordered` → engine `reorderElement`). N'émet PAS
+   * `onElementModified` : un reorder pur ne change pas les bounds, et un op
+   * `update` (redact + re-add) serait redondant et re-empilerait l'élément au
+   * premier plan. No-op si l'élément n'est pas sur la page affichée.
    */
   bringToFront: (elementId: string) => void;
   /**
    * Renvoyer un élément à l'arrière-plan (z-order). Pendant du `bringToFront`
-   * via `canvas.sendObjectToBack`. Persiste l'ordre via le scene graph ET dans
-   * le binaire PDF (`onElementReordered` → engine `reorderElement`).
+   * via `canvas.sendObjectToBack`. Persiste l'ordre UNIQUEMENT via le `reorder`
+   * op dédié (`onElementReordered` → engine `reorderElement`) ; n'émet PAS
+   * `onElementModified` (un `update` re-empilerait l'élément au premier plan et
+   * contredirait ce sendToBack).
    */
   sendToBack: (elementId: string) => void;
   /** Obtenir les IDs des éléments sélectionnés */
@@ -330,6 +334,12 @@ export interface EditorCanvasProps {
    * édition, handle impératif, callbacks, fond text-free) est identique.
    */
   embedded?: boolean;
+  /**
+   * Word-like running header/footer edit mode is active for this document (SL2).
+   * When true, the page background raster EXCLUDES the baked `/GPHF` band so the
+   * editable HeaderFooterZone overlaid on top never doubles against it.
+   */
+  headerFooterActive?: boolean;
   /** Zoom recalculé par un mode fit (page/width). */
   onFitZoomChange?: (zoom: number) => void;
   /**
@@ -574,6 +584,7 @@ export function EditorCanvas({
   fieldKind = "text",
   fitMode: fitModeProp = null,
   embedded = false,
+  headerFooterActive = false,
   onFitZoomChange,
   showRulers = false,
   rulerUnit = "mm",
@@ -678,6 +689,13 @@ export function EditorCanvas({
   useEffect(() => {
     embeddedRef.current = embedded;
   }, [embedded]);
+  // Mirror ref of `headerFooterActive`: read inside `loadPage` (a stable-closure
+  // callback with deps []) so a freshly-rendered background excludes the baked
+  // `/GPHF` band whenever H/F edit mode is on, without re-creating loadPage.
+  const headerFooterActiveRef = useRef(headerFooterActive);
+  useEffect(() => {
+    headerFooterActiveRef.current = headerFooterActive;
+  }, [headerFooterActive]);
   const isSpaceDownRef = useRef(false);
   const isPanningRef = useRef(false);
   const panStartRef = useRef<{
@@ -2414,6 +2432,11 @@ export function EditorCanvas({
               // section backgrounds blank. Keeping shapes in the raster makes
               // their fidelity exact and independent of that engine quirk.
               skipText: true,
+              // In Word-like H/F edit mode, drop the baked `/GPHF` band so the
+              // editable HeaderFooterZone overlaid on top never doubles it.
+              ...(headerFooterActiveRef.current
+                ? { excludeMarkedContent: true }
+                : {}),
             });
             renderer.dispose();
 
@@ -2722,15 +2745,15 @@ export function EditorCanvas({
         // Fabric v6 renamed the z-order API to the `*Object*` form.
         canvas.bringObjectToFront(obj);
         canvas.requestRenderAll();
-        // Persist the new stacking BOTH ways:
-        //  - scene-graph order (collab/editor authority) via onElementModified;
-        //  - PDF binary via a dedicated `reorder` op → engine `reorderElement`,
-        //    so the z-order survives reload (not just the live editor). Bounds
-        //    are unchanged, so onElementModified records no redaction.
+        // A pure reorder changes ONLY the stacking, never the bounds — so we
+        // emit ONLY the dedicated `reorder` op (queueReorder → engine
+        // `reorderElement` bake), which survives reload. We deliberately do NOT
+        // also emit onElementModified: that would queue a redundant `update`
+        // (redact + re-add) op for unchanged bounds — wasteful, and worse, the
+        // redact+readd re-adds the element ON TOP, which can contradict a
+        // sendToBack. The PDF binary z-order is persisted by the reorder op alone.
         const element = fabricObjectToElement(obj);
         if (element) {
-          const oldBounds = lastKnownBoundsRef.current.get(element.elementId);
-          onElementModifiedRef.current?.(element, oldBounds);
           onElementReorderedRef.current?.(element, true);
         }
         saveHistory(canvas);
@@ -2746,10 +2769,12 @@ export function EditorCanvas({
         if (!obj) return;
         canvas.sendObjectToBack(obj);
         canvas.requestRenderAll();
+        // Pure reorder (see bringToFront): emit ONLY the dedicated `reorder` op,
+        // never onElementModified — a redact+readd `update` would re-add the
+        // element on top and contradict this sendToBack, besides being redundant
+        // for unchanged bounds.
         const element = fabricObjectToElement(obj);
         if (element) {
-          const oldBounds = lastKnownBoundsRef.current.get(element.elementId);
-          onElementModifiedRef.current?.(element, oldBounds);
           onElementReorderedRef.current?.(element, false);
         }
         saveHistory(canvas);

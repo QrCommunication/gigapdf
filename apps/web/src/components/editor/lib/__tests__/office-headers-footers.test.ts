@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import {
   detectHeaderFooterFromModel,
   detectHeaderFooterFromOffice,
+  projectOfficeToRunningHeaderFooter,
+  projectOfficeBytesToRunningHeaderFooter,
 } from "../office-headers-footers";
 import type {
   GigaBlock,
@@ -170,5 +172,76 @@ describe("detectHeaderFooterFromOffice", () => {
     };
     const result = await detectHeaderFooterFromOffice(BYTES, throwingLoader);
     expect(result).toEqual({ header: null, footer: null });
+  });
+});
+
+describe("projectOfficeToRunningHeaderFooter", () => {
+  it("returns an empty default zone for a null model", () => {
+    const def = projectOfficeToRunningHeaderFooter(null);
+    expect(def.default.header).toEqual([]);
+    expect(def.default.footer).toEqual([]);
+  });
+
+  it("projects each band block into a left-anchored text item", () => {
+    const def = projectOfficeToRunningHeaderFooter(
+      model([
+        section({
+          header: [paragraph("Company Confidential"), paragraph("Draft")],
+          footer: [paragraph("Page footer")],
+        }),
+      ]),
+    );
+    expect(def.default.header).toEqual([
+      { type: "text", text: "Company Confidential", anchor: "left", size: 10 },
+      { type: "text", text: "Draft", anchor: "left", size: 10 },
+    ]);
+    expect(def.default.footer).toEqual([
+      { type: "text", text: "Page footer", anchor: "left", size: 10 },
+    ]);
+  });
+
+  it("takes the first non-empty band of each kind across sections", () => {
+    const def = projectOfficeToRunningHeaderFooter(
+      model([
+        section({ header: [paragraph("First header")] }),
+        section({ footer: [paragraph("Second-section footer")] }),
+      ]),
+    );
+    expect(def.default.header[0]).toMatchObject({ text: "First header" });
+    expect(def.default.footer[0]).toMatchObject({
+      text: "Second-section footer",
+    });
+  });
+});
+
+describe("projectOfficeBytesToRunningHeaderFooter", () => {
+  function fakeEngineLoader(returnedModel: GigaDocument | null) {
+    const officeToModel = vi.fn(() => returnedModel);
+    return Object.assign(async () => ({ officeToModel }) as never, {
+      officeToModel,
+    });
+  }
+
+  it("converts office bytes and projects the bands", async () => {
+    const loader = fakeEngineLoader(
+      model([section({ footer: [paragraph("Confidential")] })]),
+    );
+    const def = await projectOfficeBytesToRunningHeaderFooter(
+      new Uint8Array([0x50, 0x4b, 0x03, 0x04]),
+      loader,
+    );
+    expect(def.default.footer[0]).toMatchObject({ text: "Confidential" });
+  });
+
+  it("returns an empty definition on engine failure (never throws)", async () => {
+    const throwing = async () => {
+      throw new Error("boom");
+    };
+    const def = await projectOfficeBytesToRunningHeaderFooter(
+      new Uint8Array([1]),
+      throwing,
+    );
+    expect(def.default.header).toEqual([]);
+    expect(def.default.footer).toEqual([]);
   });
 });

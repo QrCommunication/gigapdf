@@ -351,6 +351,14 @@ export function fabricObjectToElement(
     );
     const detected = mimeMatch?.[1]?.toLowerCase().replace("jpeg", "jpg");
     const originalFormat: string = detected ?? "png";
+    // A PARSED image overlay is displayed as an opacity-0 hit-target (the
+    // text-free raster shows it); persisting that 0 would make the image VANISH
+    // from the PDF on the first move/resize. Prefer the real opacity stashed on
+    // `data.originalOpacity` (mirrors the shape `data.originalFill` decoupling);
+    // a newly-added image has none → fall back to the live opacity.
+    const stashedOpacity = obj.data?.originalOpacity;
+    const resolvedOpacity =
+      typeof stashedOpacity === "number" ? stashedOpacity : (obj.opacity ?? 1);
     return {
       ...baseElement,
       type: "image" as const,
@@ -364,7 +372,7 @@ export function fabricObjectToElement(
         },
       },
       style: {
-        opacity: obj.opacity ?? 1,
+        opacity: resolvedOpacity,
         blendMode: "normal" as const,
       },
       crop: null,

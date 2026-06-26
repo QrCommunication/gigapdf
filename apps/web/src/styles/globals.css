@@ -578,8 +578,54 @@
   animation: lp-gauge 8s ease-in-out infinite;
 }
 
+/* ── Écran de chargement de l'éditeur : pages qui défilent ── */
+@keyframes gp-page-flip {
+  0% {
+    transform: rotateY(0deg) translateX(0);
+    opacity: 1;
+  }
+  45% {
+    transform: rotateY(-152deg) translateX(-8%);
+    opacity: 0.3;
+  }
+  90%,
+  100% {
+    transform: rotateY(0deg) translateX(0);
+    opacity: 1;
+  }
+}
+
+.gp-loading-stack {
+  position: relative;
+  width: 64px;
+  height: 84px;
+  perspective: 640px;
+}
+
+.gp-loading-page {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: linear-gradient(160deg, var(--card) 0%, var(--muted) 100%);
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.12);
+  transform-origin: left center;
+  animation: gp-page-flip 1.6s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+.gp-loading-page:nth-child(1) {
+  animation-delay: 0s;
+}
+.gp-loading-page:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.gp-loading-page:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
 /* ── Accessibilité : tout est figé si l'utilisateur le demande ── */
 @media (prefers-reduced-motion: reduce) {
+  .gp-loading-page,
   .lp-anim-cursor-a,
   .lp-anim-cursor-b,
   .lp-anim-ocr,

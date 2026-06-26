@@ -68,6 +68,12 @@ export interface PageSlotProps {
   /** Ruler display unit. */
   rulerUnit?: RulerUnit;
   /**
+   * SL2 — Word-like header/footer edit mode is active. Forwarded to the active
+   * page's EditorCanvas so its background raster excludes the baked `/GPHF` band
+   * (the editable HeaderFooterZone is overlaid via `renderActiveOverlay`).
+   */
+  headerFooterActive?: boolean;
+  /**
    * This page's margins (PDF points), or `null` if unknown / not loaded yet.
    * Draggable margin guides render only when present AND the page is active.
    */
@@ -156,6 +162,7 @@ function PageSlotImpl({
   tool,
   showRulers = false,
   rulerUnit = "mm",
+  headerFooterActive = false,
   margins,
   onMarginsCommit,
   onActivate,
@@ -217,6 +224,7 @@ function PageSlotImpl({
             width={slot.width}
             height={slot.height}
             tool={tool ?? "select"}
+            headerFooterActive={headerFooterActive}
             {...(getFontFaceName ? { getFontFaceName } : {})}
             {...(shapeType !== undefined ? { shapeType } : {})}
             {...(annotationType !== undefined ? { annotationType } : {})}

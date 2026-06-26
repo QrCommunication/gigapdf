@@ -1600,6 +1600,18 @@
     },
     "title": "PDF Editor",
     "loading": "Loading document...",
+    "loadingScreen": {
+      "connecting": "Connecting to document…",
+      "analyzing": "Analyzing PDF…",
+      "elements": "Loading page content…",
+      "building": "Preparing the editor…",
+      "ready": "Ready",
+      "error": "Loading failed",
+      "pages": "Page {parsed} of {total}",
+      "percent": "{value} %",
+      "aria": "Document loading progress",
+      "srStatus": "{phase} — {value} %"
+    },
     "untitled": "Untitled",
     "back": "Back to documents",
     "share": "Share",
@@ -1731,6 +1743,52 @@
       "exportPdf": "PDF (.pdf)",
       "exportSuccess": "Export successful",
       "exportError": "Export failed"
+    },
+    "headerFooter": {
+      "insertImage": "Insert image",
+      "closeZone": "Close zone",
+      "token": {
+        "page": "Page number",
+        "pages": "Page count",
+        "date": "Date",
+        "title": "Document title"
+      },
+      "errorTitle": "Couldn't update the header / footer",
+      "errorDescription": "The header / footer couldn't be updated. Please try again.",
+      "signedWarningTitle": "Signed document",
+      "signedWarningDescription": "This document is signed: editing the header or footer will invalidate the existing signatures.",
+      "differentFirstPage": "Different first page",
+      "differentOddEven": "Different odd & even pages",
+      "zone": {
+        "default": "Default",
+        "firstPage": "First page",
+        "evenPage": "Even pages",
+        "oddPage": "Odd pages"
+      }
+    },
+    "addPage": {
+      "toolbarLabel": "Add page",
+      "formatLabel": "Format",
+      "format": {
+        "a4": "A4",
+        "a3": "A3",
+        "letter": "Letter",
+        "legal": "Legal",
+        "custom": "Custom"
+      },
+      "orientationLabel": "Orientation",
+      "orientation": {
+        "portrait": "Portrait",
+        "landscape": "Landscape"
+      },
+      "positionLabel": "Position",
+      "position": {
+        "after": "After current page",
+        "end": "At the end"
+      },
+      "customWidth": "Width (pt)",
+      "customHeight": "Height (pt)",
+      "add": "Add page"
     },
     "headersFooters": {
       "toolbarLabel": "Headers & footers",

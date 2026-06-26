@@ -59,7 +59,7 @@ import {
   effectivePagePoints,
   pageIndexAtScroll,
 } from "./lib/page-layout";
-import { readAllPageMargins, type PageMargins } from "./lib/page-margins";
+import type { PageMargins } from "./lib/page-margins";
 import type { RulerUnit } from "./lib/ruler-ticks";
 
 /** Pages of buffer kept mounted on each side of the visible window. */
@@ -104,6 +104,13 @@ export interface ContinuousPageViewProps {
   showRulers?: boolean;
   /** Display unit for the rulers (px/mm/cm/in/pt). Defaults to "mm". */
   rulerUnit?: RulerUnit;
+  /**
+   * Per-page content margins (PDF points), aligned to `pages` by index — the
+   * single source of truth owned by page.tsx (pageId-keyed, persisted in the
+   * editor sidecar). An entry is `null` when a page's margins are unknown / not
+   * loaded; a missing array means no guides at all.
+   */
+  margins?: Array<PageMargins | null>;
   /**
    * Commit new margins (PDF points) for a page after its margin guide is
    * dropped. When omitted, the draggable margin guides are not rendered.
@@ -197,6 +204,11 @@ export interface ContinuousPageViewProps {
    * single-page `overlay` prop of `EditorCanvas`. Receives the 0-based page index.
    */
   renderActiveOverlay?: (index: number) => React.ReactNode;
+  /**
+   * SL2 — Word-like header/footer edit mode is active. Forwarded to the active
+   * page's EditorCanvas so its background raster excludes the baked `/GPHF` band.
+   */
+  headerFooterActive?: boolean;
 }
 
 /**
@@ -214,6 +226,7 @@ function ContinuousPageViewImpl(
     onActivatePage,
     showRulers = false,
     rulerUnit = "mm",
+    margins,
     onMarginsCommit,
     getFontFaceName,
     shapeType,
@@ -235,6 +248,7 @@ function ContinuousPageViewImpl(
     onTextSelectionStyleChanged,
     onCanvasReady,
     renderActiveOverlay,
+    headerFooterActive = false,
   }: ContinuousPageViewProps,
   ref: React.ForwardedRef<ContinuousPageViewHandle>,
 ) {
@@ -279,52 +293,69 @@ function ContinuousPageViewImpl(
 
   // ── Shared render pool, rebuilt when the PDF binary changes ────────────────
   const [pool, setPool] = useState<PageRenderPool | null>(null);
-
-  // Per-page margins (PDF points), read from the binary; drives the draggable
-  // guides. `null` entries (or a missing index) → no guides for that page.
-  const [pageMargins, setPageMargins] = useState<Array<PageMargins | null>>([]);
+  // Mirror of the LIVE committed pool. The pdfFile-change effect reads it to
+  // dispose the *previous* pool only AFTER the new one is committed (atomic
+  // swap), so the cleanup never has to `setPool(null)` — which would unmount
+  // every PageSlot, including the active page's `<EditorCanvas embedded>`
+  // editing session (selection/undo lost + a full-document re-raster flash).
+  const poolRef = useRef<PageRenderPool | null>(null);
 
   useEffect(() => {
+    // No document → tear down for real (there is genuinely nothing to show).
     if (!pdfFile) {
+      poolRef.current?.dispose();
+      poolRef.current = null;
       setPool(null);
-      setPageMargins([]);
       return;
     }
+
+    // Epoch guard: if `pdfFile` changes again before this async build finishes,
+    // `cancelled` flips so this (now-stale) run never commits an outdated pool.
     let cancelled = false;
-    let created: PageRenderPool | null = null;
 
     void (async () => {
       try {
         const bytes = await pdfFile.arrayBuffer();
         if (cancelled) {
+          // pdfFile changed during arrayBuffer() — abandon before allocating a
+          // pool, so a superseded run never builds (nothing to dispose).
           return;
         }
-        created = new PageRenderPool({ pdfBytes: bytes });
-        setPool(created);
-        // Read margins off the same bytes (cheap: opens one short-lived doc on
-        // the already-loaded engine). Failure is non-fatal — just no guides.
-        try {
-          const margins = await readAllPageMargins(bytes);
-          if (!cancelled) {
-            setPageMargins(margins);
-          }
-        } catch (err) {
-          clientLogger.warn("[ContinuousPageView] margin read failed:", err);
-          if (!cancelled) {
-            setPageMargins([]);
-          }
-        }
+        const next = new PageRenderPool({ pdfBytes: bytes });
+
+        // ── ATOMIC POOL SWAP ──
+        // Commit the NEW pool first: because each `<PageSlot>` is keyed by its
+        // stable `pageId` and the gate `{pool ? … : null}` never goes false
+        // (pool stays truthy across the swap), React reconciles the slots WITHOUT
+        // unmounting them — the active editing session is preserved, zero flash.
+        // Only THEN do we dispose the pool the previous run committed.
+        const previous = poolRef.current;
+        poolRef.current = next;
+        setPool(next);
+        previous?.dispose();
       } catch (err) {
         clientLogger.warn("[ContinuousPageView] pool init failed:", err);
       }
     })();
 
+    // NB: the cleanup deliberately does NOT dispose `poolRef.current` — the live
+    // pool must survive the swap so the active PageSlot is never unmounted. A
+    // run that is superseded mid-build bails on the `cancelled` check above
+    // (before allocating), so there is nothing to dispose here. The committed
+    // pool is disposed either by the next swap (`previous?.dispose()`), the
+    // `!pdfFile` branch, or the unmount effect below.
     return () => {
       cancelled = true;
-      created?.dispose();
-      setPool(null);
     };
   }, [pdfFile]);
+
+  // Final teardown: dispose whatever pool is live when the component unmounts.
+  useEffect(() => {
+    return () => {
+      poolRef.current?.dispose();
+      poolRef.current = null;
+    };
+  }, []);
 
   // ── IntersectionObserver windowing ────────────────────────────────────────
   // One observer (root = scroll element). Each page owns a zero-size sentinel;
@@ -629,7 +660,7 @@ function ContinuousPageViewImpl(
                   pool={pool}
                   showRulers={showRulers}
                   rulerUnit={rulerUnit}
-                  margins={pageMargins[index] ?? null}
+                  margins={margins?.[index] ?? null}
                   {...(onMarginsCommit ? { onMarginsCommit } : {})}
                   {...(getFontFaceName ? { getFontFaceName } : {})}
                   {...(isActive ? { shapeType } : {})}
@@ -643,6 +674,7 @@ function ContinuousPageViewImpl(
                     ? { onRedactionMarksChanged }
                     : {})}
                   {...(isActive ? { documentId } : {})}
+                  {...(isActive ? { headerFooterActive } : {})}
                   {...(isActive && tool ? { tool } : {})}
                   {...(isActive && onElementAdded ? { onElementAdded } : {})}
                   {...(isActive && onInkDrawn ? { onInkDrawn } : {})}
