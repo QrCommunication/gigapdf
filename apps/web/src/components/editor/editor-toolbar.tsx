@@ -105,6 +105,7 @@ import {
   InsertLinkDialog,
   type InsertLinkValue,
 } from "./insert-link-dialog";
+import { InsertSvgDialog, type InsertSvgValue } from "./insert-svg-dialog";
 import type { HeaderFooterKind } from "./lib/page-headers-footers";
 import type { HeaderFooterSpec } from "@qrcommunication/gigapdf-lib";
 
@@ -202,6 +203,10 @@ export interface EditorToolbarProps {
   onInsertLink?: (value: InsertLinkValue) => void;
   /** Insert menu — remove the hyperlink from the selected text element. */
   onRemoveLink?: () => void;
+  /** Insert menu — embed an SVG graphic on the current page. */
+  onInsertSvg?: (value: InsertSvgValue) => void;
+  /** Known named destinations, offered in the link dialog's "named" mode. */
+  namedDestinations?: string[];
   /** Insert menu — insert a blank page before / after the current page. */
   onInsertBlankPage?: (position: "before" | "after") => void;
   /** Insert menu — apply bullet / numbered list formatting to selected text. */
@@ -581,6 +586,8 @@ export function EditorToolbar({
   onInsertTable,
   onInsertLink,
   onRemoveLink,
+  onInsertSvg,
+  namedDestinations,
   onInsertBlankPage,
   onInsertList,
   pageCount = 1,
@@ -629,6 +636,7 @@ export function EditorToolbar({
   const [showAnnotationDropdown, setShowAnnotationDropdown] = useState(false);
   const [showFieldDropdown, setShowFieldDropdown] = useState(false);
   const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [showSvgDialog, setShowSvgDialog] = useState(false);
   const [showZoomDropdown, setShowZoomDropdown] = useState(false);
   const [showColorDropdown, setShowColorDropdown] = useState(false);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
@@ -1043,6 +1051,7 @@ export function EditorToolbar({
       {/* Insert menu (Word-like): image, table, shapes, link, page, list */}
       <InsertMenu
         onInsertImage={() => onAddImage?.()}
+        onInsertSvg={() => setShowSvgDialog(true)}
         onInsertTable={(rows, cols) => onInsertTable?.(rows, cols)}
         onInsertShape={(shape) => {
           onShapeTypeChange?.(shape);
@@ -1631,6 +1640,7 @@ export function EditorToolbar({
         pageCount={pageCount}
         initialUrl={selectedTextElements?.[0]?.linkUrl ?? null}
         initialPage={selectedTextElements?.[0]?.linkPage ?? null}
+        existingNamedDests={namedDestinations}
         onApply={(value) => {
           onInsertLink?.(value);
           setShowLinkDialog(false);
@@ -1638,6 +1648,14 @@ export function EditorToolbar({
         onRemove={() => {
           onRemoveLink?.();
           setShowLinkDialog(false);
+        }}
+      />
+      <InsertSvgDialog
+        open={showSvgDialog}
+        onClose={() => setShowSvgDialog(false)}
+        onApply={(value) => {
+          onInsertSvg?.(value);
+          setShowSvgDialog(false);
         }}
       />
     </div>

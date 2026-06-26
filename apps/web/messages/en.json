@@ -1679,7 +1679,32 @@
         "urlLabel": "URL",
         "urlPlaceholder": "https://example.com",
         "urlInvalid": "Enter a valid http(s) or mailto link.",
-        "pageLabel": "Page number (1–{count})"
+        "pageLabel": "Page number (1–{count})",
+        "modeNamed": "Destination",
+        "namedActionLabel": "Action",
+        "namedCreate": "Create a destination",
+        "namedLink": "Link to a destination",
+        "nameLabel": "Destination name",
+        "namePlaceholder": "e.g. chapter1",
+        "namedTargetPageLabel": "Target page (1–{count})",
+        "namedLinkHint": "The selected text will become a link to this named destination."
+      },
+      "svg": "SVG",
+      "svgDialog": {
+        "title": "Insert SVG",
+        "close": "Close",
+        "cancel": "Cancel",
+        "apply": "Insert",
+        "codeLabel": "SVG code",
+        "upload": "Upload a .svg",
+        "codePlaceholder": "<svg xmlns=\"http://www.w3.org/2000/svg\">…</svg>",
+        "codeInvalid": "The code must start with \"<svg\" or an XML prolog.",
+        "centered": "Centre on the page",
+        "placementLabel": "Position and size (PDF points)",
+        "field_x": "X",
+        "field_y": "Y",
+        "field_w": "Width",
+        "field_h": "Height"
       }
     },
     "office": {
@@ -2840,7 +2865,13 @@
       "schemeLabel": "Link type",
       "scheme_web": "Website",
       "scheme_email": "Email",
-      "scheme_phone": "Phone"
+      "scheme_phone": "Phone",
+      "toasts": {
+        "namedDestCreated": "Destination \"{name}\" created",
+        "namedDestFailed": "Failed to create the destination",
+        "namedLinkAdded": "Link to \"{name}\" added",
+        "namedLinkFailed": "Failed to add the named link"
+      }
     },
     "colors": {
       "title": "Colour (prepress)",
@@ -3004,6 +3035,12 @@
       "appliedDescription": "The pencil stroke was added to the page.",
       "errorTitle": "Stroke failed",
       "errorDescription": "Could not add the pencil stroke."
+    },
+    "svg": {
+      "toasts": {
+        "inserted": "SVG inserted",
+        "failed": "Failed to insert the SVG"
+      }
     }
   },
   "errors": {

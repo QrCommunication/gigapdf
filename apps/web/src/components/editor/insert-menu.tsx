@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Plus,
   Image as ImageIcon,
+  FileCode,
   Table,
   Shapes,
   Square,
@@ -38,6 +39,8 @@ const SHAPE_ITEMS: ReadonlyArray<{
 export interface InsertMenuProps {
   /** Open the image file picker + embed flow (reuses the toolbar image add). */
   onInsertImage: () => void;
+  /** Open the insert-SVG dialog (paste markup or upload a .svg file). */
+  onInsertSvg: () => void;
   /** Insert an N×M table of editable cells + borders. */
   onInsertTable: (rows: number, cols: number) => void;
   /** Activate the shape tool with the chosen shape so the user drags to draw. */
@@ -62,6 +65,7 @@ type SubMenu = "table" | "shapes" | "page" | "list" | null;
  */
 export function InsertMenu({
   onInsertImage,
+  onInsertSvg,
   onInsertTable,
   onInsertShape,
   onInsertLink,
@@ -139,6 +143,20 @@ export function InsertMenu({
             >
               <ImageIcon size={16} />
               <span>{t("image")}</span>
+            </button>
+
+            {/* SVG (paste markup or upload a .svg file) */}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                close();
+                onInsertSvg();
+              }}
+              className={itemClass}
+            >
+              <FileCode size={16} />
+              <span>{t("svg")}</span>
             </button>
 
             {/* Table (inline size picker) */}

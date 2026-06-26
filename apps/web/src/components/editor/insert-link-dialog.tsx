@@ -6,7 +6,11 @@ import { Globe, Link2, Mail, Phone, X } from "lucide-react";
 
 export type InsertLinkValue =
   | { kind: "url"; url: string }
-  | { kind: "page"; page: number };
+  | { kind: "page"; page: number }
+  /** Define a document-level named destination anchored to `targetPage`. */
+  | { kind: "namedCreate"; name: string; targetPage: number }
+  /** Link the selected text element to an existing named destination. */
+  | { kind: "namedLink"; name: string };
 
 /** Hyperlink URI schemes offered as quick-pick chips in the URL field. */
 const URL_SCHEMES = [
@@ -37,6 +41,8 @@ export interface InsertLinkDialogProps {
   /** Pre-fill from the currently selected element's existing link, if any. */
   initialUrl?: string | null;
   initialPage?: number | null;
+  /** Known named destinations, offered as a datalist for the "named" mode. */
+  existingNamedDests?: string[];
   onApply: (value: InsertLinkValue) => void;
   /** Remove the link from the selected element. */
   onRemove?: () => void;
@@ -56,14 +62,19 @@ export function InsertLinkDialog({
   pageCount,
   initialUrl = null,
   initialPage = null,
+  existingNamedDests = [],
   onApply,
   onRemove,
 }: InsertLinkDialogProps) {
   const t = useTranslations("editor.insert.linkDialog");
   const tl = useTranslations("editor.links");
-  const [mode, setMode] = useState<"url" | "page">("url");
+  const [mode, setMode] = useState<"url" | "page" | "named">("url");
   const [url, setUrl] = useState("");
   const [page, setPage] = useState(1);
+  // "named" mode: define a destination, or link selected text to one.
+  const [namedAction, setNamedAction] = useState<"create" | "link">("create");
+  const [destName, setDestName] = useState("");
+  const [destPage, setDestPage] = useState(1);
 
   // Re-seed the form from the selected element each time the dialog OPENS.
   // Tracking the open transition during render (React-idiomatic reset) rather
@@ -71,6 +82,9 @@ export function InsertLinkDialog({
   const [wasOpen, setWasOpen] = useState(false);
   if (open && !wasOpen) {
     setWasOpen(true);
+    setNamedAction("create");
+    setDestName("");
+    setDestPage(1);
     if (initialPage && initialPage > 0) {
       setMode("page");
       setPage(initialPage);
@@ -89,16 +103,31 @@ export function InsertLinkDialog({
   const hasExistingLink = Boolean(initialUrl) || Boolean(initialPage);
   const urlValid = /^(https?:\/\/|mailto:|tel:)/i.test(url.trim());
   const pageValid = Number.isFinite(page) && page >= 1 && page <= pageCount;
+  const destNameValid = destName.trim().length > 0;
+  const destPageValid =
+    Number.isFinite(destPage) && destPage >= 1 && destPage <= pageCount;
+  // Creating a destination is document-level (no text target needed); every
+  // other mode acts on the selected text element.
   const canApply =
-    hasTextTarget && (mode === "url" ? urlValid : pageValid);
+    mode === "url"
+      ? hasTextTarget && urlValid
+      : mode === "page"
+        ? hasTextTarget && pageValid
+        : namedAction === "create"
+          ? destNameValid && destPageValid
+          : hasTextTarget && destNameValid;
 
   const handleApply = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canApply) return;
     if (mode === "url") {
       onApply({ kind: "url", url: url.trim() });
-    } else {
+    } else if (mode === "page") {
       onApply({ kind: "page", page });
+    } else if (namedAction === "create") {
+      onApply({ kind: "namedCreate", name: destName.trim(), targetPage: destPage });
+    } else {
+      onApply({ kind: "namedLink", name: destName.trim() });
     }
   };
 
@@ -134,7 +163,7 @@ export function InsertLinkDialog({
         </div>
 
         <form onSubmit={handleApply} className="px-6 pb-6 pt-2 space-y-4">
-          {!hasTextTarget ? (
+          {!hasTextTarget && !(mode === "named" && namedAction === "create") ? (
             <p className="text-sm text-muted-foreground">{t("noTarget")}</p>
           ) : null}
 
@@ -143,8 +172,8 @@ export function InsertLinkDialog({
             <legend className="block text-sm font-medium text-foreground mb-1">
               {t("modeLabel")}
             </legend>
-            <div className="grid grid-cols-2 gap-2">
-              {(["url", "page"] as const).map((m) => (
+            <div className="grid grid-cols-3 gap-2">
+              {(["url", "page", "named"] as const).map((m) => (
                 <label
                   key={m}
                   className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-colors text-sm ${
@@ -161,7 +190,11 @@ export function InsertLinkDialog({
                     onChange={() => setMode(m)}
                     className="sr-only"
                   />
-                  {m === "url" ? t("modeUrl") : t("modePage")}
+                  {m === "url"
+                    ? t("modeUrl")
+                    : m === "page"
+                      ? t("modePage")
+                      : t("modeNamed")}
                 </label>
               ))}
             </div>
@@ -212,7 +245,7 @@ export function InsertLinkDialog({
                 <p className="mt-1 text-xs text-destructive">{t("urlInvalid")}</p>
               ) : null}
             </div>
-          ) : (
+          ) : mode === "page" ? (
             <div>
               <label
                 htmlFor="insert-link-page"
@@ -237,10 +270,93 @@ export function InsertLinkDialog({
                 className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Named destinations: define one, or link selected text to one. */}
+              <fieldset>
+                <legend className="block text-sm font-medium text-foreground mb-1">
+                  {t("namedActionLabel")}
+                </legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["create", "link"] as const).map((a) => (
+                    <label
+                      key={a}
+                      className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-colors text-sm ${
+                        namedAction === a
+                          ? "border-primary bg-primary/5 text-foreground"
+                          : "border-input text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="insert-link-named-action"
+                        value={a}
+                        checked={namedAction === a}
+                        onChange={() => setNamedAction(a)}
+                        className="sr-only"
+                      />
+                      {a === "create" ? t("namedCreate") : t("namedLink")}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <div>
+                <label
+                  htmlFor="insert-link-dest-name"
+                  className="block text-sm font-medium text-foreground mb-1"
+                >
+                  {t("nameLabel")}
+                </label>
+                <input
+                  id="insert-link-dest-name"
+                  list="insert-link-named-dests"
+                  value={destName}
+                  onChange={(e) => setDestName(e.target.value)}
+                  placeholder={t("namePlaceholder")}
+                  className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                {existingNamedDests.length > 0 ? (
+                  <datalist id="insert-link-named-dests">
+                    {existingNamedDests.map((n) => (
+                      <option key={n} value={n} />
+                    ))}
+                  </datalist>
+                ) : null}
+              </div>
+
+              {namedAction === "create" ? (
+                <div>
+                  <label
+                    htmlFor="insert-link-dest-page"
+                    className="block text-sm font-medium text-foreground mb-1"
+                  >
+                    {t("namedTargetPageLabel", { count: pageCount })}
+                  </label>
+                  <input
+                    id="insert-link-dest-page"
+                    type="number"
+                    min={1}
+                    max={pageCount}
+                    value={destPage}
+                    onChange={(e) =>
+                      setDestPage(
+                        Math.min(pageCount, Math.max(1, Number(e.target.value) || 1)),
+                      )
+                    }
+                    className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {hasTextTarget ? t("namedLinkHint") : t("noTarget")}
+                </p>
+              )}
+            </div>
           )}
 
           <div className="flex justify-between gap-2 pt-2">
-            {hasExistingLink && onRemove ? (
+            {hasExistingLink && onRemove && mode !== "named" ? (
               <button
                 type="button"
                 onClick={() => {

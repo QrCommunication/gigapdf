@@ -1679,7 +1679,32 @@
         "urlLabel": "URL",
         "urlPlaceholder": "https://exemple.com",
         "urlInvalid": "Saisissez un lien http(s) ou mailto valide.",
-        "pageLabel": "Numéro de page (1–{count})"
+        "pageLabel": "Numéro de page (1–{count})",
+        "modeNamed": "Destination",
+        "namedActionLabel": "Action",
+        "namedCreate": "Créer une destination",
+        "namedLink": "Lier vers une destination",
+        "nameLabel": "Nom de la destination",
+        "namePlaceholder": "ex. chapitre1",
+        "namedTargetPageLabel": "Page cible (1–{count})",
+        "namedLinkHint": "Le texte sélectionné deviendra un lien vers cette destination nommée."
+      },
+      "svg": "SVG",
+      "svgDialog": {
+        "title": "Insérer un SVG",
+        "close": "Fermer",
+        "cancel": "Annuler",
+        "apply": "Insérer",
+        "codeLabel": "Code SVG",
+        "upload": "Importer un .svg",
+        "codePlaceholder": "<svg xmlns=\"http://www.w3.org/2000/svg\">…</svg>",
+        "codeInvalid": "Le code doit commencer par « <svg » ou un prologue XML.",
+        "centered": "Centrer sur la page",
+        "placementLabel": "Position et taille (points PDF)",
+        "field_x": "X",
+        "field_y": "Y",
+        "field_w": "Largeur",
+        "field_h": "Hauteur"
       }
     },
     "office": {
@@ -2840,7 +2865,13 @@
       "schemeLabel": "Type de lien",
       "scheme_web": "Site web",
       "scheme_email": "E-mail",
-      "scheme_phone": "Téléphone"
+      "scheme_phone": "Téléphone",
+      "toasts": {
+        "namedDestCreated": "Destination « {name} » créée",
+        "namedDestFailed": "Échec de la création de la destination",
+        "namedLinkAdded": "Lien vers « {name} » ajouté",
+        "namedLinkFailed": "Échec de l'ajout du lien nommé"
+      }
     },
     "colors": {
       "title": "Couleur (prépresse)",
@@ -3004,6 +3035,12 @@
       "appliedDescription": "Le tracé au crayon a été ajouté à la page.",
       "errorTitle": "Échec du tracé",
       "errorDescription": "Impossible d'ajouter le tracé au crayon."
+    },
+    "svg": {
+      "toasts": {
+        "inserted": "SVG inséré",
+        "failed": "Échec de l'insertion du SVG"
+      }
     }
   },
   "errors": {
