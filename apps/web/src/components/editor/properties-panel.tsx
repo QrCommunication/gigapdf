@@ -13,6 +13,7 @@ import {
   Trash2,
   ArrowUp,
   ArrowDown,
+  ImageUp,
 } from "lucide-react";
 import type {
   Element,
@@ -109,6 +110,15 @@ export interface PropertiesPanelProps {
     index: number;
     spans: TextRunStyleSpan[];
   }) => void;
+  /**
+   * Replace the pixels of the selected image IN PLACE (engine `replaceImage` via
+   * `/api/pdf/replace-image`) — the image keeps its position / scale / rotation,
+   * only the raster changes. Called with the image's engine UNIFIED element
+   * `index` (from `imageElements()`, carried on `ImageElement.index`) and the
+   * chosen bitmap. Shown only for a parsed image (one carrying an `index >= 0`).
+   * Absent ⇒ the "Replace image" action is hidden.
+   */
+  onReplaceImage?: (args: { index: number; file: File }) => void;
 }
 
 /**
@@ -2001,6 +2011,7 @@ export function PropertiesPanel({
   getDocumentBytes,
   onPageBoxesApplied,
   onApplyTextStyle,
+  onReplaceImage,
 }: PropertiesPanelProps) {
   const t = useTranslations("editor.properties");
 
@@ -2284,36 +2295,68 @@ export function PropertiesPanel({
   );
 
   // Render pour élément image
-  const renderImageProperties = (element: ImageElement) => (
-    <div className="space-y-3">
-      <div>
-        <label className="text-xs text-muted-foreground block mb-1">
-          {t("image.dimensions")}
-        </label>
-        <div className="text-sm">
-          {element.bounds.width.toFixed(0)} x {element.bounds.height.toFixed(0)} px
+  const renderImageProperties = (element: ImageElement) => {
+    // "Replace image" is offered only for a PARSED image (one carrying a real
+    // engine unified element `index >= 0`) when the bake plumbing is wired
+    // (onReplaceImage + the active pageNumber). A freshly-added image has no
+    // index yet → the in-place swap can't target it, so the action is hidden.
+    const imgIndex = element.index;
+    const canReplace =
+      !!onReplaceImage &&
+      typeof pageNumber === "number" &&
+      typeof imgIndex === "number" &&
+      imgIndex >= 0;
+    return (
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">
+            {t("image.dimensions")}
+          </label>
+          <div className="text-sm">
+            {element.bounds.width.toFixed(0)} x {element.bounds.height.toFixed(0)} px
+          </div>
         </div>
-      </div>
 
-      <div>
-        <label className="text-xs text-muted-foreground block mb-1">
-          {t("image.opacity")}
-        </label>
-        <input
-          type="range"
-          value={(element.style?.opacity || 1) * 100}
-          onChange={(e) =>
-            onElementUpdate?.(element.elementId, {
-              style: { ...element.style, opacity: parseInt(e.target.value) / 100 },
-            } as Partial<ImageElement>)
-          }
-          min={0}
-          max={100}
-          className="w-full"
-        />
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">
+            {t("image.opacity")}
+          </label>
+          <input
+            type="range"
+            value={(element.style?.opacity || 1) * 100}
+            onChange={(e) =>
+              onElementUpdate?.(element.elementId, {
+                style: { ...element.style, opacity: parseInt(e.target.value) / 100 },
+              } as Partial<ImageElement>)
+            }
+            min={0}
+            max={100}
+            className="w-full"
+          />
+        </div>
+
+        {canReplace ? (
+          <label className="inline-flex w-full items-center justify-center gap-2 cursor-pointer rounded border px-3 py-1.5 text-sm hover:bg-accent">
+            <ImageUp size={14} />
+            <span>{t("image.replace")}</span>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file && imgIndex !== undefined) {
+                  onReplaceImage?.({ index: imgIndex, file });
+                }
+                // Reset so picking the SAME file again re-fires onChange.
+                e.target.value = "";
+              }}
+            />
+          </label>
+        ) : null}
       </div>
-    </div>
-  );
+    );
+  };
 
   // Render propriétés communes (position, taille)
   const renderCommonProperties = (element: Element) => (

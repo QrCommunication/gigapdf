@@ -909,7 +909,8 @@ export function EditorToolbar({
         </Dropdown>
       </div>
 
-      {/* Outil dessin = zone de signature (draw tool) */}
+      {/* Outil crayon (draw tool) — tracé main-levée baké en annotation /Ink.
+          Réutilise le sélecteur couleur/épaisseur global (strokeColor/strokeWidth). */}
       <ToolButton
         icon={<PenTool size={20} />}
         label={t("draw")}

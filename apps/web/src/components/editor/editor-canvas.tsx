@@ -377,6 +377,14 @@ export interface EditorCanvasProps {
   onElementReordered?: (element: Element, toFront: boolean) => void;
   /** Callback quand un élément est supprimé */
   onElementRemoved?: (elementId: string) => void;
+  /**
+   * Freehand pencil ("draw" tool): fired on pointer-up with the completed stroke
+   * as a flat `[x0, y0, x1, y1, …]` polyline ALREADY lowered to PDF user space
+   * (origin bottom-left, Y-up) — the same flip every other bake uses
+   * (`webBoundsToPdfRect` / pdf-engine `webToPdf`). The caller bakes it via the
+   * engine's `addInk` (route `/api/pdf/ink`). Absent ⇒ the pencil tool is inert.
+   */
+  onInkDrawn?: (points: number[]) => void;
   /** Callback quand la sélection change */
   onSelectionChanged?: (elementIds: string[]) => void;
   /**
@@ -529,6 +537,26 @@ interface FabricObjectWithData extends FabricObject {
 }
 
 /**
+ * Lower a single canvas/scene point (origin top-left, Y-down — PDF points at
+ * scale 1, the `page.dimensions` space) to PDF user space (origin bottom-left,
+ * Y-up). The exact same flip as the panel's `webBoundsToPdfRect` (and the
+ * pdf-engine `webToPdf` used by every other bake) for a zero-size box, so the
+ * pencil stroke lands where every shape/text/image bake would. Used by the
+ * freehand "draw" tool before emitting points to the `addInk` bake.
+ */
+function sceneToPdfUserPoint(
+  sx: number,
+  sy: number,
+  geo: { width: number; height: number; rotation: 0 | 90 | 180 | 270 },
+): [number, number] {
+  const y = geo.height - sy;
+  // rotation 180 flips X against the displayed width; 0/90/270 keep X and do a
+  // plain Y-flip against the displayed height (identical to webBoundsToPdfRect).
+  if ((geo.rotation ?? 0) === 180) return [geo.width - sx, y];
+  return [sx, y];
+}
+
+/**
  * Canvas de l'éditeur PDF avec support Fabric.js.
  * Chaque élément est indépendant et éditable.
  */
@@ -559,6 +587,7 @@ export function EditorCanvas({
   onElementModified,
   onElementReordered,
   onElementRemoved,
+  onInkDrawn,
   onSelectionChanged,
   onTextSelectionStyleChanged,
   onZoomChanged,
@@ -597,6 +626,15 @@ export function EditorCanvas({
   const onZoomChangedRef = useRef(onZoomChanged);
   const onHyperlinkClickRef = useRef(onHyperlinkClick);
   const onRedactionMarksChangedRef = useRef(onRedactionMarksChanged);
+  const onInkDrawnRef = useRef(onInkDrawn);
+
+  // Freehand pencil ("draw" tool) live-capture state. While drawing, the stroke
+  // is a transient Fabric preview; on pointer-up it is lowered to PDF user space
+  // and emitted via onInkDrawn (the real `/Ink` annotation then comes back on
+  // re-parse). Held in refs because the Fabric handlers are bound once at init.
+  const isInkingRef = useRef(false);
+  const inkScenePointsRef = useRef<number[]>([]); // flat scene coords [x0,y0,…]
+  const inkPreviewRef = useRef<FabricObject | null>(null);
 
   // Refs for tool options to avoid stale closures
   const toolRef = useRef(tool);
@@ -610,9 +648,10 @@ export function EditorCanvas({
   const zoomRef = useRef(zoom);
   // Dimensions de la page courante (points PDF) — nécessaires au resize du
   // canvas DOM dans les handlers Fabric enregistrés une seule fois.
-  const pageDimsRef = useRef<{ width: number; height: number }>({
+  const pageDimsRef = useRef<{ width: number; height: number; rotation: 0 | 90 | 180 | 270 }>({
     width: width,
     height: height,
+    rotation: 0,
   });
 
   // Invite de saisie rapide pour la création d'un GROUPE de boutons radio :
@@ -672,6 +711,7 @@ export function EditorCanvas({
     onZoomChangedRef.current = onZoomChanged;
     onHyperlinkClickRef.current = onHyperlinkClick;
     onRedactionMarksChangedRef.current = onRedactionMarksChanged;
+    onInkDrawnRef.current = onInkDrawn;
     toolRef.current = tool;
     shapeTypeRef.current = shapeType;
     annotationTypeRef.current = annotationType;
@@ -686,6 +726,7 @@ export function EditorCanvas({
       pageDimsRef.current = {
         width: page.dimensions.width,
         height: page.dimensions.height,
+        rotation: page.dimensions.rotation,
       };
     }
     openRadioPromptRef.current = (x: number, y: number) => {
@@ -1463,7 +1504,7 @@ export function EditorCanvas({
 
     // Import dynamique de Fabric.js pour éviter les erreurs SSR
     import("fabric").then((fabricModule) => {
-      const { Canvas, Rect, Circle, Ellipse, Triangle, Line, IText, Group, FabricText } = fabricModule;
+      const { Canvas, Rect, Circle, Ellipse, Triangle, Line, IText, Group, FabricText, Polyline } = fabricModule;
 
       const host = containerRef.current;
       // Le container a pu se démonter pendant l'import async (mode continu :
@@ -1537,6 +1578,32 @@ export function EditorCanvas({
         const currentStrokeWidth = strokeWidthRef.current;
 
         clientLogger.debug("[EditorCanvas] mouse:down - tool:", currentTool);
+
+        // Freehand pencil ("draw" tool): begin capturing a polyline in scene
+        // coords (origin top-left). It is baked as a real `/Ink` annotation
+        // (addInk) on pointer-up; the transient preview here is removed once the
+        // re-parse brings the real ink back. `skipTargetFind` (set per-tool) makes
+        // e.target null so the stroke can start over any content.
+        if (currentTool === "draw") {
+          isInkingRef.current = true;
+          inkScenePointsRef.current = [pointer.x, pointer.y];
+          const preview = new Polyline([{ x: pointer.x, y: pointer.y }], {
+            stroke: currentStrokeColor,
+            strokeWidth: currentStrokeWidth || 2,
+            fill: "transparent",
+            strokeLineCap: "round",
+            strokeLineJoin: "round",
+            selectable: false,
+            evented: false,
+            objectCaching: false,
+            excludeFromExport: true,
+          });
+          (preview as FabricObjectWithData).data = { inkPreview: true };
+          inkPreviewRef.current = preview;
+          currentCanvas.add(preview);
+          currentCanvas.renderAll();
+          return;
+        }
 
         let newObj: FabricObject | null = null;
 
@@ -1964,48 +2031,9 @@ export function EditorCanvas({
             break;
           }
 
-          case "draw": {
-            // Zone de signature — visuel distinct (bordure dashed, label
-            // "Signature" au centre) pour que l'utilisateur comprenne tout
-            // de suite que ce n'est pas un simple champ texte.
-            const signatureGroup = new Group(
-              [
-                new Rect({
-                  left: 0,
-                  top: 0,
-                  width: 240,
-                  height: 60,
-                  fill: "rgba(255, 248, 220, 0.6)",
-                  stroke: "#8b5a2b",
-                  strokeWidth: 1.5,
-                  strokeDashArray: [6, 4],
-                  rx: 4,
-                  ry: 4,
-                }),
-                new FabricText("✍  Signature", {
-                  left: 70,
-                  top: 20,
-                  fontSize: 16,
-                  fontFamily: "Arial",
-                  fontStyle: "italic",
-                  fill: "#8b5a2b",
-                }),
-              ],
-              {
-                left: pointer.x,
-                top: pointer.y,
-              },
-            );
-            (signatureGroup as FabricObjectWithData).data = {
-              elementId: generateId(),
-              formFieldType: "signature",
-              fieldName: `signature_${Date.now()}`,
-              required: false,
-              placeholder: "Signature",
-            };
-            newObj = signatureGroup;
-            break;
-          }
+          // NOTE: the "draw" tool is the freehand pencil — handled by the
+          // ink-capture branch above (before this switch) + the mouse:move /
+          // pointer-up handlers, never as a one-shot object here.
 
           case "redact": {
             // Zone de rédaction — Rect semi-noir (preview AVANT application).
@@ -2136,6 +2164,21 @@ export function EditorCanvas({
       });
 
       canvas.on("mouse:move", (opt) => {
+        // Freehand pencil: extend the live preview while a stroke is in flight.
+        // The EMITTED geometry comes from inkScenePointsRef (raw scene coords);
+        // the Polyline below is a transient cosmetic preview only.
+        if (isInkingRef.current && inkPreviewRef.current) {
+          const sp = opt.scenePoint;
+          if (sp) {
+            inkScenePointsRef.current.push(sp.x, sp.y);
+            const poly = inkPreviewRef.current as unknown as {
+              points: { x: number; y: number }[];
+            };
+            poly.points.push({ x: sp.x, y: sp.y });
+            canvas.renderAll();
+          }
+          return;
+        }
         if (!isPanningRef.current || !panStartRef.current) return;
         const e = opt.e as MouseEvent;
         const wrapper = scrollWrapperRef.current;
@@ -2199,6 +2242,31 @@ export function EditorCanvas({
       });
 
       const endPan = () => {
+        // Freehand pencil: finalise the stroke on pointer-up / pointer-out.
+        // Lower the captured scene polyline to PDF user space (the same flip as
+        // every other bake) and emit it; the real `/Ink` annotation comes back on
+        // re-parse, so the cosmetic preview is dropped here.
+        if (isInkingRef.current) {
+          isInkingRef.current = false;
+          if (inkPreviewRef.current) {
+            canvas.remove(inkPreviewRef.current);
+            inkPreviewRef.current = null;
+          }
+          const scenePts = inkScenePointsRef.current;
+          inkScenePointsRef.current = [];
+          canvas.renderAll();
+          // Need at least two distinct points (4 numbers) to form a stroke.
+          if (scenePts.length >= 4) {
+            const geo = pageDimsRef.current;
+            const pdfPts: number[] = [];
+            for (let i = 0; i + 1 < scenePts.length; i += 2) {
+              const [px, py] = sceneToPdfUserPoint(scenePts[i]!, scenePts[i + 1]!, geo);
+              pdfPts.push(px, py);
+            }
+            onInkDrawnRef.current?.(pdfPts);
+          }
+          return;
+        }
         if (!isPanningRef.current) return;
         isPanningRef.current = false;
         panStartRef.current = null;
@@ -2432,6 +2500,11 @@ export function EditorCanvas({
     fabricRef.current.selection = tool === "select";
     fabricRef.current.defaultCursor =
       tool === "hand" ? "grab" : tool === "select" ? "default" : "crosshair";
+    // Freehand pencil: skip hit-testing so a stroke can be drawn ANYWHERE
+    // (including over existing text/images) without selecting/dragging the
+    // object underneath — the Fabric-native equivalent of isDrawingMode for our
+    // manual polyline capture.
+    fabricRef.current.skipTargetFind = tool === "draw";
     fabricRef.current.renderAll();
   }, [tool]);
 

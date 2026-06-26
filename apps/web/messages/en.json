@@ -528,7 +528,7 @@
         "signature": "PKCS#7 signature",
         "ocr": "Searchable OCR",
         "collaboration": "Live collaboration",
-        "tools": "36 PDF tools",
+        "tools": "38 PDF tools",
         "office": "9-format Office import"
       },
       "mostPopular": "Popular",
@@ -2134,7 +2134,9 @@
       },
       "image": {
         "dimensions": "Dimensions",
-        "opacity": "Opacity"
+        "opacity": "Opacity",
+        "replace": "Replace image",
+        "replacing": "Replacing…"
       },
       "annotation": {
         "type": "Type",
@@ -2990,6 +2992,18 @@
       "appliedDescription": "The text style was updated.",
       "errorTitle": "Could not apply style",
       "errorDescription": "Failed to apply the style to this text."
+    },
+    "replaceImage": {
+      "appliedTitle": "Image replaced",
+      "appliedDescription": "The selected image was replaced in the document.",
+      "errorTitle": "Replacement failed",
+      "errorDescription": "Could not replace the image. The file must be a valid PNG or JPEG."
+    },
+    "ink": {
+      "appliedTitle": "Stroke added",
+      "appliedDescription": "The pencil stroke was added to the page.",
+      "errorTitle": "Stroke failed",
+      "errorDescription": "Could not add the pencil stroke."
     }
   },
   "errors": {
@@ -3036,7 +3050,7 @@
         "toolsTitle": "Popular PDF tools",
         "toolsSubtitle": "Free, no watermark, self-hostable.",
         "solutionsTitle": "Solutions for your profession",
-        "viewAllTools": "View all 36 tools",
+        "viewAllTools": "View all 38 tools",
         "viewAllSolutions": "View all solutions",
         "registerCta": "Start working on your PDFs right now"
       },
@@ -3596,7 +3610,7 @@
             "title": "Productivity",
             "items": {
               "palette": "Global command palette (Ctrl/Cmd+K)",
-              "megaMenu": "Mega menu listing the 36 tools by category",
+              "megaMenu": "Mega menu listing the 38 tools by category",
               "tools": "36 dedicated PDF tools with help pages",
               "editor": "Visual editor: zoom, pan, continuous page view"
             }
@@ -4012,7 +4026,7 @@
   },
   "toolsMenu": {
     "allTools": "All tools",
-    "viewAll": "View all 36 tools",
+    "viewAll": "View all 38 tools",
     "categories": {
       "organize": "Organize",
       "convert": "Convert",
@@ -4474,6 +4488,39 @@
       "actionButton": "Convert to PDF",
       "toastSuccess": "Document converted",
       "toastError": "Conversion failed"
+    },
+    "changePassword": {
+      "title": "Change a PDF password",
+      "subtitle": "Change the password of a protected PDF, or set one on a file that has none.",
+      "formatsHint": "PDF file only.",
+      "actionButton": "Change password",
+      "toastSuccess": "Password changed",
+      "toastError": "Password change failed",
+      "currentPasswordLabel": "Current password",
+      "currentPasswordDescription": "Required only if the PDF is already protected.",
+      "currentPasswordPlaceholder": "Current PDF password",
+      "newPasswordLabel": "New password",
+      "newPasswordDescription": "It will be required to open the document.",
+      "newPasswordPlaceholder": "Choose a new password",
+      "ownerPasswordLabel": "Owner password (optional)",
+      "ownerPasswordDescription": "Controls permissions (printing, copying, editing) without an open password.",
+      "ownerPasswordPlaceholder": "Owner password",
+      "algorithmLabel": "Encryption",
+      "algorithmAes256": "AES 256-bit (recommended)",
+      "algorithmAes128": "AES 128-bit"
+    },
+    "flatten": {
+      "title": "Flatten a PDF",
+      "subtitle": "Freeze form fields and annotations into static content: the render stays identical, the document becomes non-interactive.",
+      "formatsHint": "PDF file only.",
+      "actionButton": "Flatten PDF",
+      "toastSuccess": "PDF flattened",
+      "toastError": "Flattening failed",
+      "targetLabel": "Elements to flatten",
+      "targetDescription": "Choose what becomes static content.",
+      "targetAll": "Forms and annotations",
+      "targetForms": "Forms only",
+      "targetAnnotations": "Annotations only"
     }
   }
 }

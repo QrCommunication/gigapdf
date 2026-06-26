@@ -343,6 +343,91 @@ export const TOOL_CONFIGS = {
     ],
   },
 
+  // Change/set the password protecting a PDF. Distinct from `unlock` (removes
+  // protection) and `protect` (encrypts a plaintext PDF): rotates an existing
+  // password (opened with the current one) or sets a new one, via the engine's
+  // changePasswords()/saveEncrypted() primitives.
+  "change-password": {
+    id: "change-password",
+    namespace: "tools.changePassword",
+    icon: "key-round",
+    endpoint: "/api/pdf/change-password",
+    uploadMode: "single",
+    accept: ACCEPT_PDF,
+    fileFieldName: "file",
+    responseKind: "binary",
+    defaultOutputName: "protected.pdf",
+    allowOutputName: true,
+    maxTotalBytes: MAX_250MB,
+    fields: [
+      {
+        // Only needed when the source PDF is already encrypted; the route
+        // ignores it for a plaintext file (omitted when empty).
+        type: "password",
+        name: "currentPassword",
+        labelKey: "currentPasswordLabel",
+        descriptionKey: "currentPasswordDescription",
+        placeholderKey: "currentPasswordPlaceholder",
+      },
+      {
+        type: "password",
+        name: "newUserPassword",
+        labelKey: "newPasswordLabel",
+        descriptionKey: "newPasswordDescription",
+        placeholderKey: "newPasswordPlaceholder",
+        required: true,
+      },
+      {
+        type: "password",
+        name: "newOwnerPassword",
+        labelKey: "ownerPasswordLabel",
+        descriptionKey: "ownerPasswordDescription",
+        placeholderKey: "ownerPasswordPlaceholder",
+      },
+      {
+        type: "select",
+        name: "algorithm",
+        labelKey: "algorithmLabel",
+        defaultValue: "AES-256",
+        options: [
+          { value: "AES-256", labelKey: "algorithmAes256" },
+          { value: "AES-128", labelKey: "algorithmAes128" },
+        ],
+      },
+    ],
+  },
+
+  // Flatten form fields and/or annotations into static page content: the visual
+  // result is unchanged but the document becomes non-interactive (finalised for
+  // printing / archiving / distribution).
+  flatten: {
+    id: "flatten",
+    namespace: "tools.flatten",
+    icon: "layers",
+    endpoint: "/api/pdf/flatten",
+    uploadMode: "single",
+    accept: ACCEPT_PDF,
+    fileFieldName: "file",
+    responseKind: "binary",
+    defaultOutputName: "flattened.pdf",
+    allowOutputName: true,
+    maxTotalBytes: MAX_250MB,
+    fields: [
+      {
+        type: "select",
+        name: "target",
+        labelKey: "targetLabel",
+        descriptionKey: "targetDescription",
+        defaultValue: "all",
+        options: [
+          { value: "all", labelKey: "targetAll" },
+          { value: "forms", labelKey: "targetForms" },
+          { value: "annotations", labelKey: "targetAnnotations" },
+        ],
+      },
+    ],
+  },
+
   "extract-pages": {
     id: "extract-pages",
     namespace: "tools.extractPages",
