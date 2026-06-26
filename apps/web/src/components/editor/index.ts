@@ -33,8 +33,18 @@ export type { MetadataDialogProps } from "./metadata-dialog";
 export { PageLabelsDialog } from "./page-labels-dialog";
 export type { PageLabelsDialogProps } from "./page-labels-dialog";
 export { ConvertDialog } from "./convert-dialog";
-export { ContentEditLayer } from "./content-edit-layer";
-export type { ContentEditLayerProps, ElementModification } from "./content-edit-layer";
+export {
+  ContentEditLayer,
+  ContentEditProvider,
+  ContentEditToolbar,
+  ContentEditZones,
+} from "./content-edit-layer";
+export type {
+  ContentEditLayerProps,
+  ContentEditProviderProps,
+  ContentEditZonesProps,
+  ElementModification,
+} from "./content-edit-layer";
 
 export { ContinuousPageView } from "./continuous-page-view";
 export type {

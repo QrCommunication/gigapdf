@@ -1,6 +1,8 @@
 "use client";
 
 import React, {
+  createContext,
+  useContext,
   useState,
   useCallback,
   useEffect,
@@ -35,6 +37,13 @@ export interface ElementModification {
   oldBounds: { x: number; y: number; width: number; height: number };
 }
 
+/**
+ * Backward-compatible props for the composed {@link ContentEditLayer}. Kept for
+ * the embed editor (apps/web/src/app/(app)/embed) which mounts the layer as a
+ * single `<main>`-cover sibling. The main editor uses the split
+ * {@link ContentEditProvider} + {@link ContentEditToolbar} + {@link ContentEditZones}
+ * so the same deep-edit surface works in the continuous (Word-like) view.
+ */
 export interface ContentEditLayerProps {
   /** The current PDF file to analyze */
   currentFile: File | null;
@@ -322,11 +331,14 @@ function InlineTextEditor({
   );
 
   return (
+    // Fills the per-element zone wrapper (already translated to bounds*zoom).
+    // Positioning at (0,0) here — NOT bounds*zoom again — keeps a single offset
+    // so the editor sits exactly on the glyph it replaces.
     <div
       style={{
         position: "absolute",
-        left: bounds.x * zoom,
-        top: bounds.y * zoom,
+        left: 0,
+        top: 0,
         width: bounds.width * zoom,
         minHeight: bounds.height * zoom,
         zIndex: 40,
@@ -393,11 +405,12 @@ function ImageZoneControls({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   return (
+    // Fills the per-element zone wrapper (already at bounds*zoom). Single offset.
     <div
       style={{
         position: "absolute",
-        left: bounds.x * zoom,
-        top: bounds.y * zoom,
+        left: 0,
+        top: 0,
         width: bounds.width * zoom,
         height: bounds.height * zoom,
         zIndex: 40,
@@ -545,40 +558,94 @@ function Toolbar({
   );
 }
 
-// ─── Empty / Loading States ───────────────────────────────────────────────────
-
-function LayerOverlayShell({
-  children,
-  toolbar,
-}: {
-  children: React.ReactNode;
-  toolbar: React.ReactNode;
-}) {
-  return (
-    <div className="absolute inset-0 z-20 flex flex-col overflow-hidden rounded-sm">
-      {toolbar}
-      <div className="relative flex-1">{children}</div>
-    </div>
-  );
-}
-
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Shared state (Context) ───────────────────────────────────────────────────
 
 /**
- * ContentEditLayer — transparent overlay enabling deep in-place editing of
- * existing PDF content (text and images) on the current page.
- *
- * Mount this as an absolutely-positioned sibling that covers the editor canvas.
- * When `isActive` is false the component renders nothing.
+ * Shared deep-edit state consumed by BOTH the viewport-level
+ * {@link ContentEditToolbar} (count / select-all / undo / clear) and the
+ * sheet-level {@link ContentEditZones} (per-element editable surfaces). Splitting
+ * the historical monolithic overlay into a toolbar + zones lets the same
+ * surface mount in the continuous (Word-like) view via `renderActiveOverlay`,
+ * exactly mirroring FormFillOverlay, without the toolbar pushing the zones down.
  */
-export function ContentEditLayer({
+interface ContentEditContextValue {
+  isActive: boolean;
+  zoom: number;
+  /** 0-based index of the active/parsed page. */
+  pageIndex: number;
+  loading: boolean;
+  parseError: string | null;
+  currentFile: File | null;
+  parsedElements: ParsedElement[];
+  zoneState: ZoneState;
+  setZoneState: React.Dispatch<React.SetStateAction<ZoneState>>;
+  activeImageId: string | null;
+  setActiveImageId: React.Dispatch<React.SetStateAction<string | null>>;
+  modCount: number;
+  // Element interaction handlers (all stable callbacks)
+  handleTextZoneClick: (element: TextElement, e: React.MouseEvent) => void;
+  handleConfirmEdit: (element: TextElement) => void;
+  handleCancelEdit: () => void;
+  handleImageZoneClick: (element: ImageElement, e: React.MouseEvent) => void;
+  handleImageReplace: (element: ImageElement, file: File) => void | Promise<void>;
+  handleDeleteZone: (element: ParsedElement, e: React.MouseEvent) => void;
+  handleRestoreZone: (elementId: string, e: React.MouseEvent) => void;
+  handleConfirmAnnotationEdit: (element: AnnotationElement) => void;
+  handleConfirmFormFieldEdit: (element: FormFieldElement) => void;
+  // Toolbar actions
+  handleSelectAllText: () => void;
+  handleUndoLast: () => void;
+  handleClearAll: () => void;
+}
+
+const ContentEditContext = createContext<ContentEditContextValue | null>(null);
+
+/**
+ * Read the shared deep-edit state. Throws if used outside a
+ * {@link ContentEditProvider}, surfacing wiring mistakes immediately.
+ */
+function useContentEdit(): ContentEditContextValue {
+  const ctx = useContext(ContentEditContext);
+  if (!ctx) {
+    throw new Error(
+      "useContentEdit must be used within a <ContentEditProvider>",
+    );
+  }
+  return ctx;
+}
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
+export interface ContentEditProviderProps {
+  /** The current PDF file to analyze. */
+  currentFile: File | null;
+  /** 0-based index of the active page (effectivePageIndex in continuous mode). */
+  pageIndex: number;
+  /** Current zoom level (1 = 100%). */
+  zoom: number;
+  /** Whether content edit mode is active. */
+  isActive: boolean;
+  /** Callback when the accumulated modifications change. */
+  onModificationsChange: (modifications: ElementModification[]) => void;
+  children: React.ReactNode;
+}
+
+/**
+ * Owns ALL deep-edit state (parsed elements for the active page, the
+ * modifications Map, the open editor, image previews) and exposes it via
+ * context so the toolbar and the zones — mounted in different parts of the tree
+ * — stay perfectly in sync. Self-parses the active page via `useOpenPdf`,
+ * re-parsing whenever the file/page/active-state changes (in continuous mode
+ * the active page drives this).
+ */
+export function ContentEditProvider({
   currentFile,
-  currentPageIndex,
+  pageIndex,
   zoom,
   isActive,
   onModificationsChange,
-  canvasRef,
-}: ContentEditLayerProps) {
+  children,
+}: ContentEditProviderProps) {
   const openPdf = useOpenPdf();
 
   const [parsedElements, setParsedElements] = useState<ParsedElement[]>([]);
@@ -594,6 +661,8 @@ export function ContentEditLayer({
     imagePreviewMap: new Map(),
   });
 
+  const [activeImageId, setActiveImageId] = useState<string | null>(null);
+
   // Track the last file+page combo we parsed to avoid redundant calls
   const lastParsedKey = useRef<string | null>(null);
 
@@ -607,7 +676,7 @@ export function ContentEditLayer({
       return;
     }
 
-    const key = `${currentFile.name}:${currentFile.size}:${currentPageIndex}`;
+    const key = `${currentFile.name}:${currentFile.size}:${pageIndex}`;
     if (lastParsedKey.current === key) return;
 
     let cancelled = false;
@@ -628,7 +697,7 @@ export function ContentEditLayer({
 
         if (cancelled) return;
 
-        const page = result.pages[currentPageIndex];
+        const page = result.pages[pageIndex];
         if (!page) {
           setParsedElements([]);
           lastParsedKey.current = key;
@@ -664,7 +733,7 @@ export function ContentEditLayer({
     };
     // openPdf.mutateAsync is stable within the mutation instance
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive, currentFile, currentPageIndex]);
+  }, [isActive, currentFile, pageIndex]);
 
   // ── Modification helpers ───────────────────────────────────────────────────
 
@@ -726,7 +795,7 @@ export function ContentEditLayer({
         if (newContent !== element.content) {
           const mod: ElementModification = {
             action: "update",
-            pageNumber: currentPageIndex,
+            pageNumber: pageIndex,
             element: { ...element, content: newContent } as unknown as Record<
               string,
               unknown
@@ -748,7 +817,7 @@ export function ContentEditLayer({
         return { ...prev, activeEditId: null };
       });
     },
-    [currentPageIndex, onModificationsChange],
+    [pageIndex, onModificationsChange],
   );
 
   const handleCancelEdit = useCallback(() => {
@@ -756,8 +825,6 @@ export function ContentEditLayer({
   }, []);
 
   // ── Image replacement ─────────────────────────────────────────────────────
-
-  const [activeImageId, setActiveImageId] = useState<string | null>(null);
 
   const handleImageZoneClick = useCallback(
     (element: ImageElement, e: React.MouseEvent) => {
@@ -775,7 +842,7 @@ export function ContentEditLayer({
         const dataUrl = await readFileAsDataUrl(file);
         const mod: ElementModification = {
           action: "update",
-          pageNumber: currentPageIndex,
+          pageNumber: pageIndex,
           element: {
             ...element,
             source: { ...element.source, dataUrl },
@@ -805,7 +872,7 @@ export function ContentEditLayer({
         // Silently ignore read failures — user can retry
       }
     },
-    [currentPageIndex, onModificationsChange],
+    [pageIndex, onModificationsChange],
   );
 
   // ── Delete zone ───────────────────────────────────────────────────────────
@@ -815,7 +882,7 @@ export function ContentEditLayer({
       e.stopPropagation();
       const mod: ElementModification = {
         action: "delete",
-        pageNumber: currentPageIndex,
+        pageNumber: pageIndex,
         element: element as unknown as Record<string, unknown>,
         oldBounds: {
           x: element.bounds.x,
@@ -826,7 +893,7 @@ export function ContentEditLayer({
       };
       pushModification(element.elementId, mod);
     },
-    [currentPageIndex, pushModification],
+    [pageIndex, pushModification],
   );
 
   const handleRestoreZone = useCallback(
@@ -844,23 +911,86 @@ export function ContentEditLayer({
     [removeModification],
   );
 
+  // ── Annotation / form-field inline confirm ─────────────────────────────────
+
+  const handleConfirmAnnotationEdit = useCallback(
+    (element: AnnotationElement) => {
+      setZoneState((prev) => {
+        if (prev.activeEditId !== element.elementId) return prev;
+        const newContent = prev.editValue;
+        if (newContent !== element.content) {
+          const mod: ElementModification = {
+            action: "update",
+            pageNumber: pageIndex,
+            element: { ...element, content: newContent } as unknown as Record<string, unknown>,
+            oldBounds: {
+              x: element.bounds.x,
+              y: element.bounds.y,
+              width: element.bounds.width,
+              height: element.bounds.height,
+            },
+          };
+          const next = new Map(prev.modifications);
+          next.set(element.elementId, mod);
+          const all = Array.from(next.values());
+          queueMicrotask(() => onModificationsChange(all));
+          return { ...prev, modifications: next, activeEditId: null };
+        }
+        return { ...prev, activeEditId: null };
+      });
+    },
+    [pageIndex, onModificationsChange],
+  );
+
+  const handleConfirmFormFieldEdit = useCallback(
+    (element: FormFieldElement) => {
+      setZoneState((prev) => {
+        if (prev.activeEditId !== element.elementId) return prev;
+        const newValue = prev.editValue;
+        if (newValue !== ((element.value as string) || "")) {
+          const mod: ElementModification = {
+            action: "update",
+            pageNumber: pageIndex,
+            element: { ...element, value: newValue } as unknown as Record<string, unknown>,
+            oldBounds: {
+              x: element.bounds.x,
+              y: element.bounds.y,
+              width: element.bounds.width,
+              height: element.bounds.height,
+            },
+          };
+          const next = new Map(prev.modifications);
+          next.set(element.elementId, mod);
+          const all = Array.from(next.values());
+          queueMicrotask(() => onModificationsChange(all));
+          return { ...prev, modifications: next, activeEditId: null };
+        }
+        return { ...prev, activeEditId: null };
+      });
+    },
+    [pageIndex, onModificationsChange],
+  );
+
   // ── Toolbar actions ────────────────────────────────────────────────────────
 
   const handleSelectAllText = useCallback(() => {
     // Opens the first undeleted text zone for editing; subsequent calls iterate
-    const firstText = parsedElements.find(
-      (el) =>
-        isTextElement(el) &&
-        zoneState.modifications.get(el.elementId)?.action !== "delete",
-    );
-    if (firstText && isTextElement(firstText)) {
-      setZoneState((prev) => ({
-        ...prev,
-        activeEditId: firstText.elementId,
-        editValue: firstText.content,
-      }));
-    }
-  }, [parsedElements, zoneState.modifications]);
+    setZoneState((prev) => {
+      const firstText = parsedElements.find(
+        (el) =>
+          isTextElement(el) &&
+          prev.modifications.get(el.elementId)?.action !== "delete",
+      );
+      if (firstText && isTextElement(firstText)) {
+        return {
+          ...prev,
+          activeEditId: firstText.elementId,
+          editValue: firstText.content,
+        };
+      }
+      return prev;
+    });
+  }, [parsedElements]);
 
   const modificationHistory = useRef<string[]>([]);
 
@@ -891,11 +1021,53 @@ export function ContentEditLayer({
     modificationHistory.current = ids;
   }, [zoneState.modifications]);
 
-  // ── Derived values ─────────────────────────────────────────────────────────
-
   const modCount = zoneState.modifications.size;
 
-  const toolbar = (
+  const value: ContentEditContextValue = {
+    isActive,
+    zoom,
+    pageIndex,
+    loading,
+    parseError,
+    currentFile,
+    parsedElements,
+    zoneState,
+    setZoneState,
+    activeImageId,
+    setActiveImageId,
+    modCount,
+    handleTextZoneClick,
+    handleConfirmEdit,
+    handleCancelEdit,
+    handleImageZoneClick,
+    handleImageReplace,
+    handleDeleteZone,
+    handleRestoreZone,
+    handleConfirmAnnotationEdit,
+    handleConfirmFormFieldEdit,
+    handleSelectAllText,
+    handleUndoLast,
+    handleClearAll,
+  };
+
+  return (
+    <ContentEditContext.Provider value={value}>
+      {children}
+    </ContentEditContext.Provider>
+  );
+}
+
+// ─── Toolbar (viewport-level) ─────────────────────────────────────────────────
+
+/** The bare blue "Content Edit Mode" bar, fed from context. */
+function ToolbarBar() {
+  const {
+    modCount,
+    handleSelectAllText,
+    handleUndoLast,
+    handleClearAll,
+  } = useContentEdit();
+  return (
     <Toolbar
       modificationCount={modCount}
       onSelectAllText={handleSelectAllText}
@@ -904,81 +1076,136 @@ export function ContentEditLayer({
       canUndo={modCount > 0}
     />
   );
+}
 
-  // ── Render nothing when not active ────────────────────────────────────────
-
+/**
+ * Viewport-level deep-edit toolbar. Mount as a sibling of the canvas/scroller
+ * (NOT inside the page sheet) so it stays pinned to the top of the canvas area
+ * in BOTH the single-page and continuous views — like the historical bar — and
+ * never pushes the editable zones down. Renders nothing when content edit is
+ * inactive. Absolutely positioned: it does not affect canvas layout.
+ */
+export function ContentEditToolbar() {
+  const { isActive } = useContentEdit();
   if (!isActive) return null;
+  return (
+    <div className="absolute inset-x-0 top-0 z-20">
+      <ToolbarBar />
+    </div>
+  );
+}
+
+// ─── Zones (sheet-level) ──────────────────────────────────────────────────────
+
+export interface ContentEditZonesProps {
+  /**
+   * 0-based index of the page these zones cover. In the continuous view this is
+   * the active page passed by `renderActiveOverlay`; in single-page it is the
+   * current page. Zones only render when it matches the parsed/active page.
+   */
+  pageIndex: number;
+  /**
+   * Returns the rendered PDF canvas (the active page's Fabric lower canvas) for
+   * background sampling behind text editors. Pulled lazily at sample time so it
+   * always reflects the currently-mounted active page. Does not mutate any
+   * shared ref.
+   */
+  getPdfCanvas?: () => HTMLCanvasElement | null;
+}
+
+/**
+ * The per-element editable surfaces ONLY (no toolbar, no shell). Mount inside
+ * the page sheet — single-page via `EditorCanvas`'s `overlay` prop, continuous
+ * via `PageSlot`'s `renderActiveOverlay` — so zones positioned at
+ * `bounds.x*zoom, bounds.y*zoom` from the sheet's top-left line up exactly with
+ * the rendered glyphs, the same model FormFillOverlay uses. `pointer-events-auto`
+ * so it captures interaction (and intercepts the canvas) while content edit is
+ * on; the wrapping overlay container is `pointer-events-none`.
+ */
+export function ContentEditZones({ pageIndex, getPdfCanvas }: ContentEditZonesProps) {
+  const {
+    isActive,
+    zoom,
+    pageIndex: activePageIndex,
+    loading,
+    parseError,
+    currentFile,
+    parsedElements,
+    zoneState,
+    setZoneState,
+    activeImageId,
+    setActiveImageId,
+    handleTextZoneClick,
+    handleConfirmEdit,
+    handleCancelEdit,
+    handleImageZoneClick,
+    handleImageReplace,
+    handleDeleteZone,
+    handleRestoreZone,
+    handleConfirmAnnotationEdit,
+    handleConfirmFormFieldEdit,
+  } = useContentEdit();
+
+  // Only render for the page the provider parsed (the active page). Guards
+  // against a transient mismatch in the continuous view (the active page is the
+  // only one that renders an overlay, so in practice these always match).
+  if (!isActive || pageIndex !== activePageIndex) return null;
 
   // ── Loading state ─────────────────────────────────────────────────────────
-
   if (loading) {
     return (
-      <LayerOverlayShell toolbar={toolbar}>
-        <div className="flex h-full items-center justify-center">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-            <p className="text-sm text-muted-foreground">
-              Scanning PDF content…
-            </p>
-          </div>
+      <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-auto">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+          <p className="text-sm text-muted-foreground">Scanning PDF content…</p>
         </div>
-      </LayerOverlayShell>
+      </div>
     );
   }
 
   // ── Error state ───────────────────────────────────────────────────────────
-
   if (parseError !== null) {
     return (
-      <LayerOverlayShell toolbar={toolbar}>
-        <div className="flex h-full items-center justify-center p-6">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <AlertCircle className="h-6 w-6 text-destructive" />
-            <p className="text-sm font-medium text-destructive">
-              Failed to parse content
-            </p>
-            <p className="text-xs text-muted-foreground">{parseError}</p>
-          </div>
+      <div className="absolute inset-0 z-20 flex items-center justify-center p-6 pointer-events-auto">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <AlertCircle className="h-6 w-6 text-destructive" />
+          <p className="text-sm font-medium text-destructive">
+            Failed to parse content
+          </p>
+          <p className="text-xs text-muted-foreground">{parseError}</p>
         </div>
-      </LayerOverlayShell>
+      </div>
     );
   }
 
   // ── No file ───────────────────────────────────────────────────────────────
-
   if (!currentFile) {
     return (
-      <LayerOverlayShell toolbar={toolbar}>
-        <div className="flex h-full items-center justify-center">
-          <p className="text-sm text-muted-foreground">
-            No PDF file open. Load a file to edit its content.
-          </p>
-        </div>
-      </LayerOverlayShell>
+      <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-auto">
+        <p className="text-sm text-muted-foreground">
+          No PDF file open. Load a file to edit its content.
+        </p>
+      </div>
     );
   }
 
   // ── Empty page ────────────────────────────────────────────────────────────
-
   if (parsedElements.length === 0) {
     return (
-      <LayerOverlayShell toolbar={toolbar}>
-        <div className="flex h-full items-center justify-center">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <ScanSearch className="h-6 w-6 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              No editable content found on this page.
-            </p>
-          </div>
+      <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-auto">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <ScanSearch className="h-6 w-6 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            No editable content found on this page.
+          </p>
         </div>
-      </LayerOverlayShell>
+      </div>
     );
   }
 
   // ── Main editing surface ──────────────────────────────────────────────────
-
   return (
-    <LayerOverlayShell toolbar={toolbar}>
+    <div className="absolute inset-0 z-20 pointer-events-auto">
       {/* Click-away to close active editors */}
       <div
         className="absolute inset-0"
@@ -1142,15 +1369,12 @@ export function ContentEditLayer({
                     }
                     onConfirm={() => handleConfirmEdit(element)}
                     onCancel={handleCancelEdit}
-                    backgroundImage={
-                      canvasRef?.current
-                        ? captureCanvasRegion(
-                            canvasRef.current,
-                            element.bounds,
-                            zoom,
-                          )
-                        : null
-                    }
+                    backgroundImage={(() => {
+                      const canvas = getPdfCanvas?.() ?? null;
+                      return canvas
+                        ? captureCanvasRegion(canvas, element.bounds, zoom)
+                        : null;
+                    })()}
                   />
                 )}
 
@@ -1388,31 +1612,7 @@ export function ContentEditLayer({
                     onChange={(val) =>
                       setZoneState((prev) => ({ ...prev, editValue: val }))
                     }
-                    onConfirm={() => {
-                      setZoneState((prev) => {
-                        if (prev.activeEditId !== element.elementId) return prev;
-                        const newContent = prev.editValue;
-                        if (newContent !== element.content) {
-                          const mod: ElementModification = {
-                            action: "update",
-                            pageNumber: currentPageIndex,
-                            element: { ...element, content: newContent } as unknown as Record<string, unknown>,
-                            oldBounds: {
-                              x: element.bounds.x,
-                              y: element.bounds.y,
-                              width: element.bounds.width,
-                              height: element.bounds.height,
-                            },
-                          };
-                          const next = new Map(prev.modifications);
-                          next.set(element.elementId, mod);
-                          const all = Array.from(next.values());
-                          queueMicrotask(() => onModificationsChange(all));
-                          return { ...prev, modifications: next, activeEditId: null };
-                        }
-                        return { ...prev, activeEditId: null };
-                      });
-                    }}
+                    onConfirm={() => handleConfirmAnnotationEdit(element)}
                     onCancel={handleCancelEdit}
                     backgroundImage={null}
                   />
@@ -1506,31 +1706,7 @@ export function ContentEditLayer({
                     onChange={(val) =>
                       setZoneState((prev) => ({ ...prev, editValue: val }))
                     }
-                    onConfirm={() => {
-                      setZoneState((prev) => {
-                        if (prev.activeEditId !== element.elementId) return prev;
-                        const newValue = prev.editValue;
-                        if (newValue !== ((element.value as string) || "")) {
-                          const mod: ElementModification = {
-                            action: "update",
-                            pageNumber: currentPageIndex,
-                            element: { ...element, value: newValue } as unknown as Record<string, unknown>,
-                            oldBounds: {
-                              x: element.bounds.x,
-                              y: element.bounds.y,
-                              width: element.bounds.width,
-                              height: element.bounds.height,
-                            },
-                          };
-                          const next = new Map(prev.modifications);
-                          next.set(element.elementId, mod);
-                          const all = Array.from(next.values());
-                          queueMicrotask(() => onModificationsChange(all));
-                          return { ...prev, modifications: next, activeEditId: null };
-                        }
-                        return { ...prev, activeEditId: null };
-                      });
-                    }}
+                    onConfirm={() => handleConfirmFormFieldEdit(element)}
                     onCancel={handleCancelEdit}
                     backgroundImage={null}
                   />
@@ -1540,6 +1716,65 @@ export function ContentEditLayer({
           </div>
         );
       })}
-    </LayerOverlayShell>
+    </div>
+  );
+}
+
+// ─── Composed backward-compatible layer (embed editor) ────────────────────────
+
+/**
+ * Single `<main>`-cover deep-edit overlay: toolbar pinned at the top with the
+ * editable zones filling the area beneath it. Mount as an absolutely-positioned
+ * sibling that covers the editor canvas. Renders nothing when `isActive` is
+ * false. Kept for the embed editor; the main editor composes
+ * {@link ContentEditProvider} + {@link ContentEditToolbar} + {@link ContentEditZones}
+ * directly so the zones can live in the page sheet (continuous-view parity).
+ */
+export function ContentEditLayer({
+  currentFile,
+  currentPageIndex,
+  zoom,
+  isActive,
+  onModificationsChange,
+  canvasRef,
+}: ContentEditLayerProps) {
+  return (
+    <ContentEditProvider
+      currentFile={currentFile}
+      pageIndex={currentPageIndex}
+      zoom={zoom}
+      isActive={isActive}
+      onModificationsChange={onModificationsChange}
+    >
+      <ContentEditLegacyShell
+        pageIndex={currentPageIndex}
+        {...(canvasRef ? { getPdfCanvas: () => canvasRef.current } : {})}
+      />
+    </ContentEditProvider>
+  );
+}
+
+interface ContentEditLegacyShellProps {
+  pageIndex: number;
+  getPdfCanvas?: () => HTMLCanvasElement | null;
+}
+
+/** Reproduces the historical layout: in-flow toolbar above, zones below. */
+function ContentEditLegacyShell({
+  pageIndex,
+  getPdfCanvas,
+}: ContentEditLegacyShellProps) {
+  const { isActive } = useContentEdit();
+  if (!isActive) return null;
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col overflow-hidden rounded-sm">
+      <ToolbarBar />
+      <div className="relative flex-1">
+        <ContentEditZones
+          pageIndex={pageIndex}
+          {...(getPdfCanvas ? { getPdfCanvas } : {})}
+        />
+      </div>
+    </div>
   );
 }

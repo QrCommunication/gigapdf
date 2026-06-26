@@ -266,6 +266,15 @@ export interface EditorCanvasHandle {
    * (mixed ⇒ field omitted).
    */
   getActiveTextSelectionStyle: () => Partial<TextStyle> | null;
+  /**
+   * The rendered PDF background canvas (Fabric lower canvas) of THIS page, or
+   * `null` before init. Used by the content-edit overlay to sample the paper
+   * behind a text zone (so the inline editor shows the real background). In the
+   * continuous view this is the ACTIVE page's canvas (the handle is routed via
+   * `onCanvasReady`); reading it lazily keeps the sample tied to the page on
+   * screen. Read-only — the caller never mutates the element.
+   */
+  getPdfCanvas: () => HTMLCanvasElement | null;
 }
 
 export interface EditorCanvasProps {
@@ -2782,6 +2791,11 @@ export function EditorCanvas({
         aggregateSelectionStyle(
           editingTextRef.current as EditableTextObject | null,
         ),
+
+      // Fabric lower canvas of this page (the rendered PDF background). The
+      // content-edit overlay samples it behind text zones. Lazy getter: returns
+      // whatever canvas is mounted now (the active page in the continuous view).
+      getPdfCanvas: (): HTMLCanvasElement | null => canvasRef.current,
 
       // --- Application des événements de collaboration distants ---
       // Ces trois méthodes reproduisent l'effet d'une action utilisateur SANS
