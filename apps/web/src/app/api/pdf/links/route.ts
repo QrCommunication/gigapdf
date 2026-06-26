@@ -10,6 +10,7 @@
  * Form fields (multipart/form-data):
  *   file    — PDF file (required)
  *   action  — "get" | "addLink" | "removeLink" | "setBookmarks" | "setOpenAction"
+ *             | "addNamedDest" | "addGotoLinkNamed"
  *
  *   addLink       — page (1..pageCount), rect (JSON {x,y,w,h}, points) and EXACTLY
  *                   ONE target: uri (http/https/mailto/tel) OR internalPage
@@ -23,6 +24,12 @@
  *   setOpenAction — action: JSON {@link Action} restricted to `goto` | `uri` |
  *                   `named` (powerful launch / javascript / form actions are
  *                   rejected in the editor context).
+ *   addNamedDest  — name (non-empty) and page (1..pageCount): defines a document
+ *                   named destination (`/Dests`) anchoring `name` to that page.
+ *   addGotoLinkNamed — page (1..pageCount), rect (JSON {x,y,w,h}, points) and a
+ *                   name: a clickable GoTo link whose target resolves through the
+ *                   named destination `name` (catalog-level, robust to page
+ *                   reordering). Define `name` first with addNamedDest.
  *
  * "get" — returns JSON `{ success, data: { links, outline, namedDests, pageCount } }`
  *         where `links` is every `/Link` annotation flattened across pages
@@ -53,6 +60,8 @@ const MAX_LEVEL = 32;
 // Sanity bound for rect coordinates (points). PDF user space is comfortably
 // below this; rejects NaN/Infinity and absurd values.
 const MAX_COORD = 1_000_000;
+// Named destinations / link-target names are short catalog keys; cap the length.
+const MAX_NAME_LENGTH = 256;
 
 // Hyperlink URI schemes accepted on a `/Link` annotation. `javascript:`,
 // `file:`, `data:` etc. are rejected to keep authored links inert/safe.
@@ -317,13 +326,15 @@ export async function POST(request: Request): Promise<Response> {
       action !== 'addLink' &&
       action !== 'removeLink' &&
       action !== 'setBookmarks' &&
-      action !== 'setOpenAction'
+      action !== 'setOpenAction' &&
+      action !== 'addNamedDest' &&
+      action !== 'addGotoLinkNamed'
     ) {
       return NextResponse.json(
         {
           success: false,
           error:
-            'action must be one of: get, addLink, removeLink, setBookmarks, setOpenAction.',
+            'action must be one of: get, addLink, removeLink, setBookmarks, setOpenAction, addNamedDest, addGotoLinkNamed.',
         },
         { status: 400 },
       );
@@ -475,6 +486,90 @@ export async function POST(request: Request): Promise<Response> {
       if (!ok) {
         return NextResponse.json(
           { success: false, error: 'Could not set the bookmarks.' },
+          { status: 422 },
+        );
+      }
+      const savedBytes = await saveDocument(handle);
+      return pdfResponse(savedBytes, file.name);
+    }
+
+    // ── addNamedDest ─────────────────────────────────────────────────────────
+    if (action === 'addNamedDest') {
+      const name = (formData.get('name') as string | null)?.trim();
+      if (!name || name.length > MAX_NAME_LENGTH) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `name must be a non-empty string of at most ${MAX_NAME_LENGTH} characters.`,
+          },
+          { status: 400 },
+        );
+      }
+      const pageRaw = formData.get('page');
+      const page = Number(pageRaw);
+      if (pageRaw === null || !isIntInRange(page, 1, pageCount)) {
+        return NextResponse.json(
+          { success: false, error: `page must be an integer between 1 and ${pageCount}.` },
+          { status: 400 },
+        );
+      }
+
+      const ok = doc.addNamedDest(name, page);
+      if (!ok) {
+        return NextResponse.json(
+          { success: false, error: 'Could not create the named destination.' },
+          { status: 422 },
+        );
+      }
+      const savedBytes = await saveDocument(handle);
+      return pdfResponse(savedBytes, file.name);
+    }
+
+    // ── addGotoLinkNamed ──────────────────────────────────────────────────────
+    if (action === 'addGotoLinkNamed') {
+      const pageRaw = formData.get('page');
+      const page = Number(pageRaw);
+      if (pageRaw === null || !isIntInRange(page, 1, pageCount)) {
+        return NextResponse.json(
+          { success: false, error: `page must be an integer between 1 and ${pageCount}.` },
+          { status: 400 },
+        );
+      }
+
+      const rectRaw = formData.get('rect') as string | null;
+      if (rectRaw === null) {
+        return NextResponse.json(
+          { success: false, error: 'rect is required for addGotoLinkNamed.' },
+          { status: 400 },
+        );
+      }
+      const rect = parseRect(rectRaw);
+      if (isError(rect)) {
+        return NextResponse.json({ success: false, error: rect.error }, { status: 400 });
+      }
+
+      const name = (formData.get('name') as string | null)?.trim();
+      if (!name || name.length > MAX_NAME_LENGTH) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `name must be a non-empty string of at most ${MAX_NAME_LENGTH} characters.`,
+          },
+          { status: 400 },
+        );
+      }
+
+      const ok = doc.addGotoLinkNamed(
+        page,
+        rect.x,
+        rect.y,
+        rect.x + rect.w,
+        rect.y + rect.h,
+        name,
+      );
+      if (!ok) {
+        return NextResponse.json(
+          { success: false, error: 'Could not add the named GoTo link.' },
           { status: 422 },
         );
       }

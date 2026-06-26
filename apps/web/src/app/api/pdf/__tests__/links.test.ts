@@ -109,6 +109,8 @@ function makeDoc() {
     removeLink: vi.fn(() => true),
     setBookmarks: vi.fn(() => true),
     setOpenAction: vi.fn(() => true),
+    addNamedDest: vi.fn(() => true),
+    addGotoLinkNamed: vi.fn(() => true),
   };
 }
 
@@ -512,6 +514,120 @@ describe('POST /api/pdf/links', () => {
     );
     expect(res.status).toBe(400);
     expect(doc.setOpenAction).not.toHaveBeenCalled();
+  });
+
+  // ── addNamedDest ───────────────────────────────────────────────────────────
+  it('addNamedDest anchors a name to a page and returns the PDF', async () => {
+    const res = await linksPOST(
+      makeRequest([
+        { key: 'file', value: makeFile() },
+        { key: 'action', value: 'addNamedDest' },
+        { key: 'name', value: 'chapter2' },
+        { key: 'page', value: '3' },
+      ]),
+    );
+    expect(res.status).toBe(200);
+    expect(await bodyStartsWithPdf(res)).toBe(true);
+    expect(doc.addNamedDest).toHaveBeenCalledWith('chapter2', 3);
+  });
+
+  it('addNamedDest rejects an empty name with 400', async () => {
+    const res = await linksPOST(
+      makeRequest([
+        { key: 'file', value: makeFile() },
+        { key: 'action', value: 'addNamedDest' },
+        { key: 'name', value: '   ' },
+        { key: 'page', value: '1' },
+      ]),
+    );
+    expect(res.status).toBe(400);
+    expect(doc.addNamedDest).not.toHaveBeenCalled();
+  });
+
+  it('addNamedDest rejects a page out of range with 400', async () => {
+    const res = await linksPOST(
+      makeRequest([
+        { key: 'file', value: makeFile() },
+        { key: 'action', value: 'addNamedDest' },
+        { key: 'name', value: 'x' },
+        { key: 'page', value: '99' },
+      ]),
+    );
+    expect(res.status).toBe(400);
+    expect(doc.addNamedDest).not.toHaveBeenCalled();
+  });
+
+  it('addNamedDest maps an engine false to 422', async () => {
+    doc.addNamedDest.mockReturnValueOnce(false);
+    const res = await linksPOST(
+      makeRequest([
+        { key: 'file', value: makeFile() },
+        { key: 'action', value: 'addNamedDest' },
+        { key: 'name', value: 'x' },
+        { key: 'page', value: '1' },
+      ]),
+    );
+    expect(res.status).toBe(422);
+    expect(vi.mocked(saveDocument)).not.toHaveBeenCalled();
+  });
+
+  // ── addGotoLinkNamed ─────────────────────────────────────────────────────────
+  it('addGotoLinkNamed builds corner coords from rect + name and returns the PDF', async () => {
+    const res = await linksPOST(
+      makeRequest([
+        { key: 'file', value: makeFile() },
+        { key: 'action', value: 'addGotoLinkNamed' },
+        { key: 'page', value: '2' },
+        { key: 'rect', value: JSON.stringify({ x: 72, y: 700, w: 120, h: 16 }) },
+        { key: 'name', value: 'chapter1' },
+      ]),
+    );
+    expect(res.status).toBe(200);
+    expect(await bodyStartsWithPdf(res)).toBe(true);
+    // rect {x,y,w,h} → corners (x0,y0,x1,y1) = (72, 700, 192, 716)
+    expect(doc.addGotoLinkNamed).toHaveBeenCalledWith(2, 72, 700, 192, 716, 'chapter1');
+  });
+
+  it('addGotoLinkNamed rejects a missing name with 400', async () => {
+    const res = await linksPOST(
+      makeRequest([
+        { key: 'file', value: makeFile() },
+        { key: 'action', value: 'addGotoLinkNamed' },
+        { key: 'page', value: '1' },
+        { key: 'rect', value: JSON.stringify({ x: 0, y: 0, w: 50, h: 10 }) },
+      ]),
+    );
+    expect(res.status).toBe(400);
+    expect(doc.addGotoLinkNamed).not.toHaveBeenCalled();
+  });
+
+  it('addGotoLinkNamed rejects a degenerate rect with 400', async () => {
+    const res = await linksPOST(
+      makeRequest([
+        { key: 'file', value: makeFile() },
+        { key: 'action', value: 'addGotoLinkNamed' },
+        { key: 'page', value: '1' },
+        { key: 'rect', value: JSON.stringify({ x: 0, y: 0, w: 0, h: 10 }) },
+        { key: 'name', value: 'x' },
+      ]),
+    );
+    expect(res.status).toBe(400);
+    expect(doc.addGotoLinkNamed).not.toHaveBeenCalled();
+  });
+
+  it('addGotoLinkNamed maps an engine false to 422', async () => {
+    doc.addGotoLinkNamed.mockReturnValueOnce(false);
+    const res = await linksPOST(
+      makeRequest([
+        { key: 'file', value: makeFile() },
+        { key: 'action', value: 'addGotoLinkNamed' },
+        { key: 'page', value: '1' },
+        { key: 'rect', value: JSON.stringify({ x: 0, y: 0, w: 50, h: 10 }) },
+        { key: 'name', value: 'x' },
+      ]),
+    );
+    expect(res.status).toBe(422);
+    expect(vi.mocked(saveDocument)).not.toHaveBeenCalled();
   });
 
   // ── error mapping ────────────────────────────────────────────────────────

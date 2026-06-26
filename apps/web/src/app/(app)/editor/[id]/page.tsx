@@ -89,6 +89,7 @@ import type {
 } from "@/components/editor/annotations-panel";
 import type { TextRunStyleSpan } from "@/components/editor/properties-panel";
 import type { InsertLinkValue } from "@/components/editor/insert-link-dialog";
+import type { InsertSvgValue } from "@/components/editor/insert-svg-dialog";
 import { EditorEditTools } from "@/components/editor/editor-edit-tools";
 import { FindReplaceDialog } from "@/components/editor/find-replace-dialog";
 import type {
@@ -160,6 +161,7 @@ import { extractDocumentText } from "@/components/editor/lib/extract-text";
 import {
   redactDocument,
   groupRectsByPage,
+  webRectToPdf,
   type PageGeometry,
   type WebRedactionRect,
 } from "@/components/editor/lib/redact-pii";
@@ -3237,17 +3239,145 @@ export default function EditorPage() {
    * change persists via the existing partial-update path (`handleElementUpdate`)
    * — no new save path.
    */
+  // Named destinations created this session — fed back into the link dialog as a
+  // datalist so the user can re-pick a name when adding a GoTo-named link.
+  const [createdNamedDests, setCreatedNamedDests] = useState<string[]>([]);
+
   const handleInsertLink = useCallback(
-    (value: InsertLinkValue) => {
-      const target = selectedTextElements[0];
-      if (!target) return;
-      const updates: Partial<TextElement> =
-        value.kind === "url"
-          ? { linkUrl: value.url, linkPage: null }
-          : { linkUrl: null, linkPage: value.page };
-      handleElementUpdate(target.elementId, updates as Partial<Element>);
+    async (value: InsertLinkValue) => {
+      // URL / in-document-page links ride as element properties and bake through
+      // the apply-elements path (no document-level round-trip).
+      if (value.kind === "url" || value.kind === "page") {
+        const target = selectedTextElements[0];
+        if (!target) return;
+        const updates: Partial<TextElement> =
+          value.kind === "url"
+            ? { linkUrl: value.url, linkPage: null }
+            : { linkUrl: null, linkPage: value.page };
+        handleElementUpdate(target.elementId, updates as Partial<Element>);
+        return;
+      }
+
+      // Named destinations live in the document catalog (/Dests) + a GoTo link
+      // annotation — applied through /api/pdf/links, then adopted in place.
+      const base = await getPreparedBlob();
+      const source = base ?? currentPdfFileRef.current;
+      if (!source) return;
+      const docName = currentPdfFileRef.current?.name ?? "document.pdf";
+
+      try {
+        const fd = new FormData();
+        fd.append("file", new File([source], docName, { type: "application/pdf" }));
+
+        if (value.kind === "namedCreate") {
+          fd.append("action", "addNamedDest");
+          fd.append("name", value.name);
+          fd.append("page", String(value.targetPage));
+        } else {
+          // namedLink: anchor a clickable box over the selected text element.
+          const target = selectedTextElements[0];
+          if (!target || !effectivePage) return;
+          const geo: PageGeometry = {
+            width: effectivePage.dimensions.width,
+            height: effectivePage.dimensions.height,
+            rotation: effectivePage.dimensions.rotation as 0 | 90 | 180 | 270,
+          };
+          // bounds.y is the TOP edge (web Y-down); webRectToPdf flips it to the
+          // PDF bottom edge (Y-up) — the same convention every bake uses.
+          const r = webRectToPdf(target.bounds, geo);
+          fd.append("action", "addGotoLinkNamed");
+          fd.append("page", String(effectivePageIndex + 1));
+          fd.append(
+            "rect",
+            JSON.stringify({ x: r.x, y: r.y, w: r.width, h: r.height }),
+          );
+          fd.append("name", value.name);
+        }
+
+        const resp = await fetch("/api/pdf/links", { method: "POST", body: fd });
+        if (!resp.ok) throw new Error(`links action failed: ${resp.status}`);
+        const blob = await resp.blob();
+        // namedCreate moves nothing; namedLink adds an annotation we re-parse so
+        // the scene graph reflects it.
+        adoptModifiedPdf(blob, { reparse: value.kind === "namedLink" });
+
+        if (value.kind === "namedCreate") {
+          setCreatedNamedDests((prev) =>
+            prev.includes(value.name) ? prev : [...prev, value.name],
+          );
+          toast({ title: t("links.toasts.namedDestCreated", { name: value.name }) });
+        } else {
+          toast({ title: t("links.toasts.namedLinkAdded", { name: value.name }) });
+        }
+      } catch (err) {
+        clientLogger.error("[editor] named destination failed", err);
+        toast({
+          variant: "destructive",
+          title:
+            value.kind === "namedCreate"
+              ? t("links.toasts.namedDestFailed")
+              : t("links.toasts.namedLinkFailed"),
+        });
+      }
     },
-    [selectedTextElements, handleElementUpdate],
+    [
+      selectedTextElements,
+      handleElementUpdate,
+      getPreparedBlob,
+      adoptModifiedPdf,
+      effectivePage,
+      effectivePageIndex,
+      toast,
+      t,
+    ],
+  );
+
+  /**
+   * Embed an SVG graphic on the current page via /api/pdf/insert-svg, then adopt
+   * the returned binary. Placement is in PDF points (origin bottom-left); when
+   * the dialog leaves it "centred" we derive a square box centred on the page
+   * (symmetric, so no Y-flip needed).
+   */
+  const handleInsertSvg = useCallback(
+    async (value: InsertSvgValue) => {
+      const base = await getPreparedBlob();
+      const source = base ?? currentPdfFileRef.current;
+      if (!source || !effectivePage) return;
+      const docName = currentPdfFileRef.current?.name ?? "document.pdf";
+
+      const pageW = effectivePage.dimensions.width;
+      const pageH = effectivePage.dimensions.height;
+      let placement = value.placement;
+      if (!placement) {
+        const side = Math.max(1, Math.min(pageW, pageH) * 0.5);
+        placement = {
+          x: (pageW - side) / 2,
+          y: (pageH - side) / 2,
+          w: side,
+          h: side,
+        };
+      }
+
+      try {
+        const fd = new FormData();
+        fd.append("file", new File([source], docName, { type: "application/pdf" }));
+        fd.append("page", String(effectivePageIndex + 1));
+        fd.append("svg", value.svg);
+        fd.append("x", String(placement.x));
+        fd.append("y", String(placement.y));
+        fd.append("w", String(placement.w));
+        fd.append("h", String(placement.h));
+        const resp = await fetch("/api/pdf/insert-svg", { method: "POST", body: fd });
+        if (!resp.ok) throw new Error(`insert svg failed: ${resp.status}`);
+        const blob = await resp.blob();
+        adoptModifiedPdf(blob, { reparse: true });
+        toast({ title: t("svg.toasts.inserted") });
+      } catch (err) {
+        clientLogger.error("[editor] insert svg failed", err);
+        toast({ variant: "destructive", title: t("svg.toasts.failed") });
+      }
+    },
+    [getPreparedBlob, adoptModifiedPdf, effectivePage, effectivePageIndex, toast, t],
   );
 
   /** Remove the hyperlink from the selected text element. */
@@ -4716,6 +4846,8 @@ export default function EditorPage() {
         onInsertTable={handleInsertTable}
         onInsertLink={handleInsertLink}
         onRemoveLink={handleRemoveLink}
+        onInsertSvg={handleInsertSvg}
+        namedDestinations={createdNamedDests}
         onInsertBlankPage={handleInsertBlankPage}
         onInsertList={handleInsertList}
         pageCount={pages.length}
