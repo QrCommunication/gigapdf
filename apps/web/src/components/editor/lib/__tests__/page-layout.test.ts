@@ -88,6 +88,35 @@ describe("computePageLayout", () => {
     const layout = computePageLayout([page(300, 400), page(500, 400)], 1);
     expect(layout.contentWidth).toBe(500);
   });
+
+  it("stacks mixed page sizes (A4 + A3 + landscape) independently", () => {
+    // SL4: pages can be added in any format/orientation, so the layout must
+    // size each slot from its own dimensions, not a shared page size.
+    const a4 = page(595, 842); // portrait A4
+    const a3 = page(842, 1191); // portrait A3 (taller + wider)
+    const a4Landscape = page(595, 842, 90); // A4 rotated → 842×595
+    const layout = computePageLayout([a4, a3, a4Landscape], 1);
+
+    expect(layout.slots).toHaveLength(3);
+    // Each slot keeps its own height…
+    expect(layout.slots[0]).toEqual({ top: PAGE_V_PADDING_PX, width: 595, height: 842 });
+    expect(layout.slots[1]).toEqual({
+      top: PAGE_V_PADDING_PX + 842 + PAGE_GAP_PX,
+      width: 842,
+      height: 1191,
+    });
+    expect(layout.slots[2]).toEqual({
+      top: PAGE_V_PADDING_PX + 842 + PAGE_GAP_PX + 1191 + PAGE_GAP_PX,
+      width: 842, // 90° rotation swaps to landscape
+      height: 595,
+    });
+    // contentWidth is the widest rendered page (A3 / rotated A4 = 842).
+    expect(layout.contentWidth).toBe(842);
+    // totalHeight sums the individual slot heights + gaps + padding.
+    expect(layout.totalHeight).toBe(
+      PAGE_V_PADDING_PX + 842 + PAGE_GAP_PX + 1191 + PAGE_GAP_PX + 595 + PAGE_V_PADDING_PX,
+    );
+  });
 });
 
 describe("pageIndexAtScroll", () => {

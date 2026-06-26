@@ -45,8 +45,33 @@ import {
   IndentIncrease,
   IndentDecrease,
   Pilcrow,
+  Image as ImageIcon,
+  X,
 } from "lucide-react";
 import type { TextElement, TextListStyle, TextStyle } from "@giga-pdf/types";
+
+/** A running-header/footer token the contextual toolbar can insert. */
+export type HFToken = "page" | "pages" | "date" | "title";
+
+/** The four insertable tokens, in toolbar order. */
+const HF_TOKENS: readonly HFToken[] = ["page", "pages", "date", "title"];
+
+/**
+ * Contextual extension of the formatting toolbar, surfaced ONLY while editing a
+ * Word-like running header/footer zone (SL2). It adds image-insert, the four
+ * token buttons and a "close zone" control to the existing cluster — never a
+ * second toolbar.
+ */
+export interface HeaderFooterToolbarContext {
+  /** Insert an image item into the active band (opens a file picker). */
+  onInsertImage: () => void;
+  /** Insert a `{{token}}` into the focused text item. */
+  onInsertToken: (token: HFToken) => void;
+  /** Close the active header/footer zone (leave H/F edit mode). */
+  onCloseZone: () => void;
+  /** Token buttons are enabled only when a text item is focused. */
+  canInsertToken: boolean;
+}
 
 /** Line-spacing presets surfaced by the quick menu (Word's common values). */
 const LINE_SPACING_PRESETS: readonly number[] = [1, 1.15, 1.5, 2, 2.5, 3];
@@ -83,6 +108,12 @@ export interface FormattingToolbarProps {
    * selection — the control then falls back to the whole-element flow.
    */
   applyTextSelectionStyle?: (patch: Partial<TextStyle>) => boolean;
+  /**
+   * When set, the toolbar is in Word-like running header/footer mode (SL2): it
+   * appends the H/F context cluster (insert image, token buttons, close zone)
+   * to the existing controls, and renders even when no text item is focused.
+   */
+  headerFooterContext?: HeaderFooterToolbarContext;
 }
 
 interface FormatButtonProps {
@@ -168,12 +199,18 @@ function ParagraphNumberRow({
   );
 }
 
-export function FormattingToolbar({
+/**
+ * The text-formatting cluster (B/I/U/S, colour, alignment, lists, spacing). Pure
+ * character/paragraph controls; renders nothing when no text element is
+ * selected. Split out of {@link FormattingToolbar} so the H/F context cluster
+ * can be appended independently (and shown even with no text item focused).
+ */
+function TextFormatCluster({
   selectedTextElements,
   onElementStyleChange,
   textSelectionStyle = null,
   applyTextSelectionStyle,
-}: FormattingToolbarProps) {
+}: Omit<FormattingToolbarProps, "headerFooterContext">) {
   const t = useTranslations("editor.toolbar");
   const [showSpacing, setShowSpacing] = useState(false);
   const spacingRef = useRef<HTMLDivElement>(null);
@@ -541,6 +578,72 @@ export function FormattingToolbar({
       </div>
 
       <Separator />
+    </>
+  );
+}
+
+/**
+ * The Word-like running header/footer context cluster: insert an image, insert
+ * the four `{{…}}` tokens (enabled only while a text item is focused), and close
+ * the active zone. Appended to the toolbar by {@link FormattingToolbar} only
+ * while {@link FormattingToolbarProps.headerFooterContext} is set.
+ */
+function HeaderFooterContextCluster({
+  context,
+}: {
+  context: HeaderFooterToolbarContext;
+}) {
+  const t = useTranslations("editor.headerFooter");
+  return (
+    <>
+      <FormatButton
+        icon={<ImageIcon size={20} />}
+        label={t("insertImage")}
+        onClick={context.onInsertImage}
+      />
+      <Separator />
+      {HF_TOKENS.map((token) => (
+        <button
+          key={token}
+          type="button"
+          onClick={() => context.onInsertToken(token)}
+          disabled={!context.canInsertToken}
+          title={t(`token.${token}`)}
+          className={`px-2 h-9 rounded-lg text-xs font-medium transition-colors ${
+            context.canInsertToken
+              ? "hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+              : "opacity-40 cursor-not-allowed text-muted-foreground"
+          }`}
+        >
+          {`{{${token}}}`}
+        </button>
+      ))}
+      <Separator />
+      <FormatButton
+        icon={<X size={20} />}
+        label={t("closeZone")}
+        onClick={context.onCloseZone}
+      />
+    </>
+  );
+}
+
+/**
+ * The editor's quick formatting cluster. Renders the text-formatting controls
+ * (when a text element is selected) and, in Word-like running header/footer mode
+ * ({@link FormattingToolbarProps.headerFooterContext} set), appends the H/F
+ * context cluster. Renders nothing when neither applies.
+ */
+export function FormattingToolbar(props: FormattingToolbarProps) {
+  const { headerFooterContext, ...textProps } = props;
+  const hasText = textProps.selectedTextElements.length > 0;
+  if (!hasText && !headerFooterContext) return null;
+  return (
+    <>
+      {hasText ? <TextFormatCluster {...textProps} /> : null}
+      {headerFooterContext ? (
+        <HeaderFooterContextCluster context={headerFooterContext} />
+      ) : null}
     </>
   );
 }

@@ -20,7 +20,13 @@ import type {
   GigaDocument,
   GigaInline,
   GigaPdfEngine,
+  RunningHeaderFooter,
 } from "@qrcommunication/gigapdf-lib";
+import {
+  emptyRunningHeaderFooter,
+  makeTextItem,
+  type HFItem,
+} from "./running-header-footer";
 
 /** Loader for the shared GigaPDF engine; injectable for tests. */
 type EngineLoader = () => Promise<GigaPdfEngine>;
@@ -97,6 +103,73 @@ export function detectHeaderFooterFromModel(
     if (result.header !== null && result.footer !== null) break;
   }
   return result;
+}
+
+/**
+ * Project a band (`GigaBlock[]`) to a list of rich running-H/F text items — one
+ * left-anchored {@link HFItem} per non-empty block, preserving block order so
+ * the editable band shows the Word structure as stacked lines. Images are not
+ * projected in SL2 (their pixels are not lifted from the model yet); only text
+ * lines carry over.
+ */
+function projectBandItems(blocks: GigaBlock[] | null): HFItem[] {
+  if (!blocks || blocks.length === 0) return [];
+  const items: HFItem[] = [];
+  for (const block of blocks) {
+    const text = blockText(block);
+    if (text.length > 0) items.push(makeTextItem(text, { anchor: "left" }));
+  }
+  return items;
+}
+
+/**
+ * Project the header/footer bands carried by the first section(s) of `model`
+ * into a rich {@link RunningHeaderFooter} `default` zone — the SL2 source of
+ * truth used to pre-fill the editable band on Word import. Mirrors
+ * {@link detectHeaderFooterFromModel}'s "first non-null band of each kind across
+ * sections" rule, but produces positioned text items instead of flattened text.
+ * Returns an empty definition when `model` carries no bands.
+ */
+export function projectOfficeToRunningHeaderFooter(
+  model: GigaDocument | null,
+): RunningHeaderFooter {
+  const def = emptyRunningHeaderFooter();
+  if (!model || !Array.isArray(model.sections)) return def;
+  let header: HFItem[] | null = null;
+  let footer: HFItem[] | null = null;
+  for (const section of model.sections) {
+    if (header === null) {
+      const items = projectBandItems(section.header);
+      if (items.length > 0) header = items;
+    }
+    if (footer === null) {
+      const items = projectBandItems(section.footer);
+      if (items.length > 0) footer = items;
+    }
+    if (header !== null && footer !== null) break;
+  }
+  def.default.header = header ?? [];
+  def.default.footer = footer ?? [];
+  return def;
+}
+
+/**
+ * Convert `office` bytes to the editable model and project its header/footer
+ * bands into a rich {@link RunningHeaderFooter}. Returns an empty definition when
+ * the bytes are not a recognised Office document or carry no bands. Never throws
+ * — a projection failure must not break the import.
+ */
+export async function projectOfficeBytesToRunningHeaderFooter(
+  office: ArrayBuffer | Uint8Array,
+  loadEngine: EngineLoader = loadPdfEngine,
+): Promise<RunningHeaderFooter> {
+  try {
+    const engine = await loadEngine();
+    const model = engine.officeToModel(toBytes(office));
+    return projectOfficeToRunningHeaderFooter(model);
+  } catch {
+    return emptyRunningHeaderFooter();
+  }
 }
 
 /**

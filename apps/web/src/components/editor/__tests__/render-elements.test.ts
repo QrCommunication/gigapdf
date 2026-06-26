@@ -98,6 +98,14 @@ function makeCanvas() {
     add: (o: FakeObj) => objects.push(o),
     remove: vi.fn(),
     getObjects: () => objects,
+    // Mirror Fabric v6's canvas.moveObjectTo: pull the object out and re-insert
+    // it at the target index (used by the post-image-load z-order re-assert).
+    moveObjectTo: (o: FakeObj, index: number) => {
+      const cur = objects.indexOf(o);
+      if (cur === -1) return;
+      objects.splice(cur, 1);
+      objects.splice(index, 0, o);
+    },
     renderAll: vi.fn(),
     requestRenderAll: vi.fn(),
     on: (event: string, cb: (e: unknown) => void) => {
@@ -936,6 +944,175 @@ describe("renderElementsOverlay — image placeholder", () => {
     expect(rect.opts.evented).toBe(false);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+// --- Parsed vs new image overlays (opacity, z-order, selection-reveal) --------
+//
+// A PARSED image (carries an engine `index`) is already baked into the text-free
+// raster, so its overlay must be an INVISIBLE (opacity 0) hit-target — like the
+// shape overlays — otherwise a full-page parsed background image paints over the
+// text and steals every click. A NEWLY-ADDED image (no `index`) is NOT in the
+// raster, so it stays visible at its real opacity. In both cases the real
+// opacity is stashed on data.originalOpacity for a lossless save.
+
+describe("renderElementsOverlay — parsed vs new image overlays", () => {
+  function imageElement(over: Partial<Record<string, unknown>> = {}): Element {
+    return {
+      type: "image",
+      elementId: "img",
+      bounds: { x: 0, y: 0, width: 100, height: 50 },
+      visible: true,
+      locked: false,
+      source: {
+        type: "embedded",
+        dataUrl: "imgU",
+        originalDimensions: { width: 100, height: 50 },
+      },
+      style: { opacity: 1 },
+      ...over,
+    } as unknown as Element;
+  }
+
+  const findImage = (canvas: unknown): FakeObj | undefined =>
+    (canvas as { _objects: FakeObj[] })._objects.find(
+      (o) => (o.data as Record<string, unknown> | undefined)?.type === "image",
+    );
+
+  it("renders a PARSED image overlay invisible (opacity 0) + stashes its real opacity", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [imageElement({ index: 4, style: { opacity: 0.8 } })],
+      fabricMock,
+      { resolveImageUrl: (u: string) => u },
+    );
+    const img = findImage(canvas)!;
+    expect(img).toBeDefined();
+    // Invisible in view (raster shows it), but the REAL opacity is preserved.
+    expect(img.opts.opacity).toBe(0);
+    const data = img.data as Record<string, unknown>;
+    expect(data.originalOpacity).toBe(0.8);
+    expect(data.isTransparentImageOverlay).toBe(true);
+    expect(data.index).toBe(4);
+  });
+
+  it("renders a NEW image overlay VISIBLE at its real opacity (not a hit-target)", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [imageElement({ style: { opacity: 0.9 } })], // no index → newly added
+      fabricMock,
+      { resolveImageUrl: (u: string) => u },
+    );
+    const img = findImage(canvas)!;
+    expect(img.opts.opacity).toBe(0.9);
+    const data = img.data as Record<string, unknown>;
+    expect(data.originalOpacity).toBe(0.9);
+    expect(data.isTransparentImageOverlay).toBe(false);
+    expect(data.index).toBeUndefined();
+  });
+
+  it("reveals a parsed image overlay on selection and re-hides it on clear", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [imageElement({ index: 2, style: { opacity: 0.75 } })],
+      fabricMock,
+      { resolveImageUrl: (u: string) => u },
+    );
+    const fire = (canvas as unknown as { fire: (e: string, p: unknown) => void })
+      .fire;
+    const img = findImage(canvas)!;
+    expect(img.opts.opacity).toBe(0); // invisible in view…
+
+    fire("selection:created", { selected: [img] });
+    expect(img.opts.opacity).toBe(0.75); // …flashed at real opacity while selected…
+
+    fire("selection:cleared", {});
+    expect(img.opts.opacity).toBe(0); // …re-hidden on deselect.
+  });
+
+  it("does NOT reveal/re-hide a NEW image overlay (stays visible)", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [imageElement({ style: { opacity: 0.9 } })], // no index → new
+      fabricMock,
+      { resolveImageUrl: (u: string) => u },
+    );
+    const fire = (canvas as unknown as { fire: (e: string, p: unknown) => void })
+      .fire;
+    const img = findImage(canvas)!;
+    expect(img.opts.opacity).toBe(0.9);
+    fire("selection:created", { selected: [img] });
+    expect(img.opts.opacity).toBe(0.9); // untouched (no isTransparentImageOverlay)
+    fire("selection:cleared", {});
+    expect(img.opts.opacity).toBe(0.9); // never forced to 0
+  });
+
+  it("stacks a parsed image overlay BELOW text (pitch-deck) — engine order beats promise order", async () => {
+    const canvas = makeCanvas();
+    // PDF background already on the canvas — must stay pinned at index 0.
+    const bg = new FakeObj();
+    bg.data = { isPdfBackground: true };
+    (canvas as unknown as { add: (o: FakeObj) => void }).add(bg);
+
+    // FabricImage that resolves imgB BEFORE imgA (the reverse of engine order),
+    // so canvas.add fires B then A — proving the final z-order uses the engine
+    // paint order, NOT the promise-resolution order.
+    const oooFabric = {
+      ...fabricMock,
+      FabricImage: {
+        fromURL: vi.fn(
+          (url: string) =>
+            new Promise<FakeObj>((resolve) =>
+              setTimeout(() => resolve(new FakeObj()), url === "imgB" ? 0 : 20),
+            ),
+        ),
+      },
+    } as unknown as typeof import("fabric");
+
+    const mkImg = (id: string, index: number, url: string): Element =>
+      imageElement({
+        elementId: id,
+        index,
+        bounds: { x: 0, y: 0, width: 400, height: 300 },
+        source: {
+          type: "embedded",
+          dataUrl: url,
+          originalDimensions: { width: 400, height: 300 },
+        },
+      });
+    const text = textElement({
+      elementId: "t",
+      content: "Slide title",
+      bounds: { x: 10, y: 20, width: 200, height: 14 },
+    });
+
+    await renderElementsOverlay(
+      canvas,
+      [mkImg("imgA", 0, "imgA"), text, mkImg("imgB", 1, "imgB")],
+      oooFabric,
+      { resolveImageUrl: (u: string) => u },
+    );
+
+    const objs = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    const idxOf = (id: string) =>
+      objs.findIndex(
+        (o) =>
+          (o.data as Record<string, unknown> | undefined)?.elementId === id,
+      );
+    // Background stays at the very bottom.
+    expect(objs[0]).toBe(bg);
+    const iA = idxOf("imgA");
+    const iB = idxOf("imgB");
+    const iT = idxOf("t");
+    // Both parsed images sit BELOW the text overlay (no more click-stealing).
+    expect(iA).toBeLessThan(iT);
+    expect(iB).toBeLessThan(iT);
+    // Image-vs-image follows engine paint order, despite B resolving first.
+    expect(iA).toBeLessThan(iB);
   });
 });
 

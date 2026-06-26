@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import { clientLogger } from "@/lib/client-logger";
 import type { DocumentObject, DocumentLanguageInfo, PageObject, BookmarkObject, LayerObject, EmbeddedFileObject, Element } from "@giga-pdf/types";
@@ -87,6 +87,33 @@ export interface UseDocumentOptions {
   flatten?: boolean;
 }
 
+/** Phase courante du chargement d'un document (jalons réels du pipeline). */
+export type LoadPhase =
+  | "idle"
+  | "connecting"
+  | "analyzing"
+  | "elements"
+  | "building"
+  | "error";
+
+/**
+ * Progression du chargement, synchronisée sur les jalons réels du pipeline
+ * (A connecting → B analyzing → C elements → D building). `value` est garanti
+ * monotone, borné [0, 100], et n'atteint jamais 100 avant la fin réelle.
+ * La phase `analyzing` (B) est un estimateur borné honnête (< 60) car le fetch
+ * du parse ne fournit pas de progression en octets ; un endpoint SSE serait
+ * nécessaire pour de vrais octets.
+ */
+export interface LoadProgress {
+  phase: LoadPhase;
+  /** 0 → 100, monotone et borné. */
+  value: number;
+  /** Pages dont les éléments ont été fusionnés (phase `elements`). */
+  pagesParsed: number;
+  /** Total de pages à fusionner (phase `elements`). */
+  pagesTotal: number;
+}
+
 export interface UseDocumentReturn {
   /** Document chargé */
   document: DocumentObject | null;
@@ -100,6 +127,13 @@ export interface UseDocumentReturn {
   currentPageIndex: number;
   /** Chargement en cours */
   loading: boolean;
+  /**
+   * Progression détaillée du chargement (barre + jalons réels). Reste à
+   * `phase: 'idle'` quand aucun document n'est demandé. NE conditionne PAS la
+   * révélation de l'éditeur (qui reste gated sur `loading`) — purement
+   * informatif/visuel.
+   */
+  loadProgress: LoadProgress;
   /** Erreur de chargement */
   error: string | null;
   /** ID du document de session (pour les appels API) */
@@ -231,12 +265,58 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
   // document's OCG `layers` (read-only). Reset on document (re)load.
   const [userLayers, setUserLayers] = useState<LayerObject[]>([]);
 
+  // Progression du chargement (barre synchronisée aux jalons A→D).
+  const [loadProgress, setLoadProgress] = useState<LoadProgress>({
+    phase: "idle",
+    value: 0,
+    pagesParsed: 0,
+    pagesTotal: 0,
+  });
+  // Estimateur borné de la phase B (analyzing) — interval nettoyé partout.
+  const estimatorRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopEstimator = useCallback(() => {
+    if (estimatorRef.current !== null) {
+      clearInterval(estimatorRef.current);
+      estimatorRef.current = null;
+    }
+  }, []);
+
+  // Mise à jour monotone + bornée de la progression. Le reset de fin/début de
+  // chargement (phase connecting, value 0) passe par un setLoadProgress direct
+  // pour réinitialiser la baseline monotone.
+  const advanceProgress = useCallback((patch: Partial<LoadProgress>) => {
+    setLoadProgress((prev) => {
+      const raw = patch.value ?? prev.value;
+      const value = Math.max(prev.value, Math.min(100, raw));
+      return { ...prev, ...patch, value };
+    });
+  }, []);
+
+  // Phase B : estimateur honnête. Pas d'octets réels (le fetch du parse n'est
+  // pas streamé), donc on approche 58 de façon asymptotique (ralentit en
+  // approchant) et on ne franchit JAMAIS 60 avant la résolution réelle du parse.
+  const startAnalyzingEstimator = useCallback(() => {
+    stopEstimator();
+    estimatorRef.current = setInterval(() => {
+      setLoadProgress((prev) => {
+        const ceil = 58; // strictement < 60 : 60 est réservé au SNAP réel
+        if (prev.value >= ceil) return prev;
+        const next = prev.value + (ceil - prev.value) * 0.1;
+        return { ...prev, value: Math.max(prev.value, next) };
+      });
+    }, 120);
+  }, [stopEstimator]);
+
   // Charger le document
   const loadDocument = useCallback(async () => {
     setLoading(true);
     setError(null);
     setFlattenedPdfFile(null);
     setUserLayers([]);
+    // A — connecting : reset complet de la baseline monotone (pas advanceProgress).
+    stopEstimator();
+    setLoadProgress({ phase: "connecting", value: 0, pagesParsed: 0, pagesTotal: 0 });
 
     try {
       let docId = sessionDocumentId;
@@ -255,11 +335,16 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       }
 
       setDocumentId(docId);
+      // A terminée : la session/le binaire S3 sont résolus.
+      advanceProgress({ value: 8 });
 
       // Récupérer le document complet avec pages et éléments (TS parser via S3)
       clientLogger.debug("[useDocument] Calling /api/pdf/parse-from-s3 for docId:", docId);
       const { getAuthToken } = await import("@/lib/api");
       const authToken = await getAuthToken();
+      // B — analyzing : démarrer l'estimateur borné AVANT le fetch du parse.
+      advanceProgress({ phase: "analyzing" });
+      startAnalyzingEstimator();
       const parseResp = await fetch("/api/pdf/parse-from-s3", {
         method: "POST",
         headers: {
@@ -269,6 +354,9 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
         body: JSON.stringify({ documentId: docId, flatten }),
         credentials: "include",
       });
+      // Parse résolu : stopper l'estimateur et SNAP à 60 (fin réelle de B).
+      stopEstimator();
+      advanceProgress({ value: 60 });
       if (!parseResp.ok) {
         throw new Error(`Parse failed: ${parseResp.status}`);
       }
@@ -311,6 +399,12 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
       // few seconds before reload (debounce + apply + upload window) would be
       // lost without this merge. See mergeBackendElements above for the dedup.
       const parsedPages = docData.pages as unknown as PageObject[];
+      // C — elements : la fusion Redis de chaque page incrémente la barre
+      // sur [60, 92]. Le compteur `done` vit dans un finally pour rester exact
+      // même quand une page échoue ; advanceProgress garantit la monotonie.
+      const pagesTotal = parsedPages.length;
+      let done = 0;
+      advanceProgress({ phase: "elements", pagesTotal, pagesParsed: 0 });
       const mergedPages = await Promise.all(
         parsedPages.map(async (page) => {
           try {
@@ -328,6 +422,10 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
               err,
             );
             return page;
+          } finally {
+            done += 1;
+            const value = pagesTotal > 0 ? 60 + (done / pagesTotal) * 32 : 92;
+            advanceProgress({ value, pagesParsed: done });
           }
         }),
       );
@@ -397,20 +495,31 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
         ...(documentLanguage ? { documentLanguage } : {}),
       };
 
+      // D — building : assemblage final du scene graph.
+      advanceProgress({ phase: "building", value: 92 });
       setDocument(doc);
       // Prefer filename (docName) over PDF title metadata when possible;
       // the PDF title may be a placeholder like "(anonymous)".
       setName(docName || doc.metadata.title || "");
       setCurrentPageIndex(0);
+      advanceProgress({ value: 100 });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Erreur de chargement";
       setError(message);
+      setLoadProgress((prev) => ({ ...prev, phase: "error" }));
       clientLogger.error("use-document.load-failed", err);
     } finally {
+      // Toujours arrêter l'estimateur (succès, erreur, ou retour anticipé).
+      stopEstimator();
       setLoading(false);
     }
-  }, [storedDocumentId, sessionDocumentId, flatten]);
+  }, [storedDocumentId, sessionDocumentId, flatten, advanceProgress, startAnalyzingEstimator, stopEstimator]);
+
+  // Nettoyage de l'interval estimateur au démontage du hook.
+  useEffect(() => {
+    return () => stopEstimator();
+  }, [stopEstimator]);
 
   // Charger au montage
   useEffect(() => {
@@ -843,6 +952,7 @@ export function useDocument(options: UseDocumentOptions): UseDocumentReturn {
     currentPage,
     currentPageIndex,
     loading,
+    loadProgress,
     error,
     documentId,
     storedDocumentId: storedId,

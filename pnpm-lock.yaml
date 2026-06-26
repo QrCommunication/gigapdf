@@ -615,7 +615,7 @@ importers:
         version: link:../types
       '@qrcommunication/gigapdf-lib':
         specifier: latest
-        version: 0.104.0
+        version: 0.105.0
       fabric:
         specifier: ^7.4.0
         version: 7.4.0
@@ -783,7 +783,7 @@ importers:
         version: link:../types
       '@qrcommunication/gigapdf-lib':
         specifier: latest
-        version: 0.104.0
+        version: 0.105.0
       gigapdf-lib-ocr:
         specifier: npm:@qrcommunication/gigapdf-lib@0.63.0
         version: '@qrcommunication/gigapdf-lib@0.63.0'
@@ -2668,8 +2668,8 @@ packages:
       react: 19.2.7
       react-dom: 19.2.7
 
-  '@qrcommunication/gigapdf-lib@0.104.0':
-    resolution: {integrity: sha512-MqZSE9WWgGtsnmqovViBYG0Qy0KR01fq0i/0fxfH5hoYBFwmZ0Psx65KvJ/g8G+5bRlBSWj8GIn0NO2Q+hurgA==}
+  '@qrcommunication/gigapdf-lib@0.105.0':
+    resolution: {integrity: sha512-Gw2nbJYgQ0tCXaGcIBBrHZ7wJrH/1f52gsKejaW2AOMQApDEbKJx4qxKbxv9pOJxPIg7x3sq2wAWng2ftvyHEA==}
     engines: {node: '>=18.17.0'}
 
   '@qrcommunication/gigapdf-lib@0.63.0':
@@ -10750,7 +10750,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react-dom'
 
-  '@qrcommunication/gigapdf-lib@0.104.0': {}
+  '@qrcommunication/gigapdf-lib@0.105.0': {}
 
   '@qrcommunication/gigapdf-lib@0.63.0': {}
 
@@ -11472,9 +11472,7 @@ snapshots:
       metro-runtime: 0.84.4
     transitivePeerDependencies:
       - '@babel/core'
-      - bufferutil
       - supports-color
-      - utf-8-validate
 
   '@react-native/normalize-color@2.1.0': {}
 

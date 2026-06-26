@@ -5,6 +5,39 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2026-06-27
+
+### Fixed
+- **Editor — text no longer hidden behind background images.** Page layers now
+  load in the correct stacking order, so text on slides/decks is visible and
+  editable instead of being covered by a full-page background.
+- **Editor — bring forward / send backward no longer reloads the document.** The
+  z-order change is applied live without re-rasterising the whole document, so
+  the current selection and in-progress edits are preserved (no flash, no lost
+  work).
+- **Editor — Word-style margin rulers no longer blank the page.** Dragging a
+  margin guide updates the content area only; margins are saved with the document
+  (editor metadata) and never crop the page.
+- **Faithful text extraction (engine 0.105.0).** Subset fonts that repack glyphs
+  onto punctuation codes via `/Encoding`+`/Differences` (common in administrative
+  forms, e.g. CERFA) no longer garble accented words and numbers — e.g. "parents"
+  and "2016" instead of "&are%ts" and "2!!".
+
+### Added
+- **Editor — Word-style editable header & footer zones.** Place text *and images*
+  directly in visible header/footer bands on the page, with a contextual toolbar
+  (insert image, page-number/date/title tokens, alignment, font and colour). A
+  different first page and different odd/even pages are supported, and the
+  definition travels with the PDF.
+- **Editor — insert blank pages in multiple formats.** Add a page in A4, A3,
+  Letter, Legal or a custom size, in portrait or landscape, from a Word-style
+  "Add page" menu.
+
+### Changed
+- **Editor — real loading progress.** Opening a document now shows a progress bar
+  synced to the actual load milestones with a page-flip animation, replacing the
+  indeterminate spinner.
+
 ## [1.12.0] - 2026-06-23
 
 ### Added
