@@ -5,6 +5,18 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.1] - 2026-06-27
+
+### Fixed
+- **Document library — Download & Preview no longer fail with "file not found".**
+  The Download button and the document Preview used a direct URL that couldn't
+  carry the auth token (404 under an owned session); both now fetch the document
+  through an authenticated request, like Export.
+- **Document library — import dropzone now shows progress and dismisses itself.**
+  The full-screen drag-and-drop import overlay now displays an upload progress
+  bar and disappears automatically when the upload finishes (it previously stayed
+  on screen until a page reload).
+
 ## [1.14.0] - 2026-06-27
 
 ### Fixed

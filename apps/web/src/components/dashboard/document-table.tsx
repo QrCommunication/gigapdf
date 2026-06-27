@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -191,7 +191,31 @@ export function DocumentTable({
 
   // Data states
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Tracks the in-memory object URL backing the preview iframe so we can revoke
+  // it (avoid leaking blobs) on close and on unmount.
+  const previewUrlRef = useRef<string | null>(null);
   const [newName, setNewName] = useState("");
+
+  // Revoke any outstanding preview object URL when the table unmounts.
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  // Close the preview and release its object URL (covers the footer button and
+  // the dialog's own dismiss paths — Esc, overlay click).
+  const closePreview = () => {
+    setPreviewOpen(false);
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setPreviewUrl(null);
+  };
 
   const handleOpenEditor = async (doc: Document) => {
     // Navigate to editor with stored document ID (not session ID)
@@ -201,9 +225,14 @@ export function DocumentTable({
   const handleDownload = async (doc: Document) => {
     try {
       setLoadingId(doc.id);
-      const result = await api.loadDocument(doc.id);
-      const downloadUrl = api.getDocumentDownloadUrl(result.document_id);
-      window.open(downloadUrl, "_blank");
+      // Fetch the bytes through the authenticated flow (Authorization: Bearer)
+      // rather than a bare URL — the backend only authenticates via the bearer
+      // token, so a direct window.open() 404s under an owned session.
+      const bytes = await downloadDocumentBytes(doc.id);
+      triggerBlobDownload(
+        new Blob([bytes as BlobPart], { type: "application/pdf" }),
+        `${doc.name}.pdf`,
+      );
     } catch (err) {
       clientLogger.error("document-table.download-failed", err);
       alert(tCard("errors.downloadFailed"));
@@ -315,9 +344,18 @@ export function DocumentTable({
       setPreviewLoading(true);
       setSelectedDoc(doc);
       setPreviewOpen(true);
-      const result = await api.loadDocument(doc.id);
-      const downloadUrl = api.getDocumentDownloadUrl(result.document_id);
-      setPreviewUrl(downloadUrl);
+      // Same reason as download: the iframe can't carry the bearer token, so we
+      // fetch the bytes authenticated and feed the iframe an in-memory object URL.
+      const bytes = await downloadDocumentBytes(doc.id);
+      // Release a previous preview URL before replacing it (avoid leak).
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+      const objectUrl = URL.createObjectURL(
+        new Blob([bytes as BlobPart], { type: "application/pdf" }),
+      );
+      previewUrlRef.current = objectUrl;
+      setPreviewUrl(objectUrl);
     } catch (err) {
       clientLogger.error("document-table.preview-failed", err);
       alert(tCard("errors.previewFailed"));
@@ -1011,7 +1049,10 @@ export function DocumentTable({
       </Dialog>
 
       {/* Preview Modal */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+      <Dialog
+        open={previewOpen}
+        onOpenChange={(open) => (open ? setPreviewOpen(true) : closePreview())}
+      >
         <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0">
           <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
             <DialogTitle className="truncate pr-4">{selectedDoc?.name}</DialogTitle>
@@ -1034,7 +1075,7 @@ export function DocumentTable({
             )}
           </div>
           <DialogFooter className="px-6 py-4 border-t flex-shrink-0">
-            <Button variant="outline" onClick={() => setPreviewOpen(false)}>
+            <Button variant="outline" onClick={closePreview}>
               {tCard("preview.close")}
             </Button>
             <Button onClick={() => selectedDoc && handleDownload(selectedDoc)}>

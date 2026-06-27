@@ -15,6 +15,15 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.14.1",
+    date: "2026-06-27",
+    type: "patch",
+    changes: [
+      { type: "fix", description: "Document library: the Download button and document Preview no longer fail with \"file not found\" — both now use an authenticated request instead of a direct URL" },
+      { type: "fix", description: "Document library: the full-screen import dropzone now shows an upload progress bar and disappears when the upload finishes (no more leftover overlay needing a page reload)" },
+    ],
+  },
+  {
     version: "1.14.0",
     date: "2026-06-27",
     type: "minor",
