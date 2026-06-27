@@ -92,6 +92,15 @@ export interface ContinuousPageViewProps {
   zoom: number;
   /** The PDF binary backing the page backgrounds (single source of truth). */
   pdfFile: File | null;
+  /**
+   * 0-based indices of the pages whose CONTENT changed in the latest bake of
+   * `pdfFile` (same page structure). When provided AND the structural signature
+   * is unchanged, the view PATCHES the existing pool in place — re-rasterising
+   * ONLY these pages — instead of rebuilding the pool (which would re-raster
+   * every visible page). Pass `null`/omit for a STRUCTURAL change (page added/
+   * removed/rotated, re-parse) → the pool is rebuilt.
+   */
+  bakedPageIndices?: number[] | null;
   /** Document ID (session backend) — forwarded to the active page's EditorCanvas. */
   documentId?: string | null;
   /** Active tool — forwarded to the active page's EditorCanvas (create/select/…). */
@@ -126,6 +135,9 @@ export interface ContinuousPageViewProps {
     wantVariant?: { bold?: boolean; italic?: boolean },
     text?: string,
   ) => string | null;
+  /** True while embedded fonts load — forwarded to the active page's EditorCanvas
+   *  so it re-renders the overlay once when fonts become ready. */
+  fontsLoading?: boolean;
   /** Shape variant for the shape tool — forwarded to the ACTIVE page's EditorCanvas. */
   shapeType?: ShapeType;
   /** Annotation variant for the annotate tool — forwarded to the ACTIVE page's EditorCanvas. */
@@ -220,6 +232,7 @@ function ContinuousPageViewImpl(
     pages,
     zoom,
     pdfFile,
+    bakedPageIndices,
     documentId,
     tool,
     activePageIndex,
@@ -229,6 +242,7 @@ function ContinuousPageViewImpl(
     margins,
     onMarginsCommit,
     getFontFaceName,
+    fontsLoading,
     shapeType,
     annotationType,
     fieldKind,
@@ -291,7 +305,7 @@ function ContinuousPageViewImpl(
     })),
   );
 
-  // ── Shared render pool, rebuilt when the PDF binary changes ────────────────
+  // ── Shared render pool ─────────────────────────────────────────────────────
   const [pool, setPool] = useState<PageRenderPool | null>(null);
   // Mirror of the LIVE committed pool. The pdfFile-change effect reads it to
   // dispose the *previous* pool only AFTER the new one is committed (atomic
@@ -300,21 +314,93 @@ function ContinuousPageViewImpl(
   // editing session (selection/undo lost + a full-document re-raster flash).
   const poolRef = useRef<PageRenderPool | null>(null);
 
+  // Per-page background revision. Bumping `bgRevisions[i]` forces ONLY page `i`'s
+  // inactive bitmap to re-rasterise (the value is forwarded to each PageSlot →
+  // PageCanvasHost render-effect dep). Untouched entries keep their bitmap. The
+  // active page renders an EditorCanvas, so it ignores this entirely.
+  const [bgRevisions, setBgRevisions] = useState<number[]>([]);
+
+  // Stable structural signature of the page set: `pageId:WxH@rotation` joined.
+  // Drives the PATCH-vs-BUILD decision below — when it is unchanged across a
+  // `pdfFile` swap, only the page binary changed (a content bake), so we patch
+  // the existing pool in place instead of rebuilding it.
+  const structuralSignature = useMemo(
+    () =>
+      pages
+        .map(
+          (p) =>
+            `${p.pageId}:${p.dimensions.width}x${p.dimensions.height}@${p.dimensions.rotation}`,
+        )
+        .join("|"),
+    [pages],
+  );
+  // Committed signature of the LIVE pool — set on BUILD, compared on the next
+  // pdfFile change to detect whether the structure changed.
+  const signatureRef = useRef<string | null>(null);
+
+  // Latest baked-page hint + page count mirrored into refs so the async pool
+  // effect reads them without re-subscribing (kept fresh by the effects below,
+  // declared BEFORE the pool effect so they run first on the same commit).
+  const bakedIndicesRef = useRef<number[] | null | undefined>(bakedPageIndices);
+  useEffect(() => {
+    bakedIndicesRef.current = bakedPageIndices;
+  }, [bakedPageIndices]);
+  const pageCountRef = useRef(pages.length);
+  useEffect(() => {
+    pageCountRef.current = pages.length;
+  }, [pages.length]);
+
   useEffect(() => {
     // No document → tear down for real (there is genuinely nothing to show).
     if (!pdfFile) {
       poolRef.current?.dispose();
       poolRef.current = null;
+      signatureRef.current = null;
       setPool(null);
       return;
     }
 
-    // Epoch guard: if `pdfFile` changes again before this async build finishes,
-    // `cancelled` flips so this (now-stale) run never commits an outdated pool.
+    // Epoch guard: if `pdfFile` changes again before this async run finishes,
+    // `cancelled` flips so this (now-stale) run never commits an outdated pool
+    // nor patches against superseded bytes.
     let cancelled = false;
 
     void (async () => {
       try {
+        const existing = poolRef.current;
+
+        // ── PATCH (same structure) ──
+        // A live pool + an unchanged structural signature means only the page
+        // binary changed (a content bake). Swap the bytes in place and bump the
+        // revision of ONLY the baked pages, so just those re-rasterise — the
+        // pool is NOT rebuilt and NO PageSlot unmounts (active session intact).
+        if (existing && signatureRef.current === structuralSignature) {
+          const bytes = await pdfFile.arrayBuffer();
+          if (cancelled) {
+            return;
+          }
+          const baked = bakedIndicesRef.current;
+          const changed = baked && baked.length > 0 ? baked : null;
+          existing.replaceBytes(bytes, changed ?? undefined);
+          setBgRevisions((prev) => {
+            const next = prev.slice();
+            if (changed) {
+              for (const i of changed) {
+                next[i] = (next[i] ?? 0) + 1;
+              }
+            } else {
+              // Unknown scope on an unchanged structure → refresh every inactive
+              // page's bitmap (the active page is an EditorCanvas, untouched).
+              for (let i = 0; i < pageCountRef.current; i += 1) {
+                next[i] = (next[i] ?? 0) + 1;
+              }
+            }
+            return next;
+          });
+          return;
+        }
+
+        // ── BUILD / ATOMIC POOL SWAP (no pool yet, or structure changed) ──
         const bytes = await pdfFile.arrayBuffer();
         if (cancelled) {
           // pdfFile changed during arrayBuffer() — abandon before allocating a
@@ -323,7 +409,6 @@ function ContinuousPageViewImpl(
         }
         const next = new PageRenderPool({ pdfBytes: bytes });
 
-        // ── ATOMIC POOL SWAP ──
         // Commit the NEW pool first: because each `<PageSlot>` is keyed by its
         // stable `pageId` and the gate `{pool ? … : null}` never goes false
         // (pool stays truthy across the swap), React reconciles the slots WITHOUT
@@ -331,6 +416,7 @@ function ContinuousPageViewImpl(
         // Only THEN do we dispose the pool the previous run committed.
         const previous = poolRef.current;
         poolRef.current = next;
+        signatureRef.current = structuralSignature;
         setPool(next);
         previous?.dispose();
       } catch (err) {
@@ -347,7 +433,10 @@ function ContinuousPageViewImpl(
     return () => {
       cancelled = true;
     };
-  }, [pdfFile]);
+    // `bakedPageIndices` is read via `bakedIndicesRef` (set in a preceding
+    // effect) so a hint change alone never re-runs this; a content bake always
+    // changes `pdfFile`, which does.
+  }, [pdfFile, structuralSignature]);
 
   // Final teardown: dispose whatever pool is live when the component unmounts.
   useEffect(() => {
@@ -658,11 +747,13 @@ function ContinuousPageViewImpl(
                   }
                   isActive={isActive}
                   pool={pool}
+                  bgRevision={bgRevisions[index] ?? 0}
                   showRulers={showRulers}
                   rulerUnit={rulerUnit}
                   margins={margins?.[index] ?? null}
                   {...(onMarginsCommit ? { onMarginsCommit } : {})}
                   {...(getFontFaceName ? { getFontFaceName } : {})}
+                  {...(fontsLoading !== undefined ? { fontsLoading } : {})}
                   {...(isActive ? { shapeType } : {})}
                   {...(isActive ? { annotationType } : {})}
                   {...(isActive ? { fieldKind } : {})}

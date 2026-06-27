@@ -35,6 +35,13 @@ export interface PageCanvasHostProps {
   scale: number;
   /** Shared pool providing the recycled canvas + memoised page backgrounds. */
   pool: PageRenderPool;
+  /**
+   * Background revision. The continuous view bumps it when this page's content
+   * was re-baked into the pool's new bytes — re-running the render effect so the
+   * bitmap re-rasterises. Unchanged → the effect does not re-run, the existing
+   * bitmap is kept (no re-raster for pages that did not change).
+   */
+  bgRevision?: number;
   /** Notified once the page background has finished rendering. */
   onReady?: (index: number) => void;
   /** Notified when the host releases its pool slot on unmount. */
@@ -51,6 +58,7 @@ export function PageCanvasHost({
   index,
   scale,
   pool,
+  bgRevision = 0,
   onReady,
   onDispose,
 }: PageCanvasHostProps) {
@@ -193,9 +201,11 @@ export function PageCanvasHost({
       }
       canvasElRef.current = null;
     };
-    // Re-render on page identity, geometry or pool change. Callbacks are read
-    // via refs (kept stable) so new closures don't force re-rasterisation.
-  }, [pool, index, page.pageId, scale, cssWidth, cssHeight]);
+    // Re-render on page identity, geometry, pool change, OR a background-revision
+    // bump (this page's content was re-baked → re-rasterise against the pool's
+    // new bytes). Callbacks are read via refs (kept stable) so new closures
+    // don't force re-rasterisation.
+  }, [pool, index, page.pageId, scale, cssWidth, cssHeight, bgRevision]);
 
   return (
     <div

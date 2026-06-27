@@ -5,6 +5,25 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-06-27
+
+### Fixed
+- **Editor — faithful overlay fonts.** Text inside form fields and page
+  headers/footers (drawn via form XObjects) no longer mixes fonts within a single
+  phrase nor overlaps: each run is now styled against its own font scope and
+  rendered with the document's embedded font with correct metrics (engine
+  0.106.0), plus a bounded width guard for runs whose font hasn't loaded yet.
+
+### Changed
+- **Editor — smoother editing in continuous view.** Editing, moving or reordering
+  an element now re-renders only the affected page instead of re-rasterising every
+  visible page.
+
+### Added
+- **Editor — header/footer parity in single-page view.** The Word-style header &
+  footer zones (and the page controls) now work in single-page view too, matching
+  the continuous view.
+
 ## [1.13.0] - 2026-06-27
 
 ### Fixed

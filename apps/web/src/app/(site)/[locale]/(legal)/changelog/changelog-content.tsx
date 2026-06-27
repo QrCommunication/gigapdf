@@ -15,6 +15,16 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.14.0",
+    date: "2026-06-27",
+    type: "minor",
+    changes: [
+      { type: "fix", description: "Editor: faithful overlay fonts — text inside form fields and page headers/footers no longer mixes fonts within a phrase or overlaps; runs use the document's embedded fonts with correct metrics (engine 0.106.0)" },
+      { type: "improvement", description: "Editor: smoother editing in continuous view — editing or reordering an element re-renders only the affected page instead of every visible page" },
+      { type: "feature", description: "Editor: header/footer and the Word-style page controls now work in single-page view too (parity with the continuous view)" },
+    ],
+  },
+  {
     version: "1.13.0",
     date: "2026-06-27",
     type: "minor",

@@ -162,6 +162,23 @@ function fontNameVariant(name: string): { bold: boolean; italic: boolean } {
   return { bold: isBold && !isSemi, italic: isItalic };
 }
 
+/**
+ * RAW exact subset-name match: does a loaded font's `candidate` name denote the
+ * very SAME embedded subset as the run's `/BaseFont` `target`? Compares the FULL
+ * names (subset prefix INCLUDED, leading "/" stripped, case-insensitive). A raw
+ * hit means `candidate` IS the exact subset that painted the run → identical
+ * glyph metrics AND full coverage, so it is preferred over the family+coverage
+ * heuristic. Deliberately does NOT strip the `ABCDEF+` subset prefix: two
+ * DISJOINT subsets of the same `/BaseFont` ("ABCDEF+X" vs "GHIJKL+X") would then
+ * collide and the wrong one would render tofu — that ambiguous case is left to
+ * the coverage heuristic. Empty names never match.
+ */
+function isExactSubsetName(candidate: string, target: string): boolean {
+  const a = candidate.replace(/^\//, '').trim().toLowerCase();
+  const b = target.replace(/^\//, '').trim().toLowerCase();
+  return a.length > 0 && a === b;
+}
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 function buildFontFaceName(documentId: string, fontId: string): string {
@@ -876,6 +893,23 @@ export function useEmbeddedFonts(opts: UseEmbeddedFontsOptions): UseEmbeddedFont
       if (!target) return null;
 
       const loaded = fonts.filter((f) => f.status === 'loaded');
+
+      // EXACT EMBEDDED SUBSET (font-fidelity fast path). `originalName` here is the
+      // run's real `/BaseFont` (subset prefix kept, e.g. "ABCDEF+TimesNewRomanPSMT",
+      // wired from the engine via TextStyle.originalFont). When a loaded FontFace
+      // advertises that exact name, it IS the subset that painted the run → exact
+      // metrics + full coverage. Resolve it BEFORE the family + cmap-coverage
+      // heuristic (which only refines among AMBIGUOUS same-family subsets). Applies
+      // to BOTH the variant-aware and the loose call, so resolveTextFont marks the
+      // result `usingEmbeddedFont` (no synthetic weight/style, no width fit).
+      const exactSubset = loaded.find((f) => {
+        const names = [f.metadata.originalName, f.metadata.postscriptName];
+        return names.some(
+          (n) => typeof n === 'string' && isExactSubsetName(n, originalName),
+        );
+      });
+      if (exactSubset) return exactSubset.fontFaceName;
+
       // Family name (loose) match against a candidate's normalised name.
       const familyHit = (candidate: string): boolean => {
         const norm = normaliseFontName(candidate);

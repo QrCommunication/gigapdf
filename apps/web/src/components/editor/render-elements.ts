@@ -306,6 +306,45 @@ function resolveTextFont(
   };
 }
 
+/**
+ * BOUNDED horizontal fit for FALLBACK-font text ONLY. The lib gives the real
+ * target advance width (`bounds.width`). When the resolved font is the EXACT
+ * embedded subset (`usingEmbeddedFont === true`) the glyph metrics already match
+ * the original, so NO scaleX is applied (squashing exact text is the bug the
+ * product directive forbids). When the resolved font is a loose/CSS FALLBACK its
+ * substitute metrics can render WIDER than the original and overlap the next run;
+ * shrink the object with a scaleX clamped to [0.92, 1] — enough to absorb the
+ * metric drift WITHOUT a visible squash, and NEVER expanding (ratio ≥ 1 ⇒
+ * untouched).
+ *
+ * A Fabric `Textbox` reports its FIXED box width here (it wraps rather than
+ * overflowing), so `measured === target` ⇒ this is naturally inert for grouped
+ * paragraphs — only single-line `IText` (whose `.width` is the measured content
+ * advance) is ever scaled. The chosen scaleX is self-inverting through the save
+ * path's `width * scaleX` bake (the persisted width stays ≈ `bounds.width`), so
+ * the place → save → reload round-trip does not drift.
+ *
+ * @returns the applied scaleX (1 when untouched) — exposed for unit assertions.
+ */
+export function applyFallbackWidthFit(
+  obj: { width?: number; set: (patch: { scaleX: number }) => void },
+  targetWidth: number,
+  usingEmbeddedFont: boolean,
+): number {
+  if (usingEmbeddedFont) return 1;
+  const measured = obj.width ?? 0;
+  if (measured <= 0 || targetWidth <= 0 || measured <= targetWidth) return 1;
+  const scaleX = Math.max(0.92, Math.min(1, targetWidth / measured));
+  obj.set({ scaleX });
+  return scaleX;
+}
+
+/** Strip a 6-letter `ABCDEF+` PDF subset prefix so two disjoint subsets of the
+ *  same `/BaseFont` compare equal (paragraph-grouping identity). */
+function stripSubsetPrefix(name: string): string {
+  return name.replace(/^[A-Z]{6}\+/, "");
+}
+
 // ---------------------------------------------------------------------------
 // Form-field overlay helpers (purs)
 // ---------------------------------------------------------------------------
@@ -472,7 +511,16 @@ function sameParagraphStyle(a: TextRun, b: TextRun): boolean {
   const ratio = fsA > fsB ? fsA / fsB : fsB / fsA;
   if (ratio > 1.1) return false; // sizes differ by more than 10%
   if ((a.style.fontFamily || "") !== (b.style.fontFamily || "")) return false;
-  if ((a.style.originalFont || "") !== (b.style.originalFont || "")) return false;
+  // `originalFont` now carries the exact `/BaseFont` (subset prefix kept). Two
+  // lines of one paragraph routinely use DIFFERENT subsets of the SAME font
+  // ("ABCDEF+Times…" vs "GHIJKL+Times…"), so compare with the subset prefix
+  // stripped — otherwise the same paragraph would never coalesce (regression).
+  if (
+    stripSubsetPrefix(a.style.originalFont || "") !==
+    stripSubsetPrefix(b.style.originalFont || "")
+  ) {
+    return false;
+  }
   if (colourKeyOf(a) !== colourKeyOf(b)) return false;
   if ((a.style.fontWeight || "normal") !== (b.style.fontWeight || "normal")) {
     return false;
@@ -1036,13 +1084,14 @@ export async function renderElementsOverlay(
           cornerSize: 8,
           transparentCorners: false,
         });
-        // No anti-overflow scaleX fit. Per the user directive ("use the embedded
-        // font, no scaleX that squashes the text"), the run keeps its NATURAL
-        // width. With the embedded PDF font resolved (the common case) the real
-        // metrics already make the text fit its bounds. If a font truly fails to
-        // load, the fallback may render slightly wider than bounds.width and
-        // overflow a little — that is the accepted trade-off over squashing the
-        // glyphs horizontally.
+        // BOUNDED anti-overflow fit — FALLBACK fonts ONLY. With the exact embedded
+        // subset resolved (the common case, `usingEmbeddedFont`) the real metrics
+        // already fit, so NO scaleX (squashing exact text is forbidden). When a
+        // loose/CSS fallback is used its metrics can render wider than the original
+        // and overlap the next run: shrink with a scaleX clamped to [0.92, 1] —
+        // absorbs the drift without a visible squash, never expands. The lib's
+        // `bounds.width` is the real target advance width.
+        applyFallbackWidthFit(textObj, textElement.bounds.width, _usingEmbeddedFont);
         (textObj as FabricObjectWithData).data = {
           elementId: textElement.elementId,
           type: "text",
@@ -1861,6 +1910,12 @@ export async function renderElementsOverlay(
       cornerSize: 8,
       transparentCorners: false,
     });
+
+    // Same BOUNDED fallback-only fit as the per-run IText branch. A Textbox keeps
+    // its FIXED box width (it wraps, never overflows horizontally), so this is
+    // inert for paragraphs that resolve a font — it exists for parity and to guard
+    // the rare single-line coalesced block rendered with a fallback font.
+    applyFallbackWidthFit(tb, blockWidth, usingEmbeddedFont);
 
     const paragraphRuns: ParagraphRun[] = runs.map((r) => ({
       elementId: r.elementId,

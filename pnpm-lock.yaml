@@ -615,7 +615,7 @@ importers:
         version: link:../types
       '@qrcommunication/gigapdf-lib':
         specifier: latest
-        version: 0.105.0
+        version: 0.106.0
       fabric:
         specifier: ^7.4.0
         version: 7.4.0
@@ -783,7 +783,7 @@ importers:
         version: link:../types
       '@qrcommunication/gigapdf-lib':
         specifier: latest
-        version: 0.105.0
+        version: 0.106.0
       gigapdf-lib-ocr:
         specifier: npm:@qrcommunication/gigapdf-lib@0.63.0
         version: '@qrcommunication/gigapdf-lib@0.63.0'
@@ -2668,8 +2668,8 @@ packages:
       react: 19.2.7
       react-dom: 19.2.7
 
-  '@qrcommunication/gigapdf-lib@0.105.0':
-    resolution: {integrity: sha512-Gw2nbJYgQ0tCXaGcIBBrHZ7wJrH/1f52gsKejaW2AOMQApDEbKJx4qxKbxv9pOJxPIg7x3sq2wAWng2ftvyHEA==}
+  '@qrcommunication/gigapdf-lib@0.106.0':
+    resolution: {integrity: sha512-4yPioBBoJ5xRBUqPCyldNn/2L6nm8uavx/p402XJlsZshg0k00i9Cshxp9J2nXzfmk1HSQjKFVx4n2SjffqniQ==}
     engines: {node: '>=18.17.0'}
 
   '@qrcommunication/gigapdf-lib@0.63.0':
@@ -10750,7 +10750,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react-dom'
 
-  '@qrcommunication/gigapdf-lib@0.105.0': {}
+  '@qrcommunication/gigapdf-lib@0.106.0': {}
 
   '@qrcommunication/gigapdf-lib@0.63.0': {}
 

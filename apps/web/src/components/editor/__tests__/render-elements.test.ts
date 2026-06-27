@@ -15,6 +15,7 @@ import { describe, it, expect, vi } from "vitest";
 import type { Element, PageBlockGroup } from "@giga-pdf/types";
 import {
   renderElementsOverlay,
+  applyFallbackWidthFit,
   groupTextRunsIntoParagraphs,
   pageBlockGroupsToParagraphs,
   pageBlockGroupsToTablesAndLists,
@@ -311,12 +312,13 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     expect((it_.data as Record<string, unknown>).usingEmbeddedFont).toBe(false);
   });
 
-  it("does NOT squash text with scaleX when the fallback font overflows its bounds", async () => {
-    // User directive: never apply a cosmetic anti-overflow scaleX. Even when the
-    // fallback font measures wider than bounds.width, the run keeps its natural
-    // width (no scaleX < 1), accepting a slight overflow over a horizontal squash.
+  it("applies a BOUNDED anti-overflow scaleX for a FALLBACK font that overflows", async () => {
+    // A loose/CSS fallback can measure wider than the run's real advance width;
+    // a BOUNDED scaleX (floor 0.92) absorbs the metric drift to stop overlap,
+    // without squashing the glyphs below 0.92 (a large overflow is left slightly
+    // over rather than crushed).
     const canvas = makeCanvas();
-    // IText mock that reports a measured width far beyond the 100px bounds.
+    // IText mock reporting a measured width far beyond the 100px bounds.
     class WideIText extends IText {
       width = 250;
     }
@@ -325,15 +327,38 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
       IText: WideIText,
     } as unknown as typeof import("fabric");
     await renderElementsOverlay(canvas, [textElement()], wideFabric, {
-      getFontFaceName: () => null,
+      getFontFaceName: () => null, // no embedded match → CSS fallback
     });
 
     const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
       (o) => o instanceof WideIText,
     ) as WideIText;
-    // No cosmetic flag is stamped anymore, and scaleX is never set to a squeeze.
-    expect((it_.data as Record<string, unknown>).cosmeticScaleX).toBeUndefined();
-    expect(it_.opts.scaleX).toBeUndefined();
+    // 100/250 = 0.4 < floor → clamped to the 0.92 floor (never crushed further).
+    expect(it_.opts.scaleX).toBeCloseTo(0.92, 5);
+    expect((it_.data as Record<string, unknown>).usingEmbeddedFont).toBe(false);
+  });
+
+  it("applies NO scaleX for an EXACT embedded font even when it measures wide", async () => {
+    // With the exact embedded subset resolved (usingEmbeddedFont) the metrics are
+    // trusted: NEVER squash exact text, even if the mock reports a wide measure.
+    const canvas = makeCanvas();
+    class WideIText extends IText {
+      width = 250;
+    }
+    const wideFabric = {
+      ...fabricMock,
+      IText: WideIText,
+    } as unknown as typeof import("fabric");
+    await renderElementsOverlay(canvas, [textElement()], wideFabric, {
+      // Exact subset resolves → resolveTextFont marks usingEmbeddedFont.
+      getFontFaceName: () => "gigapdf-doc-KWVFOU",
+    });
+
+    const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof WideIText,
+    ) as WideIText;
+    expect(it_.opts.scaleX).toBeUndefined(); // untouched
+    expect((it_.data as Record<string, unknown>).usingEmbeddedFont).toBe(true);
   });
 
   it("renders shapes as TRANSPARENT hit-targets (raster shows the real shape)", async () => {
@@ -1250,6 +1275,79 @@ describe("groupTextRunsIntoParagraphs (pure)", () => {
     ];
     const { paragraphs } = groupTextRunsIntoParagraphs(runs);
     expect(paragraphs).toHaveLength(0);
+  });
+
+  it("groups lines that use DIFFERENT subsets of the SAME /BaseFont (prefix-aware)", () => {
+    // originalFont now carries the exact subset (prefix kept). CERFA-style forms
+    // paint consecutive lines of one paragraph with disjoint subsets of the same
+    // font ("ABCDEF+X" vs "GHIJKL+X"); comparing the RAW originalFont would split
+    // the paragraph. The subset prefix must be stripped so they still coalesce.
+    const runs = [
+      paraRun("a", 100, { style: { originalFont: "ABCDEF+TimesNewRomanPSMT" } }),
+      paraRun("b", 114, { style: { originalFont: "GHIJKL+TimesNewRomanPSMT" } }),
+    ];
+    const { paragraphs } = groupTextRunsIntoParagraphs(runs);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]!.runs.map((r) => r.elementId)).toEqual(["a", "b"]);
+  });
+
+  it("does NOT group lines whose subsets denote DIFFERENT /BaseFonts", () => {
+    const runs = [
+      paraRun("a", 100, { style: { originalFont: "ABCDEF+TimesNewRomanPSMT" } }),
+      paraRun("b", 114, { style: { originalFont: "GHIJKL+ArialMT" } }),
+    ];
+    const { paragraphs } = groupTextRunsIntoParagraphs(runs);
+    expect(paragraphs).toHaveLength(0);
+  });
+});
+
+describe("applyFallbackWidthFit (pure)", () => {
+  function fitObj(width: number) {
+    const obj = {
+      width,
+      scaleX: 1,
+      set(patch: { scaleX: number }) {
+        this.scaleX = patch.scaleX;
+      },
+    };
+    return obj;
+  }
+
+  it("applies a BOUNDED scaleX for a FALLBACK font that renders wider than bounds", () => {
+    const obj = fitObj(110); // measured 110 vs target 100 → ratio 0.909... clamped
+    const scaleX = applyFallbackWidthFit(obj, 100, /* usingEmbeddedFont */ false);
+    // target/measured = 0.9090… < 0.92 → clamped UP to the 0.92 floor.
+    expect(scaleX).toBeCloseTo(0.92, 5);
+    expect(obj.scaleX).toBeCloseTo(0.92, 5);
+  });
+
+  it("uses the exact ratio when it sits inside [0.92, 1] (micro-overflow)", () => {
+    const obj = fitObj(105); // 100/105 = 0.952… within bounds
+    const scaleX = applyFallbackWidthFit(obj, 100, false);
+    expect(scaleX).toBeCloseTo(100 / 105, 5);
+    expect(scaleX).toBeGreaterThanOrEqual(0.92);
+    expect(scaleX).toBeLessThanOrEqual(1);
+    expect(obj.scaleX).toBeCloseTo(100 / 105, 5);
+  });
+
+  it("applies NO scaleX for the EXACT embedded font even when wider", () => {
+    const obj = fitObj(140); // would overflow, but exact metrics must be trusted
+    const scaleX = applyFallbackWidthFit(obj, 100, /* usingEmbeddedFont */ true);
+    expect(scaleX).toBe(1);
+    expect(obj.scaleX).toBe(1); // untouched — never squash exact text
+  });
+
+  it("never EXPANDS a fallback that fits (measured ≤ target)", () => {
+    const obj = fitObj(80);
+    const scaleX = applyFallbackWidthFit(obj, 100, false);
+    expect(scaleX).toBe(1);
+    expect(obj.scaleX).toBe(1);
+  });
+
+  it("is a no-op when the measured width is unknown (0/undefined)", () => {
+    const obj = fitObj(0);
+    expect(applyFallbackWidthFit(obj, 100, false)).toBe(1);
+    expect(obj.scaleX).toBe(1);
   });
 });
 

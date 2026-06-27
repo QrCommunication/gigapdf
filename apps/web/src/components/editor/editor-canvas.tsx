@@ -304,6 +304,15 @@ export interface EditorCanvasProps {
     wantVariant?: { bold?: boolean; italic?: boolean },
     text?: string,
   ) => string | null;
+  /**
+   * True while embedded PDF fonts are still loading (the `isLoading` of
+   * `useEmbeddedFonts`). The overlay first renders with FALLBACK metrics; when
+   * this flips false the canvas re-renders the overlay ONCE with the exact
+   * embedded subsets (correct metrics, no overlap) — no repeated flicker. Absent
+   * ⇒ the one-shot is skipped (no regression; navigation still picks up fonts via
+   * the renderElementsOverlay ref bridge).
+   */
+  fontsLoading?: boolean;
   /** Type de forme sélectionné */
   shapeType?: ShapeType;
   /** Type d'annotation sélectionné */
@@ -578,6 +587,7 @@ export function EditorCanvas({
   width = 800,
   height = 600,
   getFontFaceName,
+  fontsLoading = false,
   shapeType = "rectangle",
   annotationType = "highlight",
   fieldType = "text",
@@ -2379,6 +2389,14 @@ export function EditorCanvas({
     [getFontFaceName, applyHideMask],
   );
 
+  // Ref bridge: `loadPage` is memoised with `[]` (stable identity), so its
+  // closure captures the FIRST-render `renderElementsOverlay` — whose embedded
+  // `getFontFaceName` had ZERO fonts loaded. Reading the resolver through this
+  // ref makes every (re)load use the CURRENT resolver instead, so embedded fonts
+  // apply on page navigation (not only on the initial font-finish re-render).
+  const renderElementsOverlayRef = useRef(renderElementsOverlay);
+  renderElementsOverlayRef.current = renderElementsOverlay;
+
   // Charger une page dans le canvas
   const loadPage = useCallback(
     async (pageData: PageObject, fabricModule: typeof import("fabric")) => {
@@ -2463,7 +2481,7 @@ export function EditorCanvas({
             lastKnownBoundsRef.current.set(el.elementId, el.bounds);
           }
         }
-        await renderElementsOverlay(
+        await renderElementsOverlayRef.current(
           canvas,
           pageData.elements,
           fabricModule,
@@ -2493,6 +2511,56 @@ export function EditorCanvas({
       loadPage(page, fabricModule);
     });
   }, [page, loadPage]);
+
+  // Rebuild ONLY the editable overlay (keep the index-0 text-free PDF background
+  // — no re-fetch, no flash) with the CURRENT embedded-font resolver. Used by the
+  // font loading→ready one-shot below to swap fallback metrics for the exact
+  // embedded subsets. Wrapped in begin/endProgrammaticApply so the remove/add
+  // churn fires no scene-graph mutations (no save loop, no history entry).
+  const reRenderOverlayForFonts = useCallback(async () => {
+    const canvas = fabricRef.current;
+    if (!canvas || !page) return;
+    const fabricModule = await import("fabric");
+    beginProgrammaticApply();
+    try {
+      const overlay = canvas
+        .getObjects()
+        .filter(
+          (o) =>
+            (o as { data?: { isPdfBackground?: boolean } }).data
+              ?.isPdfBackground !== true,
+        );
+      for (const o of overlay) canvas.remove(o);
+      if (page.elements && page.elements.length > 0) {
+        await renderElementsOverlay(
+          canvas,
+          page.elements,
+          fabricModule,
+          page.blockGroups,
+        );
+      } else {
+        canvas.renderAll();
+      }
+    } finally {
+      endProgrammaticApply();
+    }
+  }, [page, renderElementsOverlay, beginProgrammaticApply, endProgrammaticApply]);
+
+  // Re-render the overlay EXACTLY ONCE, on the embedded-fonts loading→ready EDGE.
+  // The first loadPage runs before async font loading finishes, so its text
+  // overlay uses FALLBACK metrics; this single corrective pass swaps in the exact
+  // embedded subsets (correct metrics → no overlap). Gating on the true→false
+  // transition (not on `page`) avoids both the per-font-tick flicker and a
+  // redundant pass on plain navigation (handled by the renderElementsOverlay ref
+  // bridge in loadPage).
+  const prevFontsLoadingRef = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    const wasLoading = prevFontsLoadingRef.current;
+    prevFontsLoadingRef.current = fontsLoading;
+    if (wasLoading !== true || fontsLoading) return;
+    if (!fabricRef.current || !page) return;
+    void reRenderOverlayForFonts();
+  }, [fontsLoading, page, reRenderOverlayForFonts]);
 
   // Mettre à jour le zoom (changement venant du store : toolbar, presets,
   // raccourcis, modes fit).

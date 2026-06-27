@@ -45,9 +45,11 @@ const slotTracker = vi.hoisted(() => {
 const poolTracker = vi.hoisted(() => ({
   constructed: 0,
   disposed: 0,
+  replaceCalls: [] as Array<number[] | undefined>,
   reset() {
     this.constructed = 0;
     this.disposed = 0;
+    this.replaceCalls = [];
   },
 }));
 
@@ -60,6 +62,7 @@ vi.mock("../page-slot", async () => {
     page: { pageId: string };
     isActive?: boolean;
     margins?: unknown;
+    bgRevision?: number;
   }) => {
     const id = props.page.pageId;
     ReactMod.useEffect(() => {
@@ -70,6 +73,7 @@ vi.mock("../page-slot", async () => {
       "data-testid": `slot-${id}`,
       "data-active": props.isActive ? "true" : "false",
       "data-margins": JSON.stringify(props.margins ?? null),
+      "data-bg-revision": String(props.bgRevision ?? 0),
     });
   };
   return { PageSlot };
@@ -81,6 +85,9 @@ vi.mock("../lib/page-render-pool", () => {
     disposed = false;
     constructor() {
       poolTracker.constructed += 1;
+    }
+    replaceBytes(_bytes: ArrayBuffer | Uint8Array, changedIndices?: number[]) {
+      poolTracker.replaceCalls.push(changedIndices);
     }
     dispose() {
       if (!this.disposed) {
@@ -152,8 +159,8 @@ function makePages(ids: string[]): PageObject[] {
 
 const NOOP = () => {};
 
-describe("ContinuousPageView — atomic pool swap (identical structure)", () => {
-  it("swaps the pool WITHOUT unmounting the active PageSlot", async () => {
+describe("ContinuousPageView — content bake patch (identical structure)", () => {
+  it("PATCHES the pool in place (no rebuild) and re-rasterises only the baked page", async () => {
     const pages = makePages(["p1", "p2"]);
     const fileA = makePdfFile("a");
 
@@ -173,29 +180,57 @@ describe("ContinuousPageView — atomic pool swap (identical structure)", () => 
       expect(document.querySelector('[data-testid="slot-p1"]')).not.toBeNull(),
     );
     expect(slotTracker.mounts.get("p1")).toBe(1);
+    // Baseline: every page's background revision starts at 0.
+    expect(
+      document.querySelector('[data-testid="slot-p1"]')?.getAttribute(
+        "data-bg-revision",
+      ),
+    ).toBe("0");
+    expect(
+      document.querySelector('[data-testid="slot-p2"]')?.getAttribute(
+        "data-bg-revision",
+      ),
+    ).toBe("0");
 
-    // pdfFile changes (same pages). The swap must build a 2nd pool and dispose
-    // the 1st — never blanking the view.
+    // A CONTENT bake on page index 1 (same structure): a new binary + the baked
+    // index. The view must PATCH the existing pool — never rebuild it.
     const fileB = makePdfFile("b");
     rerender(
       <ContinuousPageView
         pages={pages}
         zoom={1}
         pdfFile={fileB}
+        bakedPageIndices={[1]}
         activePageIndex={0}
         onActivatePage={NOOP}
       />,
     );
 
-    await waitFor(() => expect(poolTracker.constructed).toBe(2));
-    await waitFor(() => expect(poolTracker.disposed).toBe(1));
+    // replaceBytes called once with exactly the baked indices.
+    await waitFor(() => expect(poolTracker.replaceCalls).toHaveLength(1));
+    expect(poolTracker.replaceCalls[0]).toEqual([1]);
 
-    // The crux: the active PageSlot was NEVER unmounted/remounted across the
-    // swap → the editing session is preserved, no `setPool(null)` flash.
+    // No second pool built, nothing disposed → the existing pool (and the active
+    // PageSlot it backs) is preserved.
+    expect(poolTracker.constructed).toBe(1);
+    expect(poolTracker.disposed).toBe(0);
     expect(slotTracker.unmounts.get("p1") ?? 0).toBe(0);
     expect(slotTracker.mounts.get("p1")).toBe(1);
-    // The active slot is still in the DOM after the swap.
-    expect(document.querySelector('[data-testid="slot-p1"]')).not.toBeNull();
+
+    // Only the baked page (p2) had its background revision bumped; the active
+    // page (p1) keeps its bitmap.
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-testid="slot-p2"]')?.getAttribute(
+          "data-bg-revision",
+        ),
+      ).toBe("1"),
+    );
+    expect(
+      document.querySelector('[data-testid="slot-p1"]')?.getAttribute(
+        "data-bg-revision",
+      ),
+    ).toBe("0");
   });
 });
 
