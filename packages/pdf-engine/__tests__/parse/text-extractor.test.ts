@@ -1,7 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import type { TextElement } from '@giga-pdf/types';
-import { extractTextElements } from '../../src/parse/text-extractor';
+import type { TextElementInfo } from '@qrcommunication/gigapdf-lib';
+import { extractTextElements, runToTextElement } from '../../src/parse/text-extractor';
 import { loadFixture, SIMPLE_PDF, MULTI_PAGE_PDF } from '../helpers';
+
+/** Build an engine `TextElementInfo` run for the pure-mapping tests. */
+function makeRun(over: Partial<TextElementInfo> = {}): TextElementInfo {
+  return {
+    index: 0,
+    text: 'Hi',
+    x: 10,
+    y: 700,
+    width: 20,
+    height: 14,
+    fontFamily: 'Times New Roman',
+    baseFont: 'ABCDEF+TimesNewRomanPSMT',
+    bold: false,
+    italic: false,
+    fontSize: 12,
+    color: [0, 0, 0],
+    rotation: 0,
+    direction: 'ltr',
+    ...over,
+  } as TextElementInfo;
+}
 
 // The native engine reads text runs straight from the PDF bytes (no pdfjs);
 // bounds come back in web coordinates (top-left origin) Y-flipped per page.
@@ -97,6 +119,21 @@ describe('extractTextElements (native engine)', () => {
 
     it('page 1 does not contain "Page 2" text', async () => {
       expect(joined(await text(MULTI_PAGE_PDF, 1))).not.toContain('Page 2');
+    });
+  });
+
+  describe('baseFont → style.originalFont wiring (font fidelity)', () => {
+    it('carries the run EXACT /BaseFont (subset prefix kept) in style.originalFont', () => {
+      const el = runToTextElement(makeRun(), 792, 1);
+      // originalFont must be the precise subset name the editor matches the
+      // embedded FontFace against — NOT the collapsed family.
+      expect(el.style.originalFont).toBe('ABCDEF+TimesNewRomanPSMT');
+      expect(el.style.fontFamily).toBe('Times New Roman');
+    });
+
+    it('falls back to the collapsed family when baseFont is empty (Type3)', () => {
+      const el = runToTextElement(makeRun({ baseFont: '' }), 792, 1);
+      expect(el.style.originalFont).toBe('Times New Roman');
     });
   });
 });

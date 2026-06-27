@@ -115,6 +115,8 @@ interface TextRun {
   /** Grouping identity: family + weight + style. */
   fontKey: string;
   fontFamily: string;
+  /** Exact `/BaseFont` (subset prefix kept) — the precise embedded-font key. */
+  baseFont: string;
   bold: boolean;
   italic: boolean;
   fontSize: number;
@@ -209,8 +211,9 @@ function detectAlignment(
 // extractTextElementsByPage — document-level extraction used by parser.ts
 // ---------------------------------------------------------------------------
 
-/** Map one engine text run to an editor `TextElement` (web coordinates). */
-function runToTextElement(run: TextElementInfo, pageHeight: number, pageNumber: number): TextElement {
+/** Map one engine text run to an editor `TextElement` (web coordinates).
+ *  Exported for unit testing the `baseFont` → `style.originalFont` wiring. */
+export function runToTextElement(run: TextElementInfo, pageHeight: number, pageNumber: number): TextElement {
   return {
     // Deterministic id seeded by (page, type, text-run index): parsing the SAME
     // PDF twice yields the SAME elementId — required for cross-session layer
@@ -264,7 +267,14 @@ function runToTextElement(run: TextElementInfo, pageHeight: number, pageNumber: 
       strikethrough: false,
       backgroundColor: null,
       verticalAlign: 'baseline',
-      originalFont: run.fontFamily || null,
+      // FONT-FIDELITY KEY: carry the run's EXACT `/BaseFont` (subset prefix kept,
+      // e.g. "ABCDEF+TimesNewRomanPSMT") resolved in the run's own scope (page or
+      // form XObject), NOT the collapsed `fontFamily` ("Times New Roman"). The
+      // editor's `getFontFaceName` matches this against the embedded FontFace by
+      // exact subset name → the overlay renders with the SAME subset that painted
+      // the run (exact metrics, no overlap). Empty `baseFont` (Type3 fonts) falls
+      // back to the family so resolution still has a key.
+      originalFont: run.baseFont || run.fontFamily || null,
     },
     ocrConfidence: null,
     linkUrl: null,
@@ -354,6 +364,7 @@ export async function extractTextBlocks(
           str: text,
           fontKey: `${run.fontFamily}|${run.bold ? 1 : 0}|${run.italic ? 1 : 0}`,
           fontFamily: run.fontFamily,
+          baseFont: run.baseFont,
           bold: run.bold,
           italic: run.italic,
           fontSize: run.fontSize,
@@ -409,7 +420,9 @@ export async function extractTextBlocks(
               fontStyle: firstRun.italic ? 'italic' : 'normal',
               color: firstRun.color,
               alignment: 'left', // refined below
-              originalFont: firstRun.fontFamily || undefined,
+              // Exact `/BaseFont` (subset) for embedded-font matching; falls back
+              // to the collapsed family for Type3 runs with no `/BaseFont`.
+              originalFont: firstRun.baseFont || firstRun.fontFamily || undefined,
               fontId: normaliseFontId(firstRun.fontFamily) || undefined,
             },
             direction,

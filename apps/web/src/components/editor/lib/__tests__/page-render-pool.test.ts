@@ -160,6 +160,64 @@ describe("PageRenderPool.renderBackground", () => {
   });
 });
 
+describe("PageRenderPool.replaceBytes", () => {
+  it("invalidates only the changed pages' backgrounds, preserving live + free canvases", async () => {
+    const { pool, renderer } = makePool();
+
+    // Populate the background cache for three pages.
+    await pool.renderBackground(0, 2);
+    await pool.renderBackground(1, 2);
+    await pool.renderBackground(2, 2);
+    expect(renderer.renderCalls).toHaveLength(3);
+    expect(renderer.loaded).toBe(1);
+
+    // One live + one recycled canvas — neither must be touched by replaceBytes.
+    await pool.acquire(0, makeEl());
+    await pool.acquire(1, makeEl());
+    pool.release(1);
+    expect(pool.liveCount).toBe(1);
+    expect(pool.freeCount).toBe(1);
+
+    pool.replaceBytes(new Uint8Array([9, 9, 9]), [2]);
+
+    // Canvases are left intact (no re-create, no dispose).
+    expect(pool.liveCount).toBe(1);
+    expect(pool.freeCount).toBe(1);
+
+    // Unchanged pages (0, 1) keep their memoised bitmaps → no re-render.
+    await pool.renderBackground(0, 2);
+    await pool.renderBackground(1, 2);
+    expect(renderer.renderCalls).toHaveLength(3);
+
+    // The changed page (2) was invalidated → re-renders against reloaded bytes.
+    await pool.renderBackground(2, 2);
+    expect(renderer.renderCalls).toHaveLength(4);
+    expect(renderer.renderCalls[3]).toEqual({ page: 3, scale: 2 });
+    // Renderer was disposed + lazily reloaded once for the changed page.
+    expect(renderer.loaded).toBe(2);
+  });
+
+  it("clears the entire background cache when no indices are given", async () => {
+    const { pool, renderer } = makePool();
+    await pool.renderBackground(0, 2);
+    await pool.renderBackground(1, 2);
+    expect(renderer.renderCalls).toHaveLength(2);
+
+    pool.replaceBytes(new Uint8Array([7]));
+
+    // Every page re-renders (whole cache dropped).
+    await pool.renderBackground(0, 2);
+    await pool.renderBackground(1, 2);
+    expect(renderer.renderCalls).toHaveLength(4);
+  });
+
+  it("is a no-op after dispose", () => {
+    const { pool } = makePool();
+    pool.dispose();
+    expect(() => pool.replaceBytes(new Uint8Array([1]), [0])).not.toThrow();
+  });
+});
+
 describe("PageRenderPool.dispose", () => {
   it("disposes live + free canvases and blocks further use", async () => {
     const { pool } = makePool();

@@ -59,6 +59,13 @@ export interface PageSlotProps {
   isActive: boolean;
   /** Shared canvas + background-render pool. */
   pool: PageRenderPool;
+  /**
+   * Background revision for THIS page. Bumped by the continuous view when this
+   * page's content was re-baked, forcing the inactive bitmap to re-rasterise
+   * against the pool's new bytes. Unchanged → the existing bitmap is kept. The
+   * active page renders an EditorCanvas, so it ignores this.
+   */
+  bgRevision?: number;
   /** Document ID (session backend) — forwarded to the active page's EditorCanvas. */
   documentId?: string | null;
   /** Active tool — forwarded to the active page's EditorCanvas (create/select/…). */
@@ -92,6 +99,9 @@ export interface PageSlotProps {
     wantVariant?: { bold?: boolean; italic?: boolean },
     text?: string,
   ) => string | null;
+  /** True while embedded fonts load — forwarded to the active page's EditorCanvas
+   *  so it re-renders the overlay once when fonts become ready. */
+  fontsLoading?: boolean;
   /** Forwarded to the active page's EditorCanvas: shape-tool variant. */
   shapeType?: ShapeType;
   /** Forwarded to the active page's EditorCanvas: annotation-tool variant. */
@@ -158,6 +168,7 @@ function PageSlotImpl({
   isVisible,
   isActive,
   pool,
+  bgRevision = 0,
   documentId,
   tool,
   showRulers = false,
@@ -167,6 +178,7 @@ function PageSlotImpl({
   onMarginsCommit,
   onActivate,
   getFontFaceName,
+  fontsLoading,
   shapeType,
   annotationType,
   fieldKind,
@@ -226,6 +238,7 @@ function PageSlotImpl({
             tool={tool ?? "select"}
             headerFooterActive={headerFooterActive}
             {...(getFontFaceName ? { getFontFaceName } : {})}
+            {...(fontsLoading !== undefined ? { fontsLoading } : {})}
             {...(shapeType !== undefined ? { shapeType } : {})}
             {...(annotationType !== undefined ? { annotationType } : {})}
             {...(fieldKind !== undefined ? { fieldKind } : {})}
@@ -252,6 +265,7 @@ function PageSlotImpl({
             index={index}
             scale={zoom}
             pool={pool}
+            bgRevision={bgRevision}
             {...(onReady ? { onReady } : {})}
             {...(onDispose ? { onDispose } : {})}
           />

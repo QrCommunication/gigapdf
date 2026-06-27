@@ -323,7 +323,8 @@ export interface EditorToolbarProps {
   onPresentationApplied?: (bytes: Uint8Array) => void | Promise<void>;
   /**
    * Word-style running headers & footers turned on for the document. The toggle
-   * button reflects this state. A continuous-view feature only.
+   * button reflects this state. Available in BOTH the continuous and the
+   * single-page view (parity).
    */
   headersFootersEnabled?: boolean;
   /** Toggle Word-style running headers & footers on/off. */
@@ -1604,32 +1605,34 @@ export function EditorToolbar({
         label={tImposition("toolbarLabel")}
         onClick={() => setShowImpositionDialog(true)}
       />
-      {/* Word-style running headers & footers — a continuous-view feature, so
-          the toggle only appears there. The button is active when bands are on;
-          clicking it opens the editor (turning the feature on if it was off). */}
-      {viewMode === "continuous" &&
-        (onToggleHeaderFooterZones ? (
-          // SL2 — the toggle enters/leaves the editable header/footer ZONE mode.
-          <ToolButton
-            icon={<PanelTop size={20} />}
-            label={tHeadersFooters("toolbarLabel")}
-            isActive={headerFooterEditing}
-            onClick={onToggleHeaderFooterZones}
-          />
-        ) : onToggleHeadersFooters ? (
-          // Legacy flat-dialog path (kept when the zone flow isn't wired).
-          <ToolButton
-            icon={<PanelTop size={20} />}
-            label={tHeadersFooters("toolbarLabel")}
-            isActive={headersFootersEnabled}
-            onClick={() => {
-              if (!headersFootersEnabled) {
-                onToggleHeadersFooters();
-              }
-              setShowHeadersFootersDialog(true);
-            }}
-          />
-        ) : null)}
+      {/* Word-style running headers & footers — available in BOTH the
+          continuous AND the single-page view (parity). The editable bands mount
+          on the active sheet in either mode (page.tsx wires <HeaderFooterZone>
+          into the continuous PageSlot overlay and the single-page EditorCanvas
+          overlay alike). The button is active when bands are on; clicking it
+          opens the editor (turning the feature on if it was off). */}
+      {onToggleHeaderFooterZones ? (
+        // SL2 — the toggle enters/leaves the editable header/footer ZONE mode.
+        <ToolButton
+          icon={<PanelTop size={20} />}
+          label={tHeadersFooters("toolbarLabel")}
+          isActive={headerFooterEditing}
+          onClick={onToggleHeaderFooterZones}
+        />
+      ) : onToggleHeadersFooters ? (
+        // Legacy flat-dialog path (kept when the zone flow isn't wired).
+        <ToolButton
+          icon={<PanelTop size={20} />}
+          label={tHeadersFooters("toolbarLabel")}
+          isActive={headersFootersEnabled}
+          onClick={() => {
+            if (!headersFootersEnabled) {
+              onToggleHeadersFooters();
+            }
+            setShowHeadersFootersDialog(true);
+          }}
+        />
+      ) : null}
 
       {/* PDF operation dialogs */}
       <MergeDialog

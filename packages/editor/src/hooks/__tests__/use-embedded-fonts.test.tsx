@@ -435,6 +435,56 @@ describe('useEmbeddedFonts', () => {
     ).toBeNull();
   });
 
+  it('exact_subset: getFontFaceName resolves the EXACT embedded /BaseFont subset, not a loose family sibling', async () => {
+    // Two subsets of the same family are loaded. Calling with the run's EXACT
+    // /BaseFont (the value now wired into TextStyle.originalFont) must return THAT
+    // subset — the precise one that painted the run — rather than the first loose
+    // family match. This is what guarantees exact metrics (no overlap) for a run
+    // that carries its real subset name.
+    const subsets = [
+      { fontId: 'f-first', originalName: 'AAAAAA+Calibri' },
+      { fontId: 'f-exact', originalName: 'ZZZZZZ+Calibri' },
+    ].map((s) => ({
+      fontId: s.fontId,
+      originalName: s.originalName,
+      postscriptName: s.originalName.replace(/^[A-Z]{6}\+/, ''),
+      fontFamily: 'Calibri',
+      subtype: 'TrueType',
+      isEmbedded: true,
+      isSubset: true,
+      format: 'ttf' as const,
+      sizeBytes: 12345,
+    }));
+
+    const fetchFontList = vi.fn().mockResolvedValue({ fonts: subsets });
+    const fetchFontData = vi.fn().mockResolvedValue({
+      dataBase64: bufferToBase64(makeFakeBuffer()),
+      format: 'ttf' as const,
+      mimeType: 'font/ttf',
+    });
+    const cache = makeEmptyCache();
+
+    const { result } = renderHook(() =>
+      useEmbeddedFonts({ documentId: DOCUMENT_ID, fetchFontList, fetchFontData, cache }),
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() =>
+      expect(result.current.fonts.every((f) => f.status === 'loaded')).toBe(true),
+    );
+
+    const name = (id: string) => `gigapdf-${DOCUMENT_ID}-${id}`;
+    // Exact /BaseFont (subset prefix kept) → the matching subset, NOT the first.
+    expect(result.current.getFontFaceName('ZZZZZZ+Calibri')).toBe(name('f-exact'));
+    expect(result.current.getFontFaceName('AAAAAA+Calibri')).toBe(name('f-first'));
+    // Exact match wins even when a variant intent is also passed.
+    expect(
+      result.current.getFontFaceName('ZZZZZZ+Calibri', { bold: false, italic: false }),
+    ).toBe(name('f-exact'));
+    // A bare family (no exact subset) still resolves via the loose path.
+    expect(result.current.getFontFaceName('Calibri')).toBe(name('f-first'));
+  });
+
   // ── Google Fonts fallback ────────────────────────────────────────────────
 
   it('google_fallback: loads a non-embedded font from the Google Fonts proxy', async () => {

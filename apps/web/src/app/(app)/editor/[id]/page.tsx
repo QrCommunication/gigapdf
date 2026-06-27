@@ -488,6 +488,13 @@ export default function EditorPage() {
 
   // Current PDF binary — kept local: File object (resource, not serializable)
   const [currentPdfFile, setCurrentPdfFile] = useState<File | null>(null);
+  // 0-based indices of the pages whose CONTENT was re-baked in the latest
+  // `currentPdfFile` swap (forwarded to the continuous view so it re-rasterises
+  // ONLY those pages instead of every visible page). `null` ⇒ structural change
+  // (rotate / add / delete page / re-parse) ⇒ the continuous view rebuilds.
+  const [bakedPageIndices, setBakedPageIndices] = useState<number[] | null>(
+    null,
+  );
 
   // True while a Word-style header/footer band is being baked onto the PDF —
   // drives the dialog's busy state so the user can't fire overlapping bakes.
@@ -751,7 +758,11 @@ export default function EditorPage() {
   // Dynamically load embedded PDF fonts via FontFace API (backed by IndexedDB cache).
   // Maps originalFont names (like "g_d0_f1") to real CSS font-family names,
   // so Fabric can render text with the SAME font as the PDF background.
-  const { getFontFaceName, fonts: embeddedFonts } = useEmbeddedFonts({
+  const {
+    getFontFaceName,
+    fonts: embeddedFonts,
+    isLoading: fontsLoading,
+  } = useEmbeddedFonts({
     documentId: documentId || "",
     enabled: Boolean(documentId),
     getAuthToken,
@@ -891,10 +902,18 @@ export default function EditorPage() {
   // (Redis still has the user data, scene graph rebuilds via merge on reload).
   const pendingFlushIdsRef = useRef<string[]>([]);
 
-  const updateCurrentPdfFile = useCallback((file: File | null) => {
-    currentPdfFileRef.current = file;
-    setCurrentPdfFile(file);
-  }, []);
+  // `bakedIndices` records which 0-based page indices had their CONTENT re-baked
+  // in this binary swap. Defaults to `null` (structural change / unknown) so
+  // every existing caller keeps the safe "rebuild" semantics; only the content
+  // bake in `getPreparedBlob` passes the precise indices for the fast path.
+  const updateCurrentPdfFile = useCallback(
+    (file: File | null, bakedIndices: number[] | null = null) => {
+      currentPdfFileRef.current = file;
+      setCurrentPdfFile(file);
+      setBakedPageIndices(bakedIndices);
+    },
+    [],
+  );
 
   // Adopt the flattened PDF (Form XObjects inlined by parse-from-s3) as the
   // binary source of truth. Runs once when the flattened file arrives from the
@@ -963,9 +982,22 @@ export default function EditorPage() {
 
       const blob =
         modified instanceof Blob ? modified : new Blob([modified as BlobPart]);
+      // 0-based indices of the pages this bake actually touched (all ops carry a
+      // 1-based pageNumber). Forwarded so the continuous view re-rasterises ONLY
+      // these pages — same structure, no pool rebuild.
+      const bakedIdx = Array.from(
+        new Set(
+          allOps
+            .map((op) =>
+              typeof op.pageNumber === "number" ? op.pageNumber - 1 : -1,
+            )
+            .filter((i) => i >= 0),
+        ),
+      );
       // Update local cache so subsequent ops apply on top of the new binary.
       updateCurrentPdfFile(
         new File([blob], pdfFile.name, { type: "application/pdf" }),
+        bakedIdx,
       );
       // Clear content modifications now that they're baked in.
       setContentModifications([]);
@@ -5393,6 +5425,7 @@ export default function EditorPage() {
               pages={pages}
               zoom={zoom}
               pdfFile={currentPdfFile}
+              bakedPageIndices={bakedPageIndices}
               documentId={documentId}
               tool={activeTool}
               activePageIndex={effectivePageIndex}
@@ -5402,6 +5435,7 @@ export default function EditorPage() {
               margins={pageMargins}
               onMarginsCommit={handleMarginsCommit}
               getFontFaceName={getFontFaceName}
+              fontsLoading={fontsLoading}
               shapeType={shapeType}
               annotationType={annotationType}
               fieldKind={fieldKind}
@@ -5478,6 +5512,7 @@ export default function EditorPage() {
                 page={currentPage}
                 documentId={documentId}
                 getFontFaceName={getFontFaceName}
+                fontsLoading={fontsLoading}
                 tool={activeTool}
                 zoom={zoom}
                 fitMode={fitMode}
@@ -5506,8 +5541,30 @@ export default function EditorPage() {
                 onCanvasReady={setCanvasHandle}
                 onHyperlinkClick={handleHyperlinkClick}
                 onRedactionMarksChanged={setRedactionMarkCount}
+                // Word-like H/F edit mode: when on, the page background raster
+                // EXCLUDES the baked `/GPHF` band so the editable bands below
+                // aren't doubled (parity with the continuous view).
+                headerFooterActive={hfEditMode}
                 overlay={
                   <>
+                    {/* SL2 — Word-like editable running header/footer bands for
+                        the current page (single-page parity with the continuous
+                        view's PageSlot `renderActiveOverlay`). Mounted in the
+                        same page×zoom sheet space as the form-fill overlay; the
+                        background raster already excludes the baked `/GPHF` band
+                        (headerFooterActive), so there is no doubling. The zone is
+                        first-page/odd-even aware via `pageNumber`. */}
+                    {hfEditMode && hfDef ? (
+                      <HeaderFooterZone
+                        def={hfDef}
+                        onChange={handleHfDefChange}
+                        registry={hfRegistryRef.current}
+                        pxPerPt={zoom}
+                        pageNumber={currentPageIndex + 1}
+                        {...(hfZoneLabel ? { zoneLabel: hfZoneLabel } : {})}
+                        onFocusedTextItemChange={handleHfFocusedChange}
+                      />
+                    ) : null}
                     {showFormsPanel &&
                     formsMode === "fill" &&
                     loadedFormFields.length > 0 ? (

@@ -111,7 +111,12 @@ export class PageRenderPool {
   /** Shared renderer (one GigaPdfDoc); created lazily on first background render. */
   private renderer: SharedRenderer | null = null;
   private rendererLoad: Promise<void> | null = null;
-  private readonly pdfBytes: ArrayBuffer | Uint8Array | undefined;
+  /**
+   * Raw PDF bytes backing the shared renderer. Mutable: {@link replaceBytes}
+   * swaps it in place after a content bake so the SAME pool re-rasterises only
+   * the changed pages, without tearing down its live/recycled canvases.
+   */
+  private pdfBytes: ArrayBuffer | Uint8Array | undefined;
 
   /** Memoised page backgrounds keyed by `${index}@${scaleBucket}`. */
   private readonly bgCache = new Map<string, Promise<string>>();
@@ -229,6 +234,63 @@ export class PageRenderPool {
 
     this.bgCache.set(key, pending);
     return pending;
+  }
+
+  /**
+   * Swap the backing PDF bytes in place after a CONTENT bake (same page
+   * structure), so the SAME pool keeps serving — only the changed pages
+   * re-rasterise.
+   *
+   * Unlike rebuilding the pool, this never touches the live canvases or the
+   * free-list (no `<PageSlot>` unmounts, the active page's editing session is
+   * preserved). It:
+   *   1. installs the new `bytes` as the renderer source;
+   *   2. disposes the current renderer/doc and clears the load latch, forcing a
+   *      lazy reload against the new bytes on the next {@link renderBackground};
+   *   3. invalidates the memoised backgrounds ONLY for `changedIndices` (keys
+   *      `${i}@…`) — unchanged pages keep their bitmaps (zero re-raster). When
+   *      `changedIndices` is omitted, the whole background cache is cleared.
+   *
+   * No-op once {@link dispose}d.
+   *
+   * @param bytes Replacement PDF bytes (the freshly-baked binary).
+   * @param changedIndices 0-based indices of the pages whose content changed.
+   */
+  replaceBytes(
+    bytes: ArrayBuffer | Uint8Array,
+    changedIndices?: number[],
+  ): void {
+    if (this.disposed) {
+      return;
+    }
+    this.pdfBytes = bytes;
+
+    // Drop the current renderer + load latch so the next background render
+    // re-opens the document against the NEW bytes (lazy reload). Live canvases
+    // and the free-list are deliberately left intact.
+    try {
+      this.renderer?.dispose();
+    } catch (err) {
+      clientLogger.warn(
+        "[PageRenderPool] renderer dispose during replaceBytes failed:",
+        err,
+      );
+    }
+    this.renderer = null;
+    this.rendererLoad = null;
+
+    if (changedIndices && changedIndices.length > 0) {
+      const changed = new Set(changedIndices);
+      for (const key of Array.from(this.bgCache.keys())) {
+        const at = key.indexOf("@");
+        const idx = Number(at >= 0 ? key.slice(0, at) : key);
+        if (changed.has(idx)) {
+          this.bgCache.delete(key);
+        }
+      }
+    } else {
+      this.bgCache.clear();
+    }
   }
 
   /**

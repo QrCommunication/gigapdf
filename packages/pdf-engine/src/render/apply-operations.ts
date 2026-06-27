@@ -209,7 +209,7 @@ function isValidRunIndex(index: unknown): index is number {
  */
 function styleMatchesRun(
   element: TextElement,
-  run: { fontFamily: string; bold: boolean; italic: boolean; fontSize: number; color: [number, number, number] },
+  run: { fontFamily: string; baseFont?: string; bold: boolean; italic: boolean; fontSize: number; color: [number, number, number] },
 ): boolean {
   const style = element.style;
   if (!style) return false;
@@ -231,11 +231,16 @@ function styleMatchesRun(
   const elementHex = (style.color ?? '').toLowerCase();
   if (elementHex !== runHex) return false;
 
-  // Font family — compare case-insensitively; `originalFont` (the engine-
-  // resolved `/BaseFont`) is the closest match to the run's reported family.
+  // Font family — compare case-insensitively. `originalFont` now carries the
+  // run's EXACT `/BaseFont` (subset prefix kept) for embedded-font fidelity, so
+  // accept a match on EITHER the raw `/BaseFont` the run reports OR the collapsed
+  // family (legacy saved elements / Type3 runs whose `originalFont` is the family).
   const runFamily = run.fontFamily.toLowerCase();
+  const runBaseFont = (run.baseFont ?? '').toLowerCase();
   const elementFamily = (style.originalFont ?? style.fontFamily ?? '').toLowerCase();
-  if (elementFamily !== runFamily) return false;
+  if (elementFamily !== runFamily && (!runBaseFont || elementFamily !== runBaseFont)) {
+    return false;
+  }
 
   return true;
 }
