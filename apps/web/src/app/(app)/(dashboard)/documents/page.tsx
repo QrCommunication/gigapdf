@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { DocumentExplorer, ViewMode } from "@/components/dashboard/document-explorer";
 import { SortField, SortDirection } from "@/components/dashboard/document-table";
 import { BreadcrumbFolder } from "@/components/dashboard/folder-breadcrumb";
-import { Button, Input, Skeleton, useToast } from "@giga-pdf/ui";
+import { Button, Input, Progress, Skeleton, useToast } from "@giga-pdf/ui";
 import {
   Search,
   Upload,
@@ -762,6 +762,16 @@ export default function DocumentsPage() {
     async (files: File[]) => {
       if (files.length === 0) return;
 
+      // Drop-overlay safety net. The explorer's scoped drop zone calls
+      // stopPropagation, so a drop on the listing never bubbles up to the page
+      // onDrop that clears the drag overlay — it would stay stuck on screen.
+      // processFiles is the SINGLE funnel for every import path (page drop,
+      // explorer drop, dialog), so resetting the drag state here (before any
+      // code that could throw) guarantees the full-screen drag overlay always
+      // closes the moment an import starts.
+      dragDepthRef.current = 0;
+      setIsDraggingFiles(false);
+
       setUploading(true);
       setError(null);
       setUploadProgress({ done: 0, total: files.length });
@@ -923,6 +933,14 @@ export default function DocumentsPage() {
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex < navigationHistory.length - 1;
 
+  // Batch upload completion percentage (0–100) for the full-screen import
+  // overlay progress bar. One tick per settled file, so this is per-file
+  // granularity (not bytes transferred).
+  const uploadPercent =
+    uploadProgress && uploadProgress.total > 0
+      ? Math.round((uploadProgress.done / uploadProgress.total) * 100)
+      : 0;
+
   return (
     <div
       className="space-y-4 relative min-h-[calc(100vh-4rem)]"
@@ -956,8 +974,10 @@ export default function DocumentsPage() {
         }
       }}
     >
-      {/* Drop zone overlay — only visible while dragging external files */}
-      {isDraggingFiles && (
+      {/* Drop zone overlay — only while dragging external files AND not yet
+          importing (the upload overlay below takes over the moment an import
+          starts, so the two never coexist). */}
+      {isDraggingFiles && !uploading && (
         <div
           className="fixed inset-0 z-40 flex items-center justify-center bg-primary/10 backdrop-blur-sm border-4 border-dashed border-primary/60 pointer-events-none"
           style={{ pointerEvents: "none" }}
@@ -970,6 +990,34 @@ export default function DocumentsPage() {
                 {t("import.dropHint")}
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload overlay with a real progress bar — visible for the whole
+          import. processFiles' `finally` resets uploading/uploadProgress on
+          success AND error, so this overlay always dismisses on its own. */}
+      {uploading && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+          <div
+            className="bg-background rounded-lg shadow-2xl px-8 py-6 w-[min(90vw,28rem)] space-y-3"
+            aria-live="polite"
+          >
+            <p className="text-lg font-semibold">{t("import.uploading")}</p>
+            {uploadProgress && (
+              <>
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>
+                    {t("import.uploadingProgress", {
+                      done: uploadProgress.done,
+                      total: uploadProgress.total,
+                    })}
+                  </span>
+                  <span>{uploadPercent}%</span>
+                </div>
+                <Progress value={uploadPercent} />
+              </>
+            )}
           </div>
         </div>
       )}
