@@ -5,6 +5,18 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.1] - 2026-06-30
+
+### Fixed — editor text fidelity for standard CFF base fonts (gigapdf-lib 0.110.3)
+
+- **Documents using a CFF/Type1 subset of a standard base font (e.g. `Times-Bold`,
+  as in many CERFA administrative forms) no longer render their static text with
+  collapsed spaces and overlapping letters in the editor** ("DEMANDEDERATTACHEMENT…").
+  The embedded font served to the editor overlay now carries the correct advance
+  widths (read from the CFF `nominalWidthX`/`defaultWidthX`), so words are spaced
+  and glyphs sit correctly. Introduced with the 1.17.0 engine-served fonts; the
+  PDF rendering itself was always correct.
+
 ## [1.17.0] - 2026-06-30
 
 ### Changed — OCR re-architected to a host-side engine (gigapdf-lib 0.110.2)
