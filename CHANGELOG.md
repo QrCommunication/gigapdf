@@ -5,6 +5,27 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-06-30
+
+### Improved
+- **PDF → Office export now produces real flowing documents (engine 0.108.0).**
+  Exporting a PDF to Word, PowerPoint or OpenDocument (`.docx`, `.pptx`, `.odt`,
+  `.odp`) — from both the editor and the document library — now routes through the
+  reconstructed semantic model. The result is genuine flowing `<w:p>` paragraphs
+  with styled runs, real `<w:tbl>` tables, list numbering, multi-column section
+  layout, page margins estimated from the content and real headers/footers,
+  instead of fixed-position VML text boxes whose text was clipped mid-sentence.
+  Adjacent glyph fragments (one per embedded-font subset) are coalesced into clean
+  contiguous styled runs, and a paragraph that overflows from the bottom of one
+  page to the top of the next is stitched back into a single block.
+- **Office import is cleaner.** Word and OpenDocument documents (`.docx`/`.odt`)
+  now import with adjacent visually-identical runs merged into single runs, so a
+  converted file no longer has every word as a separate fragment — much easier to
+  edit and free of spurious font inconsistencies.
+- **Document metadata carried over on export.** The source PDF's title, author,
+  subject and creation/modification dates now flow into the exported Office file's
+  document properties (`docProps/core.xml`, `docProps/app.xml`).
+
 ## [1.14.1] - 2026-06-27
 
 ### Fixed

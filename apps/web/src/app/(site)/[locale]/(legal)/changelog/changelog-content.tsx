@@ -15,6 +15,16 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.15.0",
+    date: "2026-06-30",
+    type: "minor",
+    changes: [
+      { type: "improvement", description: "Export to Office is far more faithful (engine 0.108.0): exporting a PDF to Word, PowerPoint or OpenDocument — from the editor and your document library — now produces a real flowing document with proper paragraphs, styled text, tables, multi-column layout, headers/footers and page margins recovered from the original, instead of fixed-position text boxes that clipped text mid-sentence" },
+      { type: "improvement", description: "Office import is cleaner: Word and OpenDocument files now import with continuous styled text instead of every word becoming a separate fragment, making converted documents much easier to edit" },
+      { type: "improvement", description: "PDF to Office export now carries over the document's metadata (title, author, subject, creation and modification dates)" },
+    ],
+  },
+  {
     version: "1.14.1",
     date: "2026-06-27",
     type: "patch",
