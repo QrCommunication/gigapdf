@@ -1,11 +1,19 @@
 /**
- * OCR via the WASM engine's built-in recognizer (`@qrcommunication/gigapdf-lib`).
+ * Plain-text / hOCR extraction from scanned pages.
  *
- * Native engine path: OCR runs entirely in WebAssembly (offline-trained CNN) —
- * no external binary. Nothing leaves the process.
+ * Host-side OCR: each page is rasterised to a PNG by the main WASM engine
+ * (`renderPage`) and the bitmap is recognised by the native OCR microservice
+ * (see `../ocr-engine`). The service returns recognized lines in image pixel
+ * space; this module joins them for `"text"` output or wraps them as minimal
+ * hOCR for `"hocr"` output. Nothing leaves the host beyond the OCR service.
  */
 
-import { getOcrEngine } from '../wasm-ocr';
+import { getEngine } from '../wasm';
+import { getOcrWords } from '../ocr-engine';
+
+// The OCR service availability probe lives in `../ocr-engine`; re-export it so
+// the public `./parse` surface (and the `/api/pdf/ocr` GET route) is unchanged.
+export { isOcrAvailable } from '../ocr-engine';
 
 export class OcrUnavailableError extends Error {
   constructor() {
@@ -38,11 +46,6 @@ export interface OcrResult {
   fullText: string;
 }
 
-/** The WASM OCR engine is always available (no system dependency). */
-export async function isOcrAvailable(): Promise<boolean> {
-  return true;
-}
-
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 }
@@ -66,9 +69,10 @@ function buildHocr(
 
 export async function ocrPdf(pdfBytes: Uint8Array, options: OcrOptions = {}): Promise<OcrResult> {
   const { pages, dpi = 144, format = 'text' } = options;
+  // Render at >= 2× so glyphs stay large enough for the recogniser even at 72dpi.
   const scale = Math.max(2, dpi / 72);
 
-  const giga = await getOcrEngine();
+  const giga = await getEngine();
   const doc = giga.open(pdfBytes);
   try {
     const totalPages = doc.pageCount();
@@ -76,17 +80,14 @@ export async function ocrPdf(pdfBytes: Uint8Array, options: OcrOptions = {}): Pr
       ? pages.filter((p) => p >= 1 && p <= totalPages)
       : Array.from({ length: totalPages }, (_, i) => i + 1);
 
-    const results: OcrPageResult[] = targetPages.map((pageNumber) => {
-      if (format === 'hocr') {
-        const words = doc.ocr(pageNumber, scale);
-        return {
-          pageNumber,
-          text: words.map((w) => w.text).join(' '),
-          hocr: buildHocr(pageNumber, words),
-        };
-      }
-      return { pageNumber, text: doc.ocrText(pageNumber, scale).trim() };
-    });
+    const results: OcrPageResult[] = [];
+    for (const pageNumber of targetPages) {
+      // Rasterise the page to PNG (main engine) then recognise host-side.
+      const png = doc.renderPage(pageNumber, scale);
+      const words = await getOcrWords(png);
+      const text = words.map((w) => w.text).join('\n').trim();
+      results.push(format === 'hocr' ? { pageNumber, text, hocr: buildHocr(pageNumber, words) } : { pageNumber, text });
+    }
 
     return {
       pages: results,

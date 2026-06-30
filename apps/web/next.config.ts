@@ -74,11 +74,6 @@ const nextConfig: NextConfig = {
     // reads from disk at runtime. Bundling the package would lose the sibling
     // `.wasm`, so keep it external (and trace the wasm — see below).
     "@qrcommunication/gigapdf-lib",
-    // OCR alias (npm:@qrcommunication/gigapdf-lib@0.63.0) ships its own
-    // `gigapdf.wasm` + `.gpocr` model files that Turbopack can't bundle
-    // ("Unknown module type" on `.gpocr`). Keep it external (Node require at
-    // runtime) and trace the wasm + models below for the standalone output.
-    "gigapdf-lib-ocr",
   ],
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
@@ -102,15 +97,9 @@ const nextConfig: NextConfig = {
     // included explicitly for every API route that touches PDFs or Office.
     "/api/pdf/**": [
       "../../node_modules/@qrcommunication/gigapdf-lib/gigapdf.wasm",
-      // OCR engine (external alias): wasm + `.gpocr` models are read from disk
-      // at runtime by loadDefault(), so they must be traced explicitly.
-      "../../node_modules/gigapdf-lib-ocr/gigapdf.wasm",
-      "../../node_modules/gigapdf-lib-ocr/models/*.gpocr",
     ],
     "/api/office/**": [
       "../../node_modules/@qrcommunication/gigapdf-lib/gigapdf.wasm",
-      "../../node_modules/gigapdf-lib-ocr/gigapdf.wasm",
-      "../../node_modules/gigapdf-lib-ocr/models/*.gpocr",
     ],
     // OFL fallback fonts for text bake (apply-elements / watermark): without
     // them resolveFont() falls back to StandardFonts.Helvetica, losing the

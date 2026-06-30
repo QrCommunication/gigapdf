@@ -614,8 +614,8 @@ importers:
         specifier: workspace:*
         version: link:../types
       '@qrcommunication/gigapdf-lib':
-        specifier: 0.109.1
-        version: 0.109.1
+        specifier: 0.110.2
+        version: 0.110.2
       fabric:
         specifier: ^7.4.0
         version: 7.4.0
@@ -782,11 +782,8 @@ importers:
         specifier: workspace:*
         version: link:../types
       '@qrcommunication/gigapdf-lib':
-        specifier: 0.109.1
-        version: 0.109.1
-      gigapdf-lib-ocr:
-        specifier: npm:@qrcommunication/gigapdf-lib@0.63.0
-        version: '@qrcommunication/gigapdf-lib@0.63.0'
+        specifier: 0.110.2
+        version: 0.110.2
     devDependencies:
       '@giga-pdf/eslint-config':
         specifier: workspace:*
@@ -2668,12 +2665,8 @@ packages:
       react: 19.2.7
       react-dom: 19.2.7
 
-  '@qrcommunication/gigapdf-lib@0.109.1':
-    resolution: {integrity: sha512-uBuXJPovkS2M3KudSWzR3uG6SB7OxwueB/kiffiwSzEsw+8VVtmdqYsspHKYIi5TDc3jp8SuO4oT9HsFvQTD2Q==}
-    engines: {node: '>=18.17.0'}
-
-  '@qrcommunication/gigapdf-lib@0.63.0':
-    resolution: {integrity: sha512-L/6pfqwHmb4AvsOyTLELBCIw2D8UwiP9KTkqKCkhlF6P2E6pal5ZuIKCO8Hpc9RpCEuL/aOZthQHZcsuhsFRGQ==}
+  '@qrcommunication/gigapdf-lib@0.110.2':
+    resolution: {integrity: sha512-pZmkVvhzX2fYIHI9T5dgUK/1rKAVargCLOKGpgo3uVSkSpPWfIXgToQ//ZdMgyFJIXGAb4ikq0+bXzjGn8T/wg==}
     engines: {node: '>=18.17.0'}
 
   '@radix-ui/number@1.1.2':
@@ -10762,9 +10755,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react-dom'
 
-  '@qrcommunication/gigapdf-lib@0.109.1': {}
-
-  '@qrcommunication/gigapdf-lib@0.63.0': {}
+  '@qrcommunication/gigapdf-lib@0.110.2': {}
 
   '@radix-ui/number@1.1.2': {}
 
@@ -11484,7 +11475,9 @@ snapshots:
       metro-runtime: 0.84.4
     transitivePeerDependencies:
       - '@babel/core'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-color@2.1.0': {}
 

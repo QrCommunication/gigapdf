@@ -6,8 +6,17 @@
  * layer → extractPlainText round-trip) is gated only on the presence of the
  * sample PDF — the OCR engine is always available (offline WASM, no binary).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
+
+// Recognition is host-side (HTTP OCR microservice). Stub the OCR client so the
+// pipeline wiring is exercised without a running service: real engine
+// rasterisation + text-layer baking, deterministic (empty) recognition. The
+// real `scriptTokensToOcrModel` is preserved via `importOriginal`.
+vi.mock('../../src/ocr-engine', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/ocr-engine')>();
+  return { ...actual, getOcrWords: vi.fn(async () => []) };
+});
 import { join } from 'node:path';
 import { getEngine } from '../../src/wasm';
 import {

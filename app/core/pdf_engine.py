@@ -7,8 +7,9 @@ Main PDF engine.
 # All PDF rendering, page manipulation, and editing operations are now
 # handled by the TypeScript pdf-engine package at packages/pdf-engine.
 #
-# Python only retains: OCR (pytesseract), Celery workers, FastAPI endpoints
-# that do NOT perform PDF processing.
+# Python only retains: OCR block ingestion (store_ocr_blocks; OCR itself is
+# performed by the host-side gigapdf-ocr-rten service, not this backend),
+# Celery workers, FastAPI endpoints that do NOT perform PDF processing.
 #
 # TODO: Route all PDF manipulation calls to the TS engine via HTTP.
 """

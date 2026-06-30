@@ -34,6 +34,11 @@ export type { TextBlock } from './parse/text-extractor';
 export { extractImages } from './parse/image-extractor';
 export type { ExtractedImage, ExtractImagesOptions } from './parse/image-extractor';
 
+// Fonts — embedded-font extraction for the editor overlay (engine-backed, no
+// external font tooling). Replaces the legacy pikepdf/fontTools backend path.
+export { listDocumentFonts, getDocumentFont } from './fonts/extract-fonts';
+export type { ExtractedFontMeta, ExtractedFontBinary } from './fonts/extract-fonts';
+
 // Render
 export {
   addText,
@@ -127,11 +132,12 @@ export type {
   PageBlockGroup,
 } from './parse';
 
-// Re-export the OCR script identifiers from the engine library so callers
-// (API route validation, UI script picker) have a single source of truth for
-// the set of writing systems the bundled OCR models cover.
-export { ALL_OCR_SCRIPTS } from 'gigapdf-lib-ocr';
-export type { OcrScript } from 'gigapdf-lib-ocr';
+// OCR recognizer vocabulary — host-side OCR service model names. Replaces the
+// former engine-bundled `ALL_OCR_SCRIPTS` / `OcrScript` (removed with the WASM
+// recognizer). Callers (API route validation, UI script picker) use this as the
+// single source of truth for the writing systems the OCR service covers.
+export { OCR_LANGUAGES, listOcrLanguages } from './parse';
+export type { OcrLanguage, NativeOcrWord } from './parse';
 
 // Model ops — native paragraph/list formatting bake via the unified model
 // (`toModel` → `applyModelOps` → `modelToPdf`). The flat-index ↔ BlockAddr

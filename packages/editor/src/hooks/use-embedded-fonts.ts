@@ -405,7 +405,7 @@ async function defaultFetchFontList(
   const token = getToken ? await Promise.resolve(getToken()) : null;
   const headers: HeadersInit = { Accept: 'application/json' };
   if (token) (headers as Record<string, string>).Authorization = `Bearer ${token}`;
-  const response = await fetch(`/api/v1/pdf/fonts/${encodeURIComponent(documentId)}`, {
+  const response = await fetch(`/api/pdf/fonts/${encodeURIComponent(documentId)}`, {
     headers,
     credentials: 'include',
   });
@@ -437,7 +437,7 @@ async function defaultFetchFontData(
   const headers: HeadersInit = { Accept: 'application/json' };
   if (token) (headers as Record<string, string>).Authorization = `Bearer ${token}`;
   const response = await fetch(
-    `/api/v1/pdf/fonts/${encodeURIComponent(documentId)}/${encodeURIComponent(fontId)}`,
+    `/api/pdf/fonts/${encodeURIComponent(documentId)}/${encodeURIComponent(fontId)}`,
     { headers, credentials: 'include' },
   );
   if (!response.ok) {

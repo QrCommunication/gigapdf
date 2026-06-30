@@ -12,12 +12,13 @@
  *
  * Pipeline (offline, fully in the WASM engine):
  *   1. Select pages WITHOUT extractable text (or every page with `force`).
- *   2. Load the bundled per-script OCR models once (shared with the searchable
- *      pipeline via {@link ensureOcrModels}).
+ *   2. Map the requested scripts to a single forced OCR-service recognizer
+ *      (shared logic with the searchable pipeline via `scriptTokensToOcrModel`).
  *   3. For each page:
- *        a. `renderPage` → PNG → `decodePng` → raw RGBA at the OCR scale, so the
- *           image pixels align 1:1 with the OCR word boxes.
- *        b. `ocr` → word boxes (image pixels, top-left origin, y down).
+ *        a. `renderPage` → PNG (POST-rotation). The SAME PNG feeds OCR and
+ *           background sampling, so image pixels align 1:1 with the word boxes.
+ *        b. `getOcrWords(png)` → word boxes (image pixels, top-left origin, y
+ *           down) from the host OCR microservice.
  *        c. Group words into LINES (fewer, cleaner masks than per-word; the fill
  *           stays homogeneous over a whole line).
  *        d. For each line: sample the local background colour from the RGBA ring
@@ -32,12 +33,12 @@
  * same page, so the content-stream paint order is [scan] → [masks] → [text].
  */
 
-import type { GigaPdfEngine, OcrWord } from 'gigapdf-lib-ocr';
-import { getOcrEngine } from '../wasm-ocr';
+import type { GigaPdfEngine } from '@qrcommunication/gigapdf-lib';
+import { getEngine } from '../wasm';
+import { getOcrWords, scriptTokensToOcrModel, type NativeOcrWord } from '../ocr-engine';
 import { engineLogger } from '../utils/logger';
 import { extractPlainText } from './structured-text';
 import {
-  ensureOcrModels,
   filterPagesByRange,
   ocrWordToPdfPlacement,
   type MakeSearchablePdfOptions,
@@ -159,7 +160,7 @@ export function sampleBackgroundColor(
  * robust left-to-right clustering used by the OCR-blocks extractor. Empty words
  * are dropped. Each returned line keeps its words in left-to-right order.
  */
-function groupWordsIntoLines(words: OcrWord[]): OcrWord[][] {
+function groupWordsIntoLines(words: NativeOcrWord[]): NativeOcrWord[][] {
   const nonEmpty = words.filter((w) => w.text.trim().length > 0);
   if (nonEmpty.length === 0) return [];
 
@@ -169,7 +170,7 @@ function groupWordsIntoLines(words: OcrWord[]): OcrWord[][] {
 
   const sorted = [...nonEmpty].sort((a, b) => a.y - b.y || a.x - b.x);
 
-  const lines: OcrWord[][] = [];
+  const lines: NativeOcrWord[][] = [];
   for (const word of sorted) {
     const centreY = word.y + word.h / 2;
     const line = lines.find((group) => {
@@ -183,7 +184,7 @@ function groupWordsIntoLines(words: OcrWord[]): OcrWord[][] {
 }
 
 /** The union pixel bbox of a non-empty list of OCR words. */
-function unionWordBox(line: OcrWord[]): OcrWordBox {
+function unionWordBox(line: NativeOcrWord[]): OcrWordBox {
   const left = Math.min(...line.map((w) => w.x));
   const top = Math.min(...line.map((w) => w.y));
   const right = Math.max(...line.map((w) => w.x + w.w));
@@ -218,8 +219,8 @@ export async function makeEditableOcrPdf(
   }
 
   const scale = dpi / 72;
-  const giga = await getOcrEngine();
-  await ensureOcrModels(giga, options.languages, options.handwriting);
+  const model = scriptTokensToOcrModel(options.languages, options.handwriting);
+  const giga = await getEngine();
   const doc = giga.open(pdfBytes);
 
   let pagesProcessed = 0;
@@ -243,15 +244,18 @@ export async function makeEditableOcrPdf(
         rotation,
       };
 
-      const words = doc.ocr(pageNumber, scale);
+      // Rasterise once (POST-rotation): the SAME PNG feeds OCR recognition and
+      // the background sampling, so image pixels align 1:1 with the word boxes.
+      const png = doc.renderPage(pageNumber, scale);
+      const words = await getOcrWords(png, model ? { model } : {});
       pagesProcessed += 1;
 
       const lines = groupWordsIntoLines(words);
       if (lines.length === 0) continue;
 
-      // Decode the rendered page ONCE so we can sample backgrounds in pixels.
+      // Decode the rendered page so we can sample backgrounds in pixels.
       // A decode failure is non-fatal: masks then fall back to white.
-      const background = decodePage(giga, doc.renderPage(pageNumber, scale));
+      const background = decodePage(giga, png);
 
       // 2a. Paint a background mask per line (BEFORE the text, so text is on top).
       for (const line of lines) {

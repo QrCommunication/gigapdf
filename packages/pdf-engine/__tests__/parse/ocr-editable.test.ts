@@ -147,8 +147,7 @@ describe('makeEditableOcrPdf — mask + text wiring (mocked)', () => {
 
     const doc = {
       pageInfo: vi.fn(() => ({ width: 600, height: 800, rotation: 0 })),
-      ocr: vi.fn(() => words),
-      // A 1200×1600 RGBA buffer (scale 2) so decodePng/sampling has real pixels.
+      // A PNG placeholder feeds BOTH getOcrWords (mocked) and decodePng (mocked).
       renderPage: vi.fn(() => new Uint8Array([1, 2, 3])),
       addRectangle,
       addTextLayer,
@@ -164,14 +163,17 @@ describe('makeEditableOcrPdf — mask + text wiring (mocked)', () => {
         height: 1600,
         rgba: new Uint8Array(1200 * 1600 * 4).fill(0xe0),
       })),
-      loadAllBundledOcrModels: vi.fn(async () => 0),
-      loadBundledOcrModels: vi.fn(async () => []),
     };
 
-    // ocr-editable.ts loads the dedicated OCR engine from `../wasm-ocr`
-    // (getOcrEngine), not the main `../wasm` engine — mock that module so the
-    // real gigapdf-lib-ocr is never opened on the dummy bytes below.
-    vi.doMock('../../src/wasm-ocr', () => ({ getOcrEngine: vi.fn(async () => engine) }));
+    // Recognition is host-side now: mock the main engine (`../wasm`) and the OCR
+    // client (`../ocr-engine`) so neither the real WASM engine nor the OCR
+    // service is touched on the dummy bytes below. `scriptTokensToOcrModel` is
+    // kept real via importOriginal.
+    vi.doMock('../../src/wasm', () => ({ getEngine: vi.fn(async () => engine) }));
+    vi.doMock('../../src/ocr-engine', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../../src/ocr-engine')>();
+      return { ...actual, getOcrWords: vi.fn(async () => words) };
+    });
     // The page has NO extractable text → it is selected for OCR.
     vi.doMock('../../src/parse/structured-text', () => ({
       extractPlainText: vi.fn(async () => [{ pageNumber: 1, text: '' }]),
@@ -211,7 +213,6 @@ describe('makeEditableOcrPdf — mask + text wiring (mocked)', () => {
 
     const doc = {
       pageInfo: vi.fn(() => ({ width: 600, height: 800, rotation: 0 })),
-      ocr: vi.fn(() => words),
       renderPage: vi.fn(() => new Uint8Array([0])),
       addRectangle,
       addTextLayer: vi.fn(() => 1),
@@ -221,11 +222,13 @@ describe('makeEditableOcrPdf — mask + text wiring (mocked)', () => {
     const engine = {
       open: vi.fn(() => doc),
       decodePng: vi.fn(() => null), // decode failure → white fallback
-      loadAllBundledOcrModels: vi.fn(async () => 0),
-      loadBundledOcrModels: vi.fn(async () => []),
     };
 
-    vi.doMock('../../src/wasm-ocr', () => ({ getOcrEngine: vi.fn(async () => engine) }));
+    vi.doMock('../../src/wasm', () => ({ getEngine: vi.fn(async () => engine) }));
+    vi.doMock('../../src/ocr-engine', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../../src/ocr-engine')>();
+      return { ...actual, getOcrWords: vi.fn(async () => words) };
+    });
     vi.doMock('../../src/parse/structured-text', () => ({
       extractPlainText: vi.fn(async () => [{ pageNumber: 1, text: '' }]),
     }));

@@ -1,0 +1,35 @@
+[Unit]
+Description=GigaPDF OCR Engine (gigapdf-ocr-rten — PaddleOCR PP-OCR via RTen, host-side)
+After=network.target
+
+[Service]
+Type=simple
+User=gigapdf
+Group=gigapdf
+WorkingDirectory=/opt/gigapdf
+EnvironmentFile=/opt/gigapdf/.env
+# The binary reads OCR_MODELS_DIR + OCR_BIND from the environment (.env). It loads
+# the ~250 MB of PaddleOCR .rten models ONCE at boot, then serves recognition over
+# the local HTTP endpoint the Next.js web app calls (OCR_SERVICE_URL).
+ExecStart=/opt/gigapdf/bin/ocr_serve
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=300
+StandardOutput=append:/var/log/gigapdf/ocr.log
+StandardError=append:/var/log/gigapdf/ocr-error.log
+
+# OCR holds the 14-language ONNX model set resident in memory.
+MemoryHigh=2G
+MemoryMax=3G
+
+# Security — same hardening as the other units; needs the binary (under /opt/gigapdf)
+# and the models dir (under /var/lib/gigapdf) readable, and a log dir writable.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/gigapdf /var/lib/gigapdf /var/log/gigapdf
+
+[Install]
+WantedBy=multi-user.target

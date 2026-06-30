@@ -243,10 +243,57 @@ sudo chmod 640 "\$VPS_PATH/.env"
 # "cannot open '.git/FETCH_HEAD': Permission denied".
 sudo chown -R ubuntu:ubuntu "\$VPS_PATH/.git" 2>/dev/null || true
 
+# ── 2.10b Fetch host-side OCR engine (gigapdf-ocr-rten binary + .rten models) ──
+# Recognition runs in the gigapdf-ocr service (PaddleOCR PP-OCR via RTen). The
+# prebuilt x86_64 binary + the 14-language model set ship as the lib's
+# "ocr-rten-v1" release asset (kept out of git). Idempotent: a SHA marker skips
+# the ~250MB re-download when nothing changed.
+section "Fetching OCR engine (gigapdf-ocr-rten)"
+OCR_REL="https://github.com/QrCommunication/gigapdf-lib/releases/download/ocr-rten-v1"
+OCR_BIN="\$VPS_PATH/bin/ocr_serve"
+OCR_MODELS_ROOT="/var/lib/gigapdf/rten-models"
+sudo mkdir -p "\$VPS_PATH/bin" "\$OCR_MODELS_ROOT"
+OCR_TMP=\$(mktemp -d)
+if curl -fsSL -o "\$OCR_TMP/gigapdf-ocr.sha256" "\$OCR_REL/gigapdf-ocr.sha256"; then
+  NEWSHA=\$(grep "gigapdf-ocr-models.tar.gz" "\$OCR_TMP/gigapdf-ocr.sha256" | awk '{print \$1}')
+  MARKER="\$OCR_MODELS_ROOT/.asset-sha"
+  if [ ! -x "\$OCR_BIN" ] || [ ! -d "\$OCR_MODELS_ROOT/models" ] || [ "\$(cat "\$MARKER" 2>/dev/null)" != "\$NEWSHA" ]; then
+    echo "  fetching OCR binary + 14-language models (~250MB) …"
+    curl -fsSL -o "\$OCR_TMP/ocr_serve" "\$OCR_REL/ocr_serve"
+    curl -fsSL -o "\$OCR_TMP/gigapdf-ocr-models.tar.gz" "\$OCR_REL/gigapdf-ocr-models.tar.gz"
+    ( cd "\$OCR_TMP" && sha256sum -c gigapdf-ocr.sha256 )
+    sudo install -m 0755 -o gigapdf -g gigapdf "\$OCR_TMP/ocr_serve" "\$OCR_BIN"
+    sudo rm -rf "\$OCR_MODELS_ROOT/models"
+    sudo tar xzf "\$OCR_TMP/gigapdf-ocr-models.tar.gz" -C "\$OCR_MODELS_ROOT"
+    sudo chown -R gigapdf:gigapdf "\$OCR_MODELS_ROOT"
+    echo "\$NEWSHA" | sudo tee "\$MARKER" >/dev/null
+    echo "  ✓ OCR engine updated"
+  else
+    echo "  ✓ OCR engine up-to-date — skipping ~250MB fetch"
+  fi
+else
+  echo "  ⚠ could not reach OCR release asset — leaving existing OCR engine in place"
+fi
+rm -rf "\$OCR_TMP"
+# Upsert the OCR env keys into .env (idempotent — never duplicates a key).
+for kv in "OCR_MODELS_DIR=/var/lib/gigapdf/rten-models/models" "OCR_BIND=127.0.0.1:8077" "OCR_SERVICE_URL=http://127.0.0.1:8077"; do
+  k="\${kv%%=*}"
+  sudo grep -q "^\$k=" "\$VPS_PATH/.env" 2>/dev/null || echo "\$kv" | sudo tee -a "\$VPS_PATH/.env" >/dev/null
+done
+# Install/refresh the systemd unit.
+if [ -f "\$VPS_PATH/deploy/systemd/gigapdf-ocr.service" ]; then
+  sudo cp "\$VPS_PATH/deploy/systemd/gigapdf-ocr.service" /etc/systemd/system/gigapdf-ocr.service
+  sudo systemctl daemon-reload
+  sudo systemctl enable gigapdf-ocr >/dev/null 2>&1 || true
+fi
+
 # ── 2.11 Restart services (api/celery first, then next-js apps) ──────────
 section "Restarting systemd services"
 if ! \$WEB_ONLY; then
   sudo systemctl restart gigapdf-api gigapdf-celery gigapdf-celery-billing
+  # OCR loads ~250MB of models at boot; restart it here to pick up a new
+  # binary/model set or unit/env change (idempotent fetch above made it current).
+  sudo systemctl restart gigapdf-ocr 2>/dev/null || true
   sleep 2
 fi
 sudo systemctl restart gigapdf-web gigapdf-admin
@@ -254,7 +301,7 @@ sleep 3
 
 # ── 2.12 Report service states ───────────────────────────────────────────
 section "Service states"
-for svc in gigapdf-api gigapdf-web gigapdf-admin gigapdf-celery gigapdf-celery-billing; do
+for svc in gigapdf-api gigapdf-web gigapdf-admin gigapdf-ocr gigapdf-celery gigapdf-celery-billing; do
   printf "  %-30s %s\n" "\$svc" "\$(sudo systemctl is-active "\$svc" 2>&1 || echo unknown)"
 done
 REMOTE

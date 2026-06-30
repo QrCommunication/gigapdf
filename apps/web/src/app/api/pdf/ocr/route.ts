@@ -1,5 +1,6 @@
 /**
- * PDF OCR route — runs the built-in WASM OCR engine on each rasterised page.
+ * PDF OCR route — rasterises each page with the WASM engine and recognises it
+ * via the host OCR microservice.
  *
  * POST /api/pdf/ocr
  *
@@ -57,20 +58,40 @@ import {
   makeEditableOcrPdf,
   OcrUnavailableError,
   isOcrAvailable,
-  ALL_OCR_SCRIPTS,
 } from '@giga-pdf/pdf-engine';
-import type { OcrScript } from '@giga-pdf/pdf-engine';
 import { PDFCorruptedError } from '@giga-pdf/pdf-engine';
 
 /**
- * Parse + validate the optional `scripts` form field: a JSON array of bundled
- * OCR script identifiers (writing systems) to load before recognition, e.g.
- * `["alpha"]` (Latin/Cyrillic) or `["cjk"]` (Chinese). Unknown values are
- * dropped. Returns `undefined` when the field is absent or yields no valid
- * script — in which case the engine loads every bundled model (auto-detect),
- * preserving the historical behaviour.
+ * The legacy writing-system tokens the OCR dialogs send in the `scripts` field.
+ * They are forwarded to makeSearchablePdf / makeEditableOcrPdf, which map them
+ * to a single forced OCR-service recognizer (`X-Ocr-Model`). Validating here
+ * just drops garbage; the engine maps any unknown token to Latin defensively.
  */
-function parseScripts(raw: string | null): OcrScript[] | undefined {
+const LEGACY_SCRIPT_TOKENS = new Set<string>([
+  'alpha',
+  'cyrillic',
+  'arabic',
+  'hebrew',
+  'devanagari',
+  'tamil',
+  'telugu',
+  'kannada',
+  'cjk',
+  'chinese',
+  'chinese_simplified',
+  'chinese_traditional',
+  'japanese',
+  'korean',
+]);
+
+/**
+ * Parse + validate the optional `scripts` form field: a JSON array of writing-
+ * system tokens to recognize, e.g. `["alpha"]` (Latin) or `["cjk"]` (Chinese).
+ * Unknown values are dropped. Returns `undefined` when the field is absent or
+ * yields no valid token — the engine then omits `X-Ocr-Model` and the OCR
+ * service auto-selects a recognizer per line.
+ */
+function parseScripts(raw: string | null): string[] | undefined {
   if (!raw) return undefined;
   let parsed: unknown;
   try {
@@ -79,9 +100,8 @@ function parseScripts(raw: string | null): OcrScript[] | undefined {
     return undefined;
   }
   if (!Array.isArray(parsed)) return undefined;
-  const allowed = new Set<string>(ALL_OCR_SCRIPTS as readonly string[]);
   const scripts = parsed.filter(
-    (s): s is OcrScript => typeof s === 'string' && allowed.has(s),
+    (s): s is string => typeof s === 'string' && LEGACY_SCRIPT_TOKENS.has(s),
   );
   return scripts.length > 0 ? scripts : undefined;
 }

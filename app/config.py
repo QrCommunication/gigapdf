@@ -187,14 +187,6 @@ class Settings(BaseSettings):
     )
 
     # -------------------------------------------------------------------------
-    # Feature Flags
-    # -------------------------------------------------------------------------
-    font_extraction_enabled: bool = Field(
-        default=True,
-        description="Enable the /api/v1/pdf/fonts/* endpoints. Set to False to return 503.",
-    )
-
-    # -------------------------------------------------------------------------
     # Computed Properties
     # -------------------------------------------------------------------------
     @property

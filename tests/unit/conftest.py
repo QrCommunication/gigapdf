@@ -42,8 +42,8 @@ from unittest.mock import MagicMock
 # ---------------------------------------------------------------------------
 
 # Heavy third-party dependencies replaced with MagicMock so the lightweight
-# unit tests can import app.services.font_extraction_service without paying
-# the cost of the full backend stack.
+# unit tests can import service modules without paying the cost of the full
+# backend stack.
 _THIRD_PARTY_STUBS: tuple[str, ...] = (
     "pdfplumber",
     "celery",
@@ -88,7 +88,7 @@ def _build_services_package_stub() -> types.ModuleType:
     """Return a synthetic ``app.services`` module backed by the real source dir.
 
     ``__path__`` points at the real folder so Python's finder still locates
-    submodules like ``app.services.font_extraction_service`` on disk while we
+    submodules like ``app.services.<name>`` on disk while we
     bypass the eager imports performed by the real ``app/services/__init__.py``.
     """
     real_path = os.path.abspath(
