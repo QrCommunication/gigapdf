@@ -5,6 +5,18 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.2] - 2026-06-30
+
+### Fixed — editor text fidelity for repacked subset fonts (gigapdf-lib 0.110.4)
+
+- **Form labels that used a repacked embedded subset font (e.g. the "Nom et
+  adresse de l'organisme d'assurance maladie…" labels in CERFA forms) no longer
+  render as garbage** ("Nç ê Dçê D ê") in the editor. The embedded font served to
+  the overlay now carries a correct character map rebuilt from the document's
+  authoritative encoding, so the text renders as written. The PDF itself was
+  always correct. (A few rare non-é accents may still fall back; ASCII and é are
+  faithful.)
+
 ## [1.17.1] - 2026-06-30
 
 ### Fixed — editor text fidelity for standard CFF base fonts (gigapdf-lib 0.110.3)

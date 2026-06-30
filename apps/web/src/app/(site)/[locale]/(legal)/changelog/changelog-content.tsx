@@ -15,6 +15,14 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.17.2",
+    date: "2026-06-30",
+    type: "patch",
+    changes: [
+      { type: "fix", description: "Editor: form labels that use a repacked embedded subset font (e.g. the small-print labels in CERFA forms) no longer render as garbage — the embedded fonts now carry a correct character map rebuilt from the document's encoding, so the text shows as written (engine 0.110.4)" },
+    ],
+  },
+  {
     version: "1.17.1",
     date: "2026-06-30",
     type: "patch",
