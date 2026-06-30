@@ -111,6 +111,11 @@ mkdir -p /var/lib/gigapdf/documents
 # multilingual MiniLM model (~470 MB) is downloaded here once;
 # FASTEMBED_CACHE_DIR in .env must point to this path.
 mkdir -p /var/lib/gigapdf/fastembed-cache
+# Host-side OCR engine (gigapdf-ocr-rten): the prebuilt `ocr_serve` binary lives in
+# /opt/gigapdf/bin and the ~250 MB .rten model set in /var/lib/gigapdf/rten-models;
+# both are fetched from the lib's "ocr-rten-v1" release asset by deploy/redeploy.sh.
+mkdir -p /opt/gigapdf/bin
+mkdir -p /var/lib/gigapdf/rten-models
 mkdir -p /var/log/gigapdf
 mkdir -p /var/www/certbot
 mkdir -p /opt/gigapdf-repo.git

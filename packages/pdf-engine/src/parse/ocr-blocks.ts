@@ -19,7 +19,8 @@
  * fragmented per-word token — better embeddings, fewer rows, tighter snippets.
  */
 
-import { getOcrEngine } from '../wasm-ocr';
+import { getEngine } from '../wasm';
+import { getOcrWords } from '../ocr-engine';
 import { engineLogger } from '../utils/logger';
 import type { OcrWordBox, PdfPlacementContext } from './ocr-searchable';
 
@@ -31,6 +32,8 @@ export interface OcrBlock {
   text: string;
   /** Bounding box in PDF user space (points). x/y = lower-left corner. */
   bbox: { x: number; y: number; w: number; h: number };
+  /** Recognizer confidence in [0, 1] (average over the block's words). */
+  confidence?: number;
 }
 
 export interface ExtractOcrBlocksOptions {
@@ -193,6 +196,17 @@ interface EngineOcrWord {
   y: number;
   w: number;
   h: number;
+  /** Recognizer confidence in [0, 1] (present from the host OCR service). */
+  confidence?: number;
+}
+
+/** Average recognizer confidence of a word list, or undefined when unknown. */
+function averageConfidence(words: EngineOcrWord[]): number | undefined {
+  const values = words
+    .map((w) => w.confidence)
+    .filter((c): c is number => typeof c === 'number');
+  if (values.length === 0) return undefined;
+  return values.reduce((sum, c) => sum + c, 0) / values.length;
 }
 
 /**
@@ -247,7 +261,8 @@ function groupWordsIntoLines(
       ctx,
     );
     if (bbox.w < 0.5 || bbox.h < 0.5) continue;
-    blocks.push({ page: pageNumber, text, bbox });
+    const confidence = averageConfidence(ordered);
+    blocks.push(confidence === undefined ? { page: pageNumber, text, bbox } : { page: pageNumber, text, bbox, confidence });
   }
   return blocks;
 }
@@ -267,7 +282,8 @@ function wordsToBlocks(
       ctx,
     );
     if (bbox.w < 0.5 || bbox.h < 0.5) continue;
-    blocks.push({ page: pageNumber, text, bbox });
+    const { confidence } = word;
+    blocks.push(typeof confidence !== 'number' ? { page: pageNumber, text, bbox } : { page: pageNumber, text, bbox, confidence });
   }
   return blocks;
 }
@@ -276,7 +292,8 @@ function wordsToBlocks(
  * OCR the requested pages and return text blocks with PDF-point bounding boxes,
  * ready to POST to the semantic-index ingestion endpoint.
  *
- * Runs entirely in WebAssembly (offline CNN, no external binary). Page selection
+ * Pages are rasterised by the WASM engine and recognised by the host OCR
+ * microservice (no third-party binary in-process). Page selection
  * is explicit via `options.pages`; pass a single page for on-demand per-page OCR
  * from the editor.
  */
@@ -287,7 +304,7 @@ export async function extractOcrBlocks(
   const { pages, dpi = 144, granularity = 'line' } = options;
   const scale = dpi / 72;
 
-  const giga = await getOcrEngine();
+  const giga = await getEngine();
   const doc = giga.open(pdfBytes);
 
   const blocks: OcrBlock[] = [];
@@ -315,7 +332,9 @@ export async function extractOcrBlocks(
         rotation,
       };
 
-      const words = doc.ocr(pageNumber, scale) as EngineOcrWord[];
+      // Rasterise to PNG (main engine, POST-rotation) then recognise host-side.
+      const png = doc.renderPage(pageNumber, scale);
+      const words: EngineOcrWord[] = await getOcrWords(png);
       pagesProcessed += 1;
 
       const pageBlocks =

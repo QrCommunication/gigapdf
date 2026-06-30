@@ -30,7 +30,13 @@ export { getMetadataRobust } from './metadata-robust';
 export { ocrPdf, isOcrAvailable, OcrUnavailableError } from './ocr';
 export type { OcrOptions, OcrPageResult, OcrResult } from './ocr';
 
-export { makeSearchablePdf, ocrWordToPdfPlacement, ensureOcrModels } from './ocr-searchable';
+// Host-side OCR service client (recognition over HTTP). `OCR_LANGUAGES` /
+// `OcrLanguage` replace the engine's former `ALL_OCR_SCRIPTS` / `OcrScript` as
+// the stable vocabulary symbol for importers.
+export { OCR_LANGUAGES, listOcrLanguages, getOcrWords, getOcrServiceUrl } from '../ocr-engine';
+export type { OcrLanguage, NativeOcrWord } from '../ocr-engine';
+
+export { makeSearchablePdf, ocrWordToPdfPlacement } from './ocr-searchable';
 export type {
   MakeSearchablePdfOptions,
   MakeSearchablePdfResult,

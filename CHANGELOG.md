@@ -5,6 +5,40 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-06-30
+
+### Changed — OCR re-architected to a host-side engine (gigapdf-lib 0.110.2)
+
+- **OCR recognition moved from the in-browser WASM recognizer to a native,
+  always-on host-side service** (`gigapdf-ocr-rten` — PaddleOCR PP-OCR on RTen, a
+  pure-Rust ONNX runtime). gigapdf-lib 0.110.x removed the client WASM recognizer
+  (`.gpocr` models, the `doc.ocr()` API); the app now renders each page on the
+  server and sends it to a persistent OCR microservice (`gigapdf-ocr` systemd
+  unit) that loads its models **once at boot** and answers over a local HTTP
+  endpoint — so OCR no longer pays a multi-hundred-MB model load per request.
+- **14 recognizers**: Latin, Cyrillic, Arabic, Hebrew, Simplified & Traditional
+  Chinese, Japanese, Korean, Devanagari, Tamil, Telugu, Kannada/Georgian, plus
+  Latin handwriting — with automatic per-line script selection.
+- The editor/GED OCR dialogs, the three modes (extract text / searchable PDF /
+  editable PDF) and the `/api/pdf/ocr(+page)` contracts are **unchanged in shape**;
+  only the recognition backend moved. PDF rasterization + invisible/visible
+  text-layer baking stay in TypeScript via gigapdf-lib 0.110.2.
+
+### Changed — editor embedded fonts served by the engine (no external font tooling)
+
+- **The editor overlay now serves each PDF's own embedded fonts through the
+  in-house engine** (`extractWebFont`, gigapdf-lib 0.110.2): CFF/Type1 are wrapped
+  to a browser-loadable OpenType with a synthesized cmap, TrueType is repaired
+  in place, and the original glyphs are kept — so administrative forms (e.g.
+  CERFA) and other subset fonts render on-screen exactly as in the source. This
+  replaces the previous Python (pikepdf/fontTools) font-extraction backend.
+
+### Removed
+- The `gigapdf-lib-ocr` npm alias (the last version carrying the in-browser WASM
+  recognizer) and the `.gpocr` model bundling / Next.js file-tracing.
+- The server-side Python font-extraction service and its `/api/v1/fonts`
+  endpoint (superseded by the engine-backed `/api/pdf/fonts` path above).
+
 ## [1.16.0] - 2026-06-30
 
 ### Added

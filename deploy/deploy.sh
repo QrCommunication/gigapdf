@@ -285,6 +285,47 @@ sudo systemctl enable gigapdf-web
 sudo systemctl enable gigapdf-admin
 sudo systemctl enable gigapdf-celery
 sudo systemctl enable gigapdf-celery-billing
+sudo systemctl enable gigapdf-ocr
+
+# =============================================================================
+# 7b. Fetch host-side OCR engine (gigapdf-ocr-rten binary + .rten models)
+# =============================================================================
+# Recognition runs in the gigapdf-ocr service (PaddleOCR PP-OCR via RTen). The
+# prebuilt x86_64 binary + the 14-language model set ship as the lib's
+# "ocr-rten-v1" release asset (kept out of git). Idempotent: a SHA marker skips
+# the ~250MB re-download when nothing changed.
+log_info "Fetching OCR engine (gigapdf-ocr-rten)..."
+OCR_REL="https://github.com/QrCommunication/gigapdf-lib/releases/download/ocr-rten-v1"
+OCR_BIN="$APP_DIR/bin/ocr_serve"
+OCR_MODELS_ROOT="/var/lib/gigapdf/rten-models"
+sudo mkdir -p "$APP_DIR/bin" "$OCR_MODELS_ROOT"
+OCR_TMP="$(mktemp -d)"
+if curl -fsSL -o "$OCR_TMP/gigapdf-ocr.sha256" "$OCR_REL/gigapdf-ocr.sha256"; then
+    OCR_NEWSHA="$(grep "gigapdf-ocr-models.tar.gz" "$OCR_TMP/gigapdf-ocr.sha256" | awk '{print $1}')"
+    OCR_MARKER="$OCR_MODELS_ROOT/.asset-sha"
+    if [ ! -x "$OCR_BIN" ] || [ ! -d "$OCR_MODELS_ROOT/models" ] || [ "$(cat "$OCR_MARKER" 2>/dev/null)" != "$OCR_NEWSHA" ]; then
+        log_info "  downloading OCR binary + 14-language models (~250MB)..."
+        curl -fsSL -o "$OCR_TMP/ocr_serve" "$OCR_REL/ocr_serve"
+        curl -fsSL -o "$OCR_TMP/gigapdf-ocr-models.tar.gz" "$OCR_REL/gigapdf-ocr-models.tar.gz"
+        ( cd "$OCR_TMP" && sha256sum -c gigapdf-ocr.sha256 )
+        sudo install -m 0755 -o gigapdf -g gigapdf "$OCR_TMP/ocr_serve" "$OCR_BIN"
+        sudo rm -rf "$OCR_MODELS_ROOT/models"
+        sudo tar xzf "$OCR_TMP/gigapdf-ocr-models.tar.gz" -C "$OCR_MODELS_ROOT"
+        sudo chown -R gigapdf:gigapdf "$OCR_MODELS_ROOT"
+        echo "$OCR_NEWSHA" | sudo tee "$OCR_MARKER" >/dev/null
+        log_info "  OCR engine updated."
+    else
+        log_info "  OCR engine up-to-date — skipping ~250MB fetch."
+    fi
+else
+    log_warn "  could not reach OCR release asset — leaving existing OCR engine in place."
+fi
+rm -rf "$OCR_TMP"
+# Upsert OCR env keys into .env (idempotent — never duplicates a key).
+for kv in "OCR_MODELS_DIR=/var/lib/gigapdf/rten-models/models" "OCR_BIND=127.0.0.1:8077" "OCR_SERVICE_URL=http://127.0.0.1:8077"; do
+    k="${kv%%=*}"
+    sudo grep -q "^$k=" "$APP_DIR/.env" 2>/dev/null || echo "$kv" | sudo tee -a "$APP_DIR/.env" >/dev/null
+done
 
 # =============================================================================
 # 8. Update Nginx Configuration + Maintenance Page
@@ -364,6 +405,10 @@ sudo systemctl restart gigapdf-celery
 sudo systemctl restart gigapdf-celery-billing
 log_info "Celery workers restarted."
 
+log_info "--- Step 9b-bis: Restart OCR engine (loads ~250MB models at boot) ---"
+sudo systemctl restart gigapdf-ocr
+log_info "gigapdf-ocr restarted (model load takes a few seconds)."
+
 log_info "--- Step 9c: Restart Next.js Web (nginx serves stale keepalives) ---"
 sudo systemctl restart gigapdf-web
 # Brief grace period so the new process binds port 3000 before admin restarts
@@ -410,6 +455,8 @@ check_service gigapdf-web
 check_service gigapdf-admin
 check_service gigapdf-celery
 check_service gigapdf-celery-billing
+check_service gigapdf-ocr
+check_http "OCR /health" "http://localhost:8077/health"
 
 echo ""
 echo "HTTP endpoints:"

@@ -15,6 +15,15 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.17.0",
+    date: "2026-06-30",
+    type: "minor",
+    changes: [
+      { type: "improvement", description: "OCR is faster and runs as an always-on engine (engine 0.110.2): scanned pages are now recognized by a dedicated service that loads its models once at startup instead of reloading them on every request — covering 14 writing systems (Latin, Cyrillic, Arabic, Hebrew, Simplified & Traditional Chinese, Japanese, Korean, Devanagari, Tamil, Telugu, Kannada) plus Latin handwriting, with automatic per-line script detection. Extract text, build a searchable PDF, or make a scan editable — all unchanged in how you use them" },
+      { type: "improvement", description: "Editor: sharper on-screen text — the overlay now loads each document's own embedded fonts through the in-house engine (engine 0.110.2), so administrative forms (e.g. CERFA) and other subset fonts render exactly as in the source" },
+    ],
+  },
+  {
     version: "1.16.0",
     date: "2026-06-30",
     type: "minor",

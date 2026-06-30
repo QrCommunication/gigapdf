@@ -80,12 +80,6 @@ RATE_LIMITS = {
     "ocr": (5, 60),  # 5 OCR requests per minute
     "auth": (20, 60),  # 20 auth attempts per minute
     "search": (30, 60),  # 30 searches per minute
-    # Embedded-font fetches: read-only, idempotent, cached (Redis 24h + client
-    # IndexedDB). A single document can request 20-30+ fonts when the editor
-    # opens; they must not share the small "default" bucket or the editor 429s
-    # on load. The client also caps concurrency (see use-embedded-fonts.ts), so
-    # this is defense in depth.
-    "fonts": (600, 60),  # 600 font fetches per minute
 }
 
 
@@ -227,11 +221,6 @@ def get_endpoint_category(path: str, method: str) -> str:
         return "search"
     elif "/unlock" in path_lower or "/login" in path_lower:
         return "auth"
-    elif "/pdf/fonts" in path_lower:
-        # Embedded-font fetches (GET /api/v1/pdf/fonts/{doc}[/{font}]). The
-        # editor requests many at once on load; give them a dedicated, generous
-        # bucket so a font-heavy document does not exhaust the "default" limit.
-        return "fonts"
 
     return "default"
 
