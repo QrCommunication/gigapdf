@@ -3,7 +3,6 @@ import { markDirty } from '../engine/document-handle';
 import type { ImageElement } from '@giga-pdf/types';
 import { webToPdf } from '../utils/coordinates';
 import { PDFPageOutOfRangeError } from '../errors';
-import { getEngine } from '../wasm';
 
 function pageGeometry(handle: PDFDocumentHandle, pageNumber: number) {
   if (pageNumber < 1 || pageNumber > handle.pageCount) {
@@ -13,7 +12,9 @@ function pageGeometry(handle: PDFDocumentHandle, pageNumber: number) {
   return { width, height, rotation: rotation as 0 | 90 | 180 | 270 };
 }
 
-function detectImageFormat(imageData: Uint8Array): 'png' | 'jpeg' | 'webp' | 'gif' | 'avif' | null {
+function detectImageFormat(
+  imageData: Uint8Array,
+): 'png' | 'jpeg' | 'webp' | 'gif' | 'avif' | 'tiff' | null {
   if (imageData.length < 12) return null;
 
   const isPng =
@@ -46,6 +47,12 @@ function detectImageFormat(imageData: Uint8Array): 'png' | 'jpeg' | 'webp' | 'gi
     imageData[8] === 0x61 && imageData[9] === 0x76 && imageData[10] === 0x69 && imageData[11] === 0x66;
   if (isAvif) return 'avif';
 
+  // TIFF: "II*\0" (little-endian / Intel) or "MM\0*" (big-endian / Motorola)
+  const isTiff =
+    (imageData[0] === 0x49 && imageData[1] === 0x49 && imageData[2] === 0x2a && imageData[3] === 0x00) ||
+    (imageData[0] === 0x4d && imageData[1] === 0x4d && imageData[2] === 0x00 && imageData[3] === 0x2a);
+  if (isTiff) return 'tiff';
+
   return null;
 }
 
@@ -66,44 +73,26 @@ export async function addImage(
     rotation,
   );
 
-  let format = detectImageFormat(imageData);
-
-  // The engine embeds PNG and JPEG natively (PNG alpha honoured). The modern
-  // formats (GIF, WebP — lossless + lossy, AVIF) are decoded by the engine's own
-  // zero-dependency decoders and re-encoded to PNG. No third-party image library.
-  if (format && format !== 'png' && format !== 'jpeg') {
-    const giga = await getEngine();
-    const decoded =
-      format === 'gif'
-        ? giga.decodeGif(imageData)
-        : format === 'webp'
-          ? giga.decodeWebp(imageData)
-          : format === 'avif'
-            ? giga.decodeAvif(imageData)
-            : null;
-    if (!decoded) {
-      const headerHex = Array.from(imageData.slice(0, 8))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join(' ');
-      throw new Error(
-        `addImage: failed to decode ${format} image (header=${headerHex}). ` +
-          `Supported formats: PNG, JPEG, GIF, WebP, AVIF.`,
-      );
-    }
-    imageData = Buffer.from(giga.rgbaToPng(decoded.rgba, decoded.width, decoded.height));
-    format = 'png';
-  }
-
-  if (format !== 'png' && format !== 'jpeg') {
+  // Validate the bytes are a recognized raster up-front so we fail with a clear
+  // message rather than a silent no-op when the engine can't decode them.
+  const format = detectImageFormat(imageData);
+  if (!format) {
     const headerHex = Array.from(imageData.slice(0, 8))
       .map((b) => b.toString(16).padStart(2, '0'))
       .join(' ');
     throw new Error(
-      `addImage: unsupported image format (detected=${format ?? 'unknown'}, header=${headerHex}). ` +
-      `Only PNG and JPEG are embeddable.`,
+      `addImage: unrecognized image format (header=${headerHex}). ` +
+        `Supported formats: PNG, JPEG, GIF, WebP, AVIF, TIFF.`,
     );
   }
 
+  // The engine (gigapdf-lib ≥ 0.109) embeds every supported raster natively:
+  // JPEG passes through as /DCTDecode, while PNG, GIF, WebP, AVIF and TIFF are
+  // decoded to RGBA in pure Rust/WASM (alpha honoured). No client-side
+  // transcoding — the raw bytes go straight to the engine. Embedding stays
+  // best-effort (the return value is intentionally not asserted): a raster the
+  // engine can't embed is skipped rather than aborting the whole edit, matching
+  // the behaviour the editor has always relied on.
   handle._doc.addImage(
     pageNumber,
     imageData,

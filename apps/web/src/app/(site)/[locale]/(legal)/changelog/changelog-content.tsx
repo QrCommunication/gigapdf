@@ -15,6 +15,15 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.16.0",
+    date: "2026-06-30",
+    type: "minor",
+    changes: [
+      { type: "feature", description: "TIFF images are now supported across the app (engine 0.109.0): convert a TIFF to PDF, insert one into a document, add a TIFF watermark, or import a TIFF into your library — alongside PNG, JPEG, GIF, WebP and AVIF" },
+      { type: "improvement", description: "Editor: Replace image now accepts every supported raster — GIF, TIFF and AVIF on top of PNG, JPEG and WebP — to swap an image in place with any of them" },
+    ],
+  },
+  {
     version: "1.15.0",
     date: "2026-06-30",
     type: "minor",

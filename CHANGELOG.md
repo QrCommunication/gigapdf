@@ -5,6 +5,27 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-06-30
+
+### Added
+- **TIFF image support across the app (gigapdf-lib 0.109.0).** Convert a TIFF to
+  PDF, insert one into a document (editor), stamp a TIFF watermark, and import a
+  TIFF into the document library — joining PNG, JPEG, GIF, WebP and AVIF. Format
+  guards (magic bytes + `accept`) were widened in the image→PDF / convert / merge
+  routes, the editor image-renderer (decoding delegated to the engine), the GED
+  import routing, the watermark pickers, and the dashboard tool.
+
+### Improved
+- **Editor "Replace image" now accepts every supported raster** — GIF, TIFF and
+  AVIF in addition to PNG, JPEG and WebP. `replaceImage` shares the `addImage`
+  decode path, documented as such since engine 0.109.1.
+
+### Changed
+- Bump **gigapdf-lib 0.108.0 → 0.109.1** (image-pipeline completeness + conversion
+  fidelity; image-format documentation corrected). Fixed the corrupt 1×1 PNG test
+  fixtures (invalid IDAT CRC + Adler32) shared by five pdf-engine test files — the
+  package test baseline is now fully green.
+
 ## [1.15.0] - 2026-06-30
 
 ### Improved

@@ -108,11 +108,11 @@ export function isOfficeFile(file: { name: string }): boolean {
 /**
  * Raster image formats convertible to a single-page editable PDF on upload.
  *
- * MIRRORS the engine's `imageToPdf` supported formats (PNG/JPEG/GIF/WebP/AVIF).
- * On upload they are raised to a PDF (`/api/convert/image` → native WASM
- * `imageToPdf`) so they open as an editable page in the editor instead of being
- * dead-stored as raw image bytes. The conversion route re-validates the image
- * magic bytes server-side.
+ * MIRRORS the engine's `imageToPdf` supported formats
+ * (PNG/JPEG/GIF/WebP/AVIF/TIFF). On upload they are raised to a PDF
+ * (`/api/convert/image` → native WASM `imageToPdf`) so they open as an editable
+ * page in the editor instead of being dead-stored as raw image bytes. The
+ * conversion route re-validates the image magic bytes server-side.
  */
 const IMAGE_CONVERT_EXTENSIONS = new Set([
   "png",
@@ -121,6 +121,8 @@ const IMAGE_CONVERT_EXTENSIONS = new Set([
   "gif",
   "webp",
   "avif",
+  "tif",
+  "tiff",
 ]);
 
 /**
