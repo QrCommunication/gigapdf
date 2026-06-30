@@ -12,6 +12,7 @@
  *   - GIF  : .gif            (GIF8)
  *   - WebP : .webp           (RIFF…WEBP)
  *   - AVIF : .avif           (…ftyp…avif)
+ *   - TIFF : .tif, .tiff     (II*\0 / MM\0*)
  *
  * Request: multipart/form-data
  *   file — the binary image
@@ -36,9 +37,9 @@ import { sanitizeContentDisposition } from '@/lib/content-disposition';
 const MAX_FILE_SIZE = 250 * 1024 * 1024; // 250 MB (mirrors the storage backend cap)
 
 /** Image extensions this route accepts (mirrors the engine's supported formats). */
-const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif']);
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'tif', 'tiff']);
 
-const ALLOWED_EXTENSIONS_LABEL = '.png, .jpg, .jpeg, .gif, .webp, .avif';
+const ALLOWED_EXTENSIONS_LABEL = '.png, .jpg, .jpeg, .gif, .webp, .avif, .tif, .tiff';
 
 // Magic byte signatures (offset-aware for container formats). Mirrors the
 // sniffing used by the engine's universal-merge detector.
@@ -49,6 +50,8 @@ const RIFF_MAGIC = [0x52, 0x49, 0x46, 0x46] as const; // RIFF
 const WEBP_TAG = [0x57, 0x45, 0x42, 0x50] as const; // WEBP (at offset 8)
 const FTYP_TAG = [0x66, 0x74, 0x79, 0x70] as const; // ftyp (at offset 4)
 const AVIF_BRAND = [0x61, 0x76, 0x69, 0x66] as const; // avif (at offset 8)
+const TIFF_LE_MAGIC = [0x49, 0x49, 0x2a, 0x00] as const; // II*\0 (little-endian / Intel)
+const TIFF_BE_MAGIC = [0x4d, 0x4d, 0x00, 0x2a] as const; // MM\0* (big-endian / Motorola)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -81,7 +84,7 @@ function hasMagic(bytes: Uint8Array, sig: readonly number[], offset = 0): boolea
   return true;
 }
 
-/** Sniff whether the buffer is a supported raster image (PNG/JPEG/GIF/WebP/AVIF). */
+/** Sniff whether the buffer is a supported raster image (PNG/JPEG/GIF/WebP/AVIF/TIFF). */
 function isImageMagic(bytes: Uint8Array): boolean {
   if (hasMagic(bytes, PNG_MAGIC) || hasMagic(bytes, JPEG_MAGIC) || hasMagic(bytes, GIF_MAGIC)) {
     return true;
@@ -90,6 +93,8 @@ function isImageMagic(bytes: Uint8Array): boolean {
   if (hasMagic(bytes, RIFF_MAGIC) && hasMagic(bytes, WEBP_TAG, 8)) return true;
   // AVIF: ....ftyp....avif
   if (hasMagic(bytes, FTYP_TAG, 4) && hasMagic(bytes, AVIF_BRAND, 8)) return true;
+  // TIFF: "II*\0" (little-endian) or "MM\0*" (big-endian)
+  if (hasMagic(bytes, TIFF_LE_MAGIC) || hasMagic(bytes, TIFF_BE_MAGIC)) return true;
   return false;
 }
 

@@ -10,8 +10,8 @@
  *   files       — One or more image files, ORDER PRESERVED (repeat the key).
  *   outputName  — Suggested filename for the result (default: images.pdf)
  *
- * Accepted image formats: PNG, JPEG, GIF, WebP, AVIF (extension + magic-byte
- * validated). PNG/JPEG embed directly; GIF/WebP/AVIF are transcoded internally.
+ * Accepted image formats: PNG, JPEG, GIF, WebP, AVIF, TIFF (extension + magic-byte
+ * validated). PNG/JPEG embed directly; GIF/WebP/AVIF/TIFF are transcoded internally.
  *
  * Returns the PDF as application/pdf binary.
  *
@@ -35,7 +35,7 @@ import { serverLogger } from '@/lib/server-logger';
 const MAX_TOTAL_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
 
 /** Accepted image extensions (lowercase, without the dot). */
-const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif']);
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'tif', 'tiff']);
 
 /**
  * Magic-byte signatures, by image kind. A file passes when it carries any of
@@ -49,6 +49,8 @@ const RIFF_MAGIC = [0x52, 0x49, 0x46, 0x46] as const; // RIFF (WebP container)
 const WEBP_TAG = [0x57, 0x45, 0x42, 0x50] as const; // WEBP (at offset 8)
 const FTYP_TAG = [0x66, 0x74, 0x79, 0x70] as const; // ftyp (at offset 4, AVIF)
 const AVIF_BRAND = [0x61, 0x76, 0x69, 0x66] as const; // avif (at offset 8)
+const TIFF_LE_MAGIC = [0x49, 0x49, 0x2a, 0x00] as const; // II*\0 (little-endian / Intel)
+const TIFF_BE_MAGIC = [0x4d, 0x4d, 0x00, 0x2a] as const; // MM\0* (big-endian / Motorola)
 
 /** Lowercase extension (without the dot) of a filename, or '' if none. */
 function extensionOf(filename: string): string {
@@ -73,6 +75,7 @@ function isImageMagic(bytes: Uint8Array): boolean {
   }
   if (hasMagic(bytes, RIFF_MAGIC) && hasMagic(bytes, WEBP_TAG, 8)) return true; // WebP
   if (hasMagic(bytes, FTYP_TAG, 4) && hasMagic(bytes, AVIF_BRAND, 8)) return true; // AVIF
+  if (hasMagic(bytes, TIFF_LE_MAGIC) || hasMagic(bytes, TIFF_BE_MAGIC)) return true; // TIFF
   return false;
 }
 

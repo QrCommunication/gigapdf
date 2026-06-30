@@ -438,7 +438,7 @@ export function WatermarkRunner() {
                   <FileDrop
                     label={t("imageDropLabel")}
                     hint={t("imageFormatsHint")}
-                    accept="image/png,image/jpeg,image/webp,image/gif,image/avif,.png,.jpg,.jpeg,.webp,.gif,.avif"
+                    accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/tiff,.png,.jpg,.jpeg,.webp,.gif,.avif,.tif,.tiff"
                     icon={ImageIcon}
                     file={imageFile}
                     disabled={running}

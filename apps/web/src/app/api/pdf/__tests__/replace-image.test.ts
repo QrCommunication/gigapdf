@@ -61,6 +61,9 @@ const FAKE_PDF = new Uint8Array(
 );
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]); // PNG sig
 const JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+const GIF_BYTES = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00]); // "GIF89a"
+const TIFF_BYTES = new Uint8Array([0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00]); // "II*\0" (little-endian)
+const AVIF_BYTES = new Uint8Array([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66]); // ftyp…avif
 const NOT_AN_IMAGE = new Uint8Array([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b]);
 
 const mockAuthOk = {
@@ -173,13 +176,13 @@ describe('POST /api/pdf/replace-image', () => {
     expect(body.error).toMatch(/image file is required/i);
   });
 
-  it('returns 400 when the image is not a PNG/JPEG/WebP', async () => {
+  it('returns 400 when the image is not a recognized raster', async () => {
     const res = await POST(
       makeReplaceRequest([{ key: 'image', value: makeFile('x.bin', NOT_AN_IMAGE, 'application/octet-stream') }]),
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toMatch(/PNG, JPEG or WebP/i);
+    expect(body.error).toMatch(/PNG, JPEG, WebP, GIF, TIFF or AVIF/i);
     expect(engine.open).not.toHaveBeenCalled();
   });
 
@@ -201,6 +204,17 @@ describe('POST /api/pdf/replace-image', () => {
     const res = await POST(
       makeReplaceRequest([{ key: 'image', value: makeFile('photo.jpg', JPEG_BYTES, 'image/jpeg') }]),
     );
+    expect(res.status).toBe(200);
+    expect(engine.replaceImage).toHaveBeenCalledTimes(1);
+  });
+
+  // `replaceImage` shares the addImage decode path → all 6 rasters since 0.109.
+  it.each([
+    ['GIF', GIF_BYTES, 'image/gif', 'pic.gif'],
+    ['TIFF', TIFF_BYTES, 'image/tiff', 'pic.tiff'],
+    ['AVIF', AVIF_BYTES, 'image/avif', 'pic.avif'],
+  ])('accepts a %s bitmap at the gate', async (_label, bytes, type, name) => {
+    const res = await POST(makeReplaceRequest([{ key: 'image', value: makeFile(name, bytes, type) }]));
     expect(res.status).toBe(200);
     expect(engine.replaceImage).toHaveBeenCalledTimes(1);
   });

@@ -19,7 +19,7 @@ const MAX_250MB = 250 * 1024 * 1024;
 /** Accept hint for endpoints that take a single PDF. */
 const ACCEPT_PDF = ".pdf,application/pdf";
 /** Accept hint for raster images (image-to-pdf). */
-const ACCEPT_IMAGES = ".png,.jpg,.jpeg,.gif,.webp,.avif,image/*";
+const ACCEPT_IMAGES = ".png,.jpg,.jpeg,.gif,.webp,.avif,.tif,.tiff,image/*";
 /** Accept hint for office documents (office-to-pdf). */
 const ACCEPT_OFFICE =
   ".doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp";

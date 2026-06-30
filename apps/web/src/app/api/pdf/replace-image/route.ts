@@ -16,7 +16,7 @@
  *                 non-negative integer), exactly the `index` reported by
  *                 `GigaPdfDoc.imageElements()` and carried on the editor's
  *                 `ImageElement.index`.
- *   image       — the replacement bitmap: PNG, JPEG or WebP (required).
+ *   image       — the replacement bitmap: PNG, JPEG, WebP, GIF, TIFF or AVIF (required).
  *
  * Returns the modified PDF as application/pdf, 400 on bad input, 422 when the
  * engine rejects the swap (page/index doesn't resolve to a top-level image, or
@@ -51,12 +51,16 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 /**
  * Sniff the magic bytes of an uploaded image. `replaceImage` re-encodes through
- * the same path as `addImage` (PNG → fresh `/SMask`, JPEG → `/DCTDecode`
- * passthrough), so PNG and JPEG are the natively-supported set; WebP is accepted
- * at the gate too (the engine is the final authority and returns `false` → 422
- * for anything it cannot decode). Anything else is rejected up front (400).
+ * the same shared `prepare_image` path as `addImage`, so it accepts EVERY raster
+ * the engine decodes — PNG, JPEG, WebP, GIF, TIFF and AVIF (documented as such
+ * since gigapdf-lib 0.109.1). PNG/JPEG embed natively; the rest decode to RGBA in
+ * pure Rust/WASM. This gate only rejects bytes that are no recognized image at
+ * all (400); the engine remains the final authority and returns `false` → 422
+ * for anything it ultimately cannot decode.
  */
-function detectImageFormat(bytes: Uint8Array): 'png' | 'jpeg' | 'webp' | null {
+function detectImageFormat(
+  bytes: Uint8Array,
+): 'png' | 'jpeg' | 'webp' | 'gif' | 'avif' | 'tiff' | null {
   if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
     return 'png';
   }
@@ -69,6 +73,23 @@ function detectImageFormat(bytes: Uint8Array): 'png' | 'jpeg' | 'webp' | null {
     bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50 // "WEBP"
   ) {
     return 'webp';
+  }
+  if (bytes.length >= 4 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
+    return 'gif'; // "GIF8"
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70 && // "ftyp"
+    bytes[8] === 0x61 && bytes[9] === 0x76 && bytes[10] === 0x69 && bytes[11] === 0x66 // "avif"
+  ) {
+    return 'avif';
+  }
+  if (
+    bytes.length >= 4 &&
+    ((bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00) || // "II*\0" (LE)
+      (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a)) // "MM\0*" (BE)
+  ) {
+    return 'tiff';
   }
   return null;
 }
@@ -112,7 +133,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     const imageBytes = new Uint8Array(await imageEntry.arrayBuffer());
     if (detectImageFormat(imageBytes) === null) {
-      return bad('image must be a PNG, JPEG or WebP bitmap.');
+      return bad('image must be a PNG, JPEG, WebP, GIF, TIFF or AVIF bitmap.');
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());

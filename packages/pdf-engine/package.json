@@ -72,7 +72,7 @@
   },
   "dependencies": {
     "@giga-pdf/types": "workspace:*",
-    "@qrcommunication/gigapdf-lib": "0.108.0",
+    "@qrcommunication/gigapdf-lib": "0.109.1",
     "gigapdf-lib-ocr": "npm:@qrcommunication/gigapdf-lib@0.63.0"
   },
   "devDependencies": {

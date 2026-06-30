@@ -2341,7 +2341,7 @@ export function PropertiesPanel({
             <span>{t("image.replace")}</span>
             <input
               type="file"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/tiff"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];

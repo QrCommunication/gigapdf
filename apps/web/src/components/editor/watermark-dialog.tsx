@@ -261,7 +261,7 @@ export function WatermarkDialog({
                 <label className="flex items-center gap-2 w-full px-3 py-2 rounded-md border border-input bg-background text-sm cursor-pointer hover:bg-muted transition-colors">
                   <input
                     type="file"
-                    accept="image/png,image/jpeg,image/webp,image/gif,image/avif,.png,.jpg,.jpeg,.webp,.gif,.avif"
+                    accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/tiff,.png,.jpg,.jpeg,.webp,.gif,.avif,.tif,.tiff"
                     className="sr-only"
                     onChange={(e) =>
                       setImageFile(e.target.files?.[0] ?? null)

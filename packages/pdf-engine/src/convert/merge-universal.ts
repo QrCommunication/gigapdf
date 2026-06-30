@@ -65,11 +65,13 @@ const RIFF_MAGIC = [0x52, 0x49, 0x46, 0x46] as const; // RIFF
 const WEBP_TAG = [0x57, 0x45, 0x42, 0x50] as const; // WEBP (at offset 8)
 const FTYP_TAG = [0x66, 0x74, 0x79, 0x70] as const; // ftyp (at offset 4)
 const AVIF_BRAND = [0x61, 0x76, 0x69, 0x66] as const; // avif (at offset 8)
+const TIFF_LE_MAGIC = [0x49, 0x49, 0x2a, 0x00] as const; // II*\0 (little-endian / Intel)
+const TIFF_BE_MAGIC = [0x4d, 0x4d, 0x00, 0x2a] as const; // MM\0* (big-endian / Motorola)
 const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04] as const; // PK\x03\x04 (OOXML / ODF)
 const OLE2_MAGIC = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1] as const; // legacy Office
 const RTF_MAGIC = [0x7b, 0x5c, 0x72, 0x74, 0x66] as const; // {\rtf
 
-/** Sniff an image kind purely from magic bytes (PNG/JPEG/GIF/WebP/AVIF). */
+/** Sniff an image kind purely from magic bytes (PNG/JPEG/GIF/WebP/AVIF/TIFF). */
 function isImageMagic(bytes: Uint8Array): boolean {
   if (hasMagic(bytes, PNG_MAGIC) || hasMagic(bytes, JPEG_MAGIC) || hasMagic(bytes, GIF_MAGIC)) {
     return true;
@@ -78,10 +80,12 @@ function isImageMagic(bytes: Uint8Array): boolean {
   if (hasMagic(bytes, RIFF_MAGIC) && hasMagic(bytes, WEBP_TAG, 8)) return true;
   // AVIF: ....ftyp....avif
   if (hasMagic(bytes, FTYP_TAG, 4) && hasMagic(bytes, AVIF_BRAND, 8)) return true;
+  // TIFF: "II*\0" (little-endian) or "MM\0*" (big-endian)
+  if (hasMagic(bytes, TIFF_LE_MAGIC) || hasMagic(bytes, TIFF_BE_MAGIC)) return true;
   return false;
 }
 
-const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif']);
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'tif', 'tiff']);
 const HTML_EXTENSIONS = new Set(['html', 'htm']);
 
 /**
@@ -156,7 +160,7 @@ function labelOf(input: UniversalMergeInput, index: number): string {
  *  - 1 input  → returns that input's PDF conversion directly (no merge step).
  *  - N inputs → converts all, then `engine.mergePdfs([...])`.
  *
- * Supported per-file types: PDF (passthrough), image (PNG/JPEG/GIF/WebP/AVIF),
+ * Supported per-file types: PDF (passthrough), image (PNG/JPEG/GIF/WebP/AVIF/TIFF),
  * Office (docx/doc/odt, xlsx/xls/ods, pptx/ppt/odp), HTML, RTF, plain text.
  *
  * @throws {PDFEngineError} if the list is empty, or if any file's type cannot be
