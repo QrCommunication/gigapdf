@@ -15,6 +15,14 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.17.1",
+    date: "2026-06-30",
+    type: "patch",
+    changes: [
+      { type: "fix", description: "Editor: documents using a standard base font (e.g. Times-Bold, common in CERFA administrative forms) no longer show their static text with missing spaces and overlapping letters — the embedded fonts now carry the correct character widths (engine 0.110.3)" },
+    ],
+  },
+  {
     version: "1.17.0",
     date: "2026-06-30",
     type: "minor",
