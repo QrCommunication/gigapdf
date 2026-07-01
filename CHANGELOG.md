@@ -5,6 +5,28 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.0] - 2026-07-01
+
+### Fixed — legal small-print now reproduces the original exactly
+
+- **Justified small print (the legal footer of a CERFA form) tiles word-for-word
+  like the source.** Each word is fitted to its exact PDF advance (`/Widths`), so
+  the browser's slightly-wider font metrics can no longer eat the inter-word
+  spaces ("amende et/ou" → "amendeet/ou"). Consumes `gigapdf-lib` 0.112.0 (per-word
+  positioned segments) plus a per-word width fit in the editable overlay.
+
+### Fixed — every form-field widget is placed (duplicate pages + radio buttons)
+
+- **A form field that appears on more than one page (an official form's carbon
+  copy) is now shown on ALL its pages.** Fill it once on page 1 and the value
+  appears on page 2, as the PDF intends — previously only the field's first widget
+  was placed, so page-2 copies were missing entirely.
+- **Radio groups place every button** with the correct checked state (a button is
+  ticked only when the field's value equals its own on-state), not just the first.
+- **Empty and unselected fields are placed too**, at their exact `/Rect` size — so
+  the whole form is editable, not only the pre-filled boxes.
+- Consumes `gigapdf-lib` 0.113.0 (`FieldInfo.widgets` — every widget placement).
+
 ## [1.18.0] - 2026-07-01
 
 ### Fixed — 1:1 editor fidelity for justified & multi-line PDF text (CERFA forms)

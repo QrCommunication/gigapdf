@@ -15,6 +15,15 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.19.0",
+    date: "2026-07-01",
+    type: "minor",
+    changes: [
+      { type: "fix", description: "Editor: justified legal small-print (a CERFA footer) now tiles word-for-word like the original. Each word is fitted to its exact width from the PDF, so the browser's slightly-wider fonts can no longer collapse the spaces between words (\"amende et/ou\" → \"amendeet/ou\") while the text stays editable (engine 0.112.0)" },
+      { type: "fix", description: "Form fields: a field that repeats on more than one page — an official form's carbon copy — is now placed on ALL its pages. Fill it once on page 1 and the value appears on page 2, exactly as the PDF intends. Every radio button is placed with the correct checked state, and empty or unselected fields are placed too, at their exact size (engine 0.113.0)" },
+    ],
+  },
+  {
     version: "1.18.0",
     date: "2026-07-01",
     type: "minor",

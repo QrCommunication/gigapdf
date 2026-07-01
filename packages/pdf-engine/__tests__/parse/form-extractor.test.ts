@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { FormFieldElement } from '@giga-pdf/types';
-import { extractFormFieldElements } from '../../src/parse/form-extractor';
+import {
+  extractFormFieldElements,
+  extractFormFieldsByPage,
+} from '../../src/parse/form-extractor';
 import { loadFixture, SIMPLE_PDF, WITH_FORMS_PDF } from '../helpers';
 
 // The fixtures are US-Letter (612×792); form-field bounds come back in web
@@ -79,6 +82,33 @@ describe('extractFormFieldElements (native engine)', () => {
   describe('simple.pdf — no form fields', () => {
     it('returns an empty array when the PDF has no form fields', async () => {
       expect(await formFields(SIMPLE_PDF)).toEqual([]);
+    });
+  });
+
+  // A field's widgets each become their own overlay (a duplicate-page copy, or a
+  // radio button), keyed uniquely, with the button on-state stamped for check state.
+  describe('per-widget placement + button on-state', () => {
+    it('keys every widget element uniquely and never leaks an on-state onto text', async () => {
+      const byPage = await extractFormFieldsByPage(loadFixture(WITH_FORMS_PDF));
+      const all = [...byPage.values()].flat();
+      expect(all.length).toBeGreaterThan(0);
+      const ids = all.map((f) => f.elementId);
+      expect(new Set(ids).size).toBe(ids.length); // (name, page, widget index)
+      for (const f of all) {
+        if (f.fieldType === 'text' || f.fieldType === 'dropdown') {
+          expect(f.onValue == null).toBe(true);
+        }
+      }
+    });
+
+    it('stamps onValue on a checkbox/radio widget element', async () => {
+      const byPage = await extractFormFieldsByPage(loadFixture(WITH_FORMS_PDF));
+      const checkable = [...byPage.values()]
+        .flat()
+        .filter((f) => f.fieldType === 'checkbox' || f.fieldType === 'radio');
+      expect(
+        checkable.some((f) => typeof f.onValue === 'string' && f.onValue.length > 0),
+      ).toBe(true);
     });
   });
 });
