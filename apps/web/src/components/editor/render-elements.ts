@@ -1260,14 +1260,14 @@ export async function renderElementsOverlay(
           cornerSize: 8,
           transparentCorners: false,
         });
-        // BOUNDED anti-overflow fit — FALLBACK fonts ONLY. With the exact embedded
-        // subset resolved (the common case, `usingEmbeddedFont`) the real metrics
-        // already fit, so NO scaleX (squashing exact text is forbidden). When a
-        // loose/CSS fallback is used its metrics can render wider than the original
-        // and overlap the next run: shrink with a scaleX clamped to [0.92, 1] —
-        // absorbs the drift without a visible squash, never expands. The lib's
-        // `bounds.width` is the real target advance width.
-        applyFallbackWidthFit(textObj, textElement.bounds.width, _usingEmbeddedFont);
+        // Fit the run to its exact /Widths box for ANY font (embedded too). Even the
+        // exact embedded subset renders at the FontFace's hmtx advance, which is a
+        // hair WIDER than the PDF's /Widths — so a run interleaved in a justified line
+        // (a footer's plain " 'obtenir" / " le versement" between positioned words)
+        // overflows and overlaps its neighbour. Shrinking to the box restores the
+        // rasterizer's footprint; it never expands, so a run that already fits (the
+        // common left-aligned paragraph case) is untouched. See applySegmentWidthFit.
+        applySegmentWidthFit(textObj, textElement.bounds.width);
         (textObj as FabricObjectWithData).data = {
           elementId: textElement.elementId,
           type: "text",
