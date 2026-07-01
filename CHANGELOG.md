@@ -5,7 +5,26 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.19.1] - 2026-07-02
+## [1.19.2] - 2026-07-02
+
+### Fixed — no more vanishing footer lines or misplaced headers on dense forms
+
+- **Text no longer jumps out of place on complex forms (CERFA and the like).** The
+  editor coalesces the engine's paragraphs, headings, table cells and list items
+  into Word-style editable blocks — but on dense administrative layouts the engine's
+  structural reconstruction sometimes groups runs that are visually unrelated (a
+  "paragraph" or "table cell" spanning the footer AND the header). Folding those into
+  one text box relocated their words: a footer legal line lost its middle
+  ("La loi rend passible d'… des avantages indus" with the whole clause missing),
+  a header banner's "VOLET 2" slid to the top-left corner, small fragments floated
+  below their line.
+- A **geometric-coherence gate** now guards every coalesced block: a block is only
+  folded into one editable box when its runs form a genuine single column — one run
+  per line, line-contiguous, left-aligned, and never a justified (per-word
+  positioned) run. Anything the engine mis-grouped falls back to rendering each run
+  at its exact position, which is pixel-identical to the page image. Verified
+  against the engine's own rasterizer on both pages of a filled CERFA form: footer
+  and header now reproduce the original exactly.
 
 ### Fixed — the last legal-footer overlaps (plain runs interleaved in a justified line)
 

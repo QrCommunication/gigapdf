@@ -15,6 +15,14 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.19.2",
+    date: "2026-07-02",
+    type: "patch",
+    changes: [
+      { type: "fix", description: "Editor: text no longer jumps out of place on dense forms (CERFA and the like). When the engine mis-grouped visually unrelated runs — a \"paragraph\" or table cell spanning the footer and the header — the editor folded them into one box and relocated their words: a footer legal line lost its middle, a header's \"VOLET 2\" slid to the top-left corner, small fragments floated below the line. A geometric-coherence gate now only folds a block when its runs form a genuine single column, so everything else renders exactly where it belongs (verified pixel-identical to the page image on both pages of a filled CERFA)." },
+    ],
+  },
+  {
     version: "1.19.1",
     date: "2026-07-02",
     type: "patch",
