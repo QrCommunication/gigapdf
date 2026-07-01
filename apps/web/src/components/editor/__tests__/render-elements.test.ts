@@ -20,6 +20,7 @@ import {
   groupTextRunsIntoParagraphs,
   measuredLineHeightMultiple,
   hasUniformLineAdvance,
+  isCoherentCoalescedBlock,
   pageBlockGroupsToParagraphs,
   pageBlockGroupsToTablesAndLists,
 } from "../render-elements";
@@ -1371,6 +1372,46 @@ describe("hasUniformLineAdvance (pure)", () => {
   });
 });
 
+describe("isCoherentCoalescedBlock (pure)", () => {
+  // fontSize defaults to 12 ⇒ same-line < 4.8, contiguity > 30, xSpread > 36.
+  const run = (y: number, x = 40): TextRun => paraRun(`r${y}_${x}`, y, { x }) as TextRun;
+  const withSegments = (y: number): TextRun =>
+    ({ ...(paraRun(`s${y}`, y) as unknown as TextRun), segments: [
+      { text: "a", bounds: { x: 40, y, width: 6, height: 8 } },
+      { text: "b", bounds: { x: 60, y, width: 6, height: 8 } },
+    ] }) as unknown as TextRun;
+
+  it("accepts a genuine 1-run-per-line, left-aligned, line-contiguous block", () => {
+    expect(isCoherentCoalescedBlock([run(100), run(114), run(128)])).toBe(true);
+  });
+
+  it("rejects a block containing a justified / positioned (segmented) run", () => {
+    // A TJ-positioned run's per-word geometry can't survive a wrapped Textbox.
+    expect(isCoherentCoalescedBlock([run(100), withSegments(114)])).toBe(false);
+  });
+
+  it("rejects two runs on the SAME visual line (they would stack vertically)", () => {
+    expect(isCoherentCoalescedBlock([run(100), run(100, 300)])).toBe(false);
+  });
+
+  it("rejects a footer↔header fusion (a jump far larger than one line)", () => {
+    // The lib's pageBlocks mis-groups a footer run (y≈22) with a header run
+    // (y≈792) into one "paragraph"/"cell" — a single Textbox cannot span it.
+    expect(isCoherentCoalescedBlock([run(22), run(792)])).toBe(false);
+  });
+
+  it("rejects horizontally scattered runs (a space next to a far-away rule)", () => {
+    // Two runs one line apart but 260pt apart in x → a left-aligned Textbox would
+    // reflow the right run to the block's min-x. Not a single column.
+    expect(isCoherentCoalescedBlock([run(100, 40), run(114, 300)])).toBe(false);
+  });
+
+  it("is trivially true for < 2 runs (never coalesced anyway)", () => {
+    expect(isCoherentCoalescedBlock([run(100)])).toBe(true);
+    expect(isCoherentCoalescedBlock([])).toBe(true);
+  });
+});
+
 describe("renderElementsOverlay — justified-run segments", () => {
   it("paints ONE positioned IText per segment (not a single drifting box), all sharing the run's elementId/index", async () => {
     const canvas = makeCanvas();
@@ -1718,13 +1759,16 @@ describe("pageBlockGroupsToParagraphs (pure)", () => {
 describe("renderElementsOverlay — engine blockGroups drive paragraph render", () => {
   it("uses blockGroups over the positional heuristic and round-trips source indices", async () => {
     const canvas = makeCanvas();
-    // Geometry that the heuristic would NOT group (far-apart rows), so a Textbox
-    // can only appear if the engine blockGroups are honoured.
+    // A COHERENT block (one run per line, one normal line-advance apart) but with
+    // a small left-edge offset (20pt > the heuristic's 6pt xTol) that the
+    // positional heuristic rejects — so a Textbox can only appear if the engine
+    // blockGroups are honoured. The geometry still passes the coherence gate
+    // (contiguous, single-column, no segments) so it stays coalescable.
     await renderElementsOverlay(
       canvas,
       [
         paraRun("a", 100, { index: 21, content: "Intro line one" }),
-        paraRun("b", 480, { index: 22, content: "Intro line two", x: 300 }),
+        paraRun("b", 114, { index: 22, content: "Intro line two", x: 60 }),
       ],
       fabricMock,
       { blockGroups: [{ kind: "paragraph", sourceIndices: [21, 22] }] },
@@ -1748,13 +1792,13 @@ describe("renderElementsOverlay — engine blockGroups drive paragraph render", 
 
   it("falls back to the heuristic when no blockGroups are provided", async () => {
     const canvas = makeCanvas();
-    // Same far-apart geometry, but WITHOUT blockGroups → heuristic keeps them
-    // standalone (different rows, no regular gap).
+    // Same geometry, but WITHOUT blockGroups → the heuristic keeps them standalone
+    // (the 20pt left-edge offset exceeds its 6pt xTol).
     await renderElementsOverlay(
       canvas,
       [
         paraRun("a", 100, { index: 21, content: "L1" }),
-        paraRun("b", 480, { index: 22, content: "L2", x: 300 }),
+        paraRun("b", 114, { index: 22, content: "L2", x: 60 }),
       ],
       fabricMock,
     );
@@ -1881,7 +1925,7 @@ describe("renderElementsOverlay — table/list reconstruction", () => {
       canvas,
       [
         paraRun("a", 100, { index: 1, content: "Cell line A" }),
-        paraRun("b", 200, { index: 2, content: "Cell line B", x: 220 }),
+        paraRun("b", 114, { index: 2, content: "Cell line B" }),
       ],
       fabricMock,
       { blockGroups: [tableGroup([[[1, 2]]])] },
@@ -1905,7 +1949,7 @@ describe("renderElementsOverlay — table/list reconstruction", () => {
       canvas,
       [
         paraRun("a", 100, { index: 5, content: "Bullet line 1" }),
-        paraRun("b", 200, { index: 6, content: "Bullet line 2", x: 220 }),
+        paraRun("b", 114, { index: 6, content: "Bullet line 2" }),
       ],
       fabricMock,
       { blockGroups: [listGroup([[5, 6]])] },

@@ -688,6 +688,69 @@ export function hasUniformLineAdvance(runs: readonly TextRun[]): boolean {
 }
 
 /**
+ * Whether a set of runs is a GEOMETRICALLY COHERENT block that a single
+ * left-aligned, uniformly-line-spaced `Textbox` can reproduce 1:1.
+ *
+ * The engine's `pageBlocks` structural reconstruction (paragraphs, headings AND
+ * table cells / list items) is authoritative for READING ORDER but is only a
+ * heuristic for LAYOUT — on dense administrative forms (CERFA and friends) it
+ * routinely mis-groups runs that are visually unrelated: a "paragraph" or a
+ * "table cell" whose runs span the footer (`y≈16`) AND the header (`y≈792`), or
+ * a two-run "paragraph" that is really a stray space next to a dotted rule 250pt
+ * away. Coalescing such a group into ONE `Textbox` — which lays every run on its
+ * own left-aligned line at a single uniform advance — RELOCATES those runs
+ * (footer text vanishes, header text stacks in the wrong place: the exact
+ * symptoms the user reports). {@link hasUniformLineAdvance} rejects the
+ * wildly-irregular multi-run cases but is blind to two-run groups (one gap ⇒
+ * trivially "uniform") and to uniform-but-huge advances.
+ *
+ * A coalescable block must therefore satisfy ALL of:
+ *  1. **No justified/positioned run** (`segments`): a `TJ`-positioned run's
+ *     per-word geometry can never be reproduced by a wrapped `Textbox`, so it
+ *     stays per-segment (rendered pixel-exact by the segment branch).
+ *  2. **One run per line**: consecutive runs (sorted by `bounds.y`) never share a
+ *     line (gap ≥ `0.4·fontSize`). Two runs on the same visual line would be laid
+ *     on two separate `Textbox` lines → vertical "texte emmêlé".
+ *  3. **Line-contiguous**: no consecutive gap exceeds `2.5·fontSize` — a real
+ *     block advances ≈ one line between runs; a jump of hundreds of points means
+ *     the lib fused unrelated regions.
+ *  4. **Single column**: the runs' left edges cluster within `3·fontSize` — a
+ *     left-aligned `Textbox` re-flows every line from the block's min-x, so runs
+ *     that start far apart horizontally would be shoved left of where they belong.
+ *
+ * Rejected groups are NOT dropped — they fall through to the per-run / per-segment
+ * IText path, which renders every run at its exact `bounds` (proven pixel-1:1 with
+ * the rasterizer). So this gate can only ever IMPROVE fidelity; the cost is that a
+ * genuinely centered / multi-run-per-line paragraph loses paragraph-level editing
+ * (it stays a set of standalone ITexts) — an accepted trade (a false coalesce is
+ * worse than none). Pure & deterministic (unit-tested).
+ */
+export function isCoherentCoalescedBlock(runs: readonly TextRun[]): boolean {
+  if (runs.length < 2) return true; // a lone run is never coalesced anyway
+  // (1) Justified / per-glyph-positioned runs must stay per-segment.
+  if (runs.some((r) => r.segments && r.segments.length > 0)) return false;
+
+  const sizes = runs
+    .map((r) => r.style.fontSize || 12)
+    .sort((a, b) => a - b);
+  const fs = sizes[Math.floor((sizes.length - 1) / 2)] || 12;
+
+  const ys = runs.map((r) => r.bounds.y).sort((a, b) => a - b);
+  for (let i = 1; i < ys.length; i += 1) {
+    const gap = ys[i]! - ys[i - 1]!;
+    if (gap < fs * 0.4) return false; // (2) same-line runs → would stack
+    if (gap > fs * 2.5) return false; // (3) discontinuity → unrelated regions
+  }
+
+  // (4) Single-column: left edges must cluster (a left-aligned Textbox reflows
+  //     every line from min-x, so scattered starts would be pulled leftward).
+  const xs = runs.map((r) => r.bounds.x);
+  if (Math.max(...xs) - Math.min(...xs) > fs * 3) return false;
+
+  return true;
+}
+
+/**
  * Group consecutive same-style, regularly-spaced, left-aligned text runs into
  * paragraphs. Returns BOTH the detected paragraph groups (2+ runs) AND the runs
  * that stay standalone. Pure & deterministic — drives the renderer and is unit
@@ -1059,16 +1122,22 @@ export async function renderElementsOverlay(
       ? pageBlockGroupsToTablesAndLists(dedupedElements, blockGroups).paragraphs
       : [];
 
-  // Drop any coalesced block (paragraph, table cell OR list item) whose lines are
-  // NOT uniformly spaced: a Fabric Textbox advances every line by ONE fontSize ×
-  // lineHeight, which cannot reproduce imported-PDF text that mixes a body
-  // advance with wider sub-paragraph/blank-line gaps (a CERFA intro alternates
-  // ~10.5pt and ~14pt). Coalescing it drifts the folded lines away from their
-  // same-line standalone ITexts — the "texte emmêlé". Dropped blocks fall through
-  // to the per-run IText loop and render 1:1 at their exact bounds.y (proven
-  // clean). Genuinely uniform blocks still coalesce and stay paragraph-editable.
+  // Drop any coalesced block (paragraph, table cell OR list item) that a single
+  // left-aligned, uniformly-spaced Textbox cannot reproduce 1:1. TWO gates:
+  //  • hasUniformLineAdvance — rejects blocks mixing a body advance with wider
+  //    sub-paragraph/blank-line gaps (a CERFA intro alternates ~10.5pt and ~14pt),
+  //    which a single lineHeight cannot honour.
+  //  • isCoherentCoalescedBlock — rejects blocks the lib's `pageBlocks` heuristic
+  //    mis-fused across the page: a "paragraph"/"table cell" whose runs span the
+  //    footer AND the header, two runs on the same line, a stray space next to a
+  //    far-away rule, or any justified (segmented) run. On dense forms these are
+  //    the cause of the vanishing footer / mis-placed header text.
+  // Dropped blocks fall through to the per-run / per-segment IText path and render
+  // 1:1 at their exact bounds (proven pixel-clean). Genuinely coherent blocks still
+  // coalesce and stay paragraph-editable.
   const allCoalescedGroups = [...paragraphGroups, ...tableListGroups].filter(
-    (group) => hasUniformLineAdvance(group.runs),
+    (group) =>
+      hasUniformLineAdvance(group.runs) && isCoherentCoalescedBlock(group.runs),
   );
   const runsInParagraph = new Set<string>();
   for (const group of allCoalescedGroups) {
