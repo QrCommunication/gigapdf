@@ -316,11 +316,10 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     expect((it_.data as Record<string, unknown>).usingEmbeddedFont).toBe(false);
   });
 
-  it("applies a BOUNDED anti-overflow scaleX for a FALLBACK font that overflows", async () => {
-    // A loose/CSS fallback can measure wider than the run's real advance width;
-    // a BOUNDED scaleX (floor 0.92) absorbs the metric drift to stop overlap,
-    // without squashing the glyphs below 0.92 (a large overflow is left slightly
-    // over rather than crushed).
+  it("shrinks an overflowing FALLBACK run to its /Widths box (floored at 0.5)", async () => {
+    // A loose/CSS fallback measures wider than the run's real advance; it is shrunk
+    // to the box so it can't overlap the next run, floored so a gross mis-measure
+    // (here 100/250 = 0.4) never crushes below 0.5.
     const canvas = makeCanvas();
     // IText mock reporting a measured width far beyond the 100px bounds.
     class WideIText extends IText {
@@ -337,14 +336,16 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
       (o) => o instanceof WideIText,
     ) as WideIText;
-    // 100/250 = 0.4 < floor → clamped to the 0.92 floor (never crushed further).
-    expect(it_.opts.scaleX).toBeCloseTo(0.92, 5);
+    // 100/250 = 0.4 → clamped to the 0.5 floor.
+    expect(it_.opts.scaleX).toBeCloseTo(0.5, 5);
     expect((it_.data as Record<string, unknown>).usingEmbeddedFont).toBe(false);
   });
 
-  it("applies NO scaleX for an EXACT embedded font even when it measures wide", async () => {
-    // With the exact embedded subset resolved (usingEmbeddedFont) the metrics are
-    // trusted: NEVER squash exact text, even if the mock reports a wide measure.
+  it("shrinks an overflowing EMBEDDED run to its box too (hmtx ≠ /Widths)", async () => {
+    // Even the exact embedded subset renders at the FontFace hmtx advance, a hair
+    // wider than /Widths — so a run interleaved in a justified line (a footer's plain
+    // " 'obtenir") would overlap its neighbour. It is now fitted to its box (this was
+    // previously left untouched, which caused the residual footer overlap).
     const canvas = makeCanvas();
     class WideIText extends IText {
       width = 250;
@@ -361,7 +362,8 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
       (o) => o instanceof WideIText,
     ) as WideIText;
-    expect(it_.opts.scaleX).toBeUndefined(); // untouched
+    // 100/250 = 0.4 → clamped to the 0.5 floor — fitted, no longer left untouched.
+    expect(it_.opts.scaleX).toBeCloseTo(0.5, 5);
     expect((it_.data as Record<string, unknown>).usingEmbeddedFont).toBe(true);
   });
 

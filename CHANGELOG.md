@@ -5,6 +5,17 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.1] - 2026-07-02
+
+### Fixed — the last legal-footer overlaps (plain runs interleaved in a justified line)
+
+- A justified line's **plain single-word runs** (a footer's `'obtenir`, `le
+  versement`, `et de`) were still drawn at the browser's hmtx advance — a hair wider
+  than the PDF `/Widths` — so they overflowed and overlapped the neighbouring words.
+  They are now fitted to their exact `/Widths` box like the positioned segments, so
+  the whole footer reproduces the original word-for-word (verified pixel-identical
+  against the engine's rasterizer).
+
 ## [1.19.0] - 2026-07-01
 
 ### Fixed — legal small-print now reproduces the original exactly

@@ -15,6 +15,14 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.19.1",
+    date: "2026-07-02",
+    type: "patch",
+    changes: [
+      { type: "fix", description: "Editor: the last remaining overlaps in a justified legal footer are gone. Single-word runs sitting between justified words (\"'obtenir\", \"le versement\") are now fitted to their exact width like the rest of the line, so the whole footer reproduces the original word-for-word." },
+    ],
+  },
+  {
     version: "1.19.0",
     date: "2026-07-01",
     type: "minor",
