@@ -16,6 +16,7 @@ import type { Element, PageBlockGroup } from "@giga-pdf/types";
 import {
   renderElementsOverlay,
   applyFallbackWidthFit,
+  applySegmentWidthFit,
   groupTextRunsIntoParagraphs,
   measuredLineHeightMultiple,
   hasUniformLineAdvance,
@@ -1465,6 +1466,47 @@ describe("applyFallbackWidthFit (pure)", () => {
   it("is a no-op when the measured width is unknown (0/undefined)", () => {
     const obj = fitObj(0);
     expect(applyFallbackWidthFit(obj, 100, false)).toBe(1);
+    expect(obj.scaleX).toBe(1);
+  });
+});
+
+describe("applySegmentWidthFit (pure)", () => {
+  function fitObj(width: number) {
+    return {
+      width,
+      scaleX: 1,
+      set(patch: { scaleX: number }) {
+        this.scaleX = patch.scaleX;
+      },
+    };
+  }
+
+  it("fits a word rendered WIDER than its /Widths box — even for an EMBEDDED font", () => {
+    // The whole point vs applyFallbackWidthFit: a per-word fragment must be shrunk to
+    // its /Widths advance whatever the font, so browser hmtx over-width never eats the
+    // inter-word gap. 110 measured vs 100 target → exact ratio (inside the 0.5 floor).
+    const obj = fitObj(110);
+    const scaleX = applySegmentWidthFit(obj, 100);
+    expect(scaleX).toBeCloseTo(100 / 110, 5);
+    expect(obj.scaleX).toBeCloseTo(100 / 110, 5);
+  });
+
+  it("never EXPANDS a word that already fits (measured ≤ target ⇒ keep the gap)", () => {
+    const obj = fitObj(80);
+    expect(applySegmentWidthFit(obj, 100)).toBe(1);
+    expect(obj.scaleX).toBe(1);
+  });
+
+  it("clamps the shrink at a 0.5 floor so a mis-measured fallback never collapses", () => {
+    const obj = fitObj(400); // ratio 0.25 → clamped to 0.5
+    const scaleX = applySegmentWidthFit(obj, 100);
+    expect(scaleX).toBe(0.5);
+    expect(obj.scaleX).toBe(0.5);
+  });
+
+  it("is a no-op when the measured width is unknown (0)", () => {
+    const obj = fitObj(0);
+    expect(applySegmentWidthFit(obj, 100)).toBe(1);
     expect(obj.scaleX).toBe(1);
   });
 });

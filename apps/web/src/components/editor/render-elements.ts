@@ -339,6 +339,29 @@ export function applyFallbackWidthFit(
   return scaleX;
 }
 
+/**
+ * Fit a per-word RUN FRAGMENT to its exact `/Widths` advance — for ANY font,
+ * embedded or fallback (unlike {@link applyFallbackWidthFit}, which skips embedded
+ * fonts). The engine positions each fragment at the rasterizer's pen `x`, but the
+ * browser draws the word at the FontFace's own `hmtx` advance, which is often a hair
+ * WIDER than the PDF's `/Widths` (a CFF/Type1 subset re-hinted for the web). Over a
+ * justified line those hair-widths accumulate and a word eats the inter-word gap —
+ * "amende et/ou" collapses to "amendeet/ou". Shrinking each word to its `/Widths`
+ * box restores the exact rasterizer footprint, so every gap is preserved. Shrink-ONLY
+ * (a word rendered narrower than its box keeps its gap; the next word is absolutely
+ * positioned anyway); clamped to a floor so a mis-measured fallback never collapses.
+ */
+export function applySegmentWidthFit(
+  obj: { width?: number; set: (patch: { scaleX: number }) => void },
+  targetWidth: number,
+): number {
+  const measured = obj.width ?? 0;
+  if (measured <= 0 || targetWidth <= 0 || measured <= targetWidth) return 1;
+  const scaleX = Math.max(0.5, targetWidth / measured);
+  obj.set({ scaleX });
+  return scaleX;
+}
+
 /** Strip a 6-letter `ABCDEF+` PDF subset prefix so two disjoint subsets of the
  *  same `/BaseFont` compare equal (paragraph-grouping identity). */
 function stripSubsetPrefix(name: string): string {
@@ -398,14 +421,21 @@ function formFieldChecked(field: {
   fieldType: string;
   value: string | boolean | string[];
   options: string[] | null;
+  onValue?: string | null;
 }): boolean {
   const { value } = field;
   if (typeof value === "boolean") return value;
+  // A widget with a named on-state (a radio button, or a checkbox whose "on" is a
+  // named export): checked iff the field value equals THIS widget's on-state. A
+  // radio group renders one element per button, so only the selected one is on.
+  if (field.onValue != null && field.onValue.length > 0) {
+    return formFieldTextValue(value) === field.onValue;
+  }
   if (field.fieldType === "checkbox") {
     const v = formFieldTextValue(value).toLowerCase();
     return v === "true" || v === "on" || v === "yes" || v === "1";
   }
-  // radio: checked when a non-empty option is selected.
+  // radio without a per-widget on-state: checked when a non-empty option is selected.
   return formFieldTextValue(value).length > 0;
 }
 
@@ -1147,9 +1177,12 @@ export async function renderElementsOverlay(
               cornerSize: 8,
               transparentCorners: false,
             });
-            // Fallback-only bounded width fit (no-op for the exact embedded subset)
-            // keeps a fragment inside its box on a CSS fallback, like the run path.
-            applyFallbackWidthFit(segObj, seg.bounds.width, _usingEmbeddedFont);
+            // Fit the word to its exact /Widths box for ANY font (embedded too): the
+            // browser draws it at the FontFace's hmtx advance, a hair wider than the
+            // PDF /Widths, and over a justified line those hair-widths would eat the
+            // inter-word gaps ("amende et/ou" → "amendeet/ou"). Shrinking to the box
+            // restores the rasterizer's exact per-word footprint. See applySegmentWidthFit.
+            applySegmentWidthFit(segObj, seg.bounds.width);
             (segObj as FabricObjectWithData).data = {
               elementId: textElement.elementId,
               type: "text",

@@ -408,6 +408,13 @@ export interface FormFieldElement extends ElementBase {
   placeholder?: string | null;
   /** Tooltip / alternate description (maps to /TU in AcroForm, read by screen readers). */
   tooltip?: string | null;
+  /**
+   * For a checkbox/radio WIDGET, the on-state export value that marks THIS widget
+   * checked (the field's `value` equals it). A radio group has one element per
+   * button, each with its own `onValue`; `null` for text/choice/other widgets and
+   * for a boolean checkbox with no named on-state.
+   */
+  onValue?: string | null;
 }
 
 // ============= Union Type =============

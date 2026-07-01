@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { FormFieldElement, FieldType } from '@giga-pdf/types';
-import type { FieldInfo, FieldKind } from '@qrcommunication/gigapdf-lib';
+import type { FieldInfo, FieldKind, WidgetPlacement } from '@qrcommunication/gigapdf-lib';
 import { getEngine } from '../wasm';
 
 // ---------------------------------------------------------------------------
@@ -29,8 +29,10 @@ function quaddingToAlign(quadding: number): "left" | "center" | "right" {
   }
 }
 
-function stableUUID(fieldName: string, pageNumber: number): string {
-  const hash = createHash('sha256').update(`${fieldName}:${pageNumber}`).digest('hex');
+function stableUUID(fieldName: string, pageNumber: number, widgetIndex: number): string {
+  const hash = createHash('sha256')
+    .update(`${fieldName}:${pageNumber}:${widgetIndex}`)
+    .digest('hex');
   const c16 = hash[16] ?? '0';
   return [
     hash.slice(0, 8),
@@ -61,12 +63,15 @@ function mapKind(kind: FieldKind): FieldType {
   }
 }
 
-function toElement(field: FieldInfo): FormFieldElement {
-  const pageNumber = field.page ?? 1;
-  // The engine already Y-flips `/Rect` to a top-left `[x, y, width, height]`.
-  const [x, y, width, height] = field.bounds ?? [0, 0, 0, 0];
+function toElement(field: FieldInfo, widget: WidgetPlacement, widgetIndex: number): FormFieldElement {
+  const pageNumber = widget.page ?? field.page ?? 1;
+  // The engine already Y-flips each widget `/Rect` to a top-left `[x, y, w, h]`.
+  const [x, y, width, height] = widget.bounds ?? field.bounds ?? [0, 0, 0, 0];
   return {
-    elementId: stableUUID(field.name, pageNumber),
+    // One element per WIDGET: a field on a duplicate page (or each radio button)
+    // gets its own overlay, keyed by (name, page, widget index) so two widgets of
+    // the same field on the same page never collide.
+    elementId: stableUUID(field.name, pageNumber, widgetIndex),
     type: 'form_field',
     bounds: { x, y, width, height },
     transform: { rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
@@ -77,6 +82,10 @@ function toElement(field: FieldInfo): FormFieldElement {
     fieldName: field.name,
     value: field.value,
     defaultValue: field.value,
+    // For a checkbox/radio button widget, its on-state export — this button is
+    // "checked" iff the field value equals it (a radio group has one element per
+    // button, each with its own onValue). Null for text/choice widgets.
+    onValue: widget.export ?? null,
     options: field.options.length > 0 ? field.options : null,
     properties: {
       required: field.required,
@@ -123,11 +132,23 @@ export async function extractFormFieldsByPage(
     const doc = giga.open(bytes);
     try {
       for (const field of doc.fields()) {
-        if (field.page === undefined || !field.bounds || !field.name) continue;
-        const element = toElement(field);
-        const list = byPage.get(field.page) ?? [];
-        list.push(element);
-        byPage.set(field.page, list);
+        if (!field.name) continue;
+        // Render ONE overlay per widget so a field on a duplicate page (or every
+        // radio button) is placed too — not just its first widget. Fall back to the
+        // legacy single (page, bounds) for an older engine that omits `widgets`.
+        const widgets: WidgetPlacement[] =
+          field.widgets && field.widgets.length > 0
+            ? field.widgets
+            : field.page !== undefined && field.bounds
+              ? [{ page: field.page, bounds: field.bounds }]
+              : [];
+        widgets.forEach((widget, widgetIndex) => {
+          if (widget.page === undefined || !widget.bounds) return;
+          const element = toElement(field, widget, widgetIndex);
+          const list = byPage.get(widget.page) ?? [];
+          list.push(element);
+          byPage.set(widget.page, list);
+        });
       }
     } finally {
       doc.close();
