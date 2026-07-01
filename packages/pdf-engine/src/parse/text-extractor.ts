@@ -279,6 +279,24 @@ export function runToTextElement(run: TextElementInfo, pageHeight: number, pageN
     ocrConfidence: null,
     linkUrl: null,
     linkPage: null,
+    // Positioned fragments for a justified / per-glyph-positioned run (a legal
+    // footer): each carries the engine's exact page-space box, flipped into the
+    // editor's Y-down web space exactly like the run itself. The renderer paints
+    // one IText per fragment (1:1 with the render); all share this run's
+    // elementId/index so editing still targets the whole run. Omitted for a
+    // plain run (the common case) so its single box is used unchanged.
+    segments:
+      run.segments && run.segments.length > 0
+        ? run.segments.map((s) => ({
+            text: s.text,
+            bounds: {
+              x: s.x,
+              y: pageHeight - s.y - s.height,
+              width: s.width,
+              height: run.fontSize,
+            },
+          }))
+        : undefined,
   };
 }
 

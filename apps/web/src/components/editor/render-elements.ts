@@ -469,7 +469,7 @@ function arrowHeadPoints(
 // Paragraph grouping (Word-like editing) — pure helpers
 // ---------------------------------------------------------------------------
 
-type TextRun = Extract<Element, { type: "text" }>;
+export type TextRun = Extract<Element, { type: "text" }>;
 
 /**
  * Minimal snapshot of a source text run, stashed on the paragraph Textbox's
@@ -589,6 +589,72 @@ function isUngroupableRun(t: TextRun): boolean {
   if (t.style.direction === "rtl") return true; // RTL wrapping is delicate
   if (!t.content || t.content.includes("\n")) return true; // empty / already multi-line
   return false; // otherwise groupable
+}
+
+/**
+ * Median per-line vertical advance of a coalesced paragraph's runs, expressed as
+ * a Fabric `lineHeight` MULTIPLE of `fontSize`.
+ *
+ * A Fabric `Textbox` lays every wrapped line at a UNIFORM `fontSize × lineHeight`.
+ * Hardcoding 1.2 (Word's default) over-spaces imported PDF text whose real line
+ * advance is tighter — a CERFA body is ~10.5pt for a 10pt font (⇒ ~1.05, not
+ * 1.2). The 1.5pt/line excess accumulates, so the coalesced lines drift downward
+ * and visually separate from the same-line runs that render as standalone
+ * `IText`s at their true `bounds.y` (the "texte emmêlé" the user sees). Deriving
+ * the multiple from the runs' own `bounds.y` gaps keeps the box 1:1 with the
+ * source for BOTH the lib-`pageBlocks` and positional-heuristic coalescing paths.
+ *
+ * Pure & deterministic (unit-tested). Same-line runs (gap ≈ 0) are ignored;
+ * returns 1.2 when there is < 2 lines or the measurement is degenerate; clamped
+ * to a sane range so a single outlier gap can never blow up the spacing.
+ */
+export function measuredLineHeightMultiple(
+  runs: readonly TextRun[],
+  fontSize: number,
+): number {
+  const FALLBACK = 1.2;
+  if (fontSize <= 0 || runs.length < 2) return FALLBACK;
+  const ys = runs.map((r) => r.bounds.y).sort((a, b) => a - b);
+  const gaps: number[] = [];
+  for (let i = 1; i < ys.length; i += 1) {
+    const gap = ys[i]! - ys[i - 1]!;
+    if (gap > 0.5) gaps.push(gap); // skip same-line runs (≈0 advance)
+  }
+  if (gaps.length === 0) return FALLBACK;
+  gaps.sort((a, b) => a - b);
+  const median = gaps[Math.floor((gaps.length - 1) / 2)]!;
+  return Math.min(3, Math.max(0.8, median / fontSize));
+}
+
+/**
+ * Whether a candidate paragraph's lines are spaced REGULARLY enough to survive a
+ * Fabric `Textbox`'s single uniform `lineHeight` without visible drift.
+ *
+ * A `Textbox` can only advance every line by the SAME `fontSize × lineHeight`.
+ * Imported PDF paragraphs frequently mix a body advance with wider sub-paragraph
+ * / blank-line gaps (a CERFA intro alternates ~10.5pt and ~14pt). No single
+ * lineHeight reproduces that — the median just relocates where the drift piles
+ * up (proven: max vertical drift stayed ~6pt). So a non-uniform block must NOT
+ * be coalesced; its runs render as standalone `IText`s at their exact `bounds.y`
+ * (1:1 fidelity, the ground-truth-clean path). Genuinely uniform paragraphs
+ * (typical Word-like content) still coalesce and stay paragraph-editable.
+ *
+ * Uniform ⇔ every inter-line gap is within ±30% of the median gap. Pure &
+ * deterministic (unit-tested). Blocks of < 3 lines have at most one gap and are
+ * trivially uniform.
+ */
+export function hasUniformLineAdvance(runs: readonly TextRun[]): boolean {
+  if (runs.length < 3) return true;
+  const ys = runs.map((r) => r.bounds.y).sort((a, b) => a - b);
+  const gaps: number[] = [];
+  for (let i = 1; i < ys.length; i += 1) {
+    const gap = ys[i]! - ys[i - 1]!;
+    if (gap > 0.5) gaps.push(gap); // skip same-line runs (≈0 advance)
+  }
+  if (gaps.length < 2) return true;
+  const median = [...gaps].sort((a, b) => a - b)[Math.floor((gaps.length - 1) / 2)]!;
+  if (median <= 0) return true;
+  return gaps.every((gap) => gap >= median * 0.7 && gap <= median * 1.3);
 }
 
 /**
@@ -963,7 +1029,17 @@ export async function renderElementsOverlay(
       ? pageBlockGroupsToTablesAndLists(dedupedElements, blockGroups).paragraphs
       : [];
 
-  const allCoalescedGroups = [...paragraphGroups, ...tableListGroups];
+  // Drop any coalesced block (paragraph, table cell OR list item) whose lines are
+  // NOT uniformly spaced: a Fabric Textbox advances every line by ONE fontSize ×
+  // lineHeight, which cannot reproduce imported-PDF text that mixes a body
+  // advance with wider sub-paragraph/blank-line gaps (a CERFA intro alternates
+  // ~10.5pt and ~14pt). Coalescing it drifts the folded lines away from their
+  // same-line standalone ITexts — the "texte emmêlé". Dropped blocks fall through
+  // to the per-run IText loop and render 1:1 at their exact bounds.y (proven
+  // clean). Genuinely uniform blocks still coalesce and stay paragraph-editable.
+  const allCoalescedGroups = [...paragraphGroups, ...tableListGroups].filter(
+    (group) => hasUniformLineAdvance(group.runs),
+  );
   const runsInParagraph = new Set<string>();
   for (const group of allCoalescedGroups) {
     for (const run of group.runs) runsInParagraph.add(run.elementId);
@@ -1032,6 +1108,73 @@ export async function renderElementsOverlay(
         );
         const _usingEmbeddedFont = _font.usingEmbeddedFont;
         const _resolvedFontFamily = _font.fontFamily;
+        // JUSTIFIED / per-glyph-positioned run: the engine split it into
+        // positioned fragments (a legal footer's TJ jumps a single box can't
+        // reproduce). Paint ONE IText per fragment at its exact box — 1:1 with the
+        // render — instead of one drifting box. All fragments share the run's
+        // elementId/index so selecting/moving/deleting still targets the whole run
+        // (fragments are display-exact, not individually inline-editable: editing
+        // one fragment's text would corrupt the run). Added directly here; the
+        // post-switch single-object add is skipped (fabricObj left null).
+        if (textElement.segments && textElement.segments.length > 0) {
+          for (let si = 0; si < textElement.segments.length; si += 1) {
+            const seg = textElement.segments[si]!;
+            const segObj = new IText(seg.text, {
+              ...baseOptions,
+              left: seg.bounds.x,
+              top: baselineTopFromBoundsY(seg.bounds.y, _fontSize),
+              originY: "bottom" as const,
+              width: seg.bounds.width,
+              fontSize: _fontSize,
+              fontFamily: _resolvedFontFamily,
+              fontWeight: _font.fontWeight,
+              fontStyle: _font.fontStyle,
+              fill: textColour,
+              opacity: textElement.style.opacity ?? 1,
+              textAlign: "left" as const,
+              lineHeight: 1,
+              charSpacing: (textElement.style.letterSpacing || 0) * 10,
+              underline: textElement.style.underline || false,
+              linethrough: textElement.style.strikethrough || false,
+              editable: false,
+              textBackgroundColor: "",
+              hasControls: true,
+              hasBorders: true,
+              borderColor: "rgba(0, 100, 200, 0.75)",
+              borderScaleFactor: 1,
+              cornerColor: "rgb(0, 100, 200)",
+              cornerStrokeColor: "#ffffff",
+              cornerSize: 8,
+              transparentCorners: false,
+            });
+            // Fallback-only bounded width fit (no-op for the exact embedded subset)
+            // keeps a fragment inside its box on a CSS fallback, like the run path.
+            applyFallbackWidthFit(segObj, seg.bounds.width, _usingEmbeddedFont);
+            (segObj as FabricObjectWithData).data = {
+              elementId: textElement.elementId,
+              type: "text",
+              index: textElement.index,
+              rotation0: textElement.transform?.rotation ?? 0,
+              originalFont: textElement.style.originalFont,
+              usingEmbeddedFont: _usingEmbeddedFont,
+              originalFill: textColour,
+              originalBgColor: textElement.style.backgroundColor || "",
+              linkUrl: null,
+              linkPage: null,
+              listMarkerLen: 0,
+              listStyle: null,
+              indentLeft: 0,
+              locked: textElement.locked === true,
+              // Display fragment of a segmented run — excluded from save (the run
+              // is persisted once via its index/binary, never per fragment).
+              isRunSegment: true,
+              segmentIndex: si,
+            };
+            canvas.add(segObj as unknown as FabricObject);
+          }
+          fabricObj = null;
+          break;
+        }
         // Word-like list + paragraph indentation. The marker glyph is a
         // DECORATION composed into the DISPLAYED text only (the model `content`
         // stays clean — the serialiser strips it back). The box is shifted right
@@ -1893,7 +2036,16 @@ export async function renderElementsOverlay(
       fill: textColour,
       opacity: first.style.opacity ?? 1,
       textAlign: first.style.textAlign || "left",
-      lineHeight: first.style.lineHeight || 1.2,
+      // Real per-line advance = median of the runs' own bounds.y gaps, NOT the
+      // per-run style.lineHeight (the extractor hardcodes 1.2 on every run, which
+      // is meaningless for a block's line spacing and over-spaces tight PDF text
+      // — a 10pt CERFA body advances ~10.5pt ⇒ ~1.05, not 1.2). The measured
+      // value reflects the runs' ACTUAL positions, so the box stays 1:1 with the
+      // source; it falls back to 1.2 only when unmeasurable (<2 lines). Uniform
+      // groups reach here (non-uniform ones were dropped to per-run above), so a
+      // single lineHeight faithfully reproduces the block. See
+      // measuredLineHeightMultiple.
+      lineHeight: measuredLineHeightMultiple(runs, fontSize),
       charSpacing: (first.style.letterSpacing || 0) * 10,
       underline: first.style.underline || false,
       linethrough: first.style.strikethrough || false,

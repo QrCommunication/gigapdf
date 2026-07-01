@@ -15,6 +15,15 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.18.0",
+    date: "2026-07-01",
+    type: "minor",
+    changes: [
+      { type: "fix", description: "Editor: justified small-print text (e.g. the legal footer of a CERFA form) no longer renders scrambled and overlapping. Runs whose glyphs are spread across the line are now painted fragment by fragment at their exact positions — computed the same way the page is rendered — so the text reads exactly as printed while staying editable (engine 0.111.0)" },
+      { type: "fix", description: "Editor: multi-line intro paragraphs no longer drift downward and separate from the rest of the line. Line spacing is now taken from the document's real measurements instead of a fixed default, and irregularly-spaced blocks are shown line by line for a 1:1 match" },
+    ],
+  },
+  {
     version: "1.17.2",
     date: "2026-06-30",
     type: "patch",

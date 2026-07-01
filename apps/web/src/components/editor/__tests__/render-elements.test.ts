@@ -17,9 +17,12 @@ import {
   renderElementsOverlay,
   applyFallbackWidthFit,
   groupTextRunsIntoParagraphs,
+  measuredLineHeightMultiple,
+  hasUniformLineAdvance,
   pageBlockGroupsToParagraphs,
   pageBlockGroupsToTablesAndLists,
 } from "../render-elements";
+import type { TextRun } from "../render-elements";
 
 // --- Minimal Fabric mock: each shape records its constructor options. --------
 class FakeObj {
@@ -1301,6 +1304,121 @@ describe("groupTextRunsIntoParagraphs (pure)", () => {
   });
 });
 
+describe("measuredLineHeightMultiple (pure)", () => {
+  const run = (y: number): TextRun => paraRun(`r${y}`, y) as TextRun;
+
+  it("derives the real ~10.5pt CERFA advance (≈1.05), NOT Word's 1.2", () => {
+    // CERFA intro body: 10pt font, real line advance ~10.5pt → multiple ~1.05.
+    const runs = [run(99.1), run(109.6), run(120.1), run(130.6)];
+    const m = measuredLineHeightMultiple(runs, 10);
+    expect(m).toBeCloseTo(1.05, 1);
+    expect(m).toBeLessThan(1.2); // the fix: tighter than the hardcoded default
+  });
+
+  it("uses the MEDIAN so one blank-line gap cannot inflate the spacing", () => {
+    // Four lines at ~10.5pt with a single 14pt sub-paragraph break in the middle.
+    const runs = [run(100), run(110.5), run(124.5), run(135)];
+    // gaps sorted: 10.5, 10.5, 14 → median index floor((3-1)/2)=1 → 10.5.
+    expect(measuredLineHeightMultiple(runs, 10)).toBeCloseTo(1.05, 1);
+  });
+
+  it("falls back to 1.2 for a single line or degenerate input", () => {
+    expect(measuredLineHeightMultiple([run(100)], 10)).toBe(1.2);
+    expect(measuredLineHeightMultiple([], 10)).toBe(1.2);
+    expect(measuredLineHeightMultiple([run(100), run(110)], 0)).toBe(1.2);
+  });
+
+  it("ignores same-line runs (≈0 vertical gap)", () => {
+    // Two runs on the SAME visual line (left + right column) then a real 2nd line.
+    const runs = [run(100), run(100), run(110.5)];
+    expect(measuredLineHeightMultiple(runs, 10)).toBeCloseTo(1.05, 1);
+  });
+
+  it("clamps an absurd advance into a sane range", () => {
+    expect(measuredLineHeightMultiple([run(0), run(1000)], 10)).toBe(3); // upper clamp
+    expect(measuredLineHeightMultiple([run(0), run(1)], 10)).toBe(0.8); // lower clamp
+  });
+});
+
+describe("hasUniformLineAdvance (pure)", () => {
+  const run = (y: number): TextRun => paraRun(`r${y}`, y) as TextRun;
+
+  it("is true for evenly-spaced lines (uniform Word-like paragraph)", () => {
+    expect(hasUniformLineAdvance([run(100), run(110), run(120), run(130)])).toBe(
+      true,
+    );
+  });
+
+  it("is FALSE for the CERFA intro's mixed body/sub-paragraph advances", () => {
+    // Real CERFA intro y's: ~10.5pt body advance with two ~14pt breaks → a
+    // single Textbox lineHeight would drift, so it must render per-run.
+    const runs = [99.1, 109.6, 119.7, 130.4, 144.3, 154.3, 168.1, 178.1].map(run);
+    expect(hasUniformLineAdvance(runs)).toBe(false);
+  });
+
+  it("is trivially true for < 3 lines (at most one gap)", () => {
+    expect(hasUniformLineAdvance([run(100), run(110)])).toBe(true);
+    expect(hasUniformLineAdvance([run(100)])).toBe(true);
+  });
+
+  it("ignores same-line runs when judging uniformity", () => {
+    // left+right run on each of two evenly-spaced lines → uniform.
+    const runs = [run(100), run(100), run(110), run(110), run(120)];
+    expect(hasUniformLineAdvance(runs)).toBe(true);
+  });
+});
+
+describe("renderElementsOverlay — justified-run segments", () => {
+  it("paints ONE positioned IText per segment (not a single drifting box), all sharing the run's elementId/index", async () => {
+    const canvas = makeCanvas();
+    // A justified footer run the engine split into two positioned fragments.
+    await renderElementsOverlay(
+      canvas,
+      [
+        textElement({
+          elementId: "run7",
+          index: 7,
+          content: "peuvent faire l'objet",
+          bounds: { x: 30, y: 810, width: 40, height: 6.5 },
+          style: { fontSize: 6.5, fontFamily: "Times New Roman" },
+          segments: [
+            { text: "peuvent faire", bounds: { x: 30, y: 810, width: 36, height: 6.5 } },
+            { text: "l'objet", bounds: { x: 70, y: 810, width: 13, height: 6.5 } },
+          ],
+        }),
+      ],
+      fabricMock,
+    );
+    const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    const segTexts = objects.filter(
+      (o) => o instanceof IText && (o.data as Record<string, unknown>)?.isRunSegment === true,
+    ) as IText[];
+    expect(segTexts).toHaveLength(2);
+    // Fragments carry the fragment text, at their own left, sharing run identity.
+    expect(segTexts.map((o) => o.text)).toEqual(["peuvent faire", "l'objet"]);
+    expect(segTexts.map((o) => o.opts.left)).toEqual([30, 70]);
+    for (const o of segTexts) {
+      expect((o.data as Record<string, unknown>).elementId).toBe("run7");
+      expect((o.data as Record<string, unknown>).index).toBe(7);
+    }
+    // No extra single-box IText for the run (the fragments replace it).
+    const plain = objects.filter(
+      (o) => o instanceof IText && (o.data as Record<string, unknown>)?.isRunSegment !== true,
+    );
+    expect(plain).toHaveLength(0);
+  });
+
+  it("renders a plain run (no segments) as a single box, unchanged", async () => {
+    const canvas = makeCanvas();
+    await renderElementsOverlay(canvas, [textElement()], fabricMock);
+    const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    expect(
+      objects.filter((o) => o instanceof IText && (o.data as Record<string, unknown>)?.isRunSegment === true),
+    ).toHaveLength(0);
+    expect(objects.filter((o) => o instanceof IText)).toHaveLength(1);
+  });
+});
+
 describe("applyFallbackWidthFit (pure)", () => {
   function fitObj(width: number) {
     const obj = {
@@ -1378,6 +1496,42 @@ describe("renderElementsOverlay — paragraph rendering", () => {
     const stashed = data.paragraphRuns as Array<{ elementId: string; index?: number }>;
     expect(stashed.map((r) => r.elementId)).toEqual(["a", "b", "c"]);
     expect(stashed.map((r) => r.index)).toEqual([5, 6, 7]);
+  });
+
+  it("renders a NON-UNIFORM block (mixed body/sub-paragraph advance) as per-run ITexts, not a drifting Textbox", async () => {
+    // CERFA intro shape: ~10.5pt body advance with one wider ~14pt break. A
+    // Fabric Textbox's single lineHeight cannot reproduce this without drift, so
+    // the block must NOT coalesce — every line renders 1:1 at its own bounds.y.
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [
+        paraRun("a", 100, { content: "line a" }),
+        paraRun("b", 110.5, { content: "line b" }),
+        paraRun("c", 121, { content: "line c" }),
+        paraRun("d", 135, { content: "line d" }), // +14 break → non-uniform
+      ],
+      fabricMock,
+    );
+    const objects = (canvas as unknown as { _objects: FakeObj[] })._objects;
+    expect(objects.filter((o) => o instanceof Textbox)).toHaveLength(0);
+    expect(objects.filter((o) => o instanceof IText)).toHaveLength(4);
+  });
+
+  it("drives a coalesced Textbox's lineHeight from the runs' measured advance, not the hardcoded 1.2", async () => {
+    // Uniform block, 12pt font, real 14pt advance → lineHeight 14/12 ≈ 1.166,
+    // NOT the extractor's per-run style.lineHeight of 1.2.
+    const canvas = makeCanvas();
+    await renderElementsOverlay(
+      canvas,
+      [paraRun("a", 100), paraRun("b", 114), paraRun("c", 128)],
+      fabricMock,
+    );
+    const tb = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
+      (o) => o instanceof Textbox,
+    ) as Textbox | undefined;
+    expect(tb).toBeDefined();
+    expect(tb!.opts.lineHeight as number).toBeCloseTo(14 / 12, 3);
   });
 
   it("keeps line-by-line IText when groupParagraphs is disabled", async () => {

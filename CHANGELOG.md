@@ -5,6 +5,31 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] - 2026-07-01
+
+### Fixed — 1:1 editor fidelity for justified & multi-line PDF text (CERFA forms)
+
+- **Justified / per-glyph-positioned runs (a legal footer, a spread-out table
+  cell) no longer render as scrambled, overlapping text** ("peuveht fabjet",
+  "finanlolère", "oudbtenir") in the editor. Such a run is drawn as ONE `Tj`/`TJ`
+  but spreads its glyphs with internal `TJ` position jumps, which a single
+  editable box cannot reproduce — the fragments piled up. The engine
+  (gigapdf-lib 0.111.0) now returns each run's **positioned fragments**
+  (`TextElementInfo.segments`), each computed from the **same pen walk the
+  rasterizer uses** (real glyph widths + `Tc`/`Tw`/`Tz` + `TJ` kerns), and the
+  editor paints one text box per fragment — 1:1 with the page. Every fragment
+  shares the run's identity, so selecting/moving/deleting still targets the whole
+  run. The CERFA legal footer now reads exactly as printed ("peuvent faire
+  l'objet d'une pénalité financière en application de l'article L. 114-17-1 du
+  Code de la sécurité sociale").
+- **Multi-line intro paragraphs no longer drift and separate.** A coalesced
+  paragraph rendered with Word's hardcoded 1.2 line height over-spaced tight PDF
+  text (a 10 pt body at ~10.5 pt advance), so the folded lines drifted away from
+  their same-line runs ("texte emmêlé en haut"). The editor now derives a
+  coalesced block's line spacing from the runs' **measured** advance, and blocks
+  with a non-uniform advance render per-run (1:1) instead of reflowing — Word-like
+  editing is kept for genuinely uniform paragraphs.
+
 ## [1.17.2] - 2026-06-30
 
 ### Fixed — editor text fidelity for repacked subset fonts (gigapdf-lib 0.110.4)
