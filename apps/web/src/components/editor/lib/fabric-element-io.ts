@@ -133,6 +133,11 @@ export function readFormFieldValue(
 export function fabricObjectToElement(
   obj: FabricObjectWithData,
 ): Element | null {
+  // A justified-run display FRAGMENT (render-elements paints one per segment for
+  // 1:1 fidelity) is NOT a persisted element: the run is saved once via its own
+  // index/binary, never per fragment. Serialising fragments would duplicate the
+  // run and scramble its text — skip them here (the single serialisation seam).
+  if (obj.data?.isRunSegment === true) return null;
   const elementId = obj.data?.elementId || generateId();
   const scaleY = obj.scaleY ?? 1;
   // A user resize bakes obj.scaleX into bounds.width here. There is no longer a

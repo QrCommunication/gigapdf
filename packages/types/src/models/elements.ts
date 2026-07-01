@@ -165,6 +165,26 @@ export interface TextElement extends ElementBase {
    * index.
    */
   index?: number;
+  /**
+   * Visually contiguous fragments of a justified / per-glyph-positioned run
+   * (from `TextElementInfo.segments`), each with its own web-space box. When
+   * present (length ≥ 1), the renderer paints ONE positioned `IText` per
+   * fragment — 1:1 with the source, since a single box cannot reproduce a run
+   * whose glyphs are spread by internal `TJ` jumps (a legal footer). Every
+   * fragment shares this element's {@link ElementBase.elementId} / {@link index}
+   * so editing still targets the whole run. Absent/empty ⇒ a plain run rendered
+   * as one box (the common case).
+   */
+  segments?: TextRunSegment[];
+}
+
+/**
+ * One positioned fragment of a {@link TextElement} run — its text and web-space
+ * (Y-down) box. See {@link TextElement.segments}.
+ */
+export interface TextRunSegment {
+  text: string;
+  bounds: { x: number; y: number; width: number; height: number };
 }
 
 // ============= Image Element =============
