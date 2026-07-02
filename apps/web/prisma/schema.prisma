@@ -506,3 +506,26 @@ model font_cache {
 
   @@index([last_used_at], map: "idx_font_cache_last_used")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Saved signatures — reusable "Fill & Sign" stamps (signature + initials)
+//
+// Each user keeps a small set of hand-drawn / typed signature images, stored as
+// data: URLs so they can be dropped straight onto a page without a round-trip to
+// object storage. Rows are scoped per user (bare `user_id`, matching the
+// text-based owner_id convention used across the app — no FK to `users` so this
+// table can be added additively via `prisma db push` without touching auth).
+// ─────────────────────────────────────────────────────────────────────────────
+model UserSignature {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  kind      String   @default("signature")
+  dataUrl   String   @map("data_url")
+  width     Int
+  height    Int
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId], map: "idx_user_signatures_user_id")
+  @@map("user_signatures")
+}

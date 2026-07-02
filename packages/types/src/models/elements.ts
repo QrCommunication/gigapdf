@@ -456,6 +456,7 @@ export type Tool =
   | "form_field"
   | "draw"   // creates a signature field area
   | "redact" // draws irreversible PII redaction zones
+  | "fill_sign" // Adobe-style "Fill & Sign": fill form fields + place a signature/initials
   | "hand"
   | "zoom";
 

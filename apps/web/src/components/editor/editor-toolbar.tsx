@@ -54,6 +54,7 @@ import {
   Scissors,
   Lock,
   FileSignature,
+  Signature,
   FileText,
   Layers,
   FileSearch,
@@ -205,6 +206,10 @@ export interface EditorToolbarProps {
   onSendToBack?: () => void;
   /** Callback pour ajouter une image */
   onAddImage?: () => void;
+  /** Activate Adobe-style "Fill & Sign" mode (fill form fields on the page). */
+  onFillSign?: () => void;
+  /** Open the signature/initials capture dialog to place a stamp on the page. */
+  onInsertSignature?: () => void;
   /**
    * Insert menu (Word-like) — inserts a table of editable cells + borders. Each
    * cell flows through the normal element-add + apply-elements path.
@@ -636,6 +641,8 @@ export function EditorToolbar({
   onBringToFront,
   onSendToBack,
   onAddImage,
+  onFillSign,
+  onInsertSignature,
   onInsertTable,
   onInsertLink,
   onRemoveLink,
@@ -892,6 +899,24 @@ export function EditorToolbar({
           onToolChange("image");
           onAddImage?.();
         }}
+      />
+
+      <Separator />
+
+      {/* Remplir & Signer (mode Adobe : remplissage des champs + signature) */}
+      <ToolButton
+        icon={<FileSignature size={20} />}
+        label={t("fillSign")}
+        isActive={activeTool === "fill_sign"}
+        onClick={() => {
+          onToolChange("fill_sign");
+          onFillSign?.();
+        }}
+      />
+      <ToolButton
+        icon={<Signature size={20} />}
+        label={t("insertSignature")}
+        onClick={() => onInsertSignature?.()}
       />
 
       <Separator />

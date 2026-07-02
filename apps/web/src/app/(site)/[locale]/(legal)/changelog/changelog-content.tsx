@@ -15,6 +15,16 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.20.0",
+    date: "2026-07-02",
+    type: "minor",
+    changes: [
+      { type: "feature", description: "Fill & Sign mode (Adobe-style): a new toolbar button puts the document in fill mode — form fields become clickable — so you can complete a form in place." },
+      { type: "feature", description: "Insert a signature or initials from a capture dialog with three ways to create one: Draw (freehand, trimmed to the ink), Type (a handwriting font), or Upload an image. It drops onto the page as a movable, resizable stamp." },
+      { type: "feature", description: "Save signatures to your account once: a saved signature or initials reappears in the dialog for one-click reuse on any future document, and can be deleted. Stored per user, isolated from other accounts, image validated and never logged." },
+    ],
+  },
+  {
     version: "1.19.3",
     date: "2026-07-02",
     type: "patch",

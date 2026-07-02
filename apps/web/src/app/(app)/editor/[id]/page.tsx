@@ -199,6 +199,7 @@ import {
 import { bakeOutline } from "@/components/editor/lib/outline-bake";
 import { ResizePageDialog } from "@/components/editor/resize-page-dialog";
 import { RedactPiiDialog } from "@/components/editor/redact-pii-dialog";
+import { SignatureCaptureDialog } from "@/components/editor/signature-capture-dialog";
 import type { ExportFormat } from "@/components/editor/lib/export-formats";
 import type { HeaderFooterSpec } from "@qrcommunication/gigapdf-lib";
 import { clientLogger } from "@/lib/client-logger";
@@ -4172,6 +4173,8 @@ export default function EditorPage() {
 
   // --- PII auto-detect redaction --------------------------------------------
   const [showRedactPiiDialog, setShowRedactPiiDialog] = useState(false);
+  // Fill & Sign — signature/initials capture dialog visibility.
+  const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
 
   // Redact every auto-detected PII region (whole text runs) across the whole
   // document. Reuses the manual redaction baking path: build per-page geometry,
@@ -4657,6 +4660,35 @@ export default function EditorPage() {
   const handleAddImage = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
+
+  // Fill & Sign (mode Adobe) : passe le document en mode remplissage — le panneau
+  // formulaire bascule en « fill » et l'overlay des champs devient cliquable.
+  const handleFillSign = useCallback(() => {
+    setFormsMode("fill");
+    if (!showFormsPanel) toggleFormsPanel();
+  }, [setFormsMode, showFormsPanel, toggleFormsPanel]);
+
+  // Ouvre le dialog de capture (dessin / texte / import) signature ou paraphe.
+  const handleInsertSignature = useCallback(() => {
+    setSignatureDialogOpen(true);
+  }, []);
+
+  // Insère la signature/paraphe capturé comme élément image, déplaçable et
+  // redimensionnable, exactement comme un ajout d'image (même chemin de save).
+  const handleSignatureInsert = useCallback(
+    (sig: {
+      dataUrl: string;
+      width: number;
+      height: number;
+      kind: "signature" | "initials";
+    }) => {
+      canvasHandle?.addImage(sig.dataUrl, sig.width, sig.height);
+      setSignatureDialogOpen(false);
+      setDirty(true);
+      saveWithPriority("immediate");
+    },
+    [canvasHandle, setDirty, saveWithPriority],
+  );
 
   // Handler pour le chargement de l'image
   const handleImageFileChange = useCallback(
@@ -5288,6 +5320,8 @@ export default function EditorPage() {
         onBringToFront={handleBringToFront}
         onSendToBack={handleSendToBack}
         onAddImage={handleAddImage}
+        onFillSign={handleFillSign}
+        onInsertSignature={handleInsertSignature}
         onInsertTable={handleInsertTable}
         onInsertLink={handleInsertLink}
         onRemoveLink={handleRemoveLink}
@@ -5731,6 +5765,13 @@ export default function EditorPage() {
         pages={pages}
         isApplying={redactBusy}
         onConfirm={handleRedactPiiAuto}
+      />
+
+      {/* Remplir & Signer — capture (dessin / texte / import) + signatures du compte */}
+      <SignatureCaptureDialog
+        open={signatureDialogOpen}
+        onClose={() => setSignatureDialogOpen(false)}
+        onInsert={handleSignatureInsert}
       />
 
       {/* Status bar */}

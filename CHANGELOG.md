@@ -5,6 +5,25 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.0] - 2026-07-02
+
+### Added — "Fill & Sign" mode with reusable signatures (Adobe-style)
+
+- **A new "Fill & Sign" toolbar button** puts the document in fill mode — the form
+  fields become clickable and the forms panel switches to filling — so you can
+  complete a form without leaving the page.
+- **Insert a signature or initials** from a capture dialog offering three ways to
+  create one, exactly like Adobe: **Draw** (freehand, trimmed to the ink),
+  **Type** (a handwriting font), or **Upload** an image. The signature drops onto
+  the page as a movable, resizable stamp.
+- **Save signatures to your account, once.** A "Save to my account" option stores
+  the signature (or initials) so it appears in the dialog for one-click reuse on
+  any future document; each saved item can be deleted. Stored per user, isolated
+  from other accounts.
+- All saved-signature endpoints authenticate the caller and are ownership-scoped
+  (you can only ever see or delete your own). The image is validated (raster PNG/
+  JPEG/WebP, size-capped) and never logged.
+
 ## [1.19.3] - 2026-07-02
 
 ### Fixed — document fills the canvas on open; form-field names accept spaces
