@@ -72,7 +72,12 @@ const initialState: CanvasState = {
   zoom: 1.0,
   minZoom: 0.1,
   maxZoom: 8.0,
-  fitMode: null,
+  // Fit the page to the viewport WIDTH on load so the document fills the canvas
+  // area (a bare `zoom: 1.0` leaves an A4 page smaller than a wide viewport —
+  // "la taille du formulaire est pas bonne, ça doit occuper tout l'espace"). The
+  // continuous scroller computes the exact zoom from its live width; a manual
+  // zoom clears fitMode upstream, so this only governs the initial view.
+  fitMode: "width",
   panOffset: { x: 0, y: 0 },
   activeTool: "select",
   activeSubtype: null,

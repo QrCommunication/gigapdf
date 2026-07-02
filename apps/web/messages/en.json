@@ -2230,7 +2230,7 @@
       "formField": {
         "fieldType": "Field type",
         "name": "Field name",
-        "nameInvalid": "Allowed characters: letters, digits, _ . -",
+        "nameInvalid": "The field name cannot be empty.",
         "nameDuplicate": "This name is already used by another field.",
         "tooltip": "Label / tooltip",
         "placeholder": "Placeholder text",

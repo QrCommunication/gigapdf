@@ -2230,7 +2230,7 @@
       "formField": {
         "fieldType": "Type de champ",
         "name": "Nom du champ",
-        "nameInvalid": "Caractères autorisés : lettres, chiffres, _ . -",
+        "nameInvalid": "Le nom du champ ne peut pas être vide.",
         "nameDuplicate": "Ce nom est déjà utilisé par un autre champ.",
         "tooltip": "Libellé / infobulle",
         "placeholder": "Texte indicatif",
