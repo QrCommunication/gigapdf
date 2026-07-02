@@ -15,6 +15,15 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.19.3",
+    date: "2026-07-02",
+    type: "patch",
+    changes: [
+      { type: "fix", description: "Editor: the document now fits the width of the canvas as soon as it opens, instead of showing small at 100% in a large empty area. A manual zoom still takes over from there." },
+      { type: "fix", description: "Form fields: a field name can now contain spaces and accents (\"NAIS ENF 5\", \"Prénom\", \"Nom d'usage\"). The old validator wrongly rejected spaces — a PDF field name is a text string, so only a truly empty name is refused now." },
+    ],
+  },
+  {
     version: "1.19.2",
     date: "2026-07-02",
     type: "patch",

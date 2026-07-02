@@ -135,8 +135,14 @@ function hexToRgb01(hex: string | null | undefined): [number, number, number] | 
   return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
 }
 
-/** Charset AcroForm sûr pour un nom de champ (lettres, chiffres, _ . -). */
-const FIELD_NAME_PATTERN = /^[A-Za-z0-9_.\-]+$/;
+/**
+ * Un nom (partiel) de champ AcroForm `/T` est une PDF *text string* : espaces,
+ * accents et ponctuation sont parfaitement valides (les vrais formulaires
+ * administratifs les utilisent : « NAIS ENF 5 », « Prénom », « Nom d'usage »).
+ * La seule contrainte réelle est un nom NON vide sans caractères de contrôle —
+ * l'ancien `^[A-Za-z0-9_.-]+$` rejetait à tort l'espace (« erreur bidon »).
+ */
+const FIELD_NAME_PATTERN = /^[^\p{Cc}]+$/u;
 
 /**
  * Petit set de polices SYSTÈME proposé en repli sous les polices du document.
