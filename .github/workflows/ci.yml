@@ -20,7 +20,7 @@ jobs:
   # ─────────────────────────────────────────────
   lint:
     name: Lint (JS/TS)
-    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -49,7 +49,7 @@ jobs:
   # ─────────────────────────────────────────────
   type-check:
     name: Type Check (JS/TS)
-    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -79,7 +79,7 @@ jobs:
   # ─────────────────────────────────────────────
   test-packages:
     name: Test (packages)
-    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -110,7 +110,7 @@ jobs:
   # ─────────────────────────────────────────────
   test-web:
     name: Test (web)
-    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -145,7 +145,7 @@ jobs:
   # ─────────────────────────────────────────────
   lint-python:
     name: Lint + Type Check (Python)
-    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -169,7 +169,7 @@ jobs:
   # ─────────────────────────────────────────────
   test-backend:
     name: Test (Python backend)
-    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -193,7 +193,7 @@ jobs:
   # ─────────────────────────────────────────────
   build:
     name: Build (JS/TS)
-    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     needs: [lint, type-check, test-packages, test-web, lint-python, test-backend]
     env:
@@ -243,7 +243,7 @@ jobs:
   # ─────────────────────────────────────────────
   deploy:
     name: Deploy to production
-    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Uniquement push direct sur main + APRÈS que tout le CI soit vert (needs: build).
     needs: [build]

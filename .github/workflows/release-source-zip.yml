@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   attach-source-zip:
-    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout the release commit
         # No `ref:` — on a `release` event github.sha is the tagged commit.
