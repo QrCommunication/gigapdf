@@ -24,7 +24,7 @@ jobs:
   # ─────────────────────────────────────────────
   audit-js:
     name: Audit JS/TS dependencies
-    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -62,7 +62,7 @@ jobs:
   # ─────────────────────────────────────────────
   audit-python:
     name: Audit Python dependencies
-    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -89,7 +89,7 @@ jobs:
   # ─────────────────────────────────────────────
   lockfile-integrity:
     name: Lockfile integrity check
-    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
