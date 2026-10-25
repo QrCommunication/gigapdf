@@ -5964,6 +5964,7 @@ export default function EditorPage() {
                 documentId={documentId}
                 getFontFaceName={getFontFaceName}
                 fontsLoading={fontsLoading}
+                embeddedFonts={embeddedFonts}
                 tool={activeTool}
                 zoom={zoom}
                 fitMode={fitMode}
