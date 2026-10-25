@@ -120,6 +120,68 @@ export interface TextStyle {
    * backward-compatible.
    */
   fontId?: string;
+
+  // -------------------------------------------------------------------------
+  // WASM text-rendering fidelity fields (gigapdf-lib ≥ 0.122)
+  // All optional for backward-compat with older WASM builds that omit them.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Fill opacity from ExtGState `/ca` (0..1). When present and < 1, the fill
+   * colour is composed as RGBA rather than using the global Fabric `opacity`
+   * (which would also fade the edit background / selection chrome).
+   * Absent ⇒ 1 (fully opaque, legacy behaviour).
+   */
+  fillAlpha?: number;
+
+  /**
+   * Blend mode from ExtGState `/BM` ("Normal", "Multiply", "Screen", …).
+   * Informational for now — Fabric does not natively composite text with
+   * blend modes, but the value is preserved on `data.*` for future use and
+   * for the properties panel. Absent ⇒ null / Normal.
+   */
+  blendMode?: string | null;
+
+  /**
+   * Stroke colour as [r, g, b] in 0..1 when the text rendering mode (`Tr`)
+   * includes a stroke component (modes 1, 2, 6, 7). Absent ⇒ no stroke.
+   */
+  strokeColor?: [number, number, number] | null;
+
+  /**
+   * PDF text rendering mode (ISO 32000-1 §9.3.6):
+   *   0 = fill, 1 = stroke, 2 = fill+stroke, 3 = invisible,
+   *   4 = fill+clip, 5 = stroke+clip, 6 = fill+stroke+clip, 7 = clip.
+   * Drives how the overlay paints the text (fill-only, stroke-only, both,
+   * or invisible hit-target). Absent ⇒ 0 (fill, legacy behaviour).
+   */
+  renderingMode?: number;
+
+  /**
+   * Horizontal scale factor from the text matrix (`Tm[0]`). 1 = normal.
+   * Anamorphic scaling is rare; when present the renderer applies it via
+   * Fabric `scaleX` AFTER the bounds-based sizing (additive transform).
+   * Absent ⇒ 1.
+   */
+  scaleX?: number;
+
+  /**
+   * Vertical scale factor from the text matrix (`Tm[3]`). 1 = normal.
+   * Absent ⇒ 1.
+   */
+  scaleY?: number;
+
+  /**
+   * Horizontal skew (shear) from the text matrix, in DEGREES. 0 = none.
+   * Applied via Fabric `skewX` after positioning. Absent ⇒ 0.
+   */
+  skewX?: number;
+
+  /**
+   * Vertical skew (shear) from the text matrix, in DEGREES. 0 = none.
+   * Applied via Fabric `skewY` after positioning. Absent ⇒ 0.
+   */
+  skewY?: number;
 }
 
 /**
@@ -196,6 +258,18 @@ export interface TextElement extends ElementBase {
 export interface TextRunSegment {
   text: string;
   bounds: { x: number; y: number; width: number; height: number };
+  /**
+   * Word spacing for this segment, in PDF user-space points (from the WASM
+   * engine's `TJ` / `Tw` operator). Converted to Fabric's 1/1000-em unit at
+   * render time. Absent ⇒ 0 (legacy behaviour).
+   */
+  wordSpacing?: number;
+  /**
+   * Character spacing for this segment, in PDF user-space points (from the
+   * WASM engine's `Tc` operator). Converted to Fabric's 1/1000-em unit at
+   * render time. Absent ⇒ 0 (legacy behaviour).
+   */
+  charSpacing?: number;
 }
 
 // ============= Image Element =============

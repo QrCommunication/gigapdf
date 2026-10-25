@@ -1164,7 +1164,11 @@ export function EditorCanvas({
       const pageW = pageDimsRef.current.width;
       const pageH = pageDimsRef.current.height;
       if (pageW <= 0 || pageH <= 0) return null;
-      const availW = wrapper.clientWidth - CANVAS_VIEWPORT_PADDING * 2;
+      // U7: subtract ruler width when active so fit-width zoom accounts for the
+      // space consumed by the vertical ruler (~30px). Without this, the page is
+      // scaled slightly too large and its right edge bleeds behind the sidebar.
+      const rulerOffset = showRulers ? 30 : 0;
+      const availW = wrapper.clientWidth - CANVAS_VIEWPORT_PADDING * 2 - rulerOffset;
       const availH = wrapper.clientHeight - CANVAS_VIEWPORT_PADDING * 2;
       if (availW <= 0 || availH <= 0) return null;
       const zoomForMode =
@@ -2136,6 +2140,29 @@ export function EditorCanvas({
       canvas.on("text:editing:exited", handleTextEditingExited as (e: unknown) => void);
       // Word-like partial formatting: live character-selection style → toolbar.
       canvas.on("text:selection:changed", handleTextSelectionChanged as (e: unknown) => void);
+
+      // R7: Hit-target image hover reveal — parsed images are opacity:0 hit-
+      // targets; on mouse:over we briefly show a subtle outline (opacity 0.15)
+      // so the user sees where the clickable zone is, restored on mouse:out.
+      canvas.on("mouse:over", (opt) => {
+        const target = opt.target as FabricObjectWithData | undefined;
+        if (!target?.data) return;
+        if (target.data.type !== "image" || target.data.isPdfBackground) return;
+        // Only reveal hit-targets (opacity 0), not user-added visible images.
+        if (typeof target.opacity !== "number" || target.opacity > 0.01) return;
+        target.set({ opacity: 0.15 });
+        canvas.requestRenderAll();
+      });
+      canvas.on("mouse:out", (opt) => {
+        const target = opt.target as FabricObjectWithData | undefined;
+        if (!target?.data) return;
+        if (target.data.type !== "image" || target.data.isPdfBackground) return;
+        // Restore to invisible hit-target only if it was revealed by us (0.15).
+        if (typeof target.opacity === "number" && target.opacity > 0.01 && target.opacity < 0.2) {
+          target.set({ opacity: 0 });
+          canvas.requestRenderAll();
+        }
+      });
 
       // Mouse down for creating objects - using refs to get current values
       canvas.on("mouse:down", (e) => {
