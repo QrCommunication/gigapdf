@@ -72,6 +72,9 @@ import {
   clientPointFromEvent,
 } from "./lib/touch-interaction";
 import { attachPinchZoom } from "./lib/pinch-zoom";
+// Keyboard accessibility: Tab navigation, arrow nudges, Enter/Esc editing,
+// Delete, Ctrl+A select-all, and aria-live announcements for screen readers.
+import { useCanvasKeyboardNavigation } from "./lib/hooks/use-canvas-keyboard-navigation";
 
 /** Zoom hard bounds (10% – 800%) shared by wheel, toolbar and fit modes. */
 const MIN_ZOOM = 0.1;
@@ -740,6 +743,12 @@ export function EditorCanvas({
   // removeChild fantôme (NotFoundError) au démontage en mode continu.
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fabricRef = useRef<FabricCanvas | null>(null);
+
+  // Keyboard accessibility layer: Tab order, arrow nudges, Enter/Esc editing,
+  // Delete, Ctrl+A, and aria-live announcements for screen readers.
+  const { canvasWrapperRef, ariaLiveText } = useCanvasKeyboardNavigation(
+    fabricRef.current,
+  );
   const previousPageRef = useRef<string | null>(null);
   // Conteneur scrollable (viewport) — référence directe, JAMAIS de
   // traversée DOM upperCanvasEl.parentElement (fragile aux changements de
@@ -4213,8 +4222,16 @@ export function EditorCanvas({
   // scrollable ci-dessous.
   const canvasContainer = (
     <div
-      ref={containerRef}
-      className="canvas-container relative bg-white shadow-lg rounded-sm"
+      ref={(node) => {
+        // Merge refs: containerRef (existing imperative init) + canvasWrapperRef
+        // (keyboard accessibility layer attaches its keydown listener here).
+        containerRef.current = node;
+        canvasWrapperRef(node);
+      }}
+      role="application"
+      aria-label="Éditeur PDF - utilisez Tab pour naviguer entre les éléments"
+      tabIndex={0}
+      className="canvas-container relative bg-white shadow-lg rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
       style={{
         width: canvasWidth * zoom,
         height: canvasHeight * zoom,
@@ -4225,6 +4242,11 @@ export function EditorCanvas({
         touchAction: touchActionForTool(tool),
       }}
     >
+      {/* Screen-reader live region: announces selection, moves, deletions and
+          editing state changes. Visually hidden via sr-only utility. */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {ariaLiveText}
+      </div>
       {/* Le <canvas> Fabric est créé IMPÉRATIVEMENT et attaché à containerRef
           dans l'effet d'init (voir plus bas). Il n'est PAS rendu en JSX : fabric
           v7 le déplace dans un wrapper `.canvas-container` qu'il injecte lui-même,

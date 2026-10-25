@@ -14,6 +14,8 @@ import {
   ArrowUp,
   ArrowDown,
   ImageUp,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import type {
   Element,
@@ -1785,6 +1787,196 @@ function PrepressColorSection({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Advanced WASM fidelity section for text elements
+// ---------------------------------------------------------------------------
+
+/** Rendering mode labels matching ISO 32000-1 §9.3.6 (0-3 are the common ones). */
+const RENDERING_MODE_OPTIONS = [
+  { value: 0, label: "Fill" },
+  { value: 1, label: "Stroke" },
+  { value: 2, label: "Fill + Stroke" },
+  { value: 3, label: "Invisible" },
+] as const;
+
+/** Blend modes surfaced by ExtGState `/BM`. Fabric does not natively composite
+ *  text with these — the value is preserved on the model for round-trip fidelity
+ *  and displayed as an informational / approximate preview hint. */
+const BLEND_MODE_OPTIONS = [
+  { value: "Normal", label: "Normal" },
+  { value: "Multiply", label: "Multiply" },
+  { value: "Screen", label: "Screen" },
+  { value: "Overlay", label: "Overlay" },
+  { value: "Darken", label: "Darken" },
+  { value: "Lighten", label: "Lighten" },
+] as const;
+
+interface AdvancedTextSectionProps {
+  element: TextElement;
+  onElementUpdate?: (elementId: string, updates: Partial<Element>) => void;
+}
+
+/**
+ * Collapsible "Advanced" section exposing WASM fidelity fields from
+ * `TextStyle` (gigapdf-lib ≥ 0.122). All edits go through `onElementUpdate`
+ * with a spread of the existing `style` so the scene graph and the
+ * serialisation pipeline stay in sync.
+ */
+function AdvancedTextSection({ element, onElementUpdate }: AdvancedTextSectionProps) {
+  const t = useTranslations("editor");
+  const [expanded, setExpanded] = useState(false);
+
+  const style = element.style;
+
+  // Read current values with safe fallbacks for older WASM builds that omit them.
+  const fillAlpha = style.fillAlpha ?? 1;
+  const renderingMode = style.renderingMode ?? 0;
+  const skewX = style.skewX ?? 0;
+  const skewY = style.skewY ?? 0;
+  const blendMode = style.blendMode ?? "Normal";
+  // charSpacing lives on TextRunSegment; expose the first segment's value or 0.
+  const charSpacing = element.segments?.[0]?.charSpacing ?? 0;
+
+  /** Merge partial style updates into the element via onElementUpdate. */
+  const updateStyle = (patch: Partial<typeof style>) => {
+    onElementUpdate?.(element.elementId, {
+      style: { ...style, ...patch },
+    } as Partial<TextElement>);
+  };
+
+  return (
+    <div className="border-t pt-2 mt-2">
+      <button
+        type="button"
+        onClick={() => setExpanded((prev) => !prev)}
+        className="flex items-center gap-1 w-full text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        {t("text.advanced")}
+      </button>
+
+      {expanded && (
+        <div className="mt-2 space-y-3 pl-4">
+          {/* Fill opacity (fillAlpha) — 0..1 slider displayed as percentage */}
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground block">
+              {t("text.fillOpacity")} ({Math.round(fillAlpha * 100)}%)
+            </label>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={fillAlpha}
+              onChange={(e) => updateStyle({ fillAlpha: parseFloat(e.target.value) })}
+              className="w-full"
+            />
+          </div>
+
+          {/* Rendering mode (Tr operator) */}
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground block">
+              {t("text.renderingMode")}
+            </label>
+            <select
+              value={renderingMode}
+              onChange={(e) => updateStyle({ renderingMode: parseInt(e.target.value, 10) })}
+              className="w-full px-2 py-1 text-xs rounded border bg-background"
+            >
+              {RENDERING_MODE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Skew X / Y (degrees) */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-[10px] text-muted-foreground block">
+                {t("text.skewX")} (°)
+              </label>
+              <input
+                type="number"
+                step={0.1}
+                value={skewX}
+                onChange={(e) => updateStyle({ skewX: parseFloat(e.target.value) || 0 })}
+                className="w-full px-2 py-1 text-xs rounded border bg-background"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] text-muted-foreground block">
+                {t("text.skewY")} (°)
+              </label>
+              <input
+                type="number"
+                step={0.1}
+                value={skewY}
+                onChange={(e) => updateStyle({ skewY: parseFloat(e.target.value) || 0 })}
+                className="w-full px-2 py-1 text-xs rounded border bg-background"
+              />
+            </div>
+          </div>
+
+          {/* Blend mode — informational; Fabric does not natively support PDF blend modes on text */}
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground block" title={t("text.blendModeTooltip")}>
+              {t("text.blendMode")}
+            </label>
+            <select
+              value={blendMode}
+              onChange={(e) => updateStyle({ blendMode: e.target.value })}
+              className="w-full px-2 py-1 text-xs rounded border bg-background"
+              title={t("text.blendModeTooltip")}
+            >
+              {BLEND_MODE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[9px] leading-tight text-muted-foreground/70">
+              {t("text.blendModeHint")}
+            </p>
+          </div>
+
+          {/* Character spacing (1/1000 em) — from first segment or element-level fallback */}
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground block">
+              {t("text.charSpacing")} (1/1000 em)
+            </label>
+            <input
+              type="number"
+              min={-100}
+              max={500}
+              step={1}
+              value={charSpacing}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value) || 0;
+                // Update the first segment's charSpacing if segments exist;
+                // otherwise store on the style as a top-level fallback.
+                if (element.segments && element.segments.length > 0) {
+                  const first = element.segments[0];
+                  const updatedSegments = [
+                    { ...first, charSpacing: val },
+                    ...element.segments.slice(1),
+                  ];
+                  onElementUpdate?.(element.elementId, { segments: updatedSegments } as Partial<TextElement>);
+                } else {
+                  // No segments — persist as a style-level hint for future engine use.
+                  updateStyle({ letterSpacing: val } as Partial<typeof style>);
+                }
+              }}
+              className="w-full px-2 py-1 text-xs rounded border bg-background"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type GradientKind = "linear" | "radial";
 type LinearDirection = "horizontal" | "vertical" | "diagonal";
 interface GradientStopDraft {
@@ -2238,6 +2430,15 @@ export function PropertiesPanel({
             </p>
           </div>
         )}
+
+      {/* Advanced WASM fidelity fields — collapsible section.
+          These map to TextStyle optional fields surfaced by gigapdf-lib ≥ 0.122.
+          Updates go through onElementUpdate with a spread of the existing style
+          so the scene graph and the serialisation pipeline stay in sync. */}
+      <AdvancedTextSection
+        element={element}
+        onElementUpdate={onElementUpdate}
+      />
     </div>
   );
 
