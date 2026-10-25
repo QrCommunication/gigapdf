@@ -363,6 +363,10 @@ export function fabricObjectToElement(
         backgroundColor: textObjWithStyles.textBackgroundColor || null,
         verticalAlign: "baseline" as const,
         originalFont,
+        // PHYSICAL font identity — round-trips the exact embedded program so
+        // resolveTextFont re-extracts the SAME glyphs after edit/save/reload.
+        // Absent when the run's font embeds no program (base-14 / Type3).
+        ...(data?.fontId ? { fontId: data.fontId as string } : {}),
         // Word-like list / indentation (additive). Omitted (spread of {}) when
         // not a list / no indent, so the serialised shape stays byte-identical
         // to the legacy one for plain paragraphs.
@@ -683,6 +687,9 @@ function lineToTextElement(
     backgroundColor: null,
     verticalAlign: "baseline",
     originalFont,
+    // PHYSICAL font identity — preserved from the session box so the
+    // committed line re-extracts the SAME embedded glyphs on reload.
+    ...(tb.data?.fontId ? { fontId: tb.data.fontId as string } : {}),
   };
 
   return {
@@ -903,6 +910,9 @@ function sessionRunToElement(
         backgroundColor: null,
         verticalAlign: "baseline",
         originalFont: (tb.data?.originalFont as string | null) ?? null,
+        // PHYSICAL font identity — preserved from the session box so the
+        // committed run re-extracts the SAME embedded glyphs on reload.
+        ...(tb.data?.fontId ? { fontId: tb.data.fontId as string } : {}),
       };
   return {
     elementId: run.elementId,
@@ -930,6 +940,107 @@ function sessionRunToElement(
     linkPage: null,
     ...(run.index !== undefined ? { index: run.index } : {}),
   };
+}
+
+/**
+ * Per-character style snapshot extracted from Fabric's `styles` map for one
+ * visual line of a paragraph session Textbox. Used by the reflow path to
+ * group contiguous characters sharing the SAME typography into distinct runs,
+ * preserving inline bold/italic/colour/fontSize across line wraps instead of
+ * flattening everything onto the line's dominant style.
+ */
+interface CharStyleSnapshot {
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: "bold" | "normal";
+  fontStyle: "italic" | "normal";
+  fill: string;
+  underline: boolean;
+  linethrough: boolean;
+  charSpacing: number;
+  fontId?: string;
+}
+
+/**
+ * Build a deterministic key for grouping adjacent characters that share the
+ * same visual typography during a reflow. Two characters with identical keys
+ * are coalesced into the same output run; a key change starts a new run.
+ */
+function charStyleKey(s: CharStyleSnapshot): string {
+  return `${s.fontFamily}|${s.fontSize}|${s.fontWeight}|${s.fontStyle}|${s.fill}|${s.underline ? 1 : 0}|${s.linethrough ? 1 : 0}|${s.charSpacing}|${s.fontId ?? ""}`;
+}
+
+/**
+ * Extract the per-character style snapshots for ONE visual line of a session
+ * Textbox, reading through Fabric's `_styleMap` (visual → logical line + char
+ * offset) exactly as {@link dominantSessionLineStyle} does. Returns `null` when
+ * the styles map is unavailable or empty — the caller falls back to the
+ * dominant-style-per-line behaviour so a missing styles map never breaks the
+ * reflow path.
+ */
+function extractVisualLineCharStyles(
+  tb: SessionTextbox,
+  visualLineIndex: number,
+  lineLength: number,
+  baseFontId: string | undefined,
+): CharStyleSnapshot[] | null {
+  if (!tb.styles || lineLength <= 0) return null;
+  const mapEntry = tb._styleMap?.[visualLineIndex];
+  const logicalLine = mapEntry?.line ?? visualLineIndex;
+  const offset = mapEntry?.offset ?? 0;
+  const lineStyles = tb.styles[logicalLine];
+  // When no per-char overrides exist on this logical line, every character
+  // inherits the box base style — signal this so the caller can emit a single
+  // run (no point splitting into N identical runs).
+  if (!lineStyles) return null;
+
+  const originalFont = (tb.data?.originalFont as string | null) ?? null;
+  const baseFontSize = tb.fontSize || 12;
+  const baseFill = (tb.fill as string) || "#000000";
+  const baseUnderline = tb.underline || false;
+  const baseLinethrough = tb.linethrough || false;
+  const baseCharSpacing = tb.charSpacing || 0;
+
+  const out: CharStyleSnapshot[] = [];
+  let hasAnyOverride = false;
+  for (let c = offset; c < offset + lineLength; c += 1) {
+    const s = lineStyles[c];
+    const hasOverride = s && typeof s === "object";
+    if (hasOverride) hasAnyOverride = true;
+    const fontSize =
+      hasOverride && typeof s.fontSize === "number" ? s.fontSize : baseFontSize;
+    const fill = hasOverride && typeof s.fill === "string" ? s.fill : baseFill;
+    const fontWeight = hasOverride && s.fontWeight !== undefined
+      ? (isBoldFontWeight(s.fontWeight as string | number) ? "bold" as const : "normal" as const)
+      : (isBoldFontWeight(tb.fontWeight) ? "bold" as const : "normal" as const);
+    const fontStyle = hasOverride && s.fontStyle !== undefined
+      ? (s.fontStyle === "italic" ? "italic" as const : "normal" as const)
+      : (tb.fontStyle === "italic" ? "italic" as const : "normal" as const);
+    const underline = hasOverride && typeof s.underline === "boolean"
+      ? s.underline
+      : baseUnderline;
+    const linethrough = hasOverride && typeof s.linethrough === "boolean"
+      ? s.linethrough
+      : baseLinethrough;
+    const charSpacing = hasOverride && typeof s.charSpacing === "number"
+      ? s.charSpacing
+      : baseCharSpacing;
+    out.push({
+      fontFamily: (originalFont ?? tb.fontFamily) || "Arial",
+      fontSize,
+      fontWeight,
+      fontStyle,
+      fill,
+      underline,
+      linethrough,
+      charSpacing,
+      ...(baseFontId ? { fontId: baseFontId } : {}),
+    });
+  }
+  // No per-char override at all → the whole line is uniform; signal the caller
+  // to emit a single run (the dominant-style path already handles this well).
+  if (!hasAnyOverride) return null;
+  return out;
 }
 
 /**
@@ -964,6 +1075,9 @@ function dominantSessionLineStyle(
     backgroundColor: null,
     verticalAlign: "baseline",
     originalFont,
+    // PHYSICAL font identity — preserved from the session box so the
+    // committed run re-extracts the SAME embedded glyphs on reload.
+    ...(tb.data?.fontId ? { fontId: tb.data.fontId as string } : {}),
   };
   const styles = tb.styles;
   if (!styles || lineLength <= 0) return base;
@@ -972,7 +1086,6 @@ function dominantSessionLineStyle(
   const offset = mapEntry?.offset ?? 0;
   const lineStyles = styles[logicalLine];
   if (!lineStyles) return base;
-
   const votes = new Map<string, { count: number; style: Record<string, unknown> }>();
   for (let c = offset; c < offset + lineLength; c += 1) {
     const s = lineStyles[c];
@@ -1230,41 +1343,105 @@ export function commitParagraphSession(
     return { kind: "update", elements };
   }
 
-  // REFLOW: remove every source run, add one run per re-wrapped visual line.
+  // REFLOW: remove every source run, add runs per re-wrapped visual line.
+  // When per-character styles are available on the live Textbox we group
+  // contiguous characters sharing the SAME typography into distinct runs so
+  // inline bold/italic/colour/fontSize survives the wrap. When the styles map
+  // is missing or uniform we fall back to one run per line with the dominant
+  // style (the pre-existing behaviour) — the reflow must never break.
   const removedElementIds = lineRuns.flat().map((r) => r.elementId);
-  const fontSize = tb.fontSize || 12;
+  const baseFontSize = tb.fontSize || 12;
   const lineHeight = tb.lineHeight && tb.lineHeight > 0 ? tb.lineHeight : 1.2;
-  const lineStep = fontSize * lineHeight;
+  const lineStep = baseFontSize * lineHeight;
   const blockWidth =
     (tb.width || lineRuns[0]![0]?.bounds.width || 100) * (tb.scaleX ?? 1);
   const leftX = obj.left ?? origin.left;
   const topY = obj.top ?? origin.top;
+  const baseFontId = tb.data?.fontId as string | undefined;
 
-  const addedElements: Element[] = visualLines.map((text, i) => ({
-    elementId: generateId(),
-    type: "text" as const,
-    bounds: {
-      x: leftX,
-      y: topY + i * lineStep,
-      width: blockWidth,
-      height: fontSize,
-    },
-    transform: {
-      rotation: tb.angle || 0,
-      scaleX: 1,
-      scaleY: 1,
-      skewX: tb.skewX || 0,
-      skewY: tb.skewY || 0,
-    },
-    layerId: null,
-    locked: false,
-    visible: tb.visible ?? true,
-    content: text,
-    style: dominantSessionLineStyle(tb, i, text.length),
-    ocrConfidence: null,
-    linkUrl: null,
-    linkPage: null,
-  }));
+  // Index source runs by their style key so a reflow run whose style matches
+  // an existing source run can REUSE its elementId (→ replaceText on apply
+  // instead of add+remove, preserving extraction index and identity).
+  const sourceStyleByKey = new Map<string, string>();
+  for (const runs of lineRuns) {
+    for (const run of runs) {
+      const s = run.style;
+      if (!s) continue;
+      const key = `${s.fontFamily}|${s.fontSize}|${s.fontWeight}|${s.fontStyle}|${s.color}|${s.underline ? 1 : 0}|${s.strikethrough ? 1 : 0}|${s.letterSpacing}|${s.fontId ?? ""}`;
+      if (!sourceStyleByKey.has(key)) sourceStyleByKey.set(key, run.elementId);
+    }
+  }
+
+  const addedElements: Element[] = [];
+  for (let i = 0; i < visualLines.length; i += 1) {
+    const text = visualLines[i]!;
+    if (text.length === 0) continue;
+    const charStyles = extractVisualLineCharStyles(tb, i, text.length, baseFontId);
+    if (!charStyles) {
+      // Fallback: no per-char overrides → single run with dominant style.
+      addedElements.push({
+        elementId: generateId(),
+        type: "text" as const,
+        bounds: { x: leftX, y: topY + i * lineStep, width: blockWidth, height: baseFontSize },
+        transform: { rotation: tb.angle || 0, scaleX: 1, scaleY: 1, skewX: tb.skewX || 0, skewY: tb.skewY || 0 },
+        layerId: null,
+        locked: false,
+        visible: tb.visible ?? true,
+        content: text,
+        style: dominantSessionLineStyle(tb, i, text.length),
+        ocrConfidence: null,
+        linkUrl: null,
+        linkPage: null,
+      });
+      continue;
+    }
+    // Group contiguous characters sharing the same style key into runs.
+    let runStart = 0;
+    let currentKey = charStyleKey(charStyles[0]!);
+    for (let c = 1; c <= text.length; c += 1) {
+      const nextKey = c < text.length ? charStyleKey(charStyles[c]!) : null;
+      if (nextKey !== currentKey) {
+        const slice = text.slice(runStart, c);
+        const cs = charStyles[runStart]!;
+        const styleKey = `${cs.fontFamily}|${cs.fontSize}|${cs.fontWeight}|${cs.fontStyle}|${cs.fill}|${cs.underline ? 1 : 0}|${cs.linethrough ? 1 : 0}|${cs.charSpacing}|${cs.fontId ?? ""}`;
+        const reusedId = sourceStyleByKey.get(styleKey);
+        const textStyle: TextStyle = {
+          fontFamily: cs.fontFamily,
+          fontSize: cs.fontSize,
+          fontWeight: cs.fontWeight,
+          fontStyle: cs.fontStyle,
+          color: cs.fill,
+          opacity: tb.opacity ?? 1,
+          textAlign: (tb.textAlign as "left" | "center" | "right" | "justify") || "left",
+          lineHeight: tb.lineHeight || 1.2,
+          letterSpacing: cs.charSpacing,
+          writingMode: "horizontal-tb",
+          underline: cs.underline,
+          strikethrough: cs.linethrough,
+          backgroundColor: null,
+          verticalAlign: "baseline",
+          originalFont: (tb.data?.originalFont as string | null) ?? null,
+          ...(cs.fontId ? { fontId: cs.fontId } : {}),
+        };
+        addedElements.push({
+          elementId: reusedId ?? generateId(),
+          type: "text" as const,
+          bounds: { x: leftX, y: topY + i * lineStep, width: blockWidth, height: cs.fontSize },
+          transform: { rotation: tb.angle || 0, scaleX: 1, scaleY: 1, skewX: tb.skewX || 0, skewY: tb.skewY || 0 },
+          layerId: null,
+          locked: false,
+          visible: tb.visible ?? true,
+          content: slice,
+          style: textStyle,
+          ocrConfidence: null,
+          linkUrl: null,
+          linkPage: null,
+        });
+        runStart = c;
+        currentKey = nextKey ?? "";
+      }
+    }
+  }
 
   return { kind: "reflow", removedElementIds, addedElements };
 }
@@ -1355,11 +1532,16 @@ export function sampleBackgroundUnder(
     height?: number;
     originY?: string;
     canvas?: { lowerCanvasEl?: HTMLCanvasElement; getZoom?: () => number };
+    data?: { _bgSample?: string };
   };
   const lower = o.canvas?.lowerCanvasEl;
-  if (!lower) return null;
+  if (!lower) {
+    // R4: fallback to cached background sample when canvas is unavailable or
+    // cross-origin tainted — avoids hard #ffffff mask on edit.
+    return o.data?._bgSample ?? null;
+  }
   const ctx = lower.getContext("2d");
-  if (!ctx) return null;
+  if (!ctx) return o.data?._bgSample ?? null;
   const zoom = o.canvas?.getZoom?.() ?? 1;
   const left = o.left ?? 0;
   const top = o.top ?? 0;

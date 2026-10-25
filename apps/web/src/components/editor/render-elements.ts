@@ -68,6 +68,7 @@ import {
   shiftStylesForMarker,
 } from "./lib/list-format";
 import { clampCombValue, computeCombLayout } from "./lib/comb-layout";
+import { sampleBackgroundUnder } from "./lib/fabric-element-io";
 
 type FabricModule = typeof FabricNamespace;
 
@@ -387,7 +388,11 @@ export function applyFallbackWidthFit(
   if (usingEmbeddedFont) return 1;
   const measured = obj.width ?? 0;
   if (measured <= 0 || targetWidth <= 0 || measured <= targetWidth) return 1;
-  const scaleX = Math.max(0.92, Math.min(1, targetWidth / measured));
+  // R1: skip scaling when drift < 3% — only significant metric mismatches
+  // deserve a cosmetic squash; tiny variations are invisible and harmless.
+  const ratio = targetWidth / measured;
+  if (ratio > 0.97) return 1;
+  const scaleX = Math.max(0.92, Math.min(1, ratio));
   obj.set({ scaleX });
   return scaleX;
 }
@@ -410,7 +415,10 @@ export function applySegmentWidthFit(
 ): number {
   const measured = obj.width ?? 0;
   if (measured <= 0 || targetWidth <= 0 || measured <= targetWidth) return 1;
-  const scaleX = Math.max(0.5, targetWidth / measured);
+  // R2: floor raised to 0.7 — a word squashed to 50% of its natural width is
+  // typographically broken; 0.7 keeps the segment legible while still allowing
+  // modest justification compression.
+  const scaleX = Math.max(0.7, Math.min(1, targetWidth / measured));
   obj.set({ scaleX });
   return scaleX;
 }
@@ -1469,6 +1477,14 @@ export async function renderElementsOverlay(
         if (textElement.segments && textElement.segments.length > 0) {
           for (let si = 0; si < textElement.segments.length; si += 1) {
             const seg = textElement.segments[si]!;
+            // WASM charSpacing: convert from PDF user-space points to Fabric's
+            // 1/1000-em unit. Falls back to the legacy letterSpacing when the
+            // segment carries no per-segment spacing (older WASM builds).
+            const _segCharSpacing =
+              seg.charSpacing !== undefined
+                ? (_fontSize > 0 ? (seg.charSpacing / _fontSize) * 1000 : 0)
+                : (textElement.style.letterSpacing || 0) * 10;
+
             const segObj = new IText(seg.text, {
               ...baseOptions,
               left: seg.bounds.x,
@@ -1483,7 +1499,7 @@ export async function renderElementsOverlay(
               opacity: textElement.style.opacity ?? 1,
               textAlign: "left" as const,
               lineHeight: 1,
-              charSpacing: (textElement.style.letterSpacing || 0) * 10,
+              charSpacing: _segCharSpacing,
               underline: textElement.style.underline || false,
               linethrough: textElement.style.strikethrough || false,
               editable: false,
@@ -1512,6 +1528,9 @@ export async function renderElementsOverlay(
               index: textElement.index,
               rotation0: textElement.transform?.rotation ?? 0,
               originalFont: textElement.style.originalFont,
+              // PHYSICAL font identity — pins the exact embedded program so
+              // resolveTextFont re-extracts the SAME glyphs after edit/save/reload.
+              fontId: textElement.style.fontId,
               usingEmbeddedFont: _usingEmbeddedFont,
               originalFill: textColour,
               originalBgColor: textElement.style.backgroundColor || "",
@@ -1539,6 +1558,61 @@ export async function renderElementsOverlay(
         const _indentOffset = leftIndentOffset(textElement.style);
         const { display: _displayText, prefixLen: _markerLen } =
           composeDisplayText(textElement.content || "", textElement.style);
+
+        // -----------------------------------------------------------------
+        // WASM fidelity: fillAlpha, renderingMode, strokeColor (P2)
+        // All fields are optional — older WASM builds omit them entirely.
+        // -----------------------------------------------------------------
+        const _wasmStyle = textElement.style;
+        const _renderingMode = _wasmStyle.renderingMode ?? 0;
+        const _hasStrokeColor =
+          Array.isArray(_wasmStyle.strokeColor) &&
+          _wasmStyle.strokeColor.length === 3;
+        const _strokeRgb = _hasStrokeColor
+          ? `rgb(${Math.round(_wasmStyle.strokeColor![0] * 255)}, ${Math.round(_wasmStyle.strokeColor![1] * 255)}, ${Math.round(_wasmStyle.strokeColor![2] * 255)})`
+          : null;
+
+        // fillAlpha → RGBA fill so global opacity (edit chrome) stays at 1.
+        // When absent or 1, keep the original hex/rgb textColour unchanged.
+        let _resolvedFill: string = textColour;
+        if (
+          typeof _wasmStyle.fillAlpha === "number" &&
+          _wasmStyle.fillAlpha >= 0 &&
+          _wasmStyle.fillAlpha < 1
+        ) {
+          // Parse existing colour to inject alpha. Handles both hex (#rrggbb)
+          // and rgb()/rgba() strings produced upstream. Fallback: keep as-is.
+          const _hexMatch = textColour.match(
+            /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i,
+          );
+          if (_hexMatch) {
+            // Regex guarantees 3 capture groups; TS types them as
+            // string | undefined so we assert non-null here.
+            const r = parseInt(_hexMatch[1]!, 16);
+            const g = parseInt(_hexMatch[2]!, 16);
+            const b = parseInt(_hexMatch[3]!, 16);
+            _resolvedFill = `rgba(${r}, ${g}, ${b}, ${_wasmStyle.fillAlpha})`;
+          } else {
+            // Already rgb/rgba or named colour — best-effort wrap.
+            _resolvedFill = textColour;
+          }
+        }
+
+        // Rendering mode drives fill/stroke/visibility per ISO 32000-1 §9.3.6.
+        // Mode 3 = invisible hit-target (like parsed images): opacity 0 but
+        // controls/borders remain so the user can still select/move/delete.
+        const _isInvisible = _renderingMode === 3;
+        const _isStrokeOnly = _renderingMode === 1 || _renderingMode === 5;
+        const _isFillAndStroke =
+          _renderingMode === 2 ||
+          _renderingMode === 6 ||
+          (_renderingMode === 0 && _hasStrokeColor);
+
+        // Stroke width approximation: PDF exposes a separate line-width that
+        // the WASM engine does not yet emit. fontSize/20 gives a visible but
+        // non-dominant outline for typical body text (10–14 pt → 0.5–0.7 px).
+        const _approxStrokeWidth = _fontSize > 0 ? _fontSize / 20 : 0.5;
+
         const textObj = new IText(_displayText, {
           ...baseOptions,
           left: baseOptions.left + _indentOffset,
@@ -1557,8 +1631,8 @@ export async function renderElementsOverlay(
           // ever needed (nothing underneath), so editing works on any
           // background (gradients included). data.originalFill keeps the colour
           // for the properties panel / layer-hide toggle.
-          fill: textColour,
-          opacity: textElement.style.opacity ?? 1,
+          fill: _isStrokeOnly ? "transparent" : _resolvedFill,
+          opacity: _isInvisible ? 0 : (textElement.style.opacity ?? 1),
           textAlign: textElement.style.textAlign || "left",
           lineHeight: textElement.style.lineHeight || 1.2,
           charSpacing: (textElement.style.letterSpacing || 0) * 10,
@@ -1584,7 +1658,38 @@ export async function renderElementsOverlay(
           transparentCorners: false,
           // Pointeur grossier : poignées tactiles élargies ({} sur desktop).
           ...coarseControlProps(),
+          // WASM stroke rendering: paint stroke BEHIND fill so the glyph
+          // interior stays crisp (matches PDF Tr=2 compositing order).
+          ...(
+            _isFillAndStroke || _isStrokeOnly
+              ? {
+                  stroke: _strokeRgb ?? textColour,
+                  strokeWidth: _approxStrokeWidth,
+                  paintFirst: "stroke" as const,
+                }
+              : {}
+          ),
         });
+
+        // WASM skew/scale: apply additive transforms AFTER bounds-based sizing.
+        // Skew is safe and common (italic simulation via Tm shear). Anamorphic
+        // scale (scaleX ≠ scaleY) is rare in practice and interacts poorly with
+        // Fabric's own scaleX/Y used for width-fit — apply ONLY skew here and
+        // document the limitation. Full scale support requires reworking the
+        // width-fit pipeline (deferred until a real-world PDF needs it).
+        const _skewX = _wasmStyle.skewX ?? 0;
+        const _skewY = _wasmStyle.skewY ?? 0;
+        if (Math.abs(_skewX) > 0.01 || Math.abs(_skewY) > 0.01) {
+          textObj.set({ skewX: _skewX, skewY: _skewY });
+        }
+        // blendMode is preserved on data.* for the properties panel; Fabric
+        // does not natively composite text with PDF blend modes.
+        if (_wasmStyle.blendMode && _wasmStyle.blendMode !== "Normal") {
+          (textObj as FabricObjectWithData).data = {
+            ...(textObj as FabricObjectWithData).data,
+            blendMode: _wasmStyle.blendMode,
+          };
+        }
         // Fit the run to its exact /Widths box for ANY font (embedded too). Even the
         // exact embedded subset renders at the FontFace's hmtx advance, which is a
         // hair WIDER than the PDF's /Widths — so a run interleaved in a justified line
@@ -1600,6 +1705,9 @@ export async function renderElementsOverlay(
           index: textElement.index,
           rotation0: textElement.transform?.rotation ?? 0,
           originalFont: textElement.style.originalFont,
+          // PHYSICAL font identity — pins the exact embedded program so
+          // resolveTextFont re-extracts the SAME glyphs after edit/save/reload.
+          fontId: textElement.style.fontId,
           // True when the embedded PDF font was resolved & registered — the
           // overlay then renders with the SAME typography as the original, so no
           // synthetic weight/style is applied.
@@ -2599,6 +2707,22 @@ export async function renderElementsOverlay(
 
   canvas.renderAll();
 
+  // R4: Cache background colour under each text element WHILE the canvas is
+  // still clean (no selection highlight, no edit mask). When the lower canvas
+  // later becomes cross-origin tainted (CORS), sampleBackgroundUnder falls back
+  // to this cached value instead of hard #ffffff — so the edit mask blends with
+  // the real paper/banner colour even after taint.
+  for (const obj of canvas.getObjects()) {
+    const data = (obj as FabricObjectWithData).data;
+    if (data?.type !== "text") continue;
+    // Skip if already cached (idempotent on re-render).
+    if (typeof data._bgSample === "string") continue;
+    const sample = sampleBackgroundUnder(obj as FabricObject);
+    if (sample) {
+      data._bgSample = sample;
+    }
+  }
+
   // Repose les masques de visibilité pour les éléments cachés (navigation de
   // page / re-render). Fait APRÈS renderAll() pour que sampleBackgroundUnder
   // lise le raster du fond déjà peint. Les overlays cachés sont aussi rendus
@@ -2952,6 +3076,9 @@ export function beginParagraphEditSession(
     index: first.index,
     rotation0: first.transform?.rotation ?? 0,
     originalFont: first.style.originalFont,
+    // PHYSICAL font identity — round-trips through paragraph edit sessions so
+    // resolveTextFont re-extracts the SAME glyphs after edit/save/reload.
+    fontId: first.style.fontId,
     usingEmbeddedFont: baseFont.usingEmbeddedFont,
     originalFill: textColour,
     originalBgColor: first.style.backgroundColor || "",
