@@ -14,6 +14,7 @@ import type {
   Bounds,
   TextStyle,
 } from "@giga-pdf/types";
+import type { LoadedFont } from "@giga-pdf/editor";
 import type { Canvas as FabricCanvas, FabricObject } from "fabric";
 import { clientLogger } from "@/lib/client-logger";
 // Collaboration soft-locks: the store is populated by page.tsx from socket
@@ -75,6 +76,9 @@ import { attachPinchZoom } from "./lib/pinch-zoom";
 // Keyboard accessibility: Tab navigation, arrow nudges, Enter/Esc editing,
 // Delete, Ctrl+A select-all, and aria-live announcements for screen readers.
 import { useCanvasKeyboardNavigation } from "./lib/hooks/use-canvas-keyboard-navigation";
+// O(1) element lookup by elementId — avoids scanning canvas.getObjects() on
+// every collab lock reconcile or single-element resolution.
+import { useElementIndex } from "./lib/hooks/use-element-index";
 
 /** Zoom hard bounds (10% – 800%) shared by wheel, toolbar and fit modes. */
 const MIN_ZOOM = 0.1;
@@ -359,6 +363,13 @@ export interface EditorCanvasProps {
    * the renderElementsOverlay ref bridge).
    */
   fontsLoading?: boolean;
+  /**
+   * Granular per-font load status from `useEmbeddedFonts`. When provided, the
+   * canvas performs targeted re-renders for objects using newly-loaded fonts
+   * instead of a full `renderAll()` on every font completion. Falls back to the
+   * legacy global re-render when absent.
+   */
+  embeddedFonts?: LoadedFont[];
   /** Type de forme sélectionné */
   shapeType?: ShapeType;
   /** Type d'annotation sélectionné */
@@ -680,6 +691,7 @@ export function EditorCanvas({
   height = 600,
   getFontFaceName,
   fontsLoading = false,
+  embeddedFonts,
   shapeType = "rectangle",
   annotationType = "highlight",
   fieldType = "text",
@@ -749,6 +761,11 @@ export function EditorCanvas({
   const { canvasWrapperRef, ariaLiveText } = useCanvasKeyboardNavigation(
     fabricRef.current,
   );
+  // O(1) element lookup by elementId — replaces O(n) canvas.getObjects() scans
+  // in applyCollabLocks and single-element resolution paths.
+  const { getElementById, forEachIndexed, rebuildIndex } = useElementIndex(fabricRef);
+  const rebuildIndexRef = useRef(rebuildIndex);
+  rebuildIndexRef.current = rebuildIndex;
   const previousPageRef = useRef<string | null>(null);
   // Conteneur scrollable (viewport) — référence directe, JAMAIS de
   // traversée DOM upperCanvasEl.parentElement (fragile aux changements de
@@ -945,6 +962,8 @@ export function EditorCanvas({
     beginProgrammaticApply();
     try {
       // 1) Drop badges/overlays whose element is no longer locked.
+      // Badges are auxiliary objects without elementId, so they are not in
+      // the element index — a targeted scan is still required here.
       const badges = canvas
         .getObjects()
         .filter(
@@ -958,12 +977,15 @@ export function EditorCanvas({
         if (!locks.has(forId)) canvas.remove(badge);
       }
 
-      // 2) Reconcile each real element object (snapshot: we add objects below).
-      const objects = [...canvas.getObjects()];
-      for (const obj of objects) {
+      // 2) Reconcile locked/unlocked state via O(1) index lookups instead of
+      // scanning every canvas object. We iterate over the lock set (typically
+      // much smaller than the total object count) to apply locks, then do a
+      // targeted pass over currently-marked objects to clear stale locks.
+      const lockedElementIds = new Set<string>();
+      for (const [elementId, lock] of locks.entries()) {
+        const obj = getElementById(elementId);
+        if (!obj) continue;
         const data = (obj as FabricObjectWithData).data;
-        const elementId = data?.elementId;
-        if (!elementId) continue;
         if (
           data?.__collabLockBadgeFor ||
           data?.isPdfBackground ||
@@ -973,7 +995,7 @@ export function EditorCanvas({
           continue;
         }
 
-        const lock = locks.get(elementId);
+        lockedElementIds.add(elementId);
         const marked = data?.__collabLocked === true;
         const fo = obj as FabricObject;
 
@@ -1077,11 +1099,42 @@ export function EditorCanvas({
         }
       }
 
+      // 3) Clear stale locks: elements still marked __collabLocked but no
+      // longer present in the lock set (peer unlocked or session expired).
+      // These are NOT covered by the loop above since they are absent from
+      // `locks`. We scan only the indexed elements that carry the mark
+      // rather than every canvas object.
+      forEachIndexed((obj, elementId) => {
+        const data = (obj as FabricObjectWithData).data;
+        if (data?.__collabLocked !== true) return;
+        if (lockedElementIds.has(elementId)) return;
+        const restore = data?.__collabLockRestore as
+          | {
+              selectable?: boolean;
+              evented?: boolean;
+              hasControls?: boolean;
+              hasBorders?: boolean;
+              opacity?: number;
+            }
+          | undefined;
+        (obj as FabricObject).set({
+          selectable: restore?.selectable ?? true,
+          evented: restore?.evented ?? true,
+          hasControls: restore?.hasControls ?? true,
+          hasBorders: restore?.hasBorders ?? true,
+          opacity: restore?.opacity ?? 1,
+        });
+        const rest = { ...(data as Record<string, unknown>) };
+        delete rest.__collabLocked;
+        delete rest.__collabLockRestore;
+        (obj as FabricObjectWithData).data = rest;
+      });
+
       canvas.requestRenderAll();
     } finally {
       endProgrammaticApply();
     }
-  }, [beginProgrammaticApply, endProgrammaticApply]);
+  }, [beginProgrammaticApply, endProgrammaticApply, getElementById, forEachIndexed]);
 
   // `loadPage` (memoised `[]`) reads the latest reconciler through this ref,
   // exactly like `renderElementsOverlayRef`.
@@ -3174,21 +3227,124 @@ export function EditorCanvas({
     }
   }, [page, renderElementsOverlay, beginProgrammaticApply, endProgrammaticApply]);
 
-  // Re-render the overlay EXACTLY ONCE, on the embedded-fonts loading→ready EDGE.
-  // The first loadPage runs before async font loading finishes, so its text
-  // overlay uses FALLBACK metrics; this single corrective pass swaps in the exact
-  // embedded subsets (correct metrics → no overlap). Gating on the true→false
-  // transition (not on `page`) avoids both the per-font-tick flicker and a
-  // redundant pass on plain navigation (handled by the renderElementsOverlay ref
-  // bridge in loadPage).
+  // ── Targeted font reload ─────────────────────────────────────────────────────
+  // Instead of re-rendering the entire overlay when ALL fonts finish loading
+  // (legacy `fontsLoading` boolean flip), track individual fontIds as they
+  // become available and update ONLY the Fabric objects that use each newly-
+  // loaded font. This eliminates flash/re-render storms on documents with many
+  // embedded subsets that load progressively.
+  //
+  // Fallback: when `embeddedFonts` is not provided (caller hasn't been updated),
+  // the legacy global re-render on `fontsLoading` edge is preserved below.
+
+  // Set of fontIds whose FontFace has already been applied to canvas objects.
+  // Prevents re-processing the same font on subsequent renders or re-mounts.
+  const loadedFontIdsRef = useRef<Set<string>>(new Set());
+
+  // Pending fontIds batched within the same animation frame. Multiple fonts
+  // often complete in the same tick (concurrency=4 worker pool); coalescing
+  // them into a single requestRenderAll avoids N redundant repaints.
+  const pendingFontIdsRef = useRef<Set<string>>(new Set());
+  const fontRafScheduledRef = useRef(false);
+
+  // Apply a batch of newly-loaded fontIds to matching canvas objects.
+  // Runs inside a rAF callback so multiple completions in one tick are
+  // coalesced into a single requestRenderAll().
+  const applyLoadedFontsBatch = useCallback(() => {
+    fontRafScheduledRef.current = false;
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    const batch = pendingFontIdsRef.current;
+    if (batch.size === 0) return;
+    pendingFontIdsRef.current = new Set();
+
+    let dirty = false;
+    for (const fontId of batch) {
+      // Resolve the registered CSS font-family name for this fontId via the
+      // current getFontFaceName bridge. We pass the fontId as both originalName
+      // (identity match) and fontId arg so the resolver picks it up even when
+      // no `/BaseFont` alias matches.
+      if (!getFontFaceName) continue;
+      const match = getFontFaceName(fontId, undefined, undefined, fontId);
+      if (!match) continue;
+
+      // Find every non-background object tagged with this fontId and swap its
+      // fontFamily to the resolved embedded face. Mark each as dirty so Fabric
+      // re-measures and re-renders only those glyphs.
+      for (const obj of canvas.getObjects()) {
+        const data = (obj as { data?: { fontId?: string; isPdfBackground?: boolean } }).data;
+        if (!data || data.isPdfBackground === true) continue;
+        if (data.fontId !== fontId) continue;
+
+        // Only update text-bearing objects (IText / Textbox). Shapes/images
+        // carry fontId metadata but don't render text themselves.
+        if ("fontFamily" in obj) {
+          (obj as unknown as { fontFamily: string }).fontFamily = match.name;
+          obj.set("dirty", true);
+          dirty = true;
+        }
+      }
+    }
+
+    if (dirty) {
+      canvas.requestRenderAll();
+    }
+  }, [getFontFaceName]);
+
+  // Watch the granular `embeddedFonts` array for newly-loaded fontIds.
+  // When a font transitions to 'loaded', schedule a batched update that
+  // targets only the objects using that font. Falls back to the legacy
+  // global re-render when `embeddedFonts` is absent.
+  useEffect(() => {
+    if (!embeddedFonts || embeddedFonts.length === 0) return;
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    let hasNew = false;
+    for (const f of embeddedFonts) {
+      if (f.status !== "loaded") continue;
+      if (loadedFontIdsRef.current.has(f.metadata.fontId)) continue;
+
+      // First time seeing this fontId as loaded — queue it.
+      loadedFontIdsRef.current.add(f.metadata.fontId);
+      pendingFontIdsRef.current.add(f.metadata.fontId);
+      hasNew = true;
+    }
+
+    if (!hasNew) return;
+
+    // Coalesce into a single rAF when multiple fonts complete in the same tick.
+    if (!fontRafScheduledRef.current) {
+      fontRafScheduledRef.current = true;
+      requestAnimationFrame(applyLoadedFontsBatch);
+    }
+  }, [embeddedFonts, applyLoadedFontsBatch]);
+
+  // Reset tracked fontIds when the page changes — objects from the previous
+  // page no longer exist on the canvas, and the new page's elements will be
+  // rendered fresh by loadPage with whatever fonts are already loaded.
+  useEffect(() => {
+    loadedFontIdsRef.current.clear();
+    pendingFontIdsRef.current.clear();
+    fontRafScheduledRef.current = false;
+  }, [page?.pageId]);
+
+  // LEGACY FALLBACK: when `embeddedFonts` is not provided, preserve the
+  // original behaviour — re-render the full overlay once on the
+  // fontsLoading true→false edge. This ensures backward compatibility with
+  // callers that haven't yet passed the granular prop.
   const prevFontsLoadingRef = useRef<boolean | undefined>(undefined);
   useEffect(() => {
+    // Skip legacy path when granular tracking is active.
+    if (embeddedFonts && embeddedFonts.length > 0) return;
+
     const wasLoading = prevFontsLoadingRef.current;
     prevFontsLoadingRef.current = fontsLoading;
     if (wasLoading !== true || fontsLoading) return;
     if (!fabricRef.current || !page) return;
     void reRenderOverlayForFonts();
-  }, [fontsLoading, page, reRenderOverlayForFonts]);
+  }, [fontsLoading, page, reRenderOverlayForFonts, embeddedFonts]);
 
   // Mettre à jour le zoom (changement venant du store : toolbar, presets,
   // raccourcis, modes fit).
@@ -3403,6 +3559,7 @@ export function EditorCanvas({
         if (!json) return;
         beginProgrammaticApply();
         fabricRef.current.loadFromJSON(JSON.parse(json)).then(() => {
+          rebuildIndexRef.current();
           fabricRef.current?.renderAll();
           setHistoryIndex(newIndex);
           endProgrammaticApply();
@@ -3416,6 +3573,7 @@ export function EditorCanvas({
         if (!json) return;
         beginProgrammaticApply();
         fabricRef.current.loadFromJSON(JSON.parse(json)).then(() => {
+          rebuildIndexRef.current();
           fabricRef.current?.renderAll();
           setHistoryIndex(newIndex);
           endProgrammaticApply();
