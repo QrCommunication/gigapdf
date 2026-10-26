@@ -45,6 +45,35 @@ cache fastembed), `/var/log/gigapdf/`, `shared/env/gigapdf.env`, `shared/venv/`.
 Les anciennes units plates `gigapdf-{web,admin,api}` sont stoppées + disabled mais
 laissées sur disque (fallback legacy).
 
+## Prérequis de configuration (`shared/env/gigapdf.env`)
+
+Modèle complet : `deploy/.env.production.example`. Depuis le passage au
+stockage objet modulaire (iDrive e2 par défaut), un deploy exige :
+
+- **Stockage** : `STORAGE_PROVIDER` (`idrive` par défaut), `S3_ENDPOINT`
+  (obligatoire pour iDrive e2), `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`,
+  `S3_BUCKET_NAME`. Le bucket doit avoir son **chiffrement par défaut
+  activé** (c'est le seul chiffrement au repos des fichiers). Les fichiers
+  existants doivent être copiés avant la bascule
+  (`scripts/migrate_storage.py`, voir [docs/storage.md](../docs/storage.md)).
+  Pour rester sur Scaleway : `STORAGE_PROVIDER=scaleway`.
+- **Pages légales** : toutes les `NEXT_PUBLIC_LEGAL_*`, dont
+  `NEXT_PUBLIC_LEGAL_STORAGE_*` (fournisseur de stockage, sous-traitant RGPD).
+  Elles sont figées au build web.
+
+⚠️ Les gates santé ne testent que `/health`, `/` et `/admin` : une variable
+légale manquante passe la bascule mais fait répondre **500** sur
+`/privacy`, `/terms`, `/legal-notice`, `/about`, `/contact` et `/cookies`. Un
+`S3_ENDPOINT` manquant passe aussi (le stockage n'est contacté qu'au premier
+accès). Après chaque deploy, vérifier :
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://giga-pdf.com/legal-notice      # 200
+curl -s -o /dev/null -w '%{http_code}\n' https://giga-pdf.com/privacy           # 200
+```
+
+puis Admin → Paramètres → **Tester le stockage** (`bucket encryption: AES256`).
+
 ## Séquence d'un deploy
 
 1. `git push production main` (bare repo).
