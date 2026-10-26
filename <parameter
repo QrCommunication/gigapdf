@@ -1,2 +1,0 @@
-=== TYPE-CHECK ===" && pnpm --filter web type-check 2>&1 | tail -5 && echo "=== ISSUE 77 STATE ===" && gh issue view 77 --repo QrCommunication/gigapdf --json state --jq '.state'</command>
-<parameter name="description
