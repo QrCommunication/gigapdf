@@ -43,7 +43,7 @@ Guide complet pour déployer GigaPDF en environnement de production.
 |---------|---------|-----------------|
 | PostgreSQL | 17+ | Self-hosted, Supabase, AWS RDS, Scaleway |
 | Redis | 7+ | Self-hosted, Redis Cloud, AWS ElastiCache |
-| S3 Storage | - | Scaleway, AWS S3, MinIO, Cloudflare R2 |
+| Object Storage | - | iDrive e2 (default), Scaleway, AWS S3, MinIO, Cloudflare R2, any S3-compatible — see [storage.md](../storage.md) |
 
 ---
 
@@ -153,7 +153,9 @@ services:
       - APP_ENV=production
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/gigapdf
       - REDIS_URL=redis://redis:6379/0
-      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+      - STORAGE_PROVIDER=${STORAGE_PROVIDER:-idrive}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - S3_REGION=${S3_REGION}
       - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID}
       - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
@@ -690,12 +692,13 @@ AUTH_JWT_ALGORITHM=RS256
 AUTH_JWT_ISSUER=https://your-domain.com
 AUTH_JWT_AUDIENCE=giga-pdf
 
-# S3 Storage
-S3_ENDPOINT_URL=https://s3.fr-par.scw.cloud
+# Object storage (see docs/storage.md)
+STORAGE_PROVIDER=idrive
+S3_ENDPOINT=https://xxxx.par.idrivee2-NN.com
 S3_ACCESS_KEY_ID=your-production-key
 S3_SECRET_ACCESS_KEY=your-production-secret
 S3_BUCKET_NAME=gigapdf-production
-S3_REGION=fr-par
+S3_REGION=
 
 # Celery
 CELERY_BROKER_URL=redis://localhost:6379/1
@@ -782,13 +785,36 @@ effective_io_concurrency = 200
 
 ## Storage Configuration
 
-### S3 Storage Setup / Configuration stockage S3
+### Object Storage Setup / Configuration stockage objet
+
+The storage provider is selected with `STORAGE_PROVIDER` (full reference:
+[docs/storage.md](../storage.md)). Whatever the provider, documents are
+encrypted by the application (AES-256-GCM) before upload **and** the bucket
+must have default encryption at rest enabled.
+
+#### iDrive e2 (default)
+
+1. Create a bucket in the iDrive e2 console, in the region of your choice.
+2. **Enable default encryption on the bucket** (bucket settings →
+   encryption). Encryption is handled by the bucket, the application does
+   not send per-request encryption headers.
+3. Create an access key restricted to this bucket (read/write).
+4. Set `STORAGE_PROVIDER=idrive`, `S3_ENDPOINT` (endpoint shown in the e2
+   console), `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`.
+5. Admin → Settings → *Test storage*: the message must show the bucket
+   encryption (e.g. `bucket encryption: AES256`), not
+   `WARNING: bucket default encryption is disabled`.
 
 #### Scaleway Object Storage
 
 1. Create bucket in Scaleway Console
 2. Generate API credentials
-3. Configure CORS policy:
+3. Set `STORAGE_PROVIDER=scaleway` (endpoint derived from `S3_REGION`,
+   default `fr-par`)
+
+#### CORS
+
+Only needed if browsers access presigned URLs directly (thumbnails):
 
 ```json
 {
@@ -960,7 +986,7 @@ For high traffic, consider:
 - [ ] Server provisioned and secured
 - [ ] PostgreSQL installed and configured
 - [ ] Redis installed and running
-- [ ] S3 bucket created and configured
+- [ ] Object storage bucket created, default encryption enabled, *Test storage* OK
 - [ ] SSL certificates obtained
 - [ ] Nginx configured and tested
 - [ ] Application deployed and running

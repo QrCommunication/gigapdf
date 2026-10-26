@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   e2 / MinIO / generic S3 (no more implicit Scaleway endpoint). New
   `scripts/migrate_storage.py` copies every object between providers
   (idempotent). See `docs/storage.md`.
+- **Encryption at rest on the bucket.** On iDrive e2 (and Scaleway / MinIO)
+  encryption at rest is enabled as the bucket's default encryption, so the
+  app sends no per-request SSE header (`S3_SERVER_SIDE_ENCRYPTION` still
+  forces it). Admin → *Test storage* now reports the bucket encryption
+  status (`bucket_encryption`) and warns when it is disabled. Application
+  AES-256-GCM document encryption is unchanged.
 
 ## [1.27.2] - 2026-07-06
 

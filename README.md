@@ -170,7 +170,7 @@ walkthrough.
 | **Updates** | Automatic | Manual (`git pull`) |
 | **Support** | Email / SLA | Community (GitHub Discussions) |
 | **Cost** | Subscription | Free (your infra cost) |
-| **Data residency** | EU (Scaleway, Paris) | Wherever you host |
+| **Hosting** | Servers: Scaleway (Paris) · Files: iDrive e2, encrypted at rest | Wherever you host (any S3-compatible storage) |
 | **Customization** | Configuration only | Full code access |
 
 The cloud version is operated by [QR Communication SAS](https://qrcommunication.com).

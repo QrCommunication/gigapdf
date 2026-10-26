@@ -137,6 +137,14 @@ class StorageBackend(ABC):
 
     # -- health -------------------------------------------------------------
 
+    def bucket_encryption(self) -> str | None:
+        """Default encryption configured on the bucket itself.
+
+        Returns the algorithm (``AES256``, ``aws:kms``...), ``"disabled"``
+        when the bucket has none, or ``None`` when it cannot be determined.
+        """
+        return None
+
     @abstractmethod
     def check_connection(self) -> None:
         """Raise if the bucket is unreachable or credentials are invalid."""
