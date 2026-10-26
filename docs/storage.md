@@ -41,19 +41,22 @@ Dans la console e2 : créer le bucket, **activer son chiffrement par défaut**
 
 ## Chiffrement
 
-Deux couches indépendantes :
+**Le chiffrement au repos repose sur le bucket.** Il est activé
+**directement sur le bucket** (chiffrement par défaut) chez iDrive e2 : le
+fournisseur chiffre alors chaque objet écrit (documents, versions,
+miniatures), sans que l'application n'envoie d'en-tête de chiffrement.
+C'est pourquoi `S3_SERVER_SIDE_ENCRYPTION` est désactivé par défaut pour
+`idrive`, `scaleway`, `minio` et `s3`.
 
-1. **Chiffrement applicatif** (toujours actif, quel que soit le fournisseur) :
-   chaque document est chiffré en AES-256-GCM avec sa propre clé (DEK)
-   avant l'envoi. La DEK chiffrée est stockée en base
-   (`document_versions.encryption_key`). Le fournisseur ne voit jamais le
-   contenu en clair. Les miniatures ne passent pas par ce chiffrement.
-2. **Chiffrement au repos du bucket** : activé **directement sur le
-   bucket** (chiffrement par défaut) chez iDrive e2. Le fournisseur chiffre
-   alors chaque objet écrit, miniatures comprises, sans que l'application
-   n'envoie d'en-tête de chiffrement. C'est pourquoi
-   `S3_SERVER_SIDE_ENCRYPTION` est désactivé par défaut pour `idrive`,
-   `scaleway`, `minio` et `s3`.
+> ⚠️ Le code contient aussi un chiffrement applicatif (AES-256-GCM, une clé
+> DEK par document, `ObjectStorageService.upload_encrypted_document`), mais
+> **les endpoints actuels ne l'utilisent pas** : l'import, les nouvelles
+> versions, la duplication et les miniatures (`app/api/v1/storage.py`)
+> écrivent les fichiers tels quels via `upload_file`. Seul
+> `StorageService.save_document` / `create_version`, qui n'est appelé par
+> aucune route aujourd'hui, chiffre. La lecture (`download_encrypted_document`)
+> gère les deux cas. Sans chiffrement par défaut du bucket, les fichiers
+> sont donc stockés **en clair** chez le fournisseur.
 
 `S3_SERVER_SIDE_ENCRYPTION=true` force l'envoi de
 `x-amz-server-side-encryption: AES256` à chaque écriture et copie. Ne

@@ -8,9 +8,12 @@ local disk or a custom backend — see ``STORAGE_PROVIDER``). The public API
 which provider is active.
 
 Security:
-- Application-level AES-256-GCM envelope encryption for documents
-  (independent of the provider)
-- Optional provider-side encryption (SSE) when the provider supports it
+- Encryption at rest: bucket default encryption (configured on the
+  provider), or a per-request SSE header when ``S3_SERVER_SIDE_ENCRYPTION``
+  is on
+- Application-level AES-256-GCM envelope encryption is available through
+  ``upload_encrypted_document`` (callers opt in; ``upload_file`` stores
+  bytes as-is)
 - Presigned URLs with expiration
 """
 

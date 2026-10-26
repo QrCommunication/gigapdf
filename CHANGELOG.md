@@ -21,8 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   encryption at rest is enabled as the bucket's default encryption, so the
   app sends no per-request SSE header (`S3_SERVER_SIDE_ENCRYPTION` still
   forces it). Admin → *Test storage* now reports the bucket encryption
-  status (`bucket_encryption`) and warns when it is disabled. Application
-  AES-256-GCM document encryption is unchanged.
+  status (`bucket_encryption`) and warns when it is disabled. Note: the
+  current upload endpoints do not use the application-level AES-256-GCM
+  helpers, so bucket encryption is what protects files at rest.
 
 ## [1.27.2] - 2026-07-06
 
