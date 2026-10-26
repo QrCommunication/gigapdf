@@ -18,7 +18,7 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/native": "^7.3.3",
     "@tanstack/react-query": "^5.101.0",
-    "axios": "^1.18.0",
+    "axios": "^1.20.0",
     "better-auth": "^1.6.18",
     "expo": "~56.0.12",
     "expo-auth-session": "~56.0.14",
