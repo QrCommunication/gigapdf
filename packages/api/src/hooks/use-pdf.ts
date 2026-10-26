@@ -18,6 +18,9 @@ import type {
   ApplyElementsOperation,
   ParagraphStyleEdit,
   ListEdit,
+  PrepressColor,
+  PrepressOverprint,
+  ApplyPrepressColorOptions,
   TableEdit,
   CompressPdfOptions,
 } from '../services/pdf';
@@ -532,6 +535,17 @@ export function downloadBlob(blob: Blob, filename: string): void {
   document.body.removeChild(a);
 }
 
+/**
+ * Apply a prepress colour, gradient, or output intent to a PDF via the WASM
+ * engine (`POST /api/pdf/color`). Returns the modified PDF as a Blob.
+ */
+export const useApplyPrepressColor = () => {
+  return useMutation({
+    mutationFn: (options: import('../services/pdf').ApplyPrepressColorOptions) =>
+      pdfService.applyPrepressColor(options),
+  });
+};
+
 // Re-export types for consumer convenience
 export type {
   OpenPdfOptions,
@@ -549,4 +563,7 @@ export type {
   MetadataResult,
   FlattenOptions,
   ApplyElementsOperation,
+  PrepressColor,
+  PrepressOverprint,
+  ApplyPrepressColorOptions,
 };
