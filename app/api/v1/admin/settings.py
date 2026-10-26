@@ -485,12 +485,22 @@ async def test_storage_settings():
         }
 
     info = backend.describe()
+    bucket_encryption = backend.bucket_encryption()
+    if bucket_encryption == "disabled":
+        encryption_note = "WARNING: bucket default encryption is disabled"
+    elif bucket_encryption:
+        encryption_note = f"bucket encryption: {bucket_encryption}"
+    else:
+        encryption_note = "bucket encryption status unavailable"
     return {
         "success": True,
-        "message": f"Successfully connected to bucket '{backend.bucket}'",
+        "message": f"Successfully connected to bucket '{backend.bucket}' ({encryption_note})",
         "provider": info.get("provider"),
         "endpoint": info.get("endpoint"),
         "region": info.get("region"),
+        # Bucket default encryption: algorithm, "disabled", or None (unknown).
+        "bucket_encryption": bucket_encryption,
+        "request_encryption": info.get("server_side_encryption", False),
     }
 
 

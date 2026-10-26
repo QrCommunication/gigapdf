@@ -21,7 +21,7 @@ encrypted_dek  ─────────────────────�
 (colonne TEXT dans document_versions)          │
                                                │ MÊME BASE DE DONNÉES
 document chiffré ──────────────────────────────┤
-(fichier binaire dans Scaleway S3)             │
+(stockage objet : iDrive e2, chiffré au repos) │
                                                ▼
                                        Si DB compromise :
                                        encrypted_dek EXPOSÉ
@@ -32,7 +32,7 @@ document chiffré ────────────────────�
 | Fichier | Rôle |
 |---------|------|
 | `app/services/encryption_service.py` | Génère/chiffre/déchiffre les DEK via KEK |
-| `app/services/s3_service.py` | Upload/download chiffré, encode le DEK pour la DB |
+| `app/services/s3_service.py` | Upload/download chiffré, encode le DEK pour la DB (délègue au backend `app/storage_backends/`) |
 | `app/services/storage_service.py` | Orchestre le chiffrement lors des save/load |
 | `app/models/database.py` | Modèle `DocumentVersion` avec `encryption_key` (TEXT) |
 | `migrations/versions/012_add_encryption_key_column.py` | Migration qui a ajouté la colonne |

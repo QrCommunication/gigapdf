@@ -924,7 +924,16 @@ export const settingsApi = {
   },
 
   testStorage: async () => {
-    return fetchApi<{ success: boolean; message: string; provider?: string }>(
+    return fetchApi<{
+      success: boolean;
+      message: string;
+      provider?: string;
+      endpoint?: string | null;
+      region?: string | null;
+      /** Bucket default encryption: algorithm, "disabled", or null (unknown). */
+      bucket_encryption?: string | null;
+      request_encryption?: boolean;
+    }>(
       "/api/v1/admin/settings/test-storage",
       { method: "POST" }
     );

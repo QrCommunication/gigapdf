@@ -39,8 +39,10 @@ class S3ProviderPreset:
     default_region: str
     endpoint_required: bool = False
     addressing_style: str = "path"
-    # Send ``ServerSideEncryption: AES256`` on writes. Documents are already
-    # encrypted at application level (AES-256-GCM), this is defence in depth.
+    # Send ``ServerSideEncryption: AES256`` on every write. Off for providers
+    # where encryption is enabled once as the bucket's default encryption
+    # (iDrive e2, Scaleway): the provider then encrypts every object itself.
+    # Documents are encrypted at application level (AES-256-GCM) anyway.
     server_side_encryption: bool = False
     # Third-party S3 implementations often reject the CRC checksums that
     # botocore >= 1.36 sends by default; only compute them when required.
@@ -51,6 +53,8 @@ S3_PROVIDER_PRESETS: dict[str, S3ProviderPreset] = {
     # iDrive e2 — endpoint is account/region specific and shown in the e2
     # console (e.g. https://xxxx.par.idrivee2-NN.com). Any region code is
     # accepted for SigV4; use the one displayed next to the endpoint.
+    # Encryption at rest is enabled on the bucket (default encryption), not
+    # per request.
     "idrive": S3ProviderPreset(
         label="iDrive e2",
         endpoint_template=None,
@@ -314,6 +318,24 @@ class S3CompatibleBackend(StorageBackend):
 
     def check_connection(self) -> None:
         self.client.head_bucket(Bucket=self.bucket)
+
+    def bucket_encryption(self) -> str | None:
+        try:
+            response = self.client.get_bucket_encryption(Bucket=self.bucket)
+        except Exception as exc:
+            response_err = getattr(exc, "response", None) or {}
+            code = str(response_err.get("Error", {}).get("Code", ""))
+            if code == "ServerSideEncryptionConfigurationNotFoundError":
+                return "disabled"
+            # Provider without this API, or missing permission.
+            logger.info("Bucket encryption status unavailable: %s", exc)
+            return None
+        rules = response.get("ServerSideEncryptionConfiguration", {}).get("Rules", [])
+        for rule in rules:
+            algo = rule.get("ApplyServerSideEncryptionByDefault", {}).get("SSEAlgorithm")
+            if algo:
+                return str(algo)
+        return "disabled"
 
     def describe(self) -> dict:
         return {

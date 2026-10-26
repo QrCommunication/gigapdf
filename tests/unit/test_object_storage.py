@@ -353,3 +353,35 @@ class TestMigration:
         stats = migrate_objects(src, dst, prefix="documents/", dry_run=True)
         assert stats.scanned == 1 and stats.copied == 0
         assert dst.get_object("documents/a") is None
+
+
+class TestBucketEncryption:
+    def test_enabled(self):
+        backend, client = _s3_backend()
+        client.get_bucket_encryption.return_value = {
+            "ServerSideEncryptionConfiguration": {
+                "Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
+            }
+        }
+        assert backend.bucket_encryption() == "AES256"
+
+    def test_disabled(self):
+        backend, client = _s3_backend()
+        client.get_bucket_encryption.side_effect = _ClientError(
+            "ServerSideEncryptionConfigurationNotFoundError"
+        )
+        assert backend.bucket_encryption() == "disabled"
+
+    def test_unknown_when_api_unsupported(self):
+        backend, client = _s3_backend()
+        client.get_bucket_encryption.side_effect = _ClientError("NotImplemented")
+        assert backend.bucket_encryption() is None
+
+    def test_idrive_does_not_send_per_request_sse(self):
+        backend, client = _s3_backend("idrive")
+        client.put_object.return_value = {}
+        backend.put_object("k", b"x")
+        assert "ServerSideEncryption" not in client.put_object.call_args.kwargs
+
+    def test_local_backend_unknown(self, tmp_path):
+        assert LocalFilesystemBackend(tmp_path).bucket_encryption() is None

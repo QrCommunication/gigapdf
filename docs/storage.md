@@ -8,14 +8,14 @@ ne demande **aucune modification de code**.
 
 ## Fournisseurs intégrés
 
-| `STORAGE_PROVIDER` | Service | `S3_ENDPOINT` | Région par défaut | SSE |
+| `STORAGE_PROVIDER` | Service | `S3_ENDPOINT` | Région par défaut | Chiffrement au repos |
 |---|---|---|---|---|
-| `idrive` (défaut) | iDrive e2 | **obligatoire** (console e2) | `us-east-1` | non |
-| `scaleway` | Scaleway Object Storage | optionnel (`https://s3.{region}.scw.cloud`) | `fr-par` | non |
-| `aws` | Amazon S3 | optionnel (résolu par le SDK) | `us-east-1` | oui |
-| `minio` | MinIO | **obligatoire** | `us-east-1` | non |
-| `s3` | Tout service compatible S3 | **obligatoire** | `us-east-1` | non |
-| `local` | Disque local (dev/tests) | — | — | — |
+| `idrive` (défaut) | iDrive e2 | **obligatoire** (console e2) | `us-east-1` | chiffrement par défaut du bucket |
+| `scaleway` | Scaleway Object Storage | optionnel (`https://s3.{region}.scw.cloud`) | `fr-par` | chiffrement par défaut du bucket |
+| `aws` | Amazon S3 | optionnel (résolu par le SDK) | `us-east-1` | en-tête SSE `AES256` à chaque écriture |
+| `minio` | MinIO | **obligatoire** | `us-east-1` | chiffrement par défaut du bucket |
+| `s3` | Tout service compatible S3 | **obligatoire** | `us-east-1` | chiffrement par défaut du bucket |
+| `local` | Disque local (dev/tests) | — | — | chiffrement du disque |
 
 Variables communes : `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`,
 `S3_BUCKET_NAME`, `S3_ENDPOINT`, `S3_REGION`.
@@ -24,9 +24,6 @@ Surcharges facultatives : `S3_ADDRESSING_STYLE` (`path`/`virtual`/`auto`),
 
 Le backend `local` ne fournit pas d'URL présignée : les miniatures n'y sont
 donc pas exposées (`thumbnail_url = null`). Il sert au dev et aux tests.
-
-Les documents sont de toute façon chiffrés côté application
-(AES-256-GCM, enveloppe) avant l'envoi, quel que soit le fournisseur.
 
 ### iDrive e2
 
@@ -38,6 +35,42 @@ S3_ACCESS_KEY_ID=...
 S3_SECRET_ACCESS_KEY=...
 S3_BUCKET_NAME=gigapdf
 ```
+
+Dans la console e2 : créer le bucket, **activer son chiffrement par défaut**
+(voir ci-dessous) et créer une clé d'accès limitée à ce bucket.
+
+## Chiffrement
+
+Deux couches indépendantes :
+
+1. **Chiffrement applicatif** (toujours actif, quel que soit le fournisseur) :
+   chaque document est chiffré en AES-256-GCM avec sa propre clé (DEK)
+   avant l'envoi. La DEK chiffrée est stockée en base
+   (`document_versions.encryption_key`). Le fournisseur ne voit jamais le
+   contenu en clair. Les miniatures ne passent pas par ce chiffrement.
+2. **Chiffrement au repos du bucket** : activé **directement sur le
+   bucket** (chiffrement par défaut) chez iDrive e2. Le fournisseur chiffre
+   alors chaque objet écrit, miniatures comprises, sans que l'application
+   n'envoie d'en-tête de chiffrement. C'est pourquoi
+   `S3_SERVER_SIDE_ENCRYPTION` est désactivé par défaut pour `idrive`,
+   `scaleway`, `minio` et `s3`.
+
+`S3_SERVER_SIDE_ENCRYPTION=true` force l'envoi de
+`x-amz-server-side-encryption: AES256` à chaque écriture et copie. Ne
+l'activer que si le fournisseur accepte cet en-tête (c'est le cas d'AWS,
+où il est actif par défaut).
+
+### Vérifier
+
+Admin → Paramètres → **Tester le stockage** (`POST
+/api/v1/admin/settings/test-storage`). La réponse contient
+`bucket_encryption` :
+
+| Valeur | Signification |
+|---|---|
+| `AES256`, `aws:kms`… | chiffrement par défaut actif sur le bucket ✅ |
+| `disabled` | aucun chiffrement par défaut : le message affiche `WARNING: bucket default encryption is disabled` ❌ |
+| `null` | le fournisseur n'expose pas `GetBucketEncryption` ou la clé n'a pas le droit de le lire : vérifier dans la console |
 
 ## Ajouter un autre service
 
@@ -67,6 +100,7 @@ class AzureBlobBackend(StorageBackend):
     def iter_objects(self, prefix=""): ...
     def presigned_url(self, key, expires_in=3600, method="get"): ...
     def check_connection(self): ...
+    def bucket_encryption(self): ...         # facultatif : "AES256", "disabled" ou None
 
 def create_backend(settings):
     return AzureBlobBackend(...)
@@ -92,9 +126,13 @@ venv/bin/python scripts/migrate_storage.py             # copie (relançable)
 
 Procédure conseillée :
 
-1. Lancer la copie une première fois (le site reste sur Scaleway).
-2. Passer en maintenance, relancer la copie (seuls les nouveaux objets sont copiés).
-3. Mettre `STORAGE_PROVIDER=idrive` + les variables `S3_*` iDrive dans `.env`,
+1. Créer le bucket iDrive e2 et **activer son chiffrement par défaut avant
+   toute copie** : seuls les objets écrits après l'activation sont chiffrés
+   par le fournisseur.
+2. Lancer la copie une première fois (le site reste sur Scaleway).
+3. Passer en maintenance, relancer la copie (seuls les nouveaux objets sont copiés).
+4. Mettre `STORAGE_PROVIDER=idrive` + les variables `S3_*` iDrive dans `.env`,
    redémarrer l'API et les workers Celery.
-4. Vérifier via l'admin : *Paramètres → Tester le stockage*.
-5. Garder le bucket Scaleway quelques jours avant de le supprimer.
+5. Vérifier via l'admin : *Paramètres → Tester le stockage* (connexion OK et
+   `bucket encryption: AES256`).
+6. Garder le bucket Scaleway quelques jours avant de le supprimer.

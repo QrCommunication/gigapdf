@@ -205,9 +205,10 @@ Les clients doivent être mis à jour pour :
 # Next.js 16 — proxy interne vers Python (OCR, export)
 NEXTJS_INTERNAL_URL=http://localhost:8000
 
-# S3 / Storage (TS accède via Python proxy)
-S3_BUCKET=giga-pdf-prod
-AWS_REGION=eu-west-1
+# Stockage objet (TS accède via Python proxy) — voir docs/storage.md
+STORAGE_PROVIDER=idrive
+S3_ENDPOINT=https://xxxx.par.idrivee2-NN.com
+S3_BUCKET_NAME=giga-pdf-prod
 
 # PDF Engine cache (optionnel)
 PDF_CACHE_TTL=3600
