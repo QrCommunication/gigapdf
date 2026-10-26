@@ -87,9 +87,9 @@ const nextConfig: NextConfig = {
   // `as-needed`), créant une BOUCLE de redirection. En rendu dynamique (dev/prod
   // actuel) la page est servie en place sur la réécriture → pas de boucle ; le
   // bug n'apparaît qu'une fois les pages publiques prérendues (SSG). Désactiver
-  // la normalisation d'URL par le middleware fait servir la cible de réécriture
+  // la normalisation d'URL par le proxy fait servir la cible de réécriture
   // sans re-déclencher le strip. Le proxy continue de voir le chemin public.
-  skipMiddlewareUrlNormalize: true,
+  skipProxyUrlNormalize: true,
   outputFileTracingIncludes: {
     // The Rust→WASM engine (@qrcommunication/gigapdf-lib) is loaded server-side
     // by pdf-engine via loadDefault(), which reads `gigapdf.wasm` from disk.
