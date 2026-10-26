@@ -2,7 +2,10 @@
 
 import { useTranslations } from "next-intl";
 import { FileText, Scale, ShieldCheck, CreditCard, AlertTriangle, Gavel, Code2, Mail, Server, Ban } from "lucide-react";
-import { env } from "@/lib/env";
+import { env, legalWebsite } from "@/lib/env";
+
+const hostWebsite = legalWebsite(env.NEXT_PUBLIC_LEGAL_HOST_WEBSITE);
+const storageWebsite = legalWebsite(env.NEXT_PUBLIC_LEGAL_STORAGE_WEBSITE);
 
 export default function TermsContent() {
   const t = useTranslations("legal.terms");
@@ -17,7 +20,7 @@ export default function TermsContent() {
         </div>
         <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">{t("title")}</h1>
         <p className="text-muted-foreground font-mono text-sm">
-          <span className="text-terminal-green">$</span> last_updated: 2025-12-20
+          <span className="text-terminal-green">$</span> last_updated: 2026-10-26
         </p>
       </div>
 
@@ -57,10 +60,20 @@ export default function TermsContent() {
           </div>
           <div className="rounded-xl border border-border bg-card/50 p-6 font-mono text-sm space-y-1">
             <p className="text-muted-foreground mb-2"># {t("publisher.hosting")}</p>
-            <p><span className="text-terminal-cyan">provider:</span> "Scaleway SAS"</p>
-            <p><span className="text-terminal-cyan">address:</span> "8 rue de la Ville l'Évêque"</p>
-            <p><span className="text-terminal-cyan">city:</span> "75008 Paris, France"</p>
-            <p><span className="text-terminal-cyan">website:</span> <a href="https://www.scaleway.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">"scaleway.com"</a></p>
+            <p><span className="text-terminal-cyan">provider:</span> "{env.NEXT_PUBLIC_LEGAL_HOST_NAME}"</p>
+            <p><span className="text-terminal-cyan">address:</span> "{env.NEXT_PUBLIC_LEGAL_HOST_ADDRESS}"</p>
+            {hostWebsite && (
+              <p><span className="text-terminal-cyan">website:</span> <a href={hostWebsite.href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">"{hostWebsite.label}"</a></p>
+            )}
+          </div>
+          <div className="rounded-xl border border-border bg-card/50 p-6 font-mono text-sm space-y-1">
+            <p className="text-muted-foreground mb-2"># {t("publisher.storage")}</p>
+            <p><span className="text-terminal-cyan">provider:</span> "{env.NEXT_PUBLIC_LEGAL_STORAGE_NAME}"</p>
+            <p><span className="text-terminal-cyan">address:</span> "{env.NEXT_PUBLIC_LEGAL_STORAGE_ADDRESS}"</p>
+            <p><span className="text-terminal-cyan">location:</span> "{env.NEXT_PUBLIC_LEGAL_STORAGE_LOCATION}"</p>
+            {storageWebsite && (
+              <p><span className="text-terminal-cyan">website:</span> <a href={storageWebsite.href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">"{storageWebsite.label}"</a></p>
+            )}
           </div>
         </div>
       </section>

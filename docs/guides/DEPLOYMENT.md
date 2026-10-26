@@ -176,6 +176,8 @@ services:
       context: .
       dockerfile: deploy/Dockerfile.web
     restart: always
+    env_file:
+      - .env   # NEXT_PUBLIC_LEGAL_* (required — see apps/web/.env.example)
     environment:
       - NEXT_PUBLIC_API_URL=https://api.${DOMAIN}
       - NEXT_PUBLIC_WS_URL=wss://api.${DOMAIN}
@@ -727,6 +729,18 @@ MAX_UPLOAD_SIZE_MB=500
 MAX_PAGES_PER_DOCUMENT=5000
 ```
 
+#### Web app legal variables / Variables légales de l'app web
+
+The web app (`apps/web`) needs the `NEXT_PUBLIC_LEGAL_*` variables in
+production (LCEN publisher + host, GDPR file storage provider). Full list:
+`apps/web/.env.example` or `deploy/.env.production.example`. Keep
+`NEXT_PUBLIC_LEGAL_STORAGE_*` in sync with `STORAGE_PROVIDER`: the privacy
+policy lists that provider as a sub-processor.
+
+They are inlined at build time, so set them before building. When one is
+missing, the legal pages return HTTP 500 while `/` and `/health` stay
+green: check `/legal-notice` and `/privacy` (HTTP 200) after every deploy.
+
 ---
 
 ## Database Setup
@@ -988,6 +1002,8 @@ For high traffic, consider:
 - [ ] PostgreSQL installed and configured
 - [ ] Redis installed and running
 - [ ] Object storage bucket created, default encryption enabled, *Test storage* OK
+- [ ] `STORAGE_PROVIDER` / `S3_*` set; existing files migrated (`scripts/migrate_storage.py`)
+- [ ] `NEXT_PUBLIC_LEGAL_*` set (incl. `NEXT_PUBLIC_LEGAL_STORAGE_*`), legal pages return 200
 - [ ] SSL certificates obtained
 - [ ] Nginx configured and tested
 - [ ] Application deployed and running

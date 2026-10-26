@@ -1,6 +1,6 @@
 import { setRequestLocale } from "next-intl/server";
-import { env } from "@/lib/env";
-import { Building2, Server, ShieldCheck, Mail } from "lucide-react";
+import { env, legalWebsite } from "@/lib/env";
+import { Building2, Database, Server, ShieldCheck, Mail } from "lucide-react";
 
 export const metadata = {
   title: "Mentions légales | GigaPDF",
@@ -8,6 +8,9 @@ export const metadata = {
   // Contenu fr-only : canonical fr SANS hreflang (écrase le bloc du layout [locale]).
   alternates: { canonical: "/legal-notice" },
 };
+
+const hostWebsite = legalWebsite(env.NEXT_PUBLIC_LEGAL_HOST_WEBSITE);
+const storageWebsite = legalWebsite(env.NEXT_PUBLIC_LEGAL_STORAGE_WEBSITE);
 
 export default async function LegalNoticePage({
   params,
@@ -25,7 +28,7 @@ export default async function LegalNoticePage({
         </div>
         <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">Mentions légales</h1>
         <p className="text-muted-foreground font-mono text-sm">
-          <span className="text-terminal-green">$</span> last_updated: 2026-04-26
+          <span className="text-terminal-green">$</span> last_updated: 2026-10-26
         </p>
       </div>
 
@@ -62,6 +65,30 @@ export default async function LegalNoticePage({
           <p><span className="text-terminal-cyan">adresse:</span> "{env.NEXT_PUBLIC_LEGAL_HOST_ADDRESS}"</p>
           {env.NEXT_PUBLIC_LEGAL_HOST_PHONE && (
             <p><span className="text-terminal-cyan">telephone:</span> "{env.NEXT_PUBLIC_LEGAL_HOST_PHONE}"</p>
+          )}
+          {hostWebsite && (
+            <p><span className="text-terminal-cyan">site:</span> <a href={hostWebsite.href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">"{hostWebsite.label}"</a></p>
+          )}
+        </div>
+      </section>
+
+      <section className="mb-12">
+        <div className="flex items-center gap-3 mb-4 not-prose">
+          <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+            <Database className="h-5 w-5 text-accent" />
+          </div>
+          <h2 className="text-2xl font-bold m-0">Stockage des fichiers</h2>
+        </div>
+        <p className="text-muted-foreground mb-4">
+          Les documents, versions et miniatures enregistrés sur GigaPDF sont
+          stockés, chiffrés au repos, chez le prestataire suivant :
+        </p>
+        <div className="rounded-xl border border-border bg-card/50 p-6 not-prose font-mono text-sm space-y-1">
+          <p><span className="text-terminal-cyan">nom:</span> "{env.NEXT_PUBLIC_LEGAL_STORAGE_NAME}"</p>
+          <p><span className="text-terminal-cyan">adresse:</span> "{env.NEXT_PUBLIC_LEGAL_STORAGE_ADDRESS}"</p>
+          <p><span className="text-terminal-cyan">localisation_donnees:</span> "{env.NEXT_PUBLIC_LEGAL_STORAGE_LOCATION}"</p>
+          {storageWebsite && (
+            <p><span className="text-terminal-cyan">site:</span> <a href={storageWebsite.href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">"{storageWebsite.label}"</a></p>
           )}
         </div>
       </section>

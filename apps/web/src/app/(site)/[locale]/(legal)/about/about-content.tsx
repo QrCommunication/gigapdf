@@ -3,7 +3,10 @@
 import { useTranslations } from "next-intl";
 import { Building2, Code2, Globe, Heart, Mail, MapPin, Phone, Users } from "lucide-react";
 import { Link } from "@/i18n/navigation";
-import { env } from "@/lib/env";
+import { env, legalWebsite } from "@/lib/env";
+
+const hostWebsite = legalWebsite(env.NEXT_PUBLIC_LEGAL_HOST_WEBSITE);
+const storageWebsite = legalWebsite(env.NEXT_PUBLIC_LEGAL_STORAGE_WEBSITE);
 
 export default function AboutContent() {
   const t = useTranslations("legal.about");
@@ -78,15 +81,31 @@ export default function AboutContent() {
           <div className="rounded-lg border p-6">
             <h3 className="font-semibold mb-4">{t("company.hosting.title")}</h3>
             <p className="text-muted-foreground mb-4">
-              {t("company.hosting.description")}
+              {t("company.hosting.description", {
+                hostName: env.NEXT_PUBLIC_LEGAL_HOST_NAME,
+                storageName: env.NEXT_PUBLIC_LEGAL_STORAGE_NAME,
+                storageLocation: env.NEXT_PUBLIC_LEGAL_STORAGE_LOCATION,
+              })}
             </p>
             <div className="space-y-2 text-sm text-muted-foreground">
-              <p><strong>Scaleway SAS</strong></p>
-              <p>8 rue de la Ville l'Évêque</p>
-              <p>75008 Paris, France</p>
-              <a href="https://www.scaleway.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                www.scaleway.com
-              </a>
+              <p className="font-medium text-foreground">{t("company.hosting.server")}</p>
+              <p><strong>{env.NEXT_PUBLIC_LEGAL_HOST_NAME}</strong></p>
+              <p>{env.NEXT_PUBLIC_LEGAL_HOST_ADDRESS}</p>
+              {hostWebsite && (
+                <a href={hostWebsite.href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  {hostWebsite.label}
+                </a>
+              )}
+            </div>
+            <div className="space-y-2 text-sm text-muted-foreground mt-6">
+              <p className="font-medium text-foreground">{t("company.hosting.storage")}</p>
+              <p><strong>{env.NEXT_PUBLIC_LEGAL_STORAGE_NAME}</strong></p>
+              <p>{env.NEXT_PUBLIC_LEGAL_STORAGE_ADDRESS}</p>
+              {storageWebsite && (
+                <a href={storageWebsite.href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  {storageWebsite.label}
+                </a>
+              )}
             </div>
           </div>
         </div>
@@ -131,7 +150,7 @@ export default function AboutContent() {
 
       {/* Last updated */}
       <p className="text-sm text-muted-foreground text-center mt-12">
-        {t("lastUpdated")}: 20 décembre 2025
+        {t("lastUpdated")}: 26 octobre 2026
       </p>
     </div>
   );
