@@ -1498,6 +1498,11 @@ export async function renderElementsOverlay(
               fill: textColour,
               opacity: textElement.style.opacity ?? 1,
               textAlign: "left" as const,
+              // RTL direction on segments: same rationale as the non-segmented
+              // path — the WASM engine surfaces it from the script of the run.
+              ...(textElement.style.direction === "rtl"
+                ? { direction: "rtl" as const }
+                : {}),
               lineHeight: 1,
               charSpacing: _segCharSpacing,
               underline: textElement.style.underline || false,
@@ -1634,6 +1639,13 @@ export async function renderElementsOverlay(
           fill: _isStrokeOnly ? "transparent" : _resolvedFill,
           opacity: _isInvisible ? 0 : (textElement.style.opacity ?? 1),
           textAlign: textElement.style.textAlign || "left",
+          // RTL direction: Fabric.js supports the `direction` property on IText
+          // to render right-to-left scripts (Arabic, Hebrew). The WASM engine
+          // surfaces it from the text script; pass it through so the overlay
+          // matches the PDF raster. Absent ⇒ "ltr" (Fabric default).
+          ...(textElement.style.direction === "rtl"
+            ? { direction: "rtl" as const }
+            : {}),
           lineHeight: textElement.style.lineHeight || 1.2,
           charSpacing: (textElement.style.letterSpacing || 0) * 10,
           underline: textElement.style.underline || false,
@@ -1688,6 +1700,41 @@ export async function renderElementsOverlay(
           (textObj as FabricObjectWithData).data = {
             ...(textObj as FabricObjectWithData).data,
             blendMode: _wasmStyle.blendMode,
+          };
+        }
+        // WASM wordSpacing / totalKerning: these fields live on TextRunSegment
+        // (per-segment), not on TextStyle (per-run). Read from the first segment
+        // when available; absent ⇒ 0 (legacy behaviour). Fabric does not support
+        // per-segment word spacing natively, so we apply as a top-level charSpacing
+        // adjustment when present. Non-uniform spacing across segments is
+        // preserved on data.* for round-trip fidelity but not visually rendered.
+        const _firstSegment = textElement.segments?.[0];
+        const _wordSpacing = _firstSegment?.wordSpacing ?? 0;
+        if (Math.abs(_wordSpacing) > 0.001) {
+          // Convert PDF points to Fabric 1/1000-em: multiply by 1000/fontSize.
+          const wordSpacingEm = (_wordSpacing * 1000) / (_fontSize || 12);
+          const existingCharSpacing = textObj.charSpacing ?? 0;
+          textObj.set({ charSpacing: existingCharSpacing + wordSpacingEm });
+        }
+        // WASM totalKerning: sum of TJ kerning adjustments within the first
+        // segment. Adjusts the effective width so glyphs land at their original
+        // PDF positions. Applied as an additive width correction after width-fit.
+        const _totalKerning = _firstSegment?.totalKerning ?? 0;
+        if (Math.abs(_totalKerning) > 0.001) {
+          // Kerning is in PDF points; convert to canvas pixels via scale.
+          // Negative kerning = tighter spacing → reduce width.
+          const kerningPx = _totalKerning * (options.scale ?? 1);
+          const currentWidth = textObj.width ?? 0;
+          if (currentWidth > 0) {
+            textObj.set({ width: Math.max(1, currentWidth + kerningPx) });
+          }
+        }
+        // WASM clipBounds: preserve for round-trip fidelity and future masking.
+        // Fabric does not natively clip IText objects, so no visual effect here.
+        if (textElement.clipBounds) {
+          (textObj as FabricObjectWithData).data = {
+            ...(textObj as FabricObjectWithData).data,
+            clipBounds: textElement.clipBounds,
           };
         }
         // Fit the run to its exact /Widths box for ANY font (embedded too). Even the
@@ -1770,16 +1817,60 @@ export async function renderElementsOverlay(
           const isParsedImage = imgElement.index !== undefined;
           const realImageOpacity = imgElement.style?.opacity ?? 1;
 
+          // WASM affine transform overrides: when the engine emits explicit
+          // scaleX/Y or skewX/Y (from the PDF CTM), compose them with the
+          // bounds-derived scale so the image matches the original placement.
+          // Epsilon guard avoids floating-point noise on identity transforms.
+          const wasmScaleX = imgElement.scaleX ?? 1;
+          const wasmScaleY = imgElement.scaleY ?? 1;
+          const wasmSkewX = imgElement.skewX ?? 0;
+          const wasmSkewY = imgElement.skewY ?? 0;
+          const effectiveScaleX =
+            Math.abs(wasmScaleX - 1) > 0.001
+              ? targetScaleX * wasmScaleX
+              : targetScaleX;
+          const effectiveScaleY =
+            Math.abs(wasmScaleY - 1) > 0.001
+              ? targetScaleY * wasmScaleY
+              : targetScaleY;
+
+          // WASM blendMode: map PDF `/BM` to Fabric globalCompositeOperation.
+          // "Normal" (default) maps to "source-over"; other modes pass through
+          // when Fabric supports them. Absent ⇒ no override (legacy behaviour).
+          const wasmBlendMode = imgElement.style?.blendMode;
+          const compositeOp =
+            wasmBlendMode && wasmBlendMode !== "normal"
+              ? wasmBlendMode === "multiply"
+                ? "multiply"
+                : wasmBlendMode === "screen"
+                  ? "screen"
+                  : wasmBlendMode === "overlay"
+                    ? "overlay"
+                    : wasmBlendMode === "darken"
+                      ? "darken"
+                      : wasmBlendMode === "lighten"
+                        ? "lighten"
+                        : undefined
+              : undefined;
+
           const loadPromise = FabricImage.fromURL(imageUrl, {
             crossOrigin: "anonymous",
           })
             .then((img: FabricObject) => {
               img.set({
                 ...baseOptions,
-                scaleX: targetScaleX,
-                scaleY: targetScaleY,
+                scaleX: effectiveScaleX,
+                scaleY: effectiveScaleY,
                 // Parsed → invisible hit-target; new → visible at real opacity.
                 opacity: isParsedImage ? 0 : realImageOpacity,
+                // WASM skew from the PDF CTM (rare but valid for rotated images).
+                ...(Math.abs(wasmSkewX) > 0.001 || Math.abs(wasmSkewY) > 0.001
+                  ? { skewX: wasmSkewX, skewY: wasmSkewY }
+                  : {}),
+                // WASM blend mode → Fabric composite operation.
+                ...(compositeOp
+                  ? { globalCompositeOperation: compositeOp }
+                  : {}),
               });
               (img as FabricObjectWithData).data = {
                 elementId: imgElement.elementId,
@@ -1795,6 +1886,11 @@ export async function renderElementsOverlay(
                 // Parsed images are transparent hit-targets revealed while
                 // selected (like shapes); new images are already visible.
                 isTransparentImageOverlay: isParsedImage,
+                // WASM clipBounds: preserve for round-trip fidelity. Fabric
+                // clipPath support is deferred; stored on data.* for now.
+                ...(imgElement.clipBounds
+                  ? { clipBounds: imgElement.clipBounds }
+                  : {}),
               };
               canvas.add(img);
             })
@@ -1956,7 +2052,53 @@ export async function renderElementsOverlay(
             }
           }
         }
+        // WASM vector-path properties: apply to Fabric object when present.
+        // These are PDF graphics-state attributes emitted by the WASM engine
+        // for vector paths (gp_vector_paths_json). Basic shapes (rect/circle)
+        // rarely carry them; Path objects from complex vector art do.
         if (fabricObj) {
+          const shapeStyle = shapeElement.style;
+          // fillRule: "evenodd" is needed for donut/ring shapes where the
+          // default "nonzero" would fill the hole. Fabric.Path supports this
+          // natively; other shape types ignore it safely.
+          if (shapeStyle.fillRule && shapeStyle.fillRule !== "nonzero") {
+            fabricObj.set({ fillRule: shapeStyle.fillRule });
+          }
+          // lineCap / lineJoin / miterLimit: stroke appearance attributes.
+          // Only meaningful when the shape has a visible stroke.
+          if (hasStroke) {
+            if (shapeStyle.lineCap) {
+              fabricObj.set({ strokeLineCap: shapeStyle.lineCap });
+            }
+            if (shapeStyle.lineJoin) {
+              fabricObj.set({ strokeLineJoin: shapeStyle.lineJoin });
+            }
+            if (typeof shapeStyle.miterLimit === "number") {
+              fabricObj.set({ strokeMiterLimit: shapeStyle.miterLimit });
+            }
+          }
+          // blendMode: PDF `/BM` → Fabric globalCompositeOperation.
+          // "Normal" maps to "source-over" (Fabric default); other modes
+          // pass through when supported. Stored on data.* for round-trip
+          // even when the overlay is transparent (raster-truth model).
+          if (shapeStyle.blendMode && shapeStyle.blendMode !== "Normal") {
+            const compositeOp =
+              shapeStyle.blendMode === "Multiply"
+                ? "multiply"
+                : shapeStyle.blendMode === "Screen"
+                  ? "screen"
+                  : shapeStyle.blendMode === "Overlay"
+                    ? "overlay"
+                    : shapeStyle.blendMode === "Darken"
+                      ? "darken"
+                      : shapeStyle.blendMode === "Lighten"
+                        ? "lighten"
+                        : undefined;
+            if (compositeOp) {
+              fabricObj.set({ globalCompositeOperation: compositeOp });
+            }
+          }
+
           (fabricObj as FabricObjectWithData).data = {
             elementId: shapeElement.elementId,
             type: "shape",
@@ -1973,6 +2115,19 @@ export async function renderElementsOverlay(
               shapeElement.style.strokeDashArray.length > 0
                 ? [...shapeElement.style.strokeDashArray]
                 : null,
+            // WASM vector-path attributes preserved for round-trip fidelity.
+            // The raster-truth model means these are not visually applied to
+            // the transparent overlay, but they MUST survive save/reload so
+            // the bake side can reconstruct the original PDF graphics state.
+            ...(shapeStyle.fillRule ? { fillRule: shapeStyle.fillRule } : {}),
+            ...(shapeStyle.lineCap ? { lineCap: shapeStyle.lineCap } : {}),
+            ...(shapeStyle.lineJoin ? { lineJoin: shapeStyle.lineJoin } : {}),
+            ...(typeof shapeStyle.miterLimit === "number"
+              ? { miterLimit: shapeStyle.miterLimit }
+              : {}),
+            ...(shapeStyle.blendMode
+              ? { blendMode: shapeStyle.blendMode }
+              : {}),
           };
         }
         break;

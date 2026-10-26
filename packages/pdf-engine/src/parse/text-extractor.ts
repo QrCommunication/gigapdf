@@ -232,6 +232,13 @@ export function runToTextElement(run: TextElementInfo, pageHeight: number, pageN
       x: run.x,
       y: pageHeight - run.y - run.height,
       width: run.width,
+      // bounds.height is set to fontSize (not run.height) because Fabric.js
+      // computes the visual text box height from fontSize × lineHeight. Using
+      // the raw glyph bbox height would create an asymmetry on save/reload:
+      // the overlay would be sized by run.height but Fabric would render it at
+      // fontSize × lineHeight, causing a vertical drift on every round-trip.
+      // The baseline offset (text-baseline.ts DESCENDER_OFFSET_RATIO) handles
+      // the ascender/descender positioning separately.
       height: run.fontSize,
     },
     transform: {

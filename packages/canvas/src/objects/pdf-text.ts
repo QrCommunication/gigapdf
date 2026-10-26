@@ -57,6 +57,11 @@ export class PDFText extends fabric.Textbox {
       element,
       ...fabricProps,
       ...fabricTransform,
+      // Fabric v6/v7 defaults originX/Y to 'center', which treats left/top as
+      // the object center. The parser produces top-left coords, so force
+      // origin to 'left'/'top' to avoid a visual offset of width/2, height/2.
+      originX: "left" as const,
+      originY: "top" as const,
       fontFamily: element.style.fontFamily,
       fontSize: element.style.fontSize,
       fontWeight: element.style.fontWeight,
@@ -69,6 +74,10 @@ export class PDFText extends fabric.Textbox {
       linethrough: element.style.strikethrough ?? false,
       textBackgroundColor: element.style.backgroundColor ?? "",
       textAlign: element.style.textAlign,
+      // RTL direction: Fabric.js supports the `direction` property on Textbox
+      // to render right-to-left scripts (Arabic, Hebrew). The WASM engine
+      // surfaces it from the text script; pass it through so the overlay
+      // matches the PDF raster. Absent ⇒ "ltr" (Fabric default).
       direction: element.style.direction ?? "ltr",
       lineHeight: element.style.lineHeight,
       charSpacing: element.style.letterSpacing,
