@@ -5,6 +5,16 @@ All notable changes to the @giga-pdf/s3 package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Provider-agnostic client: `STORAGE_PROVIDER` selects a preset (`idrive`
+  default, `scaleway`, `aws`, `minio`, `s3`). `S3_ENDPOINT` is required for
+  iDrive e2 / MinIO / generic S3; Scaleway derives it from `S3_REGION`.
+- CRC checksums only when required for third-party S3 providers.
+- New `buildObjectUrl(config, key)` helper (AWS endpoints without `S3_ENDPOINT`).
+
 ## [0.1.0] - 2025-12-18
 
 ### Added

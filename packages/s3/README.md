@@ -1,6 +1,6 @@
 # @giga-pdf/s3
 
-S3-compatible storage operations for Scaleway Object Storage.
+S3-compatible storage operations for any S3 provider (iDrive e2, Scaleway, AWS, MinIO…), selected with `STORAGE_PROVIDER`.
 
 ## Features
 
@@ -9,7 +9,7 @@ S3-compatible storage operations for Scaleway Object Storage.
 - **File Management**: List, search, and delete files
 - **React Hooks**: Upload and presigned URL hooks with progress tracking
 - **Type Safety**: Full TypeScript support with strict mode
-- **Scaleway Compatible**: Optimized for Scaleway Object Storage
+- **Provider-agnostic**: presets for iDrive e2, Scaleway, AWS S3, MinIO and generic S3
 
 ## Installation
 
@@ -22,11 +22,12 @@ pnpm install @giga-pdf/s3
 Set the following environment variables:
 
 ```bash
+STORAGE_PROVIDER=idrive   # idrive | scaleway | aws | minio | s3
 S3_ACCESS_KEY_ID=your_access_key
 S3_SECRET_ACCESS_KEY=your_secret_key
 S3_BUCKET_NAME=your_bucket_name
-S3_ENDPOINT=https://s3.fr-par.scw.cloud
-S3_REGION=fr-par
+S3_ENDPOINT=https://xxxx.par.idrivee2-NN.com   # required for idrive/minio/s3
+S3_REGION=                                      # empty = provider default
 ```
 
 ## Usage

@@ -342,12 +342,14 @@ STORAGE_PATH=/var/lib/gigapdf/documents
 # Maximum storage size in GB
 STORAGE_MAX_SIZE_GB=100
 
-# S3-compatible storage (Scaleway, AWS, MinIO)
-S3_ENDPOINT_URL=https://s3.fr-par.scw.cloud
+# Object storage provider: idrive | scaleway | aws | minio | s3 | local
+# (or package.module:factory for a custom backend — see docs/storage.md)
+STORAGE_PROVIDER=idrive
+S3_ENDPOINT=https://xxxx.par.idrivee2-NN.com   # required for idrive/minio/s3
 S3_ACCESS_KEY_ID=your-access-key
 S3_SECRET_ACCESS_KEY=your-secret-key
 S3_BUCKET_NAME=gigapdf-documents
-S3_REGION=fr-par
+S3_REGION=                                     # empty = provider default
 ```
 
 #### Celery Configuration (Async Tasks) / Configuration Celery
