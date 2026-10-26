@@ -5,6 +5,19 @@ All notable changes to GigaPDF are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Pluggable object storage — iDrive e2 by default.** Document, version and
+  thumbnail storage now goes through a provider-agnostic layer
+  (`app/storage_backends/`). `STORAGE_PROVIDER` selects `idrive` (default),
+  `scaleway`, `aws`, `minio`, any `s3`-compatible service, `local` disk, or a
+  custom `package.module:factory`. `S3_ENDPOINT` is now required for iDrive
+  e2 / MinIO / generic S3 (no more implicit Scaleway endpoint). New
+  `scripts/migrate_storage.py` copies every object between providers
+  (idempotent). See `docs/storage.md`.
+
 ## [1.27.2] - 2026-07-06
 
 ### Fixed

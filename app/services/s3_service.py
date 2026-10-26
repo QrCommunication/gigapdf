@@ -1,67 +1,52 @@
 """
-S3 Storage Service - Scaleway/AWS S3-compatible storage operations.
+Object storage service — provider-agnostic facade.
 
-Handles file uploads, downloads, and management for persistent document storage.
+Historically Scaleway-only; it now delegates every call to the configured
+:class:`~app.storage_backends.base.StorageBackend` (iDrive e2, Scaleway, AWS, MinIO,
+local disk or a custom backend — see ``STORAGE_PROVIDER``). The public API
+(method names, arguments, return shapes) is unchanged so callers do not care
+which provider is active.
 
-Security Features:
-- Server-Side Encryption (SSE-S3) for all uploads
-- Application-level AES-256-GCM encryption (envelope encryption)
-- Secure presigned URLs with expiration
-- Audit logging for all operations
+Security:
+- Application-level AES-256-GCM envelope encryption for documents
+  (independent of the provider)
+- Optional provider-side encryption (SSE) when the provider supports it
+- Presigned URLs with expiration
 """
+
+from __future__ import annotations
 
 import logging
 
-import boto3
-from botocore.config import Config
-from botocore.exceptions import ClientError
-
-from app.config import get_settings
+from app.storage_backends import StorageBackend, get_storage_backend
 
 logger = logging.getLogger(__name__)
 
+_PRESIGN_METHODS = {
+    "get_object": "get",
+    "put_object": "put",
+    "get": "get",
+    "put": "put",
+}
 
-class S3Service:
-    """Service for S3-compatible storage operations."""
 
-    def __init__(self):
-        """Initialize S3 service with Scaleway credentials."""
-        self.settings = get_settings()
+class ObjectStorageService:
+    """High-level storage operations used by the API and Celery tasks."""
 
-        # Get S3 configuration from settings (loaded from .env by pydantic-settings)
-        self.endpoint_url = self.settings.s3_endpoint
-        self.bucket_name = self.settings.s3_bucket_name
-        self.region = self.settings.s3_region
-        self.access_key = self.settings.s3_access_key_id
-        self.secret_key = self.settings.s3_secret_access_key
-
-        # Configure S3 client for Scaleway
-        s3_config = Config(
-            signature_version='s3v4',
-            s3={'addressing_style': 'path'},
-            retries={'max_attempts': 3, 'mode': 'standard'}
-        )
-
-        self._client = None
-        if self.access_key and self.secret_key:
-            self._client = boto3.client(
-                's3',
-                endpoint_url=self.endpoint_url,
-                region_name=self.region,
-                aws_access_key_id=self.access_key,
-                aws_secret_access_key=self.secret_key,
-                config=s3_config,
-            )
-            logger.info(f"S3 service initialized with bucket: {self.bucket_name}")
-        else:
-            logger.warning("S3 credentials not configured - storage operations will fail")
+    def __init__(self, backend: StorageBackend | None = None):
+        # None → resolve lazily from settings, so importing this module never
+        # fails on missing credentials (same behaviour as before).
+        self._backend = backend
 
     @property
-    def client(self):
-        """Get S3 client."""
-        if not self._client:
-            raise ValueError("S3 client not initialized - check S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY")
-        return self._client
+    def backend(self) -> StorageBackend:
+        return self._backend or get_storage_backend()
+
+    @property
+    def bucket_name(self) -> str:
+        return self.backend.bucket
+
+    # -- writes -------------------------------------------------------------
 
     def upload_file(
         self,
@@ -69,62 +54,29 @@ class S3Service:
         key: str,
         content_type: str = "application/pdf",
         metadata: dict | None = None,
-        server_side_encryption: bool = True,
+        server_side_encryption: bool = True,  # kept for API compatibility
     ) -> dict:
-        """
-        Upload a file to S3 with server-side encryption.
+        """Store ``file_data`` under ``key``.
 
-        Args:
-            file_data: File bytes to upload.
-            key: S3 object key (path in bucket).
-            content_type: MIME type of the file.
-            metadata: Optional metadata to attach to the object.
-            server_side_encryption: Enable SSE-S3 encryption (default: True).
-
-        Returns:
-            dict with upload result including ETag and key.
+        Provider-side encryption follows the backend configuration
+        (``S3_SERVER_SIDE_ENCRYPTION`` / provider preset).
         """
+        backend = self.backend
         try:
-            extra_args = {
-                'ContentType': content_type,
-            }
-
-            # Enable server-side encryption (SSE-S3) - disabled for Scaleway compatibility
-            # Scaleway doesn't support SSE-S3 the same way AWS does
-            # Application-level encryption (AES-256-GCM) is already applied
-            is_scaleway = self.endpoint_url and 'scw.cloud' in self.endpoint_url
-            if server_side_encryption and not is_scaleway:
-                # Only enable SSE for AWS S3, not Scaleway
-                extra_args['ServerSideEncryption'] = 'AES256'
-
-            if metadata:
-                extra_args['Metadata'] = {k: str(v) for k, v in metadata.items()}
-
-            # Upload using put_object for bytes
-            response = self.client.put_object(
-                Bucket=self.bucket_name,
-                Key=key,
-                Body=file_data,
-                **extra_args
-            )
-
-            logger.info(
-                f"Uploaded file to S3: {key} ({len(file_data)} bytes) "
-                f"[SSE: {'AES256' if server_side_encryption else 'none'}]"
-            )
-
-            return {
-                'key': key,
-                'etag': response.get('ETag', '').strip('"'),
-                'bucket': self.bucket_name,
-                'size': len(file_data),
-                'url': f"{self.endpoint_url}/{self.bucket_name}/{key}",
-                'encryption': 'AES256' if server_side_encryption else None,
-            }
-
-        except ClientError as e:
-            logger.error(f"S3 upload failed for {key}: {e}")
+            result = backend.put_object(key, file_data, content_type, metadata)
+        except Exception as e:
+            logger.error(f"Storage upload failed for {key} ({backend.provider}): {e}")
             raise
+
+        logger.info(f"Uploaded {key} ({len(file_data)} bytes) to {backend.provider}")
+        return {
+            "key": key,
+            "etag": result.get("etag", ""),
+            "bucket": backend.bucket,
+            "size": len(file_data),
+            "url": backend.public_url(key),
+            "encryption": result.get("encryption"),
+        }
 
     def upload_encrypted_document(
         self,
@@ -134,150 +86,46 @@ class S3Service:
         user_id: str,
         metadata: dict | None = None,
     ) -> tuple[dict, str]:
-        """
-        Upload a document with application-level encryption + SSE-S3.
-
-        This provides two layers of encryption:
-        1. Application-level AES-256-GCM (envelope encryption)
-        2. S3 server-side encryption (SSE-S3)
-
-        Args:
-            document_data: Plaintext document bytes.
-            key: S3 object key.
-            document_id: Document identifier for encryption AAD.
-            user_id: User identifier for encryption AAD.
-            metadata: Optional metadata.
+        """Encrypt (AES-256-GCM envelope) then upload a document.
 
         Returns:
             Tuple of (upload result dict, encrypted DEK as base64 string).
         """
         from app.services.encryption_service import encode_encrypted_key, encryption_service
 
-        # Encrypt the document at application level
         encrypted_data, encrypted_dek = encryption_service.encrypt_document(
-            document_data,
-            document_id,
-            user_id
+            document_data, document_id, user_id
         )
 
-        # Add encryption metadata
         encryption_metadata = {
-            'encrypted': 'true',
-            'encryption_version': '1',
-            'original_size': str(len(document_data)),
+            "encrypted": "true",
+            "encryption_version": "1",
+            "original_size": str(len(document_data)),
         }
         if metadata:
             encryption_metadata.update(metadata)
 
-        # Upload with SSE-S3
         result = self.upload_file(
             encrypted_data,
             key,
-            content_type='application/octet-stream',  # Encrypted data
+            content_type="application/octet-stream",
             metadata=encryption_metadata,
-            server_side_encryption=True,
         )
-
-        # Encode DEK for database storage
-        encoded_dek = encode_encrypted_key(encrypted_dek)
 
         logger.info(
             f"Uploaded encrypted document: {key} "
             f"(original: {len(document_data)} bytes, encrypted: {len(encrypted_data)} bytes)"
         )
-
-        return result, encoded_dek
-
-    def download_encrypted_document(
-        self,
-        key: str,
-        encrypted_dek: str,
-        document_id: str,
-        user_id: str,
-    ) -> bytes:
-        """
-        Download and decrypt a document.
-
-        Args:
-            key: S3 object key.
-            encrypted_dek: Base64-encoded encrypted DEK from database.
-            document_id: Document identifier for decryption.
-            user_id: User identifier for decryption.
-
-        Returns:
-            Decrypted document bytes.
-        """
-        from app.services.encryption_service import decode_encrypted_key, encryption_service
-
-        # Download encrypted data from S3
-        encrypted_data = self.download_file(key)
-        if encrypted_data is None:
-            return None
-
-        # Decode the DEK
-        dek_bytes = decode_encrypted_key(encrypted_dek)
-
-        # Decrypt the document
-        plaintext = encryption_service.decrypt_document(
-            encrypted_data,
-            dek_bytes,
-            document_id,
-            user_id
-        )
-
-        logger.info(
-            f"Downloaded and decrypted document: {key} "
-            f"(encrypted: {len(encrypted_data)} bytes, decrypted: {len(plaintext)} bytes)"
-        )
-
-        return plaintext
-
-    def download_file(self, key: str) -> bytes:
-        """
-        Download a file from S3.
-
-        Args:
-            key: S3 object key.
-
-        Returns:
-            File bytes.
-        """
-        try:
-            response = self.client.get_object(
-                Bucket=self.bucket_name,
-                Key=key
-            )
-            file_data = response['Body'].read()
-            logger.info(f"Downloaded file from S3: {key} ({len(file_data)} bytes)")
-            return file_data
-
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'NoSuchKey':
-                logger.warning(f"File not found in S3: {key}")
-                return None
-            logger.error(f"S3 download failed for {key}: {e}")
-            raise
+        return result, encode_encrypted_key(encrypted_dek)
 
     def delete_file(self, key: str) -> bool:
-        """
-        Delete a file from S3.
-
-        Args:
-            key: S3 object key.
-
-        Returns:
-            True if deleted successfully.
-        """
+        """Delete ``key``. Returns False instead of raising on failure."""
         try:
-            self.client.delete_object(
-                Bucket=self.bucket_name,
-                Key=key
-            )
-            logger.info(f"Deleted file from S3: {key}")
+            self.backend.delete_object(key)
+            logger.info(f"Deleted {key} from storage")
             return True
-
-        except ClientError as e:
-            logger.error(f"S3 delete failed for {key}: {e}")
+        except Exception as e:
+            logger.error(f"Storage delete failed for {key}: {e}")
             return False
 
     def copy_file(
@@ -287,166 +135,93 @@ class S3Service:
         content_type: str | None = None,
         metadata: dict | None = None,
     ) -> dict:
-        """
-        Copy an object inside the bucket using S3 server-side copy.
-
-        No bytes transit through the application — the copy happens
-        entirely on the storage backend (CopyObject API).
-
-        Args:
-            source_key: Existing S3 object key.
-            dest_key: Destination S3 object key.
-            content_type: Optional content type override. When provided
-                (or when metadata is provided), the copy uses
-                MetadataDirective=REPLACE; otherwise source metadata is kept.
-            metadata: Optional metadata to attach to the destination object.
-
-        Returns:
-            dict with copy result including source/destination keys.
-        """
+        """Copy an object inside the bucket (server-side when supported)."""
+        backend = self.backend
         try:
-            extra_args: dict = {}
-            if content_type or metadata:
-                extra_args["MetadataDirective"] = "REPLACE"
-                if content_type:
-                    extra_args["ContentType"] = content_type
-                if metadata:
-                    extra_args["Metadata"] = {k: str(v) for k, v in metadata.items()}
-
-            self.client.copy_object(
-                Bucket=self.bucket_name,
-                Key=dest_key,
-                CopySource={"Bucket": self.bucket_name, "Key": source_key},
-                **extra_args,
-            )
-
-            logger.info(f"Copied S3 object: {source_key} -> {dest_key}")
-
-            return {
-                "source_key": source_key,
-                "dest_key": dest_key,
-                "bucket": self.bucket_name,
-            }
-
-        except ClientError as e:
-            logger.error(f"S3 copy failed ({source_key} -> {dest_key}): {e}")
+            backend.copy_object(source_key, dest_key, content_type, metadata)
+        except Exception as e:
+            logger.error(f"Storage copy failed ({source_key} -> {dest_key}): {e}")
             raise
+        logger.info(f"Copied storage object: {source_key} -> {dest_key}")
+        return {"source_key": source_key, "dest_key": dest_key, "bucket": backend.bucket}
 
-    def file_exists(self, key: str) -> bool:
-        """
-        Check if a file exists in S3.
+    # -- reads --------------------------------------------------------------
 
-        Args:
-            key: S3 object key.
-
-        Returns:
-            True if file exists.
-        """
+    def download_file(self, key: str) -> bytes | None:
+        """Return the object bytes, or None when it does not exist."""
         try:
-            self.client.head_object(
-                Bucket=self.bucket_name,
-                Key=key
-            )
-            return True
-        except ClientError:
-            return False
+            data = self.backend.get_object(key)
+        except Exception as e:
+            logger.error(f"Storage download failed for {key}: {e}")
+            raise
+        if data is None:
+            logger.warning(f"File not found in storage: {key}")
+            return None
+        logger.info(f"Downloaded {key} ({len(data)} bytes)")
+        return data
 
-    def get_presigned_url(
+    def download_encrypted_document(
         self,
         key: str,
-        expires_in: int = 3600,
-        method: str = 'get_object'
-    ) -> str:
-        """
-        Generate a presigned URL for temporary access.
+        encrypted_dek: str,
+        document_id: str,
+        user_id: str,
+    ) -> bytes | None:
+        """Download and decrypt a document (None when the object is missing)."""
+        from app.services.encryption_service import decode_encrypted_key, encryption_service
 
-        Args:
-            key: S3 object key.
-            expires_in: URL expiration time in seconds.
-            method: S3 operation ('get_object' or 'put_object').
+        encrypted_data = self.download_file(key)
+        if encrypted_data is None:
+            return None
 
-        Returns:
-            Presigned URL string.
-        """
+        plaintext = encryption_service.decrypt_document(
+            encrypted_data, decode_encrypted_key(encrypted_dek), document_id, user_id
+        )
+        logger.info(
+            f"Downloaded and decrypted document: {key} "
+            f"(encrypted: {len(encrypted_data)} bytes, decrypted: {len(plaintext)} bytes)"
+        )
+        return plaintext
+
+    def file_exists(self, key: str) -> bool:
         try:
-            url = self.client.generate_presigned_url(
-                method,
-                Params={
-                    'Bucket': self.bucket_name,
-                    'Key': key
-                },
-                ExpiresIn=expires_in
-            )
-            return url
-        except ClientError as e:
+            return self.backend.object_exists(key)
+        except Exception:
+            return False
+
+    def list_files(self, prefix: str = "", max_keys: int = 1000) -> list[dict]:
+        return [
+            {
+                "key": obj.key,
+                "size": obj.size,
+                "last_modified": obj.last_modified,
+                "etag": obj.etag,
+            }
+            for obj in self.backend.list_objects(prefix, max_keys)
+        ]
+
+    def get_presigned_url(
+        self, key: str, expires_in: int = 3600, method: str = "get_object"
+    ) -> str:
+        """Temporary direct-access URL (``get_object`` or ``put_object``)."""
+        try:
+            return self.backend.presigned_url(key, expires_in, _PRESIGN_METHODS[method])
+        except Exception as e:
             logger.error(f"Failed to generate presigned URL for {key}: {e}")
             raise
 
-    def list_files(
-        self,
-        prefix: str = "",
-        max_keys: int = 1000
-    ) -> list[dict]:
-        """
-        List files in S3 with optional prefix filter.
-
-        Args:
-            prefix: Key prefix to filter by.
-            max_keys: Maximum number of keys to return.
-
-        Returns:
-            List of file metadata dicts.
-        """
-        try:
-            response = self.client.list_objects_v2(
-                Bucket=self.bucket_name,
-                Prefix=prefix,
-                MaxKeys=max_keys
-            )
-
-            files = []
-            for obj in response.get('Contents', []):
-                files.append({
-                    'key': obj['Key'],
-                    'size': obj['Size'],
-                    'last_modified': obj['LastModified'],
-                    'etag': obj['ETag'].strip('"'),
-                })
-
-            return files
-
-        except ClientError as e:
-            logger.error(f"S3 list failed for prefix {prefix}: {e}")
-            raise
+    # -- key layout ---------------------------------------------------------
 
     def get_document_key(self, user_id: str, document_id: str, version: int) -> str:
-        """
-        Generate S3 key for a document version.
-
-        Args:
-            user_id: User identifier.
-            document_id: Document identifier.
-            version: Version number.
-
-        Returns:
-            S3 key string.
-        """
+        """Object key for a document version."""
         return f"documents/{user_id}/{document_id}/v{version}.pdf"
 
     def get_thumbnail_key(self, user_id: str, document_id: str, extension: str) -> str:
-        """
-        Generate S3 key for a stored document thumbnail.
-
-        Args:
-            user_id: User identifier.
-            document_id: Stored document identifier.
-            extension: Image extension without dot (png, jpg, webp).
-
-        Returns:
-            S3 key string under the thumbnails/ prefix.
-        """
+        """Object key for a stored document thumbnail (png, jpg, webp)."""
         return f"thumbnails/{user_id}/{document_id}.{extension}"
 
 
-# Global service instance
-s3_service = S3Service()
+# Backward-compatible names: existing code imports ``s3_service`` / ``S3Service``.
+S3Service = ObjectStorageService
+object_storage = ObjectStorageService()
+s3_service = object_storage
