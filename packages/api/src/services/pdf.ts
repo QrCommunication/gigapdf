@@ -5,6 +5,39 @@ import type {
 } from '@giga-pdf/types';
 
 /**
+ * A prepress colour in any authored colour space (ISO 32000-1 §8.6).
+ * Mirrors the SDK `Color` union from @qrcommunication/gigapdf-lib.
+ */
+export type PrepressColor =
+  | { space: 'rgb'; rgb: number }
+  | { space: 'cmyk'; c: number; m: number; y: number; k: number }
+  | { space: 'gray'; gray: number }
+  | { space: 'separation'; name: string; tint: number; cmyk: [number, number, number, number] }
+  | { space: 'icc'; components: number[]; profileBase64: string };
+
+/** Overprint settings applied before a paint operation. */
+export interface PrepressOverprint {
+  fill: boolean;
+  stroke: boolean;
+  mode?: number;
+}
+
+/** Options for applyPrepressColor — mirrors POST /api/pdf/color form fields. */
+export interface ApplyPrepressColorOptions {
+  file: File | Blob;
+  page: number;
+  operation: 'fill' | 'polygon' | 'text' | 'gradient' | 'output-intent';
+  /** JSON payload for fill/polygon/text/gradient operations. */
+  payload?: Record<string, unknown>;
+  /** Overprint settings applied before the paint (ignored for gradient/output-intent). */
+  overprint?: PrepressOverprint;
+  /** ICC profile file (required for output-intent). */
+  iccProfile?: File | Blob;
+  /** Output condition identifier (required for output-intent, e.g. "Coated FOGRA39"). */
+  condition?: string;
+}
+
+/**
  * Response wrapper for PDF API routes
  */
 interface PdfApiResponse<T = unknown> {
@@ -1361,6 +1394,56 @@ export const pdfService = {
       body: form,
     });
     return handleBlobResponse(response);
+  },
+
+  /**
+   * A prepress colour in any authored colour space (ISO 32000-1 §8.6).
+   * Mirrors the SDK `Color` union from @qrcommunication/gigapdf-lib.
+   */
+  // Types are declared at module scope below; referenced here by JSDoc only.
+
+  /**
+   * Apply a prepress colour, gradient, or output intent to a PDF via the WASM
+   * engine (`POST /api/pdf/color`). Supports all authored colour spaces
+   * (RGB / CMYK / gray / spot Separation / ICC), overprint control, and
+   * document-level ICC output intents.
+   *
+   * Returns the modified PDF as a Blob. The caller is responsible for
+   * adopting the new bytes into the editor scene graph.
+   */
+  applyPrepressColor: async (
+    options: ApplyPrepressColorOptions,
+  ): Promise<Blob> => {
+    const form = new FormData();
+    appendFileToForm(form, options.file);
+    form.append('page', String(options.page));
+    form.append('operation', options.operation);
+
+    if (options.payload) {
+      form.append('payload', JSON.stringify(options.payload));
+    }
+    if (options.overprint && options.operation !== 'gradient' && options.operation !== 'output-intent') {
+      form.append('overprint', JSON.stringify(options.overprint));
+    }
+    if (options.iccProfile && options.operation === 'output-intent') {
+      appendFileToForm(form, options.iccProfile, 'iccProfile');
+    }
+    if (options.condition && options.operation === 'output-intent') {
+      form.append('condition', options.condition);
+    }
+
+    const response = await fetch('/api/pdf/color', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    });
+
+    if (!response.ok) {
+      const json = (await response.json().catch(() => ({}))) as PdfApiResponse;
+      throw new Error(json.error ?? `HTTP ${response.status}`);
+    }
+
+    return response.blob();
   },
 };
 

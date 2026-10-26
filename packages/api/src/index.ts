@@ -221,10 +221,12 @@ export {
   useCompressPdf,
   useIsOcrAvailable,
   useConvertToPdfA,
+  useApplyPrepressColor,
   downloadBlob,
   pdfKeys,
 } from './hooks';
 export type { OcgLayerOp } from './hooks';
+export type { PrepressColor, PrepressOverprint, ApplyPrepressColorOptions } from './services/pdf';
 
 // WebSocket
 export {
