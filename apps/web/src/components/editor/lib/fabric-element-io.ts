@@ -27,6 +27,7 @@ import type {
   TextElement,
   TextListStyle,
   TextStyle,
+  ImageStyle,
 } from "@giga-pdf/types";
 // Shared run<->Fabric-styles mapping (single source of truth with
 // render-elements.ts) so character-level styling round-trips identically.
@@ -382,6 +383,18 @@ export function fabricObjectToElement(
       // instead of redact+add. Never regenerated — newly-added text has no
       // index in data, so this stays undefined and falls back to add.
       index: data?.index as number | undefined,
+      // WASM clipBounds: preserved from the parser for round-trip fidelity.
+      // Fabric does not natively clip IText; stored on data.* for future use.
+      ...(data?.clipBounds
+        ? {
+            clipBounds: data.clipBounds as {
+              x: number;
+              y: number;
+              width: number;
+              height: number;
+            },
+          }
+        : {}),
     };
   }
 
@@ -425,7 +438,11 @@ export function fabricObjectToElement(
       },
       style: {
         opacity: resolvedOpacity,
-        blendMode: "normal" as const,
+        // WASM blendMode: preserved from the parser for round-trip fidelity.
+        // The renderer maps PDF `/BM` to Fabric globalCompositeOperation; here
+        // we read back the original value stashed on data.* so save/reload
+        // keeps the correct composite mode even when the overlay is invisible.
+        blendMode: (obj.data?.blendMode as ImageStyle["blendMode"]) ?? "normal",
       },
       crop: null,
       // Carry the ORIGINAL engine unified element index (stamped on data by the
@@ -433,6 +450,32 @@ export function fabricObjectToElement(
       // identity: apply-operations fires transformElement/removeElement instead
       // of redact+add. Newly-added images have no index → stays undefined → add.
       index: obj.data?.index as number | undefined,
+      // WASM affine transform overrides: preserved for round-trip fidelity.
+      // The renderer composes these with bounds-derived scale; on save we
+      // emit the original values so the next load reconstructs identically.
+      ...(typeof obj.data?.scaleX === "number"
+        ? { scaleX: obj.data.scaleX as number }
+        : {}),
+      ...(typeof obj.data?.scaleY === "number"
+        ? { scaleY: obj.data.scaleY as number }
+        : {}),
+      ...(typeof obj.data?.skewX === "number"
+        ? { skewX: obj.data.skewX as number }
+        : {}),
+      ...(typeof obj.data?.skewY === "number"
+        ? { skewY: obj.data.skewY as number }
+        : {}),
+      // WASM clipBounds: preserved for round-trip fidelity.
+      ...(obj.data?.clipBounds
+        ? {
+            clipBounds: obj.data.clipBounds as {
+              x: number;
+              y: number;
+              width: number;
+              height: number;
+            },
+          }
+        : {}),
     };
   }
 
@@ -553,6 +596,16 @@ export function fabricObjectToElement(
         strokeWidth: resolvedStrokeWidth,
         strokeOpacity: 1,
         strokeDashArray: [],
+        // WASM vector-path attributes: preserved from data.* (stashed by the
+        // renderer) for round-trip fidelity. The raster-truth model means these
+        // are not visually applied to the transparent overlay, but they MUST
+        // survive save/reload so the bake side can reconstruct the original PDF
+        // graphics state. Absent fields fall back to ShapeStyle defaults.
+        ...(obj.data?.fillRule ? { fillRule: obj.data.fillRule as "nonzero" | "evenodd" } : {}),
+        ...(obj.data?.lineCap ? { lineCap: obj.data.lineCap as "butt" | "round" | "square" } : {}),
+        ...(obj.data?.lineJoin ? { lineJoin: obj.data.lineJoin as "miter" | "round" | "bevel" } : {}),
+        ...(typeof obj.data?.miterLimit === "number" ? { miterLimit: obj.data.miterLimit as number } : {}),
+        ...(obj.data?.blendMode ? { blendMode: obj.data.blendMode as string } : {}),
       },
       // Carry the ORIGINAL engine unified element index (stamped on data by the
       // renderer for parsed shapes) so a moved/resized shape keeps its in-place

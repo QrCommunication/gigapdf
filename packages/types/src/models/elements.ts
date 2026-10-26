@@ -227,6 +227,13 @@ export interface TextElement extends ElementBase {
   linkUrl: string | null;
   linkPage: number | null;
   /**
+   * Optional clipping rectangle from the WASM engine (PDF user-space points).
+   * When present, the text should be visually clipped to this box. Fabric does
+   * not natively clip IText, so this is preserved on `data.clipBounds` for
+   * round-trip fidelity and future masking support. Absent ⇒ no clip.
+   */
+  clipBounds?: { x: number; y: number; width: number; height: number };
+  /**
    * Engine text-run index (from `GigaPdfDoc.textElements().index`) enabling
    * true in-place editing via `replaceText` / `moveElement` / `removeElement`.
    *
@@ -270,6 +277,13 @@ export interface TextRunSegment {
    * render time. Absent ⇒ 0 (legacy behaviour).
    */
   charSpacing?: number;
+  /**
+   * Sum of kerning adjustments (`TJ` array entries) within this segment, in
+   * PDF user-space points. When non-zero the renderer adjusts the segment's
+   * effective width so the glyphs land at the same positions as the original
+   * PDF raster. Absent ⇒ 0 (legacy behaviour).
+   */
+  totalKerning?: number;
 }
 
 // ============= Image Element =============
@@ -312,6 +326,22 @@ export interface ImageElement extends ElementBase {
    * engine element) → those still take the add path.
    */
   index?: number;
+  /**
+   * Optional affine transform from the WASM engine (PDF CTM). When present and
+   * different from identity (1/1/0/0), the renderer applies these on top of the
+   * bounds-derived scale so the image matches the original PDF placement.
+   * Absent ⇒ identity (legacy behaviour).
+   */
+  scaleX?: number;
+  scaleY?: number;
+  skewX?: number;
+  skewY?: number;
+  /**
+   * Optional clipping rectangle from the WASM engine (PDF user-space points).
+   * Preserved on `data.clipBounds` for round-trip fidelity; Fabric clipPath
+   * support is deferred. Absent ⇒ no clip.
+   */
+  clipBounds?: { x: number; y: number; width: number; height: number };
 }
 
 // ============= Shape Element =============
@@ -331,6 +361,32 @@ export interface ShapeStyle {
   strokeWidth: number;
   strokeOpacity: number;
   strokeDashArray: number[];
+  /**
+   * PDF fill rule from the WASM engine. "nonzero" is the PDF default;
+   * "evenodd" is used by some vector paths (e.g. donut shapes). Mapped to
+   * Fabric.Path `fillRule`. Absent ⇒ "nonzero" (legacy behaviour).
+   */
+  fillRule?: "nonzero" | "evenodd";
+  /**
+   * Stroke line cap from the WASM engine. Mapped to Fabric `strokeLineCap`.
+   * Absent ⇒ "butt" (PDF default).
+   */
+  lineCap?: "butt" | "round" | "square";
+  /**
+   * Stroke line join from the WASM engine. Mapped to Fabric `strokeLineJoin`.
+   * Absent ⇒ "miter" (PDF default).
+   */
+  lineJoin?: "miter" | "round" | "bevel";
+  /**
+   * Miter limit for "miter" line joins (PDF user-space units). Mapped to
+   * Fabric `strokeMiterLimit`. Absent ⇒ 10 (Fabric default).
+   */
+  miterLimit?: number;
+  /**
+   * Blend mode from the WASM engine (PDF `/BM`). Mapped to Fabric
+   * `globalCompositeOperation`. Absent ⇒ "Normal" (source-over).
+   */
+  blendMode?: string;
 }
 
 export interface ShapeElement extends ElementBase {
