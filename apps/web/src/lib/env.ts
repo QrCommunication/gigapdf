@@ -12,6 +12,16 @@ const legalSchema = z.object({
   NEXT_PUBLIC_LEGAL_HOST_NAME: z.string().min(1),
   NEXT_PUBLIC_LEGAL_HOST_ADDRESS: z.string().min(1),
   NEXT_PUBLIC_LEGAL_HOST_PHONE: z.string().optional(),
+  NEXT_PUBLIC_LEGAL_HOST_WEBSITE: z.string().optional(),
+  // File storage provider (GDPR sub-processor) — documents, versions, thumbnails.
+  NEXT_PUBLIC_LEGAL_STORAGE_NAME: z.string().min(1),
+  NEXT_PUBLIC_LEGAL_STORAGE_ADDRESS: z.string().min(1),
+  // Where the bucket's data centers are, e.g. "dans l'Union européenne (Paris, France)".
+  NEXT_PUBLIC_LEGAL_STORAGE_LOCATION: z.string().min(1),
+  NEXT_PUBLIC_LEGAL_STORAGE_WEBSITE: z.string().optional(),
+  // "true" when the storage provider is established outside the EU/EEA:
+  // shows the "transfers outside the EU" section of the privacy policy.
+  NEXT_PUBLIC_LEGAL_STORAGE_NON_EU: z.enum(["true", "false"]).optional(),
 });
 
 type LegalEnv = z.infer<typeof legalSchema>;
@@ -28,6 +38,12 @@ const raw: Record<string, string | undefined> = {
   NEXT_PUBLIC_LEGAL_HOST_NAME: process.env.NEXT_PUBLIC_LEGAL_HOST_NAME,
   NEXT_PUBLIC_LEGAL_HOST_ADDRESS: process.env.NEXT_PUBLIC_LEGAL_HOST_ADDRESS,
   NEXT_PUBLIC_LEGAL_HOST_PHONE: process.env.NEXT_PUBLIC_LEGAL_HOST_PHONE,
+  NEXT_PUBLIC_LEGAL_HOST_WEBSITE: process.env.NEXT_PUBLIC_LEGAL_HOST_WEBSITE,
+  NEXT_PUBLIC_LEGAL_STORAGE_NAME: process.env.NEXT_PUBLIC_LEGAL_STORAGE_NAME,
+  NEXT_PUBLIC_LEGAL_STORAGE_ADDRESS: process.env.NEXT_PUBLIC_LEGAL_STORAGE_ADDRESS,
+  NEXT_PUBLIC_LEGAL_STORAGE_LOCATION: process.env.NEXT_PUBLIC_LEGAL_STORAGE_LOCATION,
+  NEXT_PUBLIC_LEGAL_STORAGE_WEBSITE: process.env.NEXT_PUBLIC_LEGAL_STORAGE_WEBSITE,
+  NEXT_PUBLIC_LEGAL_STORAGE_NON_EU: process.env.NEXT_PUBLIC_LEGAL_STORAGE_NON_EU,
 };
 
 // `NEXT_PHASE` is set to "phase-production-build" by Next.js during
@@ -68,3 +84,10 @@ const fallback = (Object.fromEntries(
 ) as unknown) as LegalEnv;
 
 export const env: LegalEnv = result.success ? result.data : fallback;
+
+/** Turn a configured website ("www.example.com" or a full URL) into an href + label. */
+export function legalWebsite(value: string | undefined): { href: string; label: string } | null {
+  if (!value) return null;
+  const href = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  return { href, label: value.replace(/^https?:\/\//i, "").replace(/\/+$/, "") };
+}

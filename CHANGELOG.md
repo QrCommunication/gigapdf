@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Legal pages list the file storage provider.** Privacy policy, terms,
+  legal notice and about page now name the storage provider (iDrive e2 by
+  default) next to the server host, from new `NEXT_PUBLIC_LEGAL_STORAGE_*`
+  env vars (required in production, like the host vars). The privacy policy
+  gains a "transfers outside the EU" section (Standard Contractual Clauses)
+  when `NEXT_PUBLIC_LEGAL_STORAGE_NON_EU=true`. The hard-coded Scaleway
+  blocks and the "European sovereignty" wording are gone; host website is
+  configurable (`NEXT_PUBLIC_LEGAL_HOST_WEBSITE`).
 - **Pluggable object storage — iDrive e2 by default.** Document, version and
   thumbnail storage now goes through a provider-agnostic layer
   (`app/storage_backends/`). `STORAGE_PROVIDER` selects `idrive` (default),
