@@ -230,7 +230,7 @@
       "privacy": {
         "label": "Sovereignty",
         "title": "Free, open source and privacy-respecting",
-        "description": "Because all processing runs on our own engine, your documents are never sent to a third-party service. OCR, text extraction and semantic search run on our own infrastructure: no external AI or OCR provider is ever involved.",
+        "description": "Because all processing runs on our own engine, your documents are never sent to a third-party service for analysis. OCR, text extraction and semantic search run on our own infrastructure: no external AI or OCR provider is ever involved.",
         "points": {
           "free": "Every engine capability is available in the free plan, with no watermark and no crippled version.",
           "oss": "Source-available code under the PolyForm Noncommercial license: audit it, study it, contribute.",
@@ -3392,7 +3392,9 @@
         },
         "hosting": {
           "title": "Hosting",
-          "description": "Our infrastructure is hosted at Scaleway, a European cloud provider ensuring the sovereignty of your data."
+          "description": "Our servers (application and databases) are hosted by {hostName}. The files you save on GigaPDF are stored by {storageName} (location: {storageLocation}) and encrypted at rest.",
+          "server": "Servers",
+          "storage": "File storage"
         }
       },
       "contact": {
@@ -3489,11 +3491,16 @@
         "providers": {
           "title": "Our service providers",
           "note": "We use no artificial intelligence or OCR provider: those operations stay on our own infrastructure.",
-          "hosting": "Hosting and file storage (S3, France/EU)",
+          "hosting": "Infrastructure hosting (application servers and databases)",
+          "storage": "File storage (documents, versions, thumbnails), encrypted at rest — location: {location}",
           "payment": "Payment processing",
           "email": "Transactional email delivery (our SMTP server)",
           "monitoring": "Technical error monitoring (incident logs)",
           "fonts": "Server-side font downloads for rendering fidelity (requests restricted to the official host)"
+        },
+        "transfers": {
+          "title": "Data transfers outside the European Union",
+          "description": "{storageName} is a company established outside the European Union. Your files are kept in the “{location}” region and encrypted at rest. Any access to this data from a third country is governed by the Standard Contractual Clauses adopted by the European Commission (Article 46 GDPR), included in the data processing agreement signed with this provider. A copy of these safeguards is available on request at the address given in the Contact section."
         }
       },
       "rights": {
@@ -3540,7 +3547,7 @@
       "security": {
         "title": "Security",
         "description": "We implement appropriate technical and organizational measures to protect your data.",
-        "encryption": "Encryption of data in transit (HTTPS) and at rest",
+        "encryption": "Encryption of data in transit (HTTPS) and at rest (files encrypted by our storage provider)",
         "access": "Limited access to data on a need-to-know basis",
         "monitoring": "Regular monitoring and auditing of our systems"
       },
@@ -3574,7 +3581,8 @@
       },
       "publisher": {
         "title": "Service publisher",
-        "hosting": "Hosting provider"
+        "hosting": "Hosting provider",
+        "storage": "File storage"
       },
       "acceptance": {
         "title": "Acceptance of terms",
@@ -3791,7 +3799,7 @@
           "redis": "Redis: REDIS_URL (cache, Celery broker, WebSocket queue)",
           "secret": "APP_SECRET_KEY: backend secret key (min. 32 chars — openssl rand -hex 32)",
           "auth": "BETTER_AUTH_SECRET: frontend authentication secret (web + admin)",
-          "s3": "S3: S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET (document storage)",
+          "s3": "Storage: STORAGE_PROVIDER (idrive, scaleway, aws, minio, s3), S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET_NAME (document storage; enable the bucket's default encryption)",
           "smtp": "SMTP: MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD (auth emails)",
           "stripe": "Stripe (optional): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET — leave empty to disable billing",
           "legal": "Legal notice (prod): NEXT_PUBLIC_LEGAL_* (the app refuses to start without these, except on localhost)"

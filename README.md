@@ -125,7 +125,9 @@ required** (no LibreOffice, Tesseract, Chromium, Poppler or fontforge).
 
 > ⚠️ **Self-hosters must configure `NEXT_PUBLIC_LEGAL_*` env vars** in
 > `apps/web/.env.local` for LCEN compliance. The web app refuses to start in
-> production mode without them. See `apps/web/.env.example`.
+> production mode without them. See `apps/web/.env.example`. This includes the
+> file storage provider (`NEXT_PUBLIC_LEGAL_STORAGE_*`), listed as a GDPR
+> sub-processor on the privacy policy — keep it in sync with `STORAGE_PROVIDER`.
 
 ### Option 2 — Native (bare-metal / VPS)
 

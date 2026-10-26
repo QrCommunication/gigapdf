@@ -29,6 +29,10 @@ describe("legal env validation", () => {
     process.env.NEXT_PUBLIC_LEGAL_PUBLICATION_DIRECTOR = "Le Président de QR Communication SAS";
     process.env.NEXT_PUBLIC_LEGAL_HOST_NAME = "Scaleway SAS";
     process.env.NEXT_PUBLIC_LEGAL_HOST_ADDRESS = "8 rue de la Ville l'Évêque, 75008 Paris, France";
+    process.env.NEXT_PUBLIC_LEGAL_STORAGE_NAME = "IDrive Inc.";
+    process.env.NEXT_PUBLIC_LEGAL_STORAGE_ADDRESS = "Calabasas, CA, USA";
+    process.env.NEXT_PUBLIC_LEGAL_STORAGE_LOCATION = "dans l'Union européenne";
+    process.env.NEXT_PUBLIC_LEGAL_STORAGE_NON_EU = "true";
     Object.assign(process.env, overrides);
   }
 
@@ -88,5 +92,23 @@ describe("legal env validation", () => {
     setLegalEnv({ NEXT_PUBLIC_LEGAL_CONTACT_EMAIL: "not-an-email" });
     vi.resetModules();
     await expect(import("../env")).rejects.toThrow();
+  });
+
+  it("exposes the storage provider (GDPR sub-processor) fields", async () => {
+    setLegalEnv();
+    vi.resetModules();
+    const { env } = await import("../env");
+    expect(env.NEXT_PUBLIC_LEGAL_STORAGE_NAME).toBe("IDrive Inc.");
+    expect(env.NEXT_PUBLIC_LEGAL_STORAGE_NON_EU).toBe("true");
+  });
+
+  it("throws in production when the storage provider is not declared", async () => {
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+    process.env.NEXT_PUBLIC_APP_URL = "https://giga-pdf.com";
+    delete (process.env as Record<string, string | undefined>).NEXT_PHASE;
+    setLegalEnv();
+    delete (process.env as Record<string, string | undefined>).NEXT_PUBLIC_LEGAL_STORAGE_NAME;
+    vi.resetModules();
+    await expect(import("../env")).rejects.toThrow(/NEXT_PUBLIC_LEGAL_STORAGE_NAME/);
   });
 });

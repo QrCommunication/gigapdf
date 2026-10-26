@@ -4,6 +4,8 @@ import { useTranslations } from "next-intl";
 import { Shield, Database, Lock, Eye, Cookie, Bell, Code2, Mail, Scale, Cpu } from "lucide-react";
 import { env } from "@/lib/env";
 
+const storageNonEu = env.NEXT_PUBLIC_LEGAL_STORAGE_NON_EU === "true";
+
 export default function PrivacyContent() {
   const t = useTranslations("legal.privacy");
 
@@ -17,7 +19,7 @@ export default function PrivacyContent() {
         </div>
         <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">{t("title")}</h1>
         <p className="text-muted-foreground font-mono text-sm">
-          <span className="text-terminal-green">$</span> last_updated: 2025-12-20
+          <span className="text-terminal-green">$</span> last_updated: 2026-10-26
         </p>
       </div>
 
@@ -163,8 +165,14 @@ export default function PrivacyContent() {
         <h3>{t("sharing.providers.title")}</h3>
         <div className="grid gap-4 md:grid-cols-2 not-prose">
           <div className="rounded-xl border border-border bg-card/50 p-5">
-            <h4 className="font-semibold mb-1">Scaleway SAS</h4>
+            <h4 className="font-semibold mb-1">{env.NEXT_PUBLIC_LEGAL_HOST_NAME}</h4>
             <p className="text-sm text-muted-foreground">{t("sharing.providers.hosting")}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card/50 p-5">
+            <h4 className="font-semibold mb-1">{env.NEXT_PUBLIC_LEGAL_STORAGE_NAME}</h4>
+            <p className="text-sm text-muted-foreground">
+              {t("sharing.providers.storage", { location: env.NEXT_PUBLIC_LEGAL_STORAGE_LOCATION })}
+            </p>
           </div>
           <div className="rounded-xl border border-border bg-card/50 p-5">
             <h4 className="font-semibold mb-1">Stripe</h4>
@@ -184,6 +192,17 @@ export default function PrivacyContent() {
           </div>
         </div>
         <p className="mt-4 text-sm text-muted-foreground italic">{t("sharing.providers.note")}</p>
+        {storageNonEu && (
+          <>
+            <h3>{t("sharing.transfers.title")}</h3>
+            <p>
+              {t("sharing.transfers.description", {
+                storageName: env.NEXT_PUBLIC_LEGAL_STORAGE_NAME,
+                location: env.NEXT_PUBLIC_LEGAL_STORAGE_LOCATION,
+              })}
+            </p>
+          </>
+        )}
       </section>
 
       {/* Your Rights */}
