@@ -230,7 +230,7 @@
       "privacy": {
         "label": "Souveraineté",
         "title": "Gratuit, open source et respectueux de votre vie privée",
-        "description": "Parce que tout le traitement repose sur notre propre moteur, vos documents ne sont jamais envoyés à un service tiers. L'OCR, l'extraction de texte et la recherche sémantique tournent sur notre propre infrastructure : aucun prestataire d'IA ou d'OCR externe n'intervient jamais.",
+        "description": "Parce que tout le traitement repose sur notre propre moteur, vos documents ne sont jamais envoyés à un service tiers pour être analysés. L'OCR, l'extraction de texte et la recherche sémantique tournent sur notre propre infrastructure : aucun prestataire d'IA ou d'OCR externe n'intervient jamais.",
         "points": {
           "free": "Toutes les fonctions du moteur sont disponibles dans le plan gratuit, sans filigrane ni version bridée.",
           "oss": "Code source-available sous licence PolyForm Noncommercial : auditez-le, étudiez-le, contribuez.",
@@ -3392,7 +3392,9 @@
         },
         "hosting": {
           "title": "Hébergement",
-          "description": "Notre infrastructure est hébergée chez Scaleway, un fournisseur cloud européen garantissant la souveraineté de vos données."
+          "description": "Nos serveurs (application et bases de données) sont hébergés chez {hostName}. Les fichiers que vous enregistrez sur GigaPDF sont stockés chez {storageName} (localisation : {storageLocation}) et chiffrés au repos.",
+          "server": "Serveurs",
+          "storage": "Stockage des fichiers"
         }
       },
       "contact": {
@@ -3489,11 +3491,16 @@
         "providers": {
           "title": "Nos sous-traitants",
           "note": "Nous ne faisons appel à aucun prestataire d'intelligence artificielle ou d'OCR : ces traitements restent sur notre propre infrastructure.",
-          "hosting": "Hébergement et stockage des fichiers (S3, France/UE)",
+          "hosting": "Hébergement de l'infrastructure (serveurs applicatifs et bases de données)",
+          "storage": "Stockage des fichiers (documents, versions, miniatures), chiffrés au repos — localisation : {location}",
           "payment": "Traitement des paiements",
           "email": "Envoi des e-mails transactionnels (notre serveur SMTP)",
           "monitoring": "Surveillance des erreurs techniques (journaux d'incidents)",
           "fonts": "Téléchargement de polices côté serveur pour la fidélité du rendu (requêtes restreintes à l'hôte officiel)"
+        },
+        "transfers": {
+          "title": "Transferts de données hors de l'Union européenne",
+          "description": "{storageName} est une société établie hors de l'Union européenne. Vos fichiers sont conservés dans la région « {location} » et chiffrés au repos. L'accès éventuel à ces données depuis un pays tiers est encadré par les clauses contractuelles types adoptées par la Commission européenne (article 46 du RGPD), intégrées à l'accord de traitement des données conclu avec ce prestataire. Une copie de ces garanties peut être obtenue sur simple demande à l'adresse indiquée dans la section Contact."
         }
       },
       "rights": {
@@ -3540,7 +3547,7 @@
       "security": {
         "title": "Sécurité",
         "description": "Nous mettons en œuvre des mesures techniques et organisationnelles appropriées pour protéger vos données.",
-        "encryption": "Chiffrement des données en transit (HTTPS) et au repos",
+        "encryption": "Chiffrement des données en transit (HTTPS) et au repos (fichiers chiffrés par notre prestataire de stockage)",
         "access": "Accès limité aux données sur la base du besoin d'en connaître",
         "monitoring": "Surveillance et audit réguliers de nos systèmes"
       },
@@ -3574,7 +3581,8 @@
       },
       "publisher": {
         "title": "Éditeur du service",
-        "hosting": "Hébergeur"
+        "hosting": "Hébergeur",
+        "storage": "Stockage des fichiers"
       },
       "acceptance": {
         "title": "Acceptation des conditions",
@@ -3791,7 +3799,7 @@
           "redis": "Redis : REDIS_URL (cache, broker Celery, file WebSocket)",
           "secret": "APP_SECRET_KEY : clé secrète backend (min. 32 caractères — openssl rand -hex 32)",
           "auth": "BETTER_AUTH_SECRET : secret d'authentification du front (web + admin)",
-          "s3": "S3 : S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET (stockage des documents)",
+          "s3": "Stockage : STORAGE_PROVIDER (idrive, scaleway, aws, minio, s3), S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET_NAME (stockage des documents ; activez le chiffrement par défaut du bucket)",
           "smtp": "SMTP : MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD (emails d'auth)",
           "stripe": "Stripe (optionnel) : STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET — laissez vide pour désactiver la facturation",
           "legal": "Mentions légales (prod) : NEXT_PUBLIC_LEGAL_* (LCEN — l'app refuse de démarrer sans, hors localhost)"
