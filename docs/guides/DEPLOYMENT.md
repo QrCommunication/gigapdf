@@ -788,9 +788,10 @@ effective_io_concurrency = 200
 ### Object Storage Setup / Configuration stockage objet
 
 The storage provider is selected with `STORAGE_PROVIDER` (full reference:
-[docs/storage.md](../storage.md)). Whatever the provider, documents are
-encrypted by the application (AES-256-GCM) before upload **and** the bucket
-must have default encryption at rest enabled.
+[docs/storage.md](../storage.md)). The bucket **must** have default
+encryption at rest enabled: the current upload endpoints store files as-is
+(the application-level AES-256-GCM helpers are not wired into them), so
+bucket encryption is what protects documents at rest.
 
 #### iDrive e2 (default)
 
