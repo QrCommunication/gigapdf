@@ -67,26 +67,26 @@
   },
   "meta": {
     "title": {
-      "default": "GigaPDF — Éditez vos PDF comme un document Word. Open source.",
+      "default": "GigaPDF - Éditez vos PDF comme un document Word. Open source.",
       "template": "%s | GigaPDF"
     },
     "description": "Éditeur PDF open source avec collaboration en temps réel : modifiez texte, images et formes avec les polices d'origine, signez (PKCS#7), océrisez vos scans, convertissez de nombreux formats Office et OpenDocument. Auto-hébergeable, chiffré AES-256, conforme RGPD.",
     "keywords": "éditeur PDF open source, modifier PDF en ligne, éditeur PDF gratuit, modifier texte PDF, modifier images PDF, modifier formes PDF, calques PDF, style de formes PDF, signer PDF PKCS#7, OCR PDF cherchable, convertir Word en PDF, convertir PDF en Word, PDF collaboratif temps réel, PDF auto-hébergé, GED open source, compression PDF, PDF/A, GigaPDF",
-    "ogTitle": "GigaPDF — Éditez vos PDF comme un document Word. Vraiment.",
+    "ogTitle": "GigaPDF - Éditez vos PDF comme un document Word. Vraiment.",
     "ogDescription": "Éditeur PDF open source : texte, images et formes modifiables avec polices fidèles, collaboration live, signature PKCS#7, OCR, de nombreux formats Office. Auto-hébergeable.",
-    "twitterTitle": "GigaPDF — L'éditeur PDF open source",
+    "twitterTitle": "GigaPDF - L'éditeur PDF open source",
     "twitterDescription": "Modifiez vos PDF comme un document Word : polices fidèles, collaboration live, signature, OCR. Open source, auto-hébergeable."
   },
   "engine": {
     "meta": {
-      "title": "Le moteur PDF GigaPDF — 100 % maison, zéro bibliothèque PDF tierce",
+      "title": "Le moteur PDF GigaPDF - 100 % maison, zéro bibliothèque PDF tierce",
       "description": "Découvrez le moteur PDF maison de GigaPDF : lecture/écriture bas niveau, édition réelle du contenu, rendu haute fidélité, formulaires, signature numérique, OCR et conversion Office. Compilé en WebAssembly, sans aucune bibliothèque PDF, Office ou image tierce."
     },
     "hero": {
-      "kicker": "Le moteur PDF maison — gigapdf-lib 0.67.0",
+      "kicker": "Le moteur PDF maison - gigapdf-lib 0.67.0",
       "title": "Un moteur PDF complet,",
       "titleAccent": "écrit de zéro.",
-      "description": "La plupart des outils PDF assemblent des briques tierces. GigaPDF a fait le choix inverse : un moteur PDF intégral, conçu et écrit en interne, qui lit, écrit, édite, rend, signe et convertit vos documents. 100 % maison, zéro bibliothèque PDF, Office ou image tierce — c'est ce qui rend l'édition fidèle et le traitement souverain possibles.",
+      "description": "La plupart des outils PDF assemblent des briques tierces. GigaPDF a fait le choix inverse : un moteur PDF intégral, conçu et écrit en interne, qui lit, écrit, édite, rend, signe et convertit vos documents. 100 % maison, zéro bibliothèque PDF, Office ou image tierce - c'est ce qui rend l'édition fidèle et le traitement souverain possibles.",
       "ctaTry": "Essayer l'éditeur",
       "ctaTools": "Voir les outils PDF"
     },
@@ -104,22 +104,22 @@
           "lowLevel": "Lecture et écriture bas niveau du format PDF : tables de références croisées (xref classiques et flux xref), objets compressés (ObjStm), reconstruction des fichiers endommagés.",
           "flate": "Compression et décompression Flate entièrement maison : les flux du document sont décodés et ré-encodés sans dépendance externe.",
           "wasm": "Compilé en WebAssembly : la performance du natif, la portabilité du web, et un code que l'on maîtrise intégralement.",
-          "souverain": "Zéro bibliothèque PDF, Office ou image tierce : le format est manipulé par le moteur lui-même. La cryptographie (crates auditées RustCrypto) et le moteur JavaScript (Boa) s'appuient, eux, sur des briques éprouvées plutôt que sur du code maison risqué — un choix de sécurité assumé."
+          "souverain": "Zéro bibliothèque PDF, Office ou image tierce : le format est manipulé par le moteur lui-même. La cryptographie (crates auditées RustCrypto) et le moteur JavaScript (Boa) s'appuient, eux, sur des briques éprouvées plutôt que sur du code maison risqué - un choix de sécurité assumé."
         }
       },
       "edit": {
         "label": "Édition",
         "title": "Éditer réellement le contenu, pas le recouvrir",
-        "description": "Modifier un PDF, ce n'est pas coller un autocollant blanc par-dessus le texte. GigaPDF réécrit véritablement le flux de contenu de la page pour supprimer, déplacer ou remplacer texte, formes et images — exactement comme un traitement de texte.",
+        "description": "Modifier un PDF, ce n'est pas coller un autocollant blanc par-dessus le texte. GigaPDF réécrit véritablement le flux de contenu de la page pour supprimer, déplacer ou remplacer texte, formes et images - exactement comme un traitement de texte.",
         "points": {
           "realEdit": "Édition réelle du texte, des formes et des images : ajout, déplacement, redimensionnement, rotation et reformatage directement dans le contenu de la page.",
-          "inPlace": "Transformations sur place et sans perte : chaque élément — texte, image ou forme — est déplacé ou redimensionné via une transformation affine, sans recompression des images ni redessin des vecteurs.",
+          "inPlace": "Transformations sur place et sans perte : chaque élément - texte, image ou forme - est déplacé ou redimensionné via une transformation affine, sans recompression des images ni redessin des vecteurs.",
           "restyle": "Restyle des formes vectorielles : remplissage, couleur de contour, épaisseur et pointillés modifiés et réécrits dans la page.",
-          "tables": "Tableaux éditables : insérer ou supprimer des lignes et des colonnes, fusionner des cellules, régler bordures et fonds — y compris les tableaux reconstruits depuis un PDF existant.",
+          "tables": "Tableaux éditables : insérer ou supprimer des lignes et des colonnes, fusionner des cellules, régler bordures et fonds - y compris les tableaux reconstruits depuis un PDF existant.",
           "lists": "Listes à puces et numérotées : niveaux d'indentation, marqueurs et numérotation gérés nativement.",
           "opacity": "Opacité et transparence par élément, appliquées via l'état graphique propre au PDF (ExtGState).",
           "stacking": "Ordre d'empilement inscrit dans le document : premier ou arrière-plan est préservé à la réouverture du fichier.",
-          "trueDelete": "Suppression réelle des objets : le contenu effacé disparaît du fichier, pas masqué sous un cache — aucune donnée fantôme ne subsiste.",
+          "trueDelete": "Suppression réelle des objets : le contenu effacé disparaît du fichier, pas masqué sous un cache - aucune donnée fantôme ne subsiste.",
           "redaction": "Caviardage à valeur probante : le texte et les images expurgés sont retirés du document de façon irréversible.",
           "fidelity": "Mise en page d'origine préservée : les modifications s'intègrent au document sans en casser la structure."
         }
@@ -133,17 +133,17 @@
           "assemble": "Fusionner plusieurs PDF et extraire une sélection de pages dans un nouveau document.",
           "headers": "En-têtes et pieds de page façon traitement de texte, avec numérotation automatique, intégrés à la mise en page.",
           "links": "Liens hypertextes (URL et navigation interne), signets et sommaire reconstruits et préservés.",
-          "metadata": "Métadonnées du document — titre, auteur, sujet, mots-clés — lues et modifiables."
+          "metadata": "Métadonnées du document - titre, auteur, sujet, mots-clés - lues et modifiables."
         }
       },
       "render": {
         "label": "Rendu",
         "title": "Rasterisation et rendu haute fidélité",
-        "description": "Pour afficher un aperçu, générer une miniature ou produire une image d'une page, le moteur dessine lui-même chaque trait, chaque courbe et chaque glyphe — un rasteriseur vectoriel complet, écrit maison.",
+        "description": "Pour afficher un aperçu, générer une miniature ou produire une image d'une page, le moteur dessine lui-même chaque trait, chaque courbe et chaque glyphe - un rasteriseur vectoriel complet, écrit maison.",
         "points": {
           "vector": "Rendu vectoriel fidèle : tracés, courbes, remplissages et dégradés sont dessinés à la résolution voulue.",
           "glyphs": "Rendu des glyphes des polices embarquées (TrueType et CFF) : le texte s'affiche exactement comme dans le document d'origine.",
-          "selective": "Rasterisation sélective : une page peut être rendue sans certains éléments — par exemple sans son texte — pour superposer un contenu réellement éditable sur un fond fidèle au pixel près.",
+          "selective": "Rasterisation sélective : une page peut être rendue sans certains éléments - par exemple sans son texte - pour superposer un contenu réellement éditable sur un fond fidèle au pixel près.",
           "previews": "Aperçus et miniatures haute définition pour chaque page, à n'importe quelle échelle.",
           "images": "Export d'images nettes des pages, sans perte de qualité ni artefact."
         }
@@ -173,7 +173,7 @@
       "fonts": {
         "label": "Polices",
         "title": "Des polices fidèles, automatiquement",
-        "description": "La fidélité d'un PDF tient à ses polices. Le moteur les identifie, les récupère et les embarque lui-même, pour que vos documents s'affichent partout exactement comme prévu — sans tofu ni caractères manquants.",
+        "description": "La fidélité d'un PDF tient à ses polices. Le moteur les identifie, les récupère et les embarque lui-même, pour que vos documents s'affichent partout exactement comme prévu - sans tofu ni caractères manquants.",
         "points": {
           "identify": "Identification précise des polices utilisées dans chaque document.",
           "download": "Téléchargement automatique des polices manquantes depuis la bibliothèque Google Fonts, à la volée.",
@@ -188,14 +188,14 @@
         "points": {
           "encryption": "Chiffrement des documents en AES-256 et AES-128 (lecture rétrocompatible des PDF protégés en RC4), via les crates cryptographiques auditées RustCrypto : protection par mot de passe et contrôle des permissions.",
           "signature": "Signature numérique PKCS#7 avec certificat : une preuve d'intégrité vérifiable, à la manière des grands lecteurs PDF.",
-          "tamper": "Toute altération d'un document signé est détectable — la confiance est démontrable.",
+          "tamper": "Toute altération d'un document signé est détectable - la confiance est démontrable.",
           "archive": "Conformité d'archivage longue durée (PDF/A) pour conserver vos documents dans le temps."
         }
       },
       "html": {
         "label": "HTML → PDF",
         "title": "Du HTML/CSS au PDF, nativement",
-        "description": "Générer un PDF à partir d'une page web ou d'un gabarit HTML est un besoin courant. GigaPDF intègre son propre moteur de mise en page HTML/CSS — et le moteur JavaScript Boa pour les pages dynamiques.",
+        "description": "Générer un PDF à partir d'une page web ou d'un gabarit HTML est un besoin courant. GigaPDF intègre son propre moteur de mise en page HTML/CSS - et le moteur JavaScript Boa pour les pages dynamiques.",
         "points": {
           "css": "Moteur de rendu HTML/CSS maison : cascade des styles, mise en page en blocs et en ligne, tableaux, flexbox et pagination.",
           "fonts": "Polices web embarquées dans le PDF généré, pour un rendu fidèle au pixel près.",
@@ -209,8 +209,8 @@
         "description": "Le moteur de conversion maison ne se contente pas de prendre une photo de la page : il reconstruit de véritables documents éditables, avec du texte sélectionnable, des tableaux et des images repositionnés.",
         "points": {
           "office": "Conversion entre PDF et formats bureautiques : Word (DOCX), Excel (XLSX), PowerPoint (PPTX) et OpenDocument (ODT, ODS, ODP).",
-          "formats": "Import de RTF, HTML, Markdown, CSV et texte brut, et d'images JPEG, PNG, GIF, WebP et AVIF — toutes converties en PDF par le moteur.",
-          "editable": "De vrais éléments éditables en sortie — du texte, des tableaux, des images — et non un simple scan figé.",
+          "formats": "Import de RTF, HTML, Markdown, CSV et texte brut, et d'images JPEG, PNG, GIF, WebP et AVIF - toutes converties en PDF par le moteur.",
+          "editable": "De vrais éléments éditables en sortie - du texte, des tableaux, des images - et non un simple scan figé.",
           "web": "Export vers HTML et texte brut pour réutiliser le contenu ailleurs.",
           "fidelity": "Structure et mise en forme préservées au mieux d'un format à l'autre."
         }
@@ -224,7 +224,7 @@
           "serverSide": "OCR et extraction de texte traités côté serveur, sur notre propre moteur : aucun service de reconnaissance tiers n'intervient.",
           "layer": "Couche de texte invisible superposée à l'image : le document reste identique à l'œil, mais devient cherchable.",
           "searchable": "Recherche plein texte et copier-coller possibles sur des documents qui n'étaient que des images.",
-          "preserve": "L'image d'origine est intégralement préservée — l'OCR n'altère jamais le rendu."
+          "preserve": "L'image d'origine est intégralement préservée - l'OCR n'altère jamais le rendu."
         }
       },
       "privacy": {
@@ -244,11 +244,11 @@
     "ocrSection": {
       "label": "OCR · Couverture",
       "title": "Une reconnaissance solide, sur de nombreuses écritures",
-      "description": "Notre OCR s'appuie sur les modèles PaddleOCR (PP-OCRv3/v4), à l'état de l'art, exécutés via un runtime maison côté serveur — sans aucun binaire Tesseract ni service de reconnaissance tiers. Imprimé : latin (français, anglais, allemand, espagnol, italien, portugais…), cyrillique (russe, ukrainien…), arabe, hébreu (modèle entraîné par nos soins), devanagari (hindi, marathi…), tamoul, télougou, kannada, chinois (simplifié et traditionnel), japonais et coréen. Manuscrit, sur demande : latin (français inclus), cyrillique et grec.",
+      "description": "Notre OCR s'appuie sur les modèles PaddleOCR (PP-OCRv3/v4), à l'état de l'art, exécutés via un runtime maison côté serveur - sans aucun binaire Tesseract ni service de reconnaissance tiers. Imprimé : latin (français, anglais, allemand, espagnol, italien, portugais…), cyrillique (russe, ukrainien…), arabe, hébreu (modèle entraîné par nos soins), devanagari (hindi, marathi…), tamoul, télougou, kannada, chinois (simplifié et traditionnel), japonais et coréen. Manuscrit, sur demande : latin (français inclus), cyrillique et grec.",
       "results": {
         "label": "Écritures prises en charge",
         "title": "Les écritures reconnues",
-        "lead": "Treize modèles de reconnaissance pour le texte imprimé — douze scripts PaddleOCR plus un modèle hébreu entraîné par nos soins —, complétés par le manuscrit sur demande.",
+        "lead": "Treize modèles de reconnaissance pour le texte imprimé - douze scripts PaddleOCR plus un modèle hébreu entraîné par nos soins -, complétés par le manuscrit sur demande.",
         "table": {
           "script": "Écriture",
           "languages": "Langues / exemples",
@@ -297,15 +297,15 @@
           "indic": "Télougou · Kannada",
           "cjk": "CJK (chinois simpl./trad., japonais, coréen)",
           "print": "Texte imprimé",
-          "handwriting": "Manuscrit latin (FR…), cyrillique, grec — sur demande"
+          "handwriting": "Manuscrit latin (FR…), cyrillique, grec - sur demande"
         }
       },
       "restore": {
         "label": "Front-end de restauration",
         "title": "Vos scans dégradés, restaurés automatiquement",
-        "description": "Avant même la reconnaissance, le moteur recadre, redresse et éclaircit les documents abîmés — photos, reçus, scans inclinés ou ombrés deviennent lisibles, sans aucune intervention de votre part. Une variante de modèle dédiée « photo / dégradé » prend le relais sur les cas difficiles.",
+        "description": "Avant même la reconnaissance, le moteur recadre, redresse et éclaircit les documents abîmés - photos, reçus, scans inclinés ou ombrés deviennent lisibles, sans aucune intervention de votre part. Une variante de modèle dédiée « photo / dégradé » prend le relais sur les cas difficiles.",
         "steps": {
-          "autocrop": "Recadrage perspective automatique : le moteur détecte le quadrilatère du document (photo de page, reçu posé sur une table) et le redresse de face par homographie — fini les pages prises de biais.",
+          "autocrop": "Recadrage perspective automatique : le moteur détecte le quadrilatère du document (photo de page, reçu posé sur une table) et le redresse de face par homographie - fini les pages prises de biais.",
           "illumination": "Correction d'illumination (flat-field) : l'éclairage inégal et les ombres des photos au smartphone sont aplatis, sans toucher aux scans déjà propres.",
           "deskew": "Redressement fin (deskew, jusqu'à ±5,7°) : les pages encore légèrement de travers sont remises d'aplomb.",
           "despeckle": "Dé-bruitage (despeckle) : le grain et les taches des scans bas de gamme sont effacés.",
@@ -358,10 +358,10 @@
     "license": {
       "label": "Licence",
       "title": "PolyForm Noncommercial 1.0.0",
-      "description": "Le code est « source-available » sous licence PolyForm Noncommercial 1.0.0 : libre d'utilisation, d'étude, de modification et de redistribution pour tout usage non commercial. Pour un usage commercial, une licence dédiée est disponible — contactez-nous.",
+      "description": "Le code est « source-available » sous licence PolyForm Noncommercial 1.0.0 : libre d'utilisation, d'étude, de modification et de redistribution pour tout usage non commercial. Pour un usage commercial, une licence dédiée est disponible - contactez-nous.",
       "points": {
         "use": "Utilisez, étudiez, modifiez et redistribuez le code pour tout usage non commercial.",
-        "network": "Pour un usage commercial, une licence dédiée est requise — écrivez-nous pour en discuter.",
+        "network": "Pour un usage commercial, une licence dédiée est requise - écrivez-nous pour en discuter.",
         "trademark": "Le nom et le logo « GigaPDF » sont des marques de QR Communication SAS : un fork modifié doit se renommer entièrement."
       },
       "linkLicense": "Lire la licence",
@@ -385,7 +385,7 @@
       "steps": {
         "fork": "Forkez le dépôt et lisez le guide de contribution.",
         "dco": "Signez vos commits (DCO) avec git commit -s.",
-        "pr": "Ouvrez une pull request — la CI valide tout automatiquement."
+        "pr": "Ouvrez une pull request - la CI valide tout automatiquement."
       },
       "ctaContributing": "Guide de contribution",
       "ctaIssues": "Parcourir les issues",
@@ -400,10 +400,10 @@
   },
   "landing": {
     "hero": {
-      "kicker": "Éditeur PDF open source — PolyForm Noncommercial",
+      "kicker": "Éditeur PDF open source - PolyForm Noncommercial",
       "title": "Éditez vos PDF comme un document Word.",
       "titleAccent": "Vraiment.",
-      "description": "Texte, images et mises en page se corrigent directement dans le PDF, avec les polices d'origine. Collaboration en direct sur le même canvas, historique des versions — et vos fichiers restent chez vous : GigaPDF est open source et auto-hébergeable.",
+      "description": "Texte, images et mises en page se corrigent directement dans le PDF, avec les polices d'origine. Collaboration en direct sur le même canvas, historique des versions - et vos fichiers restent chez vous : GigaPDF est open source et auto-hébergeable.",
       "ctaPrimary": "Créer un compte gratuit",
       "ctaSecondary": "Voir le code sur GitHub",
       "mockup": {
@@ -416,7 +416,7 @@
     },
     "trust": {
       "label": "Garanties",
-      "openSource": "Open source — PolyForm Noncommercial",
+      "openSource": "Open source - PolyForm Noncommercial",
       "selfHost": "Auto-hébergeable",
       "encryption": "Chiffrement AES-256",
       "gdpr": "Conforme RGPD"
@@ -425,16 +425,16 @@
       "editing": {
         "label": "Édition",
         "title": "Chaque élément se modifie. La mise en page ne bouge pas.",
-        "description": "Un éditeur WYSIWYG qui travaille dans le PDF, pas par-dessus : texte, images et formes sont tous modifiables sur place — vous cliquez, vous modifiez, le document reste fidèle au pixel près.",
+        "description": "Un éditeur WYSIWYG qui travaille dans le PDF, pas par-dessus : texte, images et formes sont tous modifiables sur place - vous cliquez, vous modifiez, le document reste fidèle au pixel près.",
         "points": {
           "wysiwyg": "Édition visuelle directe du texte, des images et des formes : déplacez, redimensionnez, dupliquez ou supprimez n'importe quel élément sur place, sans perte",
           "fonts": "Polices fidèles : les polices d'origine sont identifiées, téléchargées depuis Google Fonts et embarquées automatiquement",
-          "formatting": "Formatage réel — gras, italique, souligné, alignement, taille et couleur",
+          "formatting": "Formatage réel - gras, italique, souligné, alignement, taille et couleur",
           "shapeStyling": "Restyler les formes vectorielles : remplissage, couleur de contour, épaisseur et pointillés",
-          "tables": "Tableaux éditables — insérer ou supprimer des lignes et colonnes, fusionner des cellules ; listes à puces et numérotées",
+          "tables": "Tableaux éditables - insérer ou supprimer des lignes et colonnes, fusionner des cellules ; listes à puces et numérotées",
           "opacity": "Opacité et transparence des éléments, intégrées dans le PDF",
-          "stacking": "Ordre d'empilement — premier ou arrière-plan, enregistré dans le PDF lui-même",
-          "layers": "Calques pour organiser textes, images et formes — créer, renommer, verrouiller et masquer, conservés d'une session à l'autre",
+          "stacking": "Ordre d'empilement - premier ou arrière-plan, enregistré dans le PDF lui-même",
+          "layers": "Calques pour organiser textes, images et formes - créer, renommer, verrouiller et masquer, conservés d'une session à l'autre",
           "multiselect": "Multi-sélection pour déplacer, aligner ou supprimer plusieurs éléments d'un geste"
         }
       },
@@ -456,19 +456,19 @@
         "description": "Signature électronique, chiffrement et formats d'archivage : le nécessaire pour des PDF opposables et pérennes.",
         "stamp": "Signé",
         "points": {
-          "signature": "Signature numérique PKCS#7 avec votre certificat P12 — traité en mémoire, jamais stocké",
+          "signature": "Signature numérique PKCS#7 avec votre certificat P12 - traité en mémoire, jamais stocké",
           "encryption": "Chiffrement AES-256 des documents, au repos comme en transit",
           "pdfa": "Export PDF/A pour l'archivage légal longue durée",
-          "ocr": "OCR intégré et 100 % maison : vos scans imprimés deviennent cherchables et copiables — latin (accents compris), cyrillique, arabe, hébreu, écritures indiennes et CJK"
+          "ocr": "OCR intégré et 100 % maison : vos scans imprimés deviennent cherchables et copiables - latin (accents compris), cyrillique, arabe, hébreu, écritures indiennes et CJK"
         }
       },
       "formats": {
         "label": "Formats",
         "title": "Tout entre. Tout ressort.",
-        "description": "Word, Excel, PowerPoint, OpenDocument : de nombreux formats s'importent en PDF — et le chemin inverse fonctionne aussi.",
+        "description": "Word, Excel, PowerPoint, OpenDocument : de nombreux formats s'importent en PDF - et le chemin inverse fonctionne aussi.",
         "points": {
           "imports": "Import de formats Office et OpenDocument (DOCX, XLSX, PPTX, ODT, ODS, ODP), plus RTF, TXT, HTML, Markdown, CSV et images",
-          "exports": "Export vers DOCX, XLSX, PPTX, ODT, ODP, RTF, Markdown, EPUB — et PNG, JPEG, HTML, texte",
+          "exports": "Export vers DOCX, XLSX, PPTX, ODT, ODP, RTF, Markdown, EPUB - et PNG, JPEG, HTML, texte",
           "compression": "Compression intelligente : des fichiers plus légers sans dégradation visible"
         }
       },
@@ -480,7 +480,7 @@
         "points": {
           "folders": "Dossiers et sous-dossiers pour structurer vos espaces",
           "tags": "Tags colorés pour croiser les classements",
-          "search": "Recherche plein texte dans le contenu des documents — y compris océrisés",
+          "search": "Recherche plein texte dans le contenu des documents - y compris océrisés",
           "trash": "Corbeille avec restauration : rien ne se perd par accident",
           "thumbnails": "Miniatures générées automatiquement pour reconnaître vos pages d'un coup d'œil"
         }
@@ -489,7 +489,7 @@
     "bento": {
       "label": "Capacités phares",
       "title": "Cinq capacités, en mouvement.",
-      "description": "Ce que GigaPDF fait de mieux — montré plutôt que raconté.",
+      "description": "Ce que GigaPDF fait de mieux - montré plutôt que raconté.",
       "collaboration": {
         "title": "Collaboration live",
         "description": "Les curseurs de votre équipe, en direct sur le document.",
@@ -519,9 +519,9 @@
     "pricing": {
       "label": "Tarifs",
       "title": "Des forfaits qui ne brident jamais l'éditeur.",
-      "description": "Commencez gratuitement, évoluez quand vos volumes grandissent. Sans frais cachés, résiliable à tout moment — et l'auto-hébergement reste gratuit pour toujours.",
+      "description": "Commencez gratuitement, évoluez quand vos volumes grandissent. Sans frais cachés, résiliable à tout moment - et l'auto-hébergement reste gratuit pour toujours.",
       "banner": {
-        "title": "Toutes les fonctionnalités, sur tous les forfaits — même gratuit.",
+        "title": "Toutes les fonctionnalités, sur tous les forfaits - même gratuit.",
         "subtitle": "Vous payez les volumes, pas les fonctions."
       },
       "included": {
@@ -942,7 +942,7 @@
       "tags": {
         "title": "Tags",
         "description": "Cliquez pour modifier les tags de ce document",
-        "empty": "Aucun tag — cliquez pour en ajouter",
+        "empty": "Aucun tag - cliquez pour en ajouter",
         "edit": "Modifier les tags",
         "loadFailed": "Tags indisponibles pour le moment"
       },
@@ -1022,7 +1022,7 @@
       "success": "Document importé avec succès",
       "error": "Échec de l'import du document",
       "dropTitle": "Déposez vos fichiers ici",
-      "dropHint": "PDF, Word, Excel, PowerPoint, OpenDocument — import dans le dossier courant",
+      "dropHint": "PDF, Word, Excel, PowerPoint, OpenDocument - import dans le dossier courant",
       "invalidFormat": "Format non supporté. Formats acceptés : PDF, Word, Excel, PowerPoint, OpenDocument",
       "summaryAllSuccess": "{count, plural, one {# document importé avec succès} other {# documents importés avec succès}}",
       "summaryPartial": "{success, plural, one {# fichier importé} other {# fichiers importés}}, {failed, plural, one {# échec} other {# échecs}}",
@@ -1034,13 +1034,13 @@
       "dialogDescription": "Les fichiers sont importés dans {path}. Les fichiers Office, Markdown et CSV sont convertis en PDF éditable ; les PDF et images sont conservés tels quels.",
       "dropPrompt": "Glissez-déposez vos fichiers ici",
       "dropNow": "Déposez pour importer",
-      "anyFormatHint": "Tous les types de fichiers — jusqu'à {size} Mo par fichier",
+      "anyFormatHint": "Tous les types de fichiers - jusqu'à {size} Mo par fichier",
       "browse": "Parcourir les fichiers",
       "close": "Fermer",
       "uploading": "Import en cours...",
       "uploadingProgress": "Import en cours... ({done}/{total})",
       "dropTitle": "Déposez vos fichiers ici",
-      "dropHint": "Tous les types de fichiers — import dans le dossier courant",
+      "dropHint": "Tous les types de fichiers - import dans le dossier courant",
       "errorEmpty": "Le fichier est vide",
       "errorTooLarge": "Fichier trop volumineux (max 250 Mo)",
       "summaryAllSuccess": "{count, plural, one {# fichier importé avec succès} other {# fichiers importés avec succès}}",
@@ -1561,7 +1561,7 @@
         "pageLayout": "Disposition des pages",
         "pageMode": "Mode d'affichage",
         "direction": "Sens de lecture",
-        "unchanged": "— Inchangé —",
+        "unchanged": "- Inchangé -",
         "viewerOptions": "Options de la fenêtre",
         "viewerHint": "Seules les options cochées sont écrites ; les autres restent inchangées."
       },
@@ -1615,7 +1615,7 @@
       "pages": "Page {parsed} sur {total}",
       "percent": "{value} %",
       "aria": "Progression du chargement du document",
-      "srStatus": "{phase} — {value} %"
+      "srStatus": "{phase} - {value} %"
     },
     "untitled": "Sans titre",
     "back": "Retour aux documents",
@@ -1649,7 +1649,7 @@
         "title": "Nouveau groupe de boutons radio",
         "groupName": "Nom du groupe",
         "options": "Options",
-        "optionsHint": "Une option par ligne — un bouton est créé pour chacune.",
+        "optionsHint": "Une option par ligne - un bouton est créé pour chacune.",
         "cancel": "Annuler",
         "create": "Créer le groupe"
       }
@@ -1809,7 +1809,7 @@
       "bandHeader": "En-tête",
       "bandFooter": "Pied de page",
       "textLabel": "Texte",
-      "textPlaceholder": "ex. Confidentiel — Page {{page}}",
+      "textPlaceholder": "ex. Confidentiel - Page {{page}}",
       "tokenHint": "Utilisez {{page}} pour le numéro de page et {{pages}} pour le nombre total de pages.",
       "alignLabel": "Alignement",
       "align": {
@@ -1861,7 +1861,7 @@
       "locationPlaceholder": "ex. Paris",
       "contactLabel": "Contact (optionnel)",
       "contactPlaceholder": "ex. nom@exemple.com",
-      "privacyNote": "Votre certificat et son mot de passe ne sont ni stockés ni journalisés — utilisés uniquement pour cette signature.",
+      "privacyNote": "Votre certificat et son mot de passe ne sont ni stockés ni journalisés - utilisés uniquement pour cette signature.",
       "lastOperationWarning": "La signature doit être la dernière opération : toute modification ultérieure du document l'invalidera.",
       "modeLabel": "Résultat",
       "applyToDocument": "Appliquer au document",
@@ -1893,7 +1893,7 @@
       "verifyEmpty": "Ce document ne contient aucune signature.",
       "verifyUnknownSigner": "Signataire inconnu",
       "verifyValid": "Valide",
-      "verifyValidModified": "Valide — document modifié après signature",
+      "verifyValidModified": "Valide - document modifié après signature",
       "verifyInvalid": "Invalide",
       "verifyReason": "Raison",
       "verifyDate": "Date",
@@ -1954,7 +1954,7 @@
       "versionLabel": "Version PDF",
       "versionHint": "Bannière d'en-tête %PDF appliquée à la sortie optimisée ou linéarisée",
       "resultSmaller": "Document compressé : {before} → {after} (−{percent} %)",
-      "resultNotSmaller": "Aucun gain de compression ({before} → {after}) — le document est déjà optimisé",
+      "resultNotSmaller": "Aucun gain de compression ({before} → {after}) - le document est déjà optimisé",
       "failed": "Échec de la compression.",
       "appliedTitle": "Compression appliquée",
       "appliedDescription": "Le document a été remplacé par la version compressée."
@@ -2034,8 +2034,8 @@
         }
       },
       "pdfUaLabel": "PDF/UA (accessibilité universelle)",
-      "pdfUaHint": "Produit un PDF balisé estampillé de l'identifiant PDF/UA-1 (ISO 14289) pour les technologies d'assistance — à la place du PDF/A.",
-      "languageDetected": "Langue du document pour l'accessibilité : {lang} — inscrite dans /Lang automatiquement.",
+      "pdfUaHint": "Produit un PDF balisé estampillé de l'identifiant PDF/UA-1 (ISO 14289) pour les technologies d'assistance - à la place du PDF/A.",
+      "languageDetected": "Langue du document pour l'accessibilité : {lang} - inscrite dans /Lang automatiquement.",
       "languageAuto": "La langue du document est détectée automatiquement et inscrite dans /Lang pour l'accessibilité.",
       "figureAltsLabel": "Texte alternatif des images (facultatif)",
       "figureAltsPlaceholder": "Une description par image, dans l'ordre…",
@@ -2047,7 +2047,7 @@
     "redact": {
       "apply": "Appliquer la rédaction",
       "applyCount": "Caviarder {count, plural, one {# zone} other {# zones}}",
-      "applyHint": "Supprime définitivement le contenu sous les zones tracées — action irréversible",
+      "applyHint": "Supprime définitivement le contenu sous les zones tracées - action irréversible",
       "applying": "Caviardage en cours…",
       "clear": "Effacer les zones",
       "irreversible": "Le caviardage est irréversible : le texte est supprimé et les pixels des images sont effacés, pas seulement masqués.",
@@ -2290,7 +2290,7 @@
         "multiline": "Multiligne",
         "checkedByDefault": "Cochée par défaut",
         "defaultValue": "Valeur par défaut",
-        "noDefault": "— Aucune —",
+        "noDefault": "- Aucune -",
         "maxLength": "Longueur maximale",
         "options": "Options",
         "addOption": "Ajouter une option",
@@ -2356,9 +2356,9 @@
       "addPolygon": "Ajouter un polygone",
       "addPolyline": "Ajouter une ligne brisée",
       "addCaret": "Ajouter un caret",
-      "addHint": "La forme est placée au centre de la page — déplacez-la avec l'outil de sélection.",
+      "addHint": "La forme est placée au centre de la page - déplacez-la avec l'outil de sélection.",
       "addedTitle": "Annotation ajoutée",
-      "addedDescription": "Forme placée au centre — déplacez-la et ajustez-la.",
+      "addedDescription": "Forme placée au centre - déplacez-la et ajustez-la.",
       "addErrorTitle": "Échec de l'ajout",
       "addErrorDescription": "Impossible d'ajouter l'annotation.",
       "refresh": "Rafraîchir",
@@ -2476,14 +2476,14 @@
       "checked": "Cochée",
       "unchecked": "Décochée",
       "noOptionsDefined": "Aucune option définie",
-      "selectOption": "— Sélectionner —",
+      "selectOption": "- Sélectionner -",
       "signatureReadOnly": "Champ signature (lecture seule)",
       "buttonField": "Champ bouton",
       "readOnlyField": "Champ en lecture seule",
       "maxChars": "Max {count} caractères",
       "filled": "Rempli",
       "empty": "Vide",
-      "highlightTooltip": "Champ « {field} » — cliquer pour le remplir",
+      "highlightTooltip": "Champ « {field} » - cliquer pour le remplir",
       "fieldTypes": {
         "text": "Texte",
         "checkbox": "Case",
@@ -2553,7 +2553,7 @@
       "formatPainter": {
         "copy": "Copier la mise en forme",
         "applyHint": "Cliquez sur un élément pour appliquer la mise en forme copiée",
-        "copied": "Mise en forme copiée — sélectionnez des éléments pour l'appliquer"
+        "copied": "Mise en forme copiée - sélectionnez des éléments pour l'appliquer"
       },
       "toasts": {
         "copied": "{count} élément(s) copié(s)",
@@ -2746,7 +2746,7 @@
       "ownerPasswordPlaceholder": "Mot de passe requis pour modifier les autorisations",
       "ownerPasswordHint": "Requis pour modifier les paramètres de sécurité.",
       "recipientCertificates": "Certificats des destinataires",
-      "recipientCertificatesHint": "Ajoutez le certificat X.509 (.cer, .crt, .pem, .der) de chaque destinataire qui doit pouvoir ouvrir le document. Aucun mot de passe partagé n'est utilisé — seule une clé privée correspondante permet de l'ouvrir.",
+      "recipientCertificatesHint": "Ajoutez le certificat X.509 (.cer, .crt, .pem, .der) de chaque destinataire qui doit pouvoir ouvrir le document. Aucun mot de passe partagé n'est utilisé - seule une clé privée correspondante permet de l'ouvrir.",
       "encryptionAlgorithm": "Algorithme de chiffrement",
       "algorithmAes256": "AES-256 (recommandé)",
       "algorithmAes128": "AES-128",
@@ -2764,7 +2764,7 @@
       "recipientCertificate": "Certificat du destinataire",
       "decryptCertificateHint": "Votre certificat X.509 (.cer, .crt, .pem, .der).",
       "privateKey": "Clé privée",
-      "privateKeyHint": "Votre clé privée RSA PKCS#1 (.key, .pem, .der). Elle est envoyée uniquement avec la requête — jamais stockée.",
+      "privateKeyHint": "Votre clé privée RSA PKCS#1 (.key, .pem, .der). Elle est envoyée uniquement avec la requête - jamais stockée.",
       "successDecrypt": "PDF déchiffré avec succès. Le téléchargement a démarré.",
       "decrypting": "Déchiffrement…",
       "decryptDownload": "Déchiffrer et télécharger",
@@ -3179,7 +3179,7 @@
         "code": "403",
         "title": "Accès refusé",
         "description": "Vous n'êtes pas propriétaire de cet élément et il ne vous a pas été partagé. Demandez au propriétaire de le partager, ou retournez à vos propres documents.",
-        "ownerHint": "Seul le propriétaire d'un document ou d'un dossier — ou une personne à qui il l'a partagé — peut l'ouvrir.",
+        "ownerHint": "Seul le propriétaire d'un document ou d'un dossier - ou une personne à qui il l'a partagé - peut l'ouvrir.",
         "backDashboard": "Retour au tableau de bord",
         "browseShared": "Partagés avec moi",
         "requestAccess": "Demander l'accès"
@@ -3190,7 +3190,7 @@
         "code": "404",
         "badge": "Erreur 404",
         "title": "Cette page a fait fausse route",
-        "description": "Le lien est rompu ou la page a été déplacée. Mais vous êtes sur GigaPDF — la plateforme PDF complète et open source. Voici tout ce que vous pouvez faire avec vos documents.",
+        "description": "Le lien est rompu ou la page a été déplacée. Mais vous êtes sur GigaPDF - la plateforme PDF complète et open source. Voici tout ce que vous pouvez faire avec vos documents.",
         "primaryCta": "Découvrir les outils PDF",
         "secondaryCta": "Retour à l'accueil",
         "toolsTitle": "Outils PDF populaires",
@@ -3204,7 +3204,7 @@
         "code": "403",
         "badge": "Erreur 403",
         "title": "Ce contenu est privé",
-        "description": "Vous avez besoin d'un compte — ou des bonnes permissions — pour consulter cette page. La bonne nouvelle : un compte GigaPDF complet est gratuit, sans carte bancaire.",
+        "description": "Vous avez besoin d'un compte - ou des bonnes permissions - pour consulter cette page. La bonne nouvelle : un compte GigaPDF complet est gratuit, sans carte bancaire.",
         "primaryCta": "Créer un compte gratuit",
         "secondaryCta": "Se connecter",
         "tools": {
@@ -3232,7 +3232,7 @@
         },
         "redaction": {
           "name": "Caviardage",
-          "description": "Supprimez définitivement le contenu sensible — à valeur probante."
+          "description": "Supprimez définitivement le contenu sensible - à valeur probante."
         },
         "sign": {
           "name": "Signature & protection",
@@ -3492,7 +3492,7 @@
           "title": "Nos sous-traitants",
           "note": "Nous ne faisons appel à aucun prestataire d'intelligence artificielle ou d'OCR : ces traitements restent sur notre propre infrastructure.",
           "hosting": "Hébergement de l'infrastructure (serveurs applicatifs et bases de données)",
-          "storage": "Stockage des fichiers (documents, versions, miniatures), chiffrés au repos — localisation : {location}",
+          "storage": "Stockage des fichiers (documents, versions, miniatures), chiffrés au repos - localisation : {location}",
           "payment": "Traitement des paiements",
           "email": "Envoi des e-mails transactionnels (notre serveur SMTP)",
           "monitoring": "Surveillance des erreurs techniques (journaux d'incidents)",
@@ -3685,7 +3685,7 @@
     },
     "docs": {
       "title": "Documentation",
-      "subtitle": "Tout pour utiliser, intégrer et auto-héberger GigaPDF — l'éditeur PDF WYSIWYG open source.",
+      "subtitle": "Tout pour utiliser, intégrer et auto-héberger GigaPDF - l'éditeur PDF WYSIWYG open source.",
       "overview": {
         "title": "Vue d'ensemble",
         "p1": "GigaPDF est un éditeur PDF WYSIWYG open source : édition réelle du texte, des images et des formulaires directement dans le document, gestion électronique des documents (GED) et collaboration en temps réel. Le code est « source-available » sous licence PolyForm Noncommercial 1.0.0 (usage non commercial libre) et entièrement auto-hébergeable.",
@@ -3728,14 +3728,14 @@
             "items": {
               "encrypt": "Chiffrer en AES-128 ou AES-256 (mots de passe utilisateur et propriétaire)",
               "permissions": "8 permissions granulaires : impression, modification, copie, annotation, formulaires, extraction, assemblage, impression haute qualité",
-              "sign": "Signer numériquement (PKCS#7) avec votre certificat P12/PFX — vérifiable dans Adobe Reader",
+              "sign": "Signer numériquement (PKCS#7) avec votre certificat P12/PFX - vérifiable dans Adobe Reader",
               "unlock": "Déverrouiller un PDF protégé par mot de passe"
             }
           },
           "recognition": {
             "title": "OCR & recherche",
             "items": {
-              "ocr": "OCR multilingue (latin, cyrillique, arabe, hébreu, devanagari, tamoul, télougou, kannada, chinois, japonais, coréen) — moteur maison, sans Tesseract",
+              "ocr": "OCR multilingue (latin, cyrillique, arabe, hébreu, devanagari, tamoul, télougou, kannada, chinois, japonais, coréen) - moteur maison, sans Tesseract",
               "searchablePdf": "Rendre un scan cherchable grâce à une couche de texte invisible",
               "semanticSearch": "Recherche sémantique dans vos documents, par le sens (embeddings + pgvector)",
               "fullTextSearch": "Recherche plein-texte sur le nom et le contenu des documents"
@@ -3797,26 +3797,26 @@
           "title": "Variables d'environnement clés (.env)",
           "postgres": "PostgreSQL : POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB (ou DATABASE_URL)",
           "redis": "Redis : REDIS_URL (cache, broker Celery, file WebSocket)",
-          "secret": "APP_SECRET_KEY : clé secrète backend (min. 32 caractères — openssl rand -hex 32)",
+          "secret": "APP_SECRET_KEY : clé secrète backend (min. 32 caractères - openssl rand -hex 32)",
           "auth": "BETTER_AUTH_SECRET : secret d'authentification du front (web + admin)",
           "s3": "Stockage : STORAGE_PROVIDER (idrive, scaleway, aws, minio, s3), S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET_NAME (stockage des documents ; activez le chiffrement par défaut du bucket)",
           "smtp": "SMTP : MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD (emails d'auth)",
-          "stripe": "Stripe (optionnel) : STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET — laissez vide pour désactiver la facturation",
-          "legal": "Mentions légales (prod) : NEXT_PUBLIC_LEGAL_* (LCEN — l'app refuse de démarrer sans, hors localhost)"
+          "stripe": "Stripe (optionnel) : STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET - laissez vide pour désactiver la facturation",
+          "legal": "Mentions légales (prod) : NEXT_PUBLIC_LEGAL_* (LCEN - l'app refuse de démarrer sans, hors localhost)"
         },
         "docker": {
           "title": "Docker (recommandé)",
-          "description": "La méthode la plus simple. Le moteur PDF (WebAssembly) est embarqué dans l'application — aucun binaire système tiers ni installation supplémentaire.",
+          "description": "La méthode la plus simple. Le moteur PDF (WebAssembly) est embarqué dans l'application - aucun binaire système tiers ni installation supplémentaire.",
           "prereq": "Prérequis : Docker 24+ et Docker Compose 2.20+.",
           "servicesTitle": "Services démarrés par docker compose :",
           "services": {
-            "postgres": "postgres — PostgreSQL 17 (base de données)",
-            "redis": "redis — Redis 7 (cache + broker Celery)",
-            "api": "api — backend FastAPI (:8000)",
-            "worker": "celery-worker — traitement asynchrone (OCR, export, conversions Office)",
-            "beat": "celery-beat — tâches planifiées (purge corbeille, sync billing)",
-            "web": "web — application Next.js + moteur PDF TypeScript (:3000)",
-            "admin": "admin — tableau de bord d'administration (:3001)"
+            "postgres": "postgres - PostgreSQL 17 (base de données)",
+            "redis": "redis - Redis 7 (cache + broker Celery)",
+            "api": "api - backend FastAPI (:8000)",
+            "worker": "celery-worker - traitement asynchrone (OCR, export, conversions Office)",
+            "beat": "celery-beat - tâches planifiées (purge corbeille, sync billing)",
+            "web": "web - application Next.js + moteur PDF TypeScript (:3000)",
+            "admin": "admin - tableau de bord d'administration (:3001)"
           },
           "bundledNote": "Le moteur PDF (WebAssembly) assure les conversions Office et HTML → PDF, l'OCR, l'embarquement des polices, la rasterisation, les signatures et le chiffrement. Aucun binaire système tiers (LibreOffice, Chromium, Tesseract, fontforge, poppler) n'est requis.",
           "migrateNote": "Après le premier démarrage (et après chaque mise à jour), appliquez les migrations de base de données :"
@@ -3834,17 +3834,17 @@
           "sysdepsTitle": "Dépendances système PDF :",
           "sysdepsNote": "Aucune. Le moteur PDF (WebAssembly) est autonome : conversions Office et HTML → PDF, OCR, embarquement des polices, rasterisation, signatures et chiffrement sont intégrés. Aucun binaire tiers (LibreOffice, Chromium, Tesseract, fontforge, poppler) à installer.",
           "backendTitle": "Backend (FastAPI + Celery)",
-          "backendNote": "L'étape pip install -r requirements.txt installe les dépendances backend (l'équivalent d'un « install des dépendances » côté Python — ce projet n'utilise PAS Composer). Puis alembic upgrade head crée le schéma.",
+          "backendNote": "L'étape pip install -r requirements.txt installe les dépendances backend (l'équivalent d'un « install des dépendances » côté Python - ce projet n'utilise PAS Composer). Puis alembic upgrade head crée le schéma.",
           "frontendTitle": "Frontend (Next.js web + admin + packages)",
           "frontendNote": "pnpm install installe les dépendances Node du monorepo, pnpm build compile les packages et applications (Turbo ordonne les dépendances internes en premier).",
           "runTitle": "Lancement des services",
           "runNote": "Chaque service tourne dans son propre processus (en production : unités systemd) : uvicorn sert l'API, deux processus Celery (worker + beat) traitent l'asynchrone et les tâches planifiées, et le serveur standalone Next.js sert l'application web.",
           "rolesTitle": "Rôle de chaque service",
           "roles": {
-            "uvicorn": "uvicorn (app.main:app) — API REST FastAPI + WebSocket",
-            "worker": "celery worker — OCR, export, conversions Office, jobs lourds",
-            "beat": "celery beat — tâches planifiées (purge corbeille 30j, sync plans Stripe)",
-            "web": "node server.js (Next.js standalone) — front public + dashboard + moteur PDF TypeScript"
+            "uvicorn": "uvicorn (app.main:app) - API REST FastAPI + WebSocket",
+            "worker": "celery worker - OCR, export, conversions Office, jobs lourds",
+            "beat": "celery beat - tâches planifiées (purge corbeille 30j, sync plans Stripe)",
+            "web": "node server.js (Next.js standalone) - front public + dashboard + moteur PDF TypeScript"
           }
         },
         "nginx": {
@@ -3877,12 +3877,12 @@
         "interactiveTitle": "Documentation interactive de l'API",
         "swagger": "Testez les endpoints directement dans votre navigateur avec Swagger UI.",
         "redoc": "Référence propre et responsive avec schémas requête/réponse détaillés (Redoc).",
-        "openapi": "Spécification OpenAPI — générez des clients dans n'importe quel langage ou importez dans Postman.",
+        "openapi": "Spécification OpenAPI - générez des clients dans n'importe quel langage ou importez dans Postman.",
         "exampleTitle": "Exemple de requête",
         "exampleDescription": "Uploadez un document PDF avec votre clé API ou votre token.",
         "download": "Télécharger JSON",
         "sdkTitle": "SDK moteur (npm)",
-        "sdkDescription": "Au-delà de l'API REST, le moteur PDF lui-même est publié comme bibliothèque TypeScript autonome @qrcommunication/gigapdf-lib. Zéro dépendance (Rust → WebAssembly), elle lit, édite, rend, signe (PKCS#12 · PAdES-B-T · PAdES-LTV), chiffre, océrise et convertit vos PDF ↔ Office/HTML/RTF/Markdown/CSV directement dans votre application Node ou navigateur — sans serveur GigaPDF.",
+        "sdkDescription": "Au-delà de l'API REST, le moteur PDF lui-même est publié comme bibliothèque TypeScript autonome @qrcommunication/gigapdf-lib. Zéro dépendance (Rust → WebAssembly), elle lit, édite, rend, signe (PKCS#12 · PAdES-B-T · PAdES-LTV), chiffre, océrise et convertit vos PDF ↔ Office/HTML/RTF/Markdown/CSV directement dans votre application Node ou navigateur - sans serveur GigaPDF.",
         "sdkInstallNote": "Le .wasm est embarqué dans le paquet et chargé via GigaPdfEngine.loadDefault(). En Next.js standalone, ajoutez le paquet à serverExternalPackages et tracez le .wasm via outputFileTracingIncludes. L'installation, l'API complète et des exemples sont documentés dans le README du SDK.",
         "sdkGithub": "Code source (GitHub)",
         "sdkNpm": "Paquet npm"
@@ -3981,7 +3981,7 @@
           "title": "Sécurité",
           "apiKeys": {
             "title": "Clés API",
-            "description": "Les clés API sont créées depuis votre tableau de bord ou via l'API REST. Chaque clé est hashée en SHA-256 côté serveur — la clé en clair n'est visible qu'à la création.",
+            "description": "Les clés API sont créées depuis votre tableau de bord ou via l'API REST. Chaque clé est hashée en SHA-256 côté serveur - la clé en clair n'est visible qu'à la création.",
             "createExample": "Créer une clé API avec domaines autorisés"
           },
           "domains": {
@@ -4162,7 +4162,7 @@
       "wrongAccount": "Cette invitation a été envoyée à {email}. Connectez-vous avec ce compte pour l'accepter.",
       "accept": "Accepter",
       "decline": "Refuser",
-      "acceptedToast": "Invitation acceptée — le document est dans « Partagés avec moi »",
+      "acceptedToast": "Invitation acceptée - le document est dans « Partagés avec moi »",
       "declinedToast": "Invitation refusée",
       "acceptFailed": "Échec de l'acceptation de l'invitation",
       "declineFailed": "Échec du refus de l'invitation",
@@ -4171,7 +4171,7 @@
       "expiredTitle": "Invitation expirée",
       "expiredDescription": "Cette invitation a expiré. Demandez à l'expéditeur de partager à nouveau le document.",
       "acceptedTitle": "Invitation déjà acceptée",
-      "acceptedDescription": "Vous avez déjà accès à ce document — retrouvez-le dans « Partagés avec moi ».",
+      "acceptedDescription": "Vous avez déjà accès à ce document - retrouvez-le dans « Partagés avec moi ».",
       "declinedTitle": "Invitation refusée",
       "declinedDescription": "Cette invitation a été refusée. Demandez à l'expéditeur de partager à nouveau le document si nécessaire.",
       "revokedTitle": "Invitation révoquée",
@@ -4202,7 +4202,7 @@
       "markAsRead": "Marquer comme lu",
       "markAllAsRead": "Tout marquer comme lu",
       "ariaLabel": "Notifications",
-      "ariaLabelUnread": "Notifications — {count} non lue(s)",
+      "ariaLabelUnread": "Notifications - {count} non lue(s)",
       "empty": "Aucune notification",
       "types": {
         "share_invitation": "« {document} » a été partagé avec vous",
