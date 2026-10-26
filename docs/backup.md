@@ -9,7 +9,7 @@
 
 Le script `scripts/backup-postgres.sh` détecte automatiquement le jour de la semaine : un run du dimanche produit un backup `weekly`, tous les autres produisent un backup `daily`.
 
-Les backups sont stockés sur Scaleway Object Storage (bucket dédié) :
+Les backups sont stockés sur un stockage objet compatible S3 (bucket dédié — iDrive e2 par défaut, Scaleway, AWS… le script utilise `aws s3 cp --endpoint-url`) :
 
 ```
 s3://<BACKUP_S3_BUCKET>/postgres/daily/gigapdf_daily_YYYYMMDD_HHMMSS.sql.gz
@@ -21,23 +21,25 @@ s3://<BACKUP_S3_BUCKET>/postgres/weekly/gigapdf_weekly_YYYYMMDD_HHMMSS.sql.gz
 Ajouter à `/opt/gigapdf/.env` :
 
 ```env
-# Backup S3 (Scaleway Object Storage)
+# Backup S3 (iDrive e2 — ou tout service compatible S3)
 BACKUP_S3_BUCKET=s3://gigapdf-backups
-BACKUP_S3_ENDPOINT_URL=https://s3.fr-par.scw.cloud
-BACKUP_S3_ACCESS_KEY=<clé Scaleway>
-BACKUP_S3_SECRET_KEY=<secret Scaleway>
-BACKUP_S3_REGION=fr-par
+BACKUP_S3_ENDPOINT_URL=https://xxxx.par.idrivee2-NN.com   # Scaleway : https://s3.fr-par.scw.cloud
+BACKUP_S3_ACCESS_KEY=<clé d'accès>
+BACKUP_S3_SECRET_KEY=<secret>
+BACKUP_S3_REGION=us-east-1                                # Scaleway : fr-par
 
 # Notifications en cas d'échec (optionnel)
 BACKUP_NOTIFY_EMAIL=ops@giga-pdf.com
 BACKUP_NOTIFY_WEBHOOK=https://hooks.slack.com/services/xxx
 ```
 
-Créer un bucket Scaleway dédié (ne pas réutiliser le bucket documents) :
+Créer un bucket dédié (ne pas réutiliser le bucket documents) et **activer
+son chiffrement par défaut** : les dumps ne sont pas chiffrés par
+l'application, c'est le bucket qui les chiffre au repos.
 
-```bash
-scw object bucket create name=gigapdf-backups region=fr-par
-```
+- iDrive e2 : console e2 → *Add bucket* `gigapdf-backups` → paramètres du
+  bucket → chiffrement activé ; clé d'accès limitée à ce bucket.
+- Scaleway : `scw object bucket create name=gigapdf-backups region=fr-par`
 
 ## Setup cron (une seule fois sur le VPS)
 

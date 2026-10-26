@@ -13,7 +13,7 @@ import {
   AbortMultipartUploadCommand,
   type CompletedPart,
 } from '@aws-sdk/client-s3';
-import { getS3Client, getS3ConfigFromEnv } from '../client';
+import { buildObjectUrl, getS3Client, getS3ConfigFromEnv } from '../client';
 import {
   getMimeTypeFromExtension,
   validateFileType,
@@ -163,7 +163,7 @@ export async function uploadFile(options: UploadOptions): Promise<UploadResult> 
   const response = await client.send(command);
 
   // Build result
-  const url = `${config.endpoint}/${config.bucket}/${key}`;
+  const url = buildObjectUrl(config, key);
 
   return {
     key,
@@ -288,7 +288,7 @@ export async function uploadFileMultipart(
     const completeResponse = await client.send(completeCommand);
 
     // Build result
-    const url = `${config.endpoint}/${config.bucket}/${key}`;
+    const url = buildObjectUrl(config, key);
 
     return {
       key,

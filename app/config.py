@@ -134,13 +134,32 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str = ""
 
     # -------------------------------------------------------------------------
-    # S3 Storage (Scaleway / AWS compatible)
+    # Object storage (pluggable — see app/storage_backends/)
     # -------------------------------------------------------------------------
+    # Which backend stores documents, versions and thumbnails:
+    #   idrive   — iDrive e2 (S3-compatible, default)
+    #   scaleway — Scaleway Object Storage
+    #   aws      — Amazon S3
+    #   minio    — MinIO / self-hosted S3
+    #   s3       — any other S3-compatible provider (set S3_ENDPOINT)
+    #   local    — local filesystem (dev / tests, no presigned URLs)
+    #   pkg.module:Factory — custom backend (callable taking Settings)
+    storage_provider: str = "idrive"
+
+    # Credentials and target bucket, shared by every S3-compatible provider.
     s3_access_key_id: str = ""
     s3_secret_access_key: str = ""
     s3_bucket_name: str = "gigapdf"
-    s3_endpoint: str = "https://s3.fr-par.scw.cloud"
-    s3_region: str = "fr-par"
+    # Leave empty to use the provider's default (Scaleway/AWS). iDrive e2 and
+    # MinIO need it, e.g. https://xxxx.par.idrivee2-NN.com for iDrive e2.
+    s3_endpoint: str = ""
+    # Leave empty to use the provider's default region.
+    s3_region: str = ""
+    # Optional overrides of the provider preset.
+    s3_addressing_style: Literal["", "path", "virtual", "auto"] = ""
+    s3_server_side_encryption: bool | None = None
+    # Root directory of the "local" provider (defaults to <storage_path>/objects).
+    storage_local_root: Path | None = None
 
     # -------------------------------------------------------------------------
     # Sentry — Error Tracking & Performance

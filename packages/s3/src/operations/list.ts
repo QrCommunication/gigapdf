@@ -10,7 +10,7 @@ import {
   type _Object,
   type CommonPrefix,
 } from '@aws-sdk/client-s3';
-import { getS3Client, getS3ConfigFromEnv } from '../client';
+import { buildObjectUrl, getS3Client, getS3ConfigFromEnv } from '../client';
 
 /**
  * List options
@@ -112,7 +112,7 @@ export async function listFiles(options: ListOptions = {}): Promise<ListResult> 
     lastModified: obj.LastModified || new Date(),
     etag: obj.ETag || '',
     storageClass: obj.StorageClass,
-    url: `${config.endpoint}/${config.bucket}/${obj.Key}`,
+    url: buildObjectUrl(config, obj.Key!),
   }));
 
   // Parse folders
@@ -258,7 +258,7 @@ export async function getFileMetadata(key: string): Promise<S3Object | null> {
       size: response.ContentLength || 0,
       lastModified: response.LastModified || new Date(),
       etag: response.ETag || '',
-      url: `${config.endpoint}/${config.bucket}/${key}`,
+      url: buildObjectUrl(config, key),
     };
   } catch (error: any) {
     if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
