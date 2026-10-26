@@ -75,6 +75,25 @@ Admin → Paramètres → **Tester le stockage** (`POST
 | `disabled` | aucun chiffrement par défaut : le message affiche `WARNING: bucket default encryption is disabled` ❌ |
 | `null` | le fournisseur n'expose pas `GetBucketEncryption` ou la clé n'a pas le droit de le lire : vérifier dans la console |
 
+## Pages légales
+
+Le fournisseur de stockage est un sous-traitant RGPD : il est affiché sur la
+politique de confidentialité, les CGU, les mentions légales et la page « À
+propos » à partir de variables de l'app web (obligatoires en production) :
+
+| Variable | Exemple (iDrive e2) |
+|---|---|
+| `NEXT_PUBLIC_LEGAL_STORAGE_NAME` | `IDrive Inc.` |
+| `NEXT_PUBLIC_LEGAL_STORAGE_ADDRESS` | `26115 Mureau Road, Suite A, Calabasas, CA 91302, USA` |
+| `NEXT_PUBLIC_LEGAL_STORAGE_LOCATION` | région du bucket, ex. `EU (Paris, France)` |
+| `NEXT_PUBLIC_LEGAL_STORAGE_WEBSITE` | `www.idrive.com` (facultatif) |
+| `NEXT_PUBLIC_LEGAL_STORAGE_NON_EU` | `true` : affiche la section « Transferts hors UE » (clauses contractuelles types) |
+
+**Changer de `STORAGE_PROVIDER` impose de mettre à jour ces variables**, puis
+de reconstruire l'app web (les `NEXT_PUBLIC_*` sont figées au build). Avec
+`NON_EU=true`, l'accord de traitement des données incluant les clauses
+contractuelles types doit être signé avec le fournisseur.
+
 ## Ajouter un autre service
 
 Trois options, de la plus simple à la plus libre :
@@ -135,7 +154,8 @@ Procédure conseillée :
 2. Lancer la copie une première fois (le site reste sur Scaleway).
 3. Passer en maintenance, relancer la copie (seuls les nouveaux objets sont copiés).
 4. Mettre `STORAGE_PROVIDER=idrive` + les variables `S3_*` iDrive dans `.env`,
-   redémarrer l'API et les workers Celery.
+   ainsi que les `NEXT_PUBLIC_LEGAL_STORAGE_*` (voir « Pages légales »), puis
+   déployer (rebuild web + redémarrage API et workers Celery).
 5. Vérifier via l'admin : *Paramètres → Tester le stockage* (connexion OK et
    `bucket encryption: AES256`).
 6. Garder le bucket Scaleway quelques jours avant de le supprimer.
