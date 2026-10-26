@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.config import get_settings
+from app.storage_backends import get_storage_backend
 
 router = APIRouter()
 
@@ -79,6 +80,21 @@ class SettingsUpdateRequest(BaseModel):
 _settings_store: dict = {}
 
 
+def _storage_settings() -> dict:
+    """Storage fields as seen by the active backend (provider-agnostic)."""
+    app_settings = get_settings()
+    try:
+        info = get_storage_backend().describe()
+    except Exception:  # misconfigured provider — still show what we know
+        info = {}
+    return {
+        "storage_provider": info.get("provider") or app_settings.storage_provider,
+        "storage_bucket": info.get("bucket") or app_settings.s3_bucket_name or None,
+        "storage_region": info.get("region") or app_settings.s3_region or None,
+        "storage_endpoint": info.get("endpoint") or app_settings.s3_endpoint or None,
+    }
+
+
 def get_current_settings() -> SystemSettings:
     """Get current system settings."""
     get_settings()
@@ -91,10 +107,7 @@ def get_current_settings() -> SystemSettings:
         "max_file_size_mb": int(os.getenv("MAX_FILE_SIZE_MB", "250")),
         "max_pages_per_document": int(os.getenv("MAX_PAGES_PER_DOCUMENT", "1000")),
         "max_documents_per_user": int(os.getenv("MAX_DOCUMENTS_PER_USER", "1000")),
-        "storage_provider": os.getenv("STORAGE_PROVIDER", "s3"),
-        "storage_bucket": os.getenv("S3_BUCKET_NAME", os.getenv("AWS_S3_BUCKET")),
-        "storage_region": os.getenv("S3_REGION", os.getenv("AWS_REGION")),
-        "storage_endpoint": os.getenv("S3_ENDPOINT", os.getenv("S3_ENDPOINT_URL")),
+        **_storage_settings(),
         "smtp_host": os.getenv("SMTP_HOST"),
         "smtp_port": int(os.getenv("SMTP_PORT", "587")),
         "smtp_user": os.getenv("SMTP_USER"),
@@ -397,7 +410,7 @@ async def test_email_settings(
         "current storage credentials (access key, secret key, endpoint, region). Uses a "
         "`HeadBucket` operation to confirm access without reading or writing any data.\n\n"
         "Returns connection status, provider name, endpoint, and region on success. "
-        "Compatible with AWS S3, Scaleway Object Storage, MinIO, and any S3-compatible provider."
+        "Works with every configured storage provider (iDrive e2, Scaleway, AWS S3, MinIO, local disk, custom)."
     ),
     response_description="Connection test result with storage provider details",
     responses={
@@ -462,48 +475,23 @@ async def test_storage_settings():
     """
     Test storage connection.
     """
-    settings = get_current_settings()
-
-    if not settings.storage_bucket:
-        return {
-            "success": False,
-            "message": "Storage bucket not configured",
-        }
-
-    # Try to connect to S3/storage
     try:
-        import boto3
-        from botocore.config import Config
-
-        s3_config = Config(
-            signature_version='s3v4',
-            s3={'addressing_style': 'path'}
-        )
-
-        s3_client = boto3.client(
-            's3',
-            endpoint_url=settings.storage_endpoint,
-            region_name=settings.storage_region or 'fr-par',
-            aws_access_key_id=os.getenv('S3_ACCESS_KEY_ID', os.getenv('AWS_ACCESS_KEY_ID')),
-            aws_secret_access_key=os.getenv('S3_SECRET_ACCESS_KEY', os.getenv('AWS_SECRET_ACCESS_KEY')),
-            config=s3_config,
-        )
-
-        # Try to list bucket
-        s3_client.head_bucket(Bucket=settings.storage_bucket)
-
-        return {
-            "success": True,
-            "message": f"Successfully connected to bucket '{settings.storage_bucket}'",
-            "provider": settings.storage_provider,
-            "endpoint": settings.storage_endpoint,
-            "region": settings.storage_region,
-        }
+        backend = get_storage_backend()
+        backend.check_connection()
     except Exception as e:
         return {
             "success": False,
             "message": f"Storage connection failed: {str(e)}",
         }
+
+    info = backend.describe()
+    return {
+        "success": True,
+        "message": f"Successfully connected to bucket '{backend.bucket}'",
+        "provider": info.get("provider"),
+        "endpoint": info.get("endpoint"),
+        "region": info.get("region"),
+    }
 
 
 @router.get(
@@ -580,44 +568,23 @@ async def get_storage_info():
     """
     Get storage information and statistics.
     """
-    settings = get_current_settings()
-
-    if not settings.storage_bucket:
+    try:
+        backend = get_storage_backend()
+    except Exception as e:
         return {
             "configured": False,
-            "message": "Storage not configured",
+            "message": f"Storage not configured: {e}",
         }
 
     try:
-        import boto3
-        from botocore.config import Config
-
-        s3_config = Config(
-            signature_version='s3v4',
-            s3={'addressing_style': 'path'}
-        )
-
-        s3_client = boto3.client(
-            's3',
-            endpoint_url=settings.storage_endpoint,
-            region_name=settings.storage_region or 'fr-par',
-            aws_access_key_id=os.getenv('S3_ACCESS_KEY_ID', os.getenv('AWS_ACCESS_KEY_ID')),
-            aws_secret_access_key=os.getenv('S3_SECRET_ACCESS_KEY', os.getenv('AWS_SECRET_ACCESS_KEY')),
-            config=s3_config,
-        )
-
-        # Get bucket location
-        s3_client.get_bucket_location(Bucket=settings.storage_bucket)
+        backend.check_connection()
 
         # Count objects (limited for performance)
-        paginator = s3_client.get_paginator('list_objects_v2')
         object_count = 0
         total_size = 0
-
-        for page in paginator.paginate(Bucket=settings.storage_bucket, MaxKeys=1000):
-            if 'Contents' in page:
-                object_count += len(page['Contents'])
-                total_size += sum(obj['Size'] for obj in page['Contents'])
+        for obj in backend.iter_objects():
+            object_count += 1
+            total_size += obj.size
             if object_count >= 1000:
                 break
 
@@ -630,12 +597,13 @@ async def get_storage_info():
                 return f"{bytes_val / 1024:.2f} KB"
             return f"{bytes_val} B"
 
+        info = backend.describe()
         return {
             "configured": True,
-            "provider": settings.storage_provider,
-            "bucket": settings.storage_bucket,
-            "region": settings.storage_region,
-            "endpoint": settings.storage_endpoint,
+            "provider": info.get("provider"),
+            "bucket": backend.bucket,
+            "region": info.get("region"),
+            "endpoint": info.get("endpoint"),
             "object_count": object_count,
             "object_count_note": "Limited to first 1000 objects" if object_count >= 1000 else None,
             "total_size_bytes": total_size,

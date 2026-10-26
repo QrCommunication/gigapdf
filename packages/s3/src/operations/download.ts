@@ -6,7 +6,7 @@
 
 import { GetObjectCommand, GetObjectCommandInput } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { getS3Client, getS3ConfigFromEnv } from '../client';
+import { buildObjectUrl, getS3Client, getS3ConfigFromEnv } from '../client';
 
 /**
  * Download options
@@ -197,7 +197,7 @@ export async function getPresignedUploadUrl(
  */
 export function getObjectUrl(key: string): string {
   const config = getS3ConfigFromEnv();
-  return `${config.endpoint}/${config.bucket}/${key}`;
+  return buildObjectUrl(config, key);
 }
 
 /**
