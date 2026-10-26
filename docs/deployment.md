@@ -1,245 +1,196 @@
-# GigaPDF — Procédure de déploiement zero-downtime
+# GigaPDF — Procédure de déploiement (installation native Ploi)
 
-> Infrastructure : VPS Scaleway x86_64 32 GB — `<your-vps-ip>`
+> Infrastructure : VPS giga-pdf.com (Ploi) — Ubuntu 24.04, Node 24, Python 3.14, PostgreSQL 18, Redis
 > Stack : FastAPI (uvicorn 4 workers) + Next.js standalone + Celery, derrière Nginx + systemd
+> Utilisateur : `ploi` (sudo passwordless)
+> Chemin repo : `/home/ploi/giga-pdf.com`
 
 ---
 
-## Architecture de déploiement
+## Architecture
 
 ```
-git push origin main
-        |
-        v
-   [deploy.sh]
-        |
-   1. git pull (code à jour, services toujours UP)
-   2. pip install / pnpm install
-   3. Build packages → Next.js web → Next.js admin
-   4. Prisma generate + migrations Alembic
-   5. Snapshot des artefacts → /opt/gigapdf-snapshots/<timestamp>/
-   6. Nginx: copie conf + maintenance page
-        |
-        v
-   [Restart séquentiel — services UP tout le long]
-        |
-   9a. systemctl reload gigapdf-api  ← SIGHUP, graceful, 0 connexion droppée
-   9b. wait_healthy API (60s max)
-   9c. systemctl restart gigapdf-celery + gigapdf-celery-billing
-   9d. systemctl restart gigapdf-web   (downtime ~3-5s, nginx → maintenance.html)
-   9e. systemctl restart gigapdf-admin
-        |
-   10. Health checks finaux → rollback automatique si échec
+giga-pdf.com      → Next.js Web  (port 3000) → systemd gigapdf-web
+admin.giga-pdf.com → Next.js Admin (port 3001) → systemd gigapdf-admin
+api.giga-pdf.com   → FastAPI      (port 8000) → systemd gigapdf-api
+Celery workers     → systemd gigapdf-celery, gigapdf-celery-billing
 ```
 
-**Downtime effectif :**
+Nginx (géré par Ploi) proxy vers les ports locaux. Les certificats SSL sont
+gérés par Ploi via Let's Encrypt dans `/etc/nginx/ssl/<domain>`.
 
-| Service | Avant | Après |
-|---------|-------|-------|
-| FastAPI API | ~60-90 s (stop+start) | **0 s** (SIGHUP graceful reload) |
-| Next.js Web | ~60-90 s | **~3-5 s** (restart rapide, nginx maintenance page) |
-| Next.js Admin | ~60-90 s | **~3-5 s** (après web healthy) |
-| Celery | ~5 s (tasks dans broker) | **~5 s** (inchangé, tâches survivent) |
+### Sous-domaine API
+
+Le fichier `/etc/nginx/sites-available/api.giga-pdf.com` est configuré pour
+proxyer vers `127.0.0.1:8000`. Le bloc `listen 443 ssl` et les certificats
+sont inclus via `/etc/nginx/ssl/api.giga-pdf.com` (géré par Ploi) — ne pas
+ajouter de directive `listen 443` dans le site pour éviter les conflits.
 
 ---
 
-## Déploiement standard
+## Installation initiale (première mise en place)
+
+### Prérequis système
 
 ```bash
-# Depuis la machine locale (ou CI)
-git push origin main
-
-# Sur le serveur (post-receive hook ou manuellement)
-ssh ubuntu@<your-vps-ip>
-cd /opt/gigapdf
-git pull
-bash deploy/deploy.sh
+sudo apt update && sudo apt install -y \
+  python3.14-venv postgresql-18-pgvector redis-server nginx curl git
+sudo corepack enable
+sudo corepack prepare pnpm@9 --activate
 ```
 
-Le script sort avec code `0` si tout est sain, `1` si un service échoue (rollback déclenché automatiquement).
-
-### Migrations base de données (OBLIGATOIRE après chaque mise à jour)
-
-`deploy.sh` exécute `alembic upgrade head` (étape 4) mais **ne bloque pas
-le déploiement si la migration échoue** (simple warning). Après chaque mise
-à jour, vérifier manuellement que la révision attendue est appliquée :
+### Base de données
 
 ```bash
-cd /opt/gigapdf
-source .venv/bin/activate
-alembic upgrade head     # idempotent — depuis la racine (alembic.ini)
-alembic current          # doit afficher la dernière révision
+sudo -u postgres psql -c "CREATE USER gigapdf WITH PASSWORD 'gigapdf';"
+sudo -u postgres psql -c "CREATE DATABASE gigapdf OWNER gigapdf;"
+sudo -u postgres psql -c "CREATE DATABASE gigapdf_celery OWNER gigapdf;"
+sudo -u postgres psql -d gigapdf -c "GRANT ALL PRIVILEGES ON DATABASE gigapdf TO gigapdf;"
+sudo -u postgres psql -d gigapdf -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
-- **v1.3.0** introduit la migration `018_free_doc_limit` (migration de
-  données : ramène à 100 la limite de documents des quotas du plan
-  gratuit créés avec l'ancien défaut 1000 ; les limites personnalisées
-  par un admin ne sont pas touchées). `alembic current` doit afficher
-  `018_free_doc_limit`.
-- **v1.2.0** introduit la migration `017_ged_features` (colonnes de
-  recherche plein texte + index corbeille sur `stored_documents`).
-- Les versions antérieures à v1.2.0 contenaient un bug dans
-  `migrations/env.py` : sur toute base où la table `alembic_version`
-  existait déjà, les migrations étaient **silencieusement annulées**
-  (exit 0, "Running upgrade …" loggé, aucun changement de schéma).
-  Corrigé en v1.2.0 — d'où l'importance du contrôle `alembic current`
-  post-déploiement.
-
----
-
-## Rollback
-
-### Rollback automatique
-
-Si un service ne répond pas dans les 60 s après restart, `deploy.sh` appelle automatiquement `scripts/rollback.sh --non-interactive`.
-
-### Rollback manuel
+### Variables d'environnement
 
 ```bash
-ssh ubuntu@<your-vps-ip>
-
-# Lister les snapshots disponibles
-sudo bash /opt/gigapdf/scripts/rollback.sh --list
-
-# Rollback vers le dernier snapshot connu-bon
-sudo bash /opt/gigapdf/scripts/rollback.sh
-
-# Rollback vers un snapshot spécifique
-sudo bash /opt/gigapdf/scripts/rollback.sh 20260421_143022
+cd /home/ploi/giga-pdf.com
+cp .env.example .env
+# Éditer : APP_SECRET_KEY, INTERNAL_API_SECRET, S3_*, STRIPE_*, RESEND_*, etc.
 ```
 
-**Ce que fait rollback.sh :**
-
-1. Arrête tous les services
-2. Restaure les artefacts de build (`.next/`, `packages/*/dist/`) depuis le snapshot
-3. Redémarre tous les services
-4. Valide que l'API répond sur `/health`
-
-**Ce que rollback.sh ne touche PAS :**
-
-- `.env` (reste en place)
-- `.venv` Python (reste en place)
-- `node_modules` (reste en place)
-- Base de données (pas de down-migration automatique — à gérer manuellement si breaking)
-
-### Rollback base de données (si migration breaking)
-
-```bash
-ssh ubuntu@<your-vps-ip>
-cd /opt/gigapdf
-source .venv/bin/activate
-source .env
-
-# Voir l'historique Alembic
-alembic history
-
-# Revenir à la révision précédente
-alembic downgrade -1
-
-# Revenir à une révision spécifique
-alembic downgrade <revision_id>
-```
-
----
-
-## Snapshots
-
-Les artefacts de chaque déploiement réussi sont sauvegardés dans `/opt/gigapdf-snapshots/<timestamp>/`.
-
-- **Rétention** : 5 derniers snapshots (les plus anciens sont supprimés automatiquement)
-- **Contenu** : `apps/web/.next/`, `apps/admin/.next/`, `packages/*/dist/`
-- **Symlink** : `/opt/gigapdf-snapshots/latest` pointe toujours vers le plus récent
-
-```bash
-# Voir la taille des snapshots
-du -sh /opt/gigapdf-snapshots/*
-
-# Voir le snapshot courant
-readlink /opt/gigapdf-snapshots/latest
-```
-
----
-
-## Page maintenance Nginx
-
-Nginx sert `/var/www/gigapdf-maintenance/maintenance.html` automatiquement quand un upstream retourne 502/503/504.
-
-- **API** (`api.giga-pdf.com`) : répond JSON `503` avec `Retry-After: 30`
-- **Web** (`giga-pdf.com`) : sert la page HTML de maintenance (branded)
-
-Le fichier source est `deploy/nginx/maintenance.html` — copié par `deploy.sh` à chaque déploiement.
-
----
-
-## Reload graceful de l'API (FastAPI / uvicorn)
-
-La configuration systemd (`deploy/systemd/gigapdf-api.service`) contient :
+**Stockage objet (iDrive e2)** :
 
 ```ini
-ExecReload=/bin/kill -HUP $MAINPID
+STORAGE_PROVIDER=idrive
+S3_ENDPOINT=https://s3.eu-west-4.idrivee2.com
+S3_REGION=eu-west-4
+S3_ACCESS_KEY_ID=<from console e2>
+S3_SECRET_ACCESS_KEY=<from console e2>
+S3_BUCKET_NAME=gigapdf
 ```
 
-`systemctl reload gigapdf-api` envoie `SIGHUP` au processus maître uvicorn. Avec 4 workers (`--workers 4`) :
-
-1. Le maître envoie `SIGWINCH` aux workers actifs (graceful shutdown après fin des requêtes en cours)
-2. Le maître fork de nouveaux workers qui chargent le nouveau code
-3. Les anciens workers se terminent proprement une fois leurs requêtes finies
-
-Résultat : **zéro connexion droppée** pendant le reload de l'API.
-
----
-
-## Surveillance post-déploiement
+### Environnement Python
 
 ```bash
-# Statut global
-sudo systemctl status gigapdf-api gigapdf-web gigapdf-admin gigapdf-celery gigapdf-celery-billing
+python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install psycopg[binary]
+```
 
-# Logs en temps réel
-tail -f /var/log/gigapdf/api.log
-tail -f /var/log/gigapdf/web.log
-journalctl -u gigapdf-api -f
+### Environnement Node.js
 
-# Health checks manuels
-curl -s http://localhost:8000/health
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3001
+```bash
+pnpm install --frozen-lockfile
+ln -sf /home/ploi/giga-pdf.com/.env apps/web/.env
+ln -sf /home/ploi/giga-pdf.com/.env apps/admin/.env
+pnpm --filter "!web" --filter "!admin" --filter "!mobile" build
+pnpm --filter web build
+pnpm --filter admin build
+```
 
-# Snapshots disponibles
-sudo bash /opt/gigapdf/scripts/rollback.sh --list
+### Copie des artefacts standalone
+
+```bash
+for app in web admin; do
+  STANDALONE="apps/$app/.next/standalone/apps/$app"
+  mkdir -p "$STANDALONE/.next"
+  rsync -a --delete "apps/$app/.next/static/" "$STANDALONE/.next/static/"
+  [ -d "apps/$app/public" ] && rsync -a --delete "apps/$app/public/" "$STANDALONE/public/"
+done
+```
+
+### Migrations base de données
+
+```bash
+.venv/bin/alembic upgrade head
+sudo -u postgres psql -d gigapdf -f deploy/init-betterauth-tables.sql
+```
+
+### Services systemd
+
+```bash
+sudo cp deploy/systemd/gigapdf-*.service /etc/systemd/system/
+sudo sed -i "s|/opt/gigapdf|/home/ploi/giga-pdf.com|g" /etc/systemd/system/gigapdf-*.service
+sudo sed -i "s|User=gigapdf|User=ploi|g" /etc/systemd/system/gigapdf-*.service
+sudo sed -i "s|Group=gigapdf|Group=ploi|g" /etc/systemd/system/gigapdf-*.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now gigapdf-api gigapdf-web gigapdf-admin gigapdf-celery gigapdf-celery-billing
+```
+
+> ⚠️ Les directives `ProtectSystem=strict`, `PrivateTmp=true`, `ReadWritePaths`
+> ont été retirées car elles bloquaient le démarrage sur cet hôte Ploi.
+> La sécurité repose sur UFW + l'utilisateur dédié `ploi`.
+
+### Répertoires runtime
+
+```bash
+sudo mkdir -p /var/lib/gigapdf/documents/exports /var/lib/gigapdf/fastembed-cache /var/lib/gigapdf/rten-models
+sudo chown -R ploi:ploi /var/lib/gigapdf
+sudo chmod -R 2775 /var/lib/gigapdf
+sudo mkdir -p /var/log/gigapdf
+sudo chown ploi:ploi /var/log/gigapdf
 ```
 
 ---
 
-## Checklist de déploiement
+## Mise à jour (déploiements suivants)
 
-- [ ] Tests CI passent (lint, type-check, tests unitaires)
-- [ ] Pas de vendredi soir
-- [ ] Migrations backward-compatible (pas de DROP COLUMN sans feature flag)
-- [ ] `git push origin main`
-- [ ] Vérifier les logs en temps réel pendant le déploiement
-- [ ] Valider API : `curl https://api.giga-pdf.com/health`
-- [ ] Valider Web : `curl -I https://giga-pdf.com`
-- [ ] En cas d'anomalie : `sudo bash /opt/gigapdf/scripts/rollback.sh`
+```bash
+ssh ploi@giga-pdf.com
+cd /home/ploi/giga-pdf.com
+git pull origin main
+.venv/bin/pip install -r requirements.txt -q
+pnpm install --frozen-lockfile
+pnpm --filter "!web" --filter "!admin" --filter "!mobile" build
+pnpm --filter web build
+pnpm --filter admin build
+for app in web admin; do
+  STANDALONE="apps/$app/.next/standalone/apps/$app"
+  mkdir -p "$STANDALONE/.next"
+  rsync -a --delete "apps/$app/.next/static/" "$STANDALONE/.next/static/"
+  [ -d "apps/$app/public" ] && rsync -a --delete "apps/$app/public/" "$STANDALONE/public/"
+done
+.venv/bin/alembic upgrade head
+sudo systemctl restart gigapdf-api gigapdf-web gigapdf-admin gigapdf-celery gigapdf-celery-billing
+sleep 5
+systemctl is-active gigapdf-api gigapdf-web gigapdf-admin gigapdf-celery gigapdf-celery-billing
+```
 
 ---
 
-## Dépendances système de l'hôte (déploiement natif)
+## Surveillance
 
-Le moteur PDF (`gigapdf-lib`) est un moteur Rust → WASM zéro dépendance
-tierce. Toutes les fonctionnalités PDF (OCR, rendu, conversion Office,
-HTML → PDF, gestion des polices) s'exécutent nativement sans aucun binaire
-système supplémentaire. Aucune installation `apt` n'est requise au-delà du
-runtime Node/Python et des services d'infrastructure (PostgreSQL, Redis).
+```bash
+systemctl is-active gigapdf-api gigapdf-web gigapdf-admin gigapdf-celery gigapdf-celery-billing
+sudo journalctl -u gigapdf-api -f --no-pager -n 50
+sudo journalctl -u gigapdf-web -f --no-pager -n 50
+curl -s http://localhost:8000/health
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
+curl -s -o /dev/null -w "%{http_code}" https://api.giga-pdf.com/health
+```
+
+---
+
+## Vérification post-installation
+
+| Check        | Commande                                                          | Attendu              |
+|--------------|-------------------------------------------------------------------|----------------------|
+| API locale   | `curl http://localhost:8000/health`                               | `200`                |
+| Web local    | `curl http://localhost:3000`                                      | `200`                |
+| Admin local  | `curl http://localhost:3001/login`                                | `200`                |
+| API publique | `curl https://api.giga-pdf.com/health`                            | `200`                |
+| Celery       | `journalctl -u gigapdf-celery --no-pager -n 3`                   | `celery@gigapdf ready` |
+| DB           | `sudo -u postgres psql -d gigapdf -c "SELECT count(*) FROM alembic_version"` | ≥ 1          |
+| S3           | Admin → Paramètres → Tester le stockage                           | connexion OK         |
 
 ---
 
 ## Fichiers concernés
 
-| Fichier | Rôle |
-|---------|------|
-| `deploy/deploy.sh` | Script de déploiement principal |
-| `scripts/rollback.sh` | Rollback vers un snapshot |
-| `deploy/nginx/maintenance.html` | Page de maintenance Nginx |
-| `deploy/nginx.conf` | Configuration Nginx (upstreams + error_page) |
-| `deploy/systemd/gigapdf-api.service` | Systemd unit (ExecReload=SIGHUP) |
+| Fichier                              | Rôle                          |
+|--------------------------------------|-------------------------------|
+| `deploy/systemd/gigapdf-*.service`   | Unités systemd (5 services)   |
+| `deploy/init-betterauth-tables.sql`  | Tables Better Auth (idempotent) |
+| `deploy/nginx.conf`                  | Config nginx complète         |
+| `docs/storage.md`                    | Configuration stockage objet  |
+| `.env`                               | Variables d'environnement     |
