@@ -13,13 +13,13 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@better-auth/expo": "^1.6.18",
+    "@better-auth/expo": "~1.6.33",
     "@expo/vector-icons": "^15.1.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/native": "^7.3.3",
     "@tanstack/react-query": "^5.101.0",
-    "axios": "^1.18.0",
-    "better-auth": "^1.6.18",
+    "axios": "^1.21.0",
+    "better-auth": "~1.6.33",
     "expo": "~56.0.12",
     "expo-auth-session": "~56.0.14",
     "expo-blur": "~56.0.3",
@@ -53,6 +53,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@react-native/metro-config": "0.85.3",
     "@types/react": "~19.2.17",
     "eslint": "^10.5.0",
     "typescript": "^6.0.3"

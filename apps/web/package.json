@@ -20,7 +20,7 @@
     "postinstall": "prisma generate || true && node -e \"const{cpSync}=require('fs');cpSync(require.resolve('@qrcommunication/gigapdf-lib/gigapdf.wasm'),'public/gigapdf.wasm');\""
   },
   "dependencies": {
-    "@better-auth/expo": "^1.6.18",
+    "@better-auth/expo": "~1.6.33",
     "@giga-pdf/api": "workspace:*",
     "@giga-pdf/canvas": "workspace:*",
     "@giga-pdf/editor": "workspace:*",
@@ -28,16 +28,16 @@
     "@giga-pdf/pdf-engine": "workspace:*",
     "@giga-pdf/types": "workspace:*",
     "@giga-pdf/ui": "workspace:*",
-    "@prisma/adapter-pg": "^7.8.0",
-    "@prisma/client": "^7.8.0",
-    "@sentry/nextjs": "^10.59.0",
-    "better-auth": "^1.6.18",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "@sentry/nextjs": "^10.75.2",
+    "better-auth": "~1.6.33",
     "clsx": "^2.1.1",
-    "fflate": "^0.8.3",
     "fabric": "^7.4.0",
+    "fflate": "^0.8.3",
     "jose": "^6.2.3",
     "lucide-react": "^1.21.0",
-    "next": "^16.4.0",
+    "next": "^16.4.3",
     "next-intl": "^4.13.0",
     "next-themes": "^0.4.6",
     "pg": "^8.22.0",
@@ -45,7 +45,7 @@
     "react-dom": "19.2.7",
     "resend": "^6.14.0",
     "tailwind-merge": "^3.6.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@giga-pdf/eslint-config": "workspace:*",
@@ -61,14 +61,14 @@
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/parser": "^8.62.0",
     "@vitejs/plugin-react": "^6.0.2",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.12",
     "eslint": "^10.5.0",
     "eslint-config-next": "^16.4.0",
     "jsdom": "^29.1.1",
-    "postcss": "^8.5.15",
-    "prisma": "^7.8.0",
+    "postcss": "^8.5.23",
+    "prisma": "^7.10.1",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.12"
   }
 }
