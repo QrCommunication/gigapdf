@@ -28,9 +28,9 @@ export default function DashboardLayout(props: { children?: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { quota } = useQuota();
 
-  // Masquer "Organization" aux comptes gratuits (plan_type === "free").
+  // Masquer "Organization" aux comptes gratuits (plan.type === "free").
   // "Billing" reste toujours visible pour permettre l'upgrade.
-  const isPaidPlan = quota?.plan_type !== "free";
+  const isPaidPlan = quota?.plan.type !== "free";
 
   const navItems = useMemo(() => {
     const items = [
