@@ -16,8 +16,8 @@
   },
   "pnpm": {
     "overrides": {
-      "react": "19.2.7",
-      "react-dom": "19.2.7",
+      "react": "19.2.3",
+      "react-dom": "19.2.3",
       "@eslint/config-array@<0.23.0": "^0.23.0",
       "@hono/node-server@<1.19.13": "^1.19.13",
       "@hono/node-server@>=2.0.0 <2.0.10": "^2.0.10",
@@ -47,20 +47,20 @@
       "js-yaml@>=4.0.0 <4.3.2": "^4.3.2",
       "kysely": ">=0.28.17",
       "lodash@<=4.17.23": "^4.18.0",
-      "metro@>=0.84.0 <0.84.6": "0.84.6",
-      "metro-babel-transformer@>=0.84.0 <0.84.6": "0.84.6",
-      "metro-cache@>=0.84.0 <0.84.6": "0.84.6",
-      "metro-cache-key@>=0.84.0 <0.84.6": "0.84.6",
-      "metro-config@>=0.84.0 <0.84.6": "0.84.6",
-      "metro-core@>=0.84.0 <0.84.6": "0.84.6",
-      "metro-file-map@>=0.84.0 <0.84.6": "0.84.6",
-      "metro-minify-terser@>=0.84.0 <0.84.6": "0.84.6",
-      "metro-resolver@>=0.84.0 <0.84.6": "0.84.6",
-      "metro-runtime@>=0.84.0 <0.84.6": "0.84.6",
-      "metro-source-map@>=0.84.0 <0.84.6": "0.84.6",
-      "metro-symbolicate@>=0.84.0 <0.84.6": "0.84.6",
-      "metro-transform-plugins@>=0.84.0 <0.84.6": "0.84.6",
-      "metro-transform-worker@>=0.84.0 <0.84.6": "0.84.6",
+      "metro@^0.84.0": "0.84.5",
+      "metro-babel-transformer@^0.84.0": "0.84.5",
+      "metro-cache@^0.84.0": "0.84.5",
+      "metro-cache-key@^0.84.0": "0.84.5",
+      "metro-config@^0.84.0": "0.84.5",
+      "metro-core@^0.84.0": "0.84.5",
+      "metro-file-map@^0.84.0": "0.84.5",
+      "metro-minify-terser@^0.84.0": "0.84.5",
+      "metro-resolver@^0.84.0": "0.84.5",
+      "metro-runtime@^0.84.0": "0.84.5",
+      "metro-source-map@^0.84.0": "0.84.5",
+      "metro-symbolicate@^0.84.0": "0.84.5",
+      "metro-transform-plugins@^0.84.0": "0.84.5",
+      "metro-transform-worker@^0.84.0": "0.84.5",
       "minimatch@<3.1.4": "^3.1.4",
       "minimatch@>=9.0.0 <9.0.7": "^9.0.7",
       "minimatch@>=10.0.0 <10.2.3": "^10.2.3",
@@ -71,7 +71,6 @@
       "node-forge@<1.4.1": "^1.4.1",
       "nodemailer@<=8.0.4": ">=8.0.5",
       "picomatch@<2.3.2": "^2.3.2",
-      "picomatch@>=3.0.0 <3.0.2": "^3.0.2",
       "picomatch@>=4.0.0 <4.0.4": "^4.0.4",
       "postcss@<8.5.23": "^8.5.23",
       "rollup@>=4.0.0 <4.59.0": "^4.59.0",
@@ -84,7 +83,6 @@
       "undici@>=7.0.0 <7.30.1": "^7.30.1",
       "uuid": ">=14.0.0",
       "valibot@<1.4.2": "^1.4.2",
-      "vite@>=7.0.0 <7.3.2": "^7.3.2",
       "vite@>=8.0.0 <8.1.6": "^8.1.6",
       "ws@>=8.0.0 <8.21.0": "^8.21.0",
       "yaml@>=2.0.0 <2.8.3": "^2.8.3",
@@ -144,7 +142,8 @@
     "tsx": "^4.22.4",
     "turbo": "^2.9.18",
     "typescript": "^6.0.3",
-    "vite": "^8.1.6"
+    "vite": "^8.1.6",
+    "webpack": "^5.112.0"
   },
   "engines": {
     "node": ">=20.0.0",
@@ -160,6 +159,7 @@
     ]
   },
   "dependencies": {
-    "@better-auth/expo": "~1.6.33"
+    "@better-auth/expo": "~1.6.33",
+    "@better-auth/utils": "0.4.2"
   }
 }
