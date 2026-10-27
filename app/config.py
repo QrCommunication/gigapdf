@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -243,6 +243,34 @@ class Settings(BaseSettings):
     def validate_storage_path(cls, v: str | Path) -> Path:
         """Convert string to Path and ensure it's valid."""
         return Path(v) if isinstance(v, str) else v
+
+    @model_validator(mode="after")
+    def validate_production_jwt_config(self) -> "Settings":
+        """Refuse to boot in production with an unusable JWT verification setup.
+
+        A placeholder key (copied from .env.example) makes every authenticated
+        request fail with 401 while /health stays green — seen on the Ploi host
+        on 2026-10-27. Failing at startup surfaces it in the deploy instead.
+        """
+        if not self.is_production:
+            return self
+
+        key = self.auth_jwt_public_key.strip()
+        is_jwks_url = key.startswith(("http://", "https://"))
+        is_pem = key.startswith("-----BEGIN")
+        if not (is_jwks_url or is_pem):
+            raise ValueError(
+                "AUTH_JWT_PUBLIC_KEY must be a JWKS URL "
+                "(e.g. http://127.0.0.1:3000/api/auth/jwks) or a PEM public key"
+            )
+
+        for name in ("auth_jwt_issuer", "auth_jwt_audience"):
+            if "example.com" in getattr(self, name):
+                raise ValueError(
+                    f"{name.upper()} still holds a placeholder value; "
+                    "set it to the Better Auth origin (BETTER_AUTH_URL)"
+                )
+        return self
 
 
 @lru_cache
