@@ -85,8 +85,8 @@ Each activity entry includes:
                             "processing_time_ms": 45,
                             "pagination": {
                                 "page": 1,
-                                "page_size": 50,
-                                "total_items": 1,
+                                "per_page": 50,
+                                "total": 1,
                                 "total_pages": 1,
                             },
                         },
@@ -128,7 +128,7 @@ if response.status_code == 200:
     activities = result["data"]["activities"]
     pagination = result["meta"]["pagination"]
 
-    print(f"Total activities: {pagination['total_items']}")
+    print(f"Total activities: {pagination['total']}")
     print(f"Page {pagination['page']} of {pagination['total_pages']}")
 
     for activity in activities:
@@ -183,7 +183,7 @@ if (result.success) {
   const { pagination } = result.meta;
 
   console.log(`Document: ${document_id}`);
-  console.log(`Total activities: ${pagination.total_items}`);
+  console.log(`Total activities: ${pagination.total}`);
   console.log(`Page ${pagination.page} of ${pagination.total_pages}`);
 
   activities.forEach(activity => {
@@ -247,7 +247,7 @@ if ($result['success']) {
     $activities = $result['data']['activities'];
     $pagination = $result['meta']['pagination'];
 
-    echo "Total activities: {$pagination['total_items']}\\n";
+    echo "Total activities: {$pagination['total']}\\n";
     echo "Page {$pagination['page']} of {$pagination['total_pages']}\\n";
 
     foreach ($activities as $activity) {
@@ -322,8 +322,8 @@ async def get_document_history(
             processing_time_ms=processing_time,
             pagination=PaginationInfo(
                 page=page,
-                page_size=limit,
-                total_items=total,
+                per_page=limit,
+                total=total,
                 total_pages=total_pages,
             ),
         ),
@@ -398,8 +398,8 @@ The response includes pagination metadata with total counts and page information
                             "processing_time_ms": 32,
                             "pagination": {
                                 "page": 1,
-                                "page_size": 50,
-                                "total_items": 2,
+                                "per_page": 50,
+                                "total": 2,
                                 "total_pages": 1,
                             },
                         },
@@ -442,7 +442,7 @@ if response.status_code == 200:
     activities = result["data"]["activities"]
     pagination = result["meta"]["pagination"]
 
-    print(f"My total activities: {pagination['total_items']}")
+    print(f"My total activities: {pagination['total']}")
 
     for activity in activities:
         print(f"{activity['created_at']}: {activity['action']} - {activity['resource_type']}")
@@ -486,7 +486,7 @@ if (result.success) {
   const { activities } = result.data;
   const { pagination } = result.meta;
 
-  console.log(`My total activities: ${pagination.total_items}`);
+  console.log(`My total activities: ${pagination.total}`);
 
   activities.forEach(activity => {
     console.log(`${activity.created_at}: ${activity.action} - ${activity.resource_type}`);
@@ -546,7 +546,7 @@ if ($result['success']) {
     $activities = $result['data']['activities'];
     $pagination = $result['meta']['pagination'];
 
-    echo "My total activities: {$pagination['total_items']}\\n";
+    echo "My total activities: {$pagination['total']}\\n";
 
     foreach ($activities as $activity) {
         echo "{$activity['created_at']}: {$activity['action']} - {$activity['resource_type']}\\n";
@@ -629,8 +629,8 @@ async def get_my_activity(
             processing_time_ms=processing_time,
             pagination=PaginationInfo(
                 page=page,
-                page_size=limit,
-                total_items=total,
+                per_page=limit,
+                total=total,
                 total_pages=total_pages,
             ),
         ),

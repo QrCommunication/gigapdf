@@ -412,8 +412,8 @@ async def get_shared_with_me(
             processing_time_ms=processing_time,
             pagination=PaginationInfo(
                 page=result["page"],
-                page_size=result["per_page"],
-                total_items=result["total"],
+                per_page=result["per_page"],
+                total=result["total"],
                 total_pages=result["total_pages"],
             ),
         ),
@@ -552,8 +552,8 @@ async def get_shared_by_me(
             processing_time_ms=processing_time,
             pagination=PaginationInfo(
                 page=result["page"],
-                page_size=result["per_page"],
-                total_items=result["total"],
+                per_page=result["per_page"],
+                total=result["total"],
                 total_pages=result["total_pages"],
             ),
         ),
@@ -2031,8 +2031,8 @@ async def get_notifications(
             processing_time_ms=processing_time,
             pagination=PaginationInfo(
                 page=result["page"],
-                page_size=result["per_page"],
-                total_items=result["total"],
+                per_page=result["per_page"],
+                total=result["total"],
                 total_pages=result["total_pages"],
             ),
         ),
