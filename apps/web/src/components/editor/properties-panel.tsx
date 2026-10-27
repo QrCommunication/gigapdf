@@ -94,6 +94,14 @@ export interface PropertiesPanelProps {
    */
   getDocumentBytes?: () => Promise<Blob | null>;
   /**
+   * Identity of the document binary currently loaded in the editor (a new
+   * reference on every load or edit), `null` until the first load resolves.
+   * The "Page boxes" section waits for it and reloads when it changes: reading
+   * the bytes before the editor has them returned `null` and left the section
+   * stuck on its error state until the user clicked "Retry".
+   */
+  documentRevision?: object | null;
+  /**
    * Called with the modified PDF bytes after a page box is written, so the
    * editor can adopt the new document. Absent ⇒ the box is still written
    * server-side, but the editor keeps its current bytes until the next reload.
@@ -1139,10 +1147,13 @@ function isDraftValid(d: BoxDraft): boolean {
 function PageBoxesSection({
   pageNumber,
   getDocumentBytes,
+  documentRevision,
   onPageBoxesApplied,
 }: {
   pageNumber: number;
   getDocumentBytes: () => Promise<Blob | null>;
+  /** See {@link PropertiesPanelProps.documentRevision}; `undefined` = not tracked. */
+  documentRevision?: object | null;
   onPageBoxesApplied?: (bytes: Uint8Array) => void;
 }) {
   const t = useTranslations("editor.pageBoxes");
@@ -1163,6 +1174,9 @@ function PageBoxesSection({
   useEffect(() => {
     let aborted = false;
     setStatus("loading");
+    // The editor has not loaded the PDF yet: stay in "loading"; this effect
+    // runs again as soon as the revision changes.
+    if (documentRevision === null) return;
     void (async () => {
       try {
         const blob = await getBytesRef.current();
@@ -1196,7 +1210,7 @@ function PageBoxesSection({
     return () => {
       aborted = true;
     };
-  }, [pageNumber, reloadToken]);
+  }, [pageNumber, reloadToken, documentRevision]);
 
   const updateDraft = (kind: PageBoxKindLocal, field: keyof BoxDraft, value: string) =>
     setDrafts((prev) =>
@@ -2207,6 +2221,7 @@ export function PropertiesPanel({
   documentFonts = [],
   pageNumber,
   getDocumentBytes,
+  documentRevision,
   onPageBoxesApplied,
   onApplyTextStyle,
   onReplaceImage,
@@ -2764,6 +2779,7 @@ export function PropertiesPanel({
           <PageBoxesSection
             pageNumber={pageNumber}
             getDocumentBytes={getDocumentBytes}
+            documentRevision={documentRevision}
             onPageBoxesApplied={onPageBoxesApplied}
           />
         )}

@@ -6079,6 +6079,7 @@ export default function EditorPage() {
           onAssignElementToLayer={handleAssignElementToLayer}
           pageNumber={effectivePageIndex + 1}
           getDocumentBytes={getPreparedBlob}
+          documentRevision={currentPdfFile}
           onPageBoxesApplied={(bytes) =>
             updateCurrentPdfFile(
               new File([new Uint8Array(bytes)], currentPdfFile?.name ?? "document.pdf", {
@@ -6230,6 +6231,7 @@ export default function EditorPage() {
               onAssignElementToLayer={handleAssignElementToLayer}
               pageNumber={effectivePageIndex + 1}
               getDocumentBytes={getPreparedBlob}
+              documentRevision={currentPdfFile}
               onPageBoxesApplied={(bytes) =>
                 updateCurrentPdfFile(
                   new File(
