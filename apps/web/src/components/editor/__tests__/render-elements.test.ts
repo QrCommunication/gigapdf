@@ -470,10 +470,10 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     expect((it_.data as Record<string, unknown>).usingEmbeddedFont).toBe(false);
   });
 
-  it("shrinks an overflowing FALLBACK run to its /Widths box (floored at 0.5)", async () => {
+  it("shrinks an overflowing FALLBACK run to its /Widths box (floored at 0.7)", async () => {
     // A loose/CSS fallback measures wider than the run's real advance; it is shrunk
     // to the box so it can't overlap the next run, floored so a gross mis-measure
-    // (here 100/250 = 0.4) never crushes below 0.5.
+    // (here 100/250 = 0.4) never crushes below 0.7 (R2 legibility floor).
     const canvas = makeCanvas();
     // IText mock reporting a measured width far beyond the 100px bounds.
     class WideIText extends IText {
@@ -490,8 +490,8 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
       (o) => o instanceof WideIText,
     ) as WideIText;
-    // 100/250 = 0.4 → clamped to the 0.5 floor.
-    expect(it_.opts.scaleX).toBeCloseTo(0.5, 5);
+    // 100/250 = 0.4 → clamped to the 0.7 floor.
+    expect(it_.opts.scaleX).toBeCloseTo(0.7, 5);
     expect((it_.data as Record<string, unknown>).usingEmbeddedFont).toBe(false);
   });
 
@@ -516,8 +516,8 @@ describe("renderElementsOverlay — 1:1 fidelity (anti-doubling)", () => {
     const it_ = (canvas as unknown as { _objects: FakeObj[] })._objects.find(
       (o) => o instanceof WideIText,
     ) as WideIText;
-    // 100/250 = 0.4 → clamped to the 0.5 floor — fitted, no longer left untouched.
-    expect(it_.opts.scaleX).toBeCloseTo(0.5, 5);
+    // 100/250 = 0.4 → clamped to the 0.7 floor — fitted, no longer left untouched.
+    expect(it_.opts.scaleX).toBeCloseTo(0.7, 5);
     expect((it_.data as Record<string, unknown>).usingEmbeddedFont).toBe(true);
   });
 
@@ -2014,7 +2014,7 @@ describe("applySegmentWidthFit (pure)", () => {
   it("fits a word rendered WIDER than its /Widths box — even for an EMBEDDED font", () => {
     // The whole point vs applyFallbackWidthFit: a per-word fragment must be shrunk to
     // its /Widths advance whatever the font, so browser hmtx over-width never eats the
-    // inter-word gap. 110 measured vs 100 target → exact ratio (inside the 0.5 floor).
+    // inter-word gap. 110 measured vs 100 target → exact ratio (inside the 0.7 floor).
     const obj = fitObj(110);
     const scaleX = applySegmentWidthFit(obj, 100);
     expect(scaleX).toBeCloseTo(100 / 110, 5);
@@ -2027,11 +2027,11 @@ describe("applySegmentWidthFit (pure)", () => {
     expect(obj.scaleX).toBe(1);
   });
 
-  it("clamps the shrink at a 0.5 floor so a mis-measured fallback never collapses", () => {
-    const obj = fitObj(400); // ratio 0.25 → clamped to 0.5
+  it("clamps the shrink at a 0.7 floor so a mis-measured fallback never collapses", () => {
+    const obj = fitObj(400); // ratio 0.25 → clamped to 0.7
     const scaleX = applySegmentWidthFit(obj, 100);
-    expect(scaleX).toBe(0.5);
-    expect(obj.scaleX).toBe(0.5);
+    expect(scaleX).toBe(0.7);
+    expect(obj.scaleX).toBe(0.7);
   });
 
   it("is a no-op when the measured width is unknown (0)", () => {
