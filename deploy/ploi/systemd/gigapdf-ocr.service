@@ -1,0 +1,33 @@
+[Unit]
+Description=GigaPDF OCR Engine (gigapdf-ocr-rten, host-side PaddleOCR via RTen)
+After=network.target
+
+[Service]
+Type=simple
+User=ploi
+Group=ploi
+WorkingDirectory=/opt/gigapdf-ocr
+# systemd reads this file as root before dropping to User=, so the 600 .env is fine.
+# The binary reads OCR_MODELS_DIR and OCR_BIND from it; the web app calls
+# OCR_SERVICE_URL (default http://127.0.0.1:8077).
+EnvironmentFile=/home/ploi/giga-pdf.com/.env
+ExecStart=/opt/gigapdf-ocr/bin/ocr_serve
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=300
+StandardOutput=journal
+StandardError=journal
+
+# The Ploi host has 3 GB of RAM shared with web, API and Celery: cap the OCR
+# engine so a large page cannot push the other services into swap or the OOM killer.
+MemoryHigh=1G
+MemoryMax=1536M
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
