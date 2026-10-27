@@ -17,6 +17,7 @@ import { Loader2, ScanText, AlertCircle } from "lucide-react";
 import { api } from "@/lib/api";
 import { clientLogger } from "@/lib/client-logger";
 import { downloadDocumentBytes } from "./download-document-bytes";
+import { SCRIPT_CHOICES, SCRIPTS_FOR_CHOICE, type ScriptChoice } from "@/lib/ocr-scripts";
 
 /**
  * Make a stored GED document searchable via OCR — the user-facing counterpart of
@@ -36,46 +37,6 @@ type Dpi = 144 | 200 | 300;
 
 /** Whether the searchable result replaces the stored doc or is downloaded. */
 type OutputMode = "replace" | "download";
-
-/**
- * The 12 writing systems offered in the UI. Several distinct choices share a
- * single bundled OCR model (Latin/Cyrillic → "alpha"; Arabic/Hebrew → "arabic";
- * Chinese simplified/traditional → "cjk"), so each maps to the concrete
- * OcrScript identifiers the engine loads — mirrors the editor OCR dialog.
- */
-type ScriptChoice =
-  | "latin"
-  | "cyrillic"
-  | "arabic"
-  | "hebrew"
-  | "devanagari"
-  | "tamil"
-  | "telugu"
-  | "kannada"
-  | "chinese_simplified"
-  | "chinese_traditional"
-  | "japanese"
-  | "korean";
-
-/** UI choice → bundled OcrScript identifier(s) understood by the engine. */
-const SCRIPT_CHOICES: { value: ScriptChoice; scripts: string[] }[] = [
-  { value: "latin", scripts: ["alpha"] },
-  { value: "cyrillic", scripts: ["alpha"] },
-  { value: "arabic", scripts: ["arabic"] },
-  { value: "hebrew", scripts: ["arabic"] },
-  { value: "devanagari", scripts: ["devanagari"] },
-  { value: "tamil", scripts: ["tamil"] },
-  { value: "telugu", scripts: ["telugu"] },
-  { value: "kannada", scripts: ["kannada"] },
-  { value: "chinese_simplified", scripts: ["cjk"] },
-  { value: "chinese_traditional", scripts: ["cjk"] },
-  { value: "japanese", scripts: ["japanese"] },
-  { value: "korean", scripts: ["korean"] },
-];
-
-const SCRIPTS_FOR_CHOICE: Record<ScriptChoice, string[]> = Object.fromEntries(
-  SCRIPT_CHOICES.map((c) => [c.value, c.scripts]),
-) as Record<ScriptChoice, string[]>;
 
 export interface GedOcrDialogProps {
   open: boolean;

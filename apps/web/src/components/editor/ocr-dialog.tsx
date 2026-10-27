@@ -11,6 +11,7 @@ import {
   downloadBlob,
 } from "@giga-pdf/api";
 import type { DocumentLanguageInfo } from "@giga-pdf/types";
+import { SCRIPT_CHOICES, SCRIPTS_FOR_CHOICE, type ScriptChoice } from "@/lib/ocr-scripts";
 
 export interface OcrDialogProps {
   open: boolean;
@@ -50,48 +51,6 @@ type OutputMode = "text" | "searchable" | "editable";
  * (historical default) or only the page currently focused in the editor.
  */
 type OcrScope = "document" | "currentPage";
-
-/**
- * The 12 writing systems offered in the UI. Several distinct user choices share
- * a single bundled OCR model (Latin and Cyrillic both use "alpha"; Arabic and
- * Hebrew both use "arabic"; Chinese simplified and traditional both use "cjk"),
- * so each choice maps to the concrete OcrScript identifiers the engine loads.
- * `scripts` is threaded through to makeSearchablePdf / makeEditableOcrPdf so the
- * engine only loads the relevant model(s) instead of every bundled one.
- */
-type ScriptChoice =
-  | "latin"
-  | "cyrillic"
-  | "arabic"
-  | "hebrew"
-  | "devanagari"
-  | "tamil"
-  | "telugu"
-  | "kannada"
-  | "chinese_simplified"
-  | "chinese_traditional"
-  | "japanese"
-  | "korean";
-
-/** UI choice → bundled OcrScript identifier(s) understood by the engine. */
-const SCRIPT_CHOICES: { value: ScriptChoice; scripts: string[] }[] = [
-  { value: "latin", scripts: ["alpha"] },
-  { value: "cyrillic", scripts: ["alpha"] },
-  { value: "arabic", scripts: ["arabic"] },
-  { value: "hebrew", scripts: ["arabic"] },
-  { value: "devanagari", scripts: ["devanagari"] },
-  { value: "tamil", scripts: ["tamil"] },
-  { value: "telugu", scripts: ["telugu"] },
-  { value: "kannada", scripts: ["kannada"] },
-  { value: "chinese_simplified", scripts: ["cjk"] },
-  { value: "chinese_traditional", scripts: ["cjk"] },
-  { value: "japanese", scripts: ["japanese"] },
-  { value: "korean", scripts: ["korean"] },
-];
-
-const SCRIPTS_FOR_CHOICE: Record<ScriptChoice, string[]> = Object.fromEntries(
-  SCRIPT_CHOICES.map((c) => [c.value, c.scripts]),
-) as Record<ScriptChoice, string[]>;
 
 /**
  * Map a detected `DocumentLanguage.script` (engine taxonomy) to the OCR writing

@@ -22,8 +22,9 @@
  *                               `pages` is ignored (automatic selection).
  *   pages      — JSON array of 1-based page numbers (optional, default all;
  *                output="text" only)
- *   lang       — OCR language hint (default "fra+eng"; output="text" only,
- *                kept for compatibility — the engine is script-based)
+ *   lang       — OCR language hint (default "fra+eng"). For searchable/editable
+ *                output it selects the recognizer when `scripts` is absent
+ *                (ISO 639-2 codes → writing system, see lib/ocr-scripts.ts).
  *   dpi        — 144 | 200 | 300 (default 144)
  *   format     — "text" | "hocr" (default "text"; output="text" only)
  *   force      — "true" to OCR every page even those that already contain
@@ -138,6 +139,7 @@ import { requireSession } from '@/lib/auth-helpers';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
 import { serverLogger } from '@/lib/server-logger';
 import { validatePdfFile } from '@/lib/request-validation';
+import { scriptsFromLanguageCodes } from '@/lib/ocr-scripts';
 
 export async function POST(request: Request): Promise<Response> {
   const authResult = await requireSession();
@@ -191,9 +193,12 @@ export async function POST(request: Request): Promise<Response> {
     //  editable   → scan masked + real visible text laid on top (editable)
     if (output === 'searchable' || output === 'editable') {
       const force = (formData.get('force') as string | null) === 'true';
-      // Restrict OCR to the chosen writing systems when provided; otherwise the
-      // engine loads every bundled model and auto-detects (default behaviour).
-      const languages = parseScripts(formData.get('scripts') as string | null);
+      // Writing systems to recognize: the explicit `scripts` (OCR dialogs), else
+      // the ones implied by `lang` (tools page, default "fra+eng"). Never leave
+      // it empty: the service's per-line auto-selection read French scans with
+      // the Hebrew model (garbage text, ~80 s per page instead of ~10 s).
+      const languages =
+        parseScripts(formData.get('scripts') as string | null) ?? scriptsFromLanguageCodes(lang);
       // Opt-in Latin handwriting recognition (printed text only by default).
       const handwriting = (formData.get('handwriting') as string | null) === 'true';
       // Optional "current page only" scope: restrict OCR to a 1-based page range.
