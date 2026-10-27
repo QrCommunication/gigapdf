@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Card,
   CardContent,
@@ -121,6 +121,7 @@ export function DocumentCard({
 }: DocumentCardProps) {
   const router = useRouter();
   const t = useTranslations("documents.card");
+  const locale = useLocale();
   const tToasts = useTranslations("documents.toasts");
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -558,8 +559,8 @@ export function DocumentCard({
           )}
           <div className="space-y-1 text-sm text-muted-foreground">
             <p>{t("size")}: {formatBytes(size)}</p>
-            <p>{t("created")}: {formatDate(createdAt)}</p>
-            <p>{t("modified")}: {formatDate(updatedAt)}</p>
+            <p>{t("created")}: {formatDate(createdAt, locale)}</p>
+            <p>{t("modified")}: {formatDate(updatedAt, locale)}</p>
           </div>
           <TagChips tags={tags} className="mt-2" />
         </CardContent>

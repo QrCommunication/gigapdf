@@ -3,7 +3,7 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 import {
   useInfiniteQuery,
   useMutation,
@@ -141,6 +141,7 @@ export default function DocumentPage({ params }: DocumentPageProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const t = useTranslations("documents.detail");
+  const locale = useLocale();
   const tCard = useTranslations("documents.card");
   const tToasts = useTranslations("documents.toasts");
   const { toast } = useToast();
@@ -406,7 +407,7 @@ export default function DocumentPage({ params }: DocumentPageProps) {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               {latestVersion && (
                 <span>
-                  {t("lastModified", { date: formatDate(latestVersion.created_at) })}
+                  {t("lastModified", { date: formatDate(latestVersion.created_at, locale) })}
                 </span>
               )}
               {currentVersion && <span>{formatBytes(currentVersion.size_bytes)}</span>}
@@ -519,12 +520,12 @@ export default function DocumentPage({ params }: DocumentPageProps) {
               <Separator />
               <MetadataRow
                 label={t("info.created")}
-                value={oldestVersion ? formatDate(oldestVersion.created_at) : "--"}
+                value={oldestVersion ? formatDate(oldestVersion.created_at, locale) : "--"}
               />
               <Separator />
               <MetadataRow
                 label={t("info.lastModified")}
-                value={latestVersion ? formatDate(latestVersion.created_at) : "--"}
+                value={latestVersion ? formatDate(latestVersion.created_at, locale) : "--"}
               />
             </CardContent>
           </Card>
@@ -619,7 +620,7 @@ export default function DocumentPage({ params }: DocumentPageProps) {
                           )}
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {formatDate(version.created_at)} ·{" "}
+                          {formatDate(version.created_at, locale)} ·{" "}
                           {formatBytes(version.size_bytes)}
                         </p>
                         {version.comment && (

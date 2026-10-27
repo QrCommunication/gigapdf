@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
   Button,
@@ -57,6 +57,7 @@ type SourceFilter = "all" | "direct" | "organization";
 
 export default function SharedWithMePage() {
   const t = useTranslations("shared");
+  const locale = useLocale();
   const router = useRouter();
 
   // Data states
@@ -355,7 +356,7 @@ export default function SharedWithMePage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Clock className="h-3 w-3" />
-                        <span>{formatDate(new Date(doc.shared_at))}</span>
+                        <span>{formatDate(new Date(doc.shared_at), locale)}</span>
                       </div>
                       {doc.file_size_bytes && (
                         <p>{formatBytes(doc.file_size_bytes)}</p>

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Button,
   Dialog,
@@ -217,6 +217,7 @@ export function DocumentTable({
 }: DocumentTableProps) {
   const router = useRouter();
   const t = useTranslations("documents");
+  const locale = useLocale();
   const tCard = useTranslations("documents.card");
   const tToasts = useTranslations("documents.toasts");
   const { toast } = useToast();
@@ -619,10 +620,10 @@ export function DocumentTable({
                     }
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {formatDate(folder.createdAt)}
+                    {formatDate(folder.createdAt, locale)}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {formatDate(folder.updatedAt)}
+                    {formatDate(folder.updatedAt, locale)}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -730,10 +731,10 @@ export function DocumentTable({
                   {formatBytes(doc.size)}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {formatDate(doc.createdAt)}
+                  {formatDate(doc.createdAt, locale)}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {formatDate(doc.updatedAt)}
+                  {formatDate(doc.updatedAt, locale)}
                 </TableCell>
                 <TableCell>
                   <DropdownMenu>

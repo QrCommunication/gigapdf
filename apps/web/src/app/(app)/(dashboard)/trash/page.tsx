@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { storageKeys } from "@giga-pdf/api";
 import {
@@ -43,6 +43,7 @@ function trashKey(page: number) {
 
 export default function TrashPage() {
   const t = useTranslations("trash");
+  const locale = useLocale();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -180,7 +181,7 @@ export default function TrashPage() {
                   <CardContent>
                     <div className="space-y-1 text-sm text-muted-foreground">
                       {doc.deleted_at && (
-                        <p>{t("deletedAt", { date: formatDate(doc.deleted_at) })}</p>
+                        <p>{t("deletedAt", { date: formatDate(doc.deleted_at, locale) })}</p>
                       )}
                       <p>{formatBytes(doc.file_size_bytes || 0)}</p>
                     </div>
