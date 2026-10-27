@@ -43,23 +43,9 @@ import {
 } from '@giga-pdf/pdf-engine';
 import { serverLogger } from '@/lib/server-logger';
 import { attachPageBlockGroups } from '@/lib/pdf-block-groups';
+import { PYTHON_BACKEND_URL } from '@/lib/python-backend-url';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
-
-/**
- * Internal URL of the Python FastAPI backend.
- *
- * Dev  : http://localhost:8000  (Python runs alongside Next.js)
- * Prod : http://127.0.0.1:8000  (loopback — nginx routes /api/v1/ externally,
- *         but we bypass nginx for the internal server-to-server call)
- *
- * Override via PYTHON_BACKEND_URL env var (server-side only, no NEXT_PUBLIC_).
- */
-const PYTHON_BACKEND_URL =
-  process.env.PYTHON_BACKEND_URL ??
-  (process.env.NODE_ENV === 'production'
-    ? 'http://127.0.0.1:8000'
-    : 'http://localhost:8000');
 
 /** Maximum time (ms) to wait for Python to stream back the PDF bytes. */
 const DOWNLOAD_TIMEOUT_MS = 30_000;

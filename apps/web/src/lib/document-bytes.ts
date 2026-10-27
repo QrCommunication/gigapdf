@@ -1,17 +1,7 @@
 import 'server-only';
 
 import { serverLogger } from '@/lib/server-logger';
-
-/**
- * Internal URL of the Python FastAPI backend (authoritative for byte storage).
- * Dev: localhost:8000 — Prod: loopback 127.0.0.1:8000 (bypasses nginx for the
- * server-to-server call). Override via PYTHON_BACKEND_URL (server-only).
- */
-const PYTHON_BACKEND_URL =
-  process.env.PYTHON_BACKEND_URL ??
-  (process.env.NODE_ENV === 'production'
-    ? 'http://127.0.0.1:8000'
-    : 'http://localhost:8000');
+import { PYTHON_BACKEND_URL } from '@/lib/python-backend-url';
 
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 
