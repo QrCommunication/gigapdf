@@ -8,11 +8,12 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { useQuota } from "@/hooks/use-quota";
 
 // Auth par cookies + locale par cookie → rendu dynamique obligatoire.
 // Explicite depuis le retrait du force-dynamic global du root layout.
@@ -25,19 +26,29 @@ export default function DashboardLayout(props: { children?: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { quota } = useQuota();
 
-  const navItems = [
-    { name: t("dashboard"), href: "/dashboard", icon: Home },
-    { name: t("documents"), href: "/documents", icon: FileText },
-    { name: t("universalMerge"), href: "/merge", icon: Combine },
-    { name: t("semanticSearch"), href: "/search", icon: ScanSearch },
-    { name: t("sharedWithMe"), href: "/shared", icon: Share2 },
-    { name: t("trash"), href: "/trash", icon: Trash2 },
-    { name: t("organization"), href: "/organization", icon: Building2 },
-    { name: t("settings"), href: "/settings", icon: Settings },
-    { name: t("developers"), href: "/developers", icon: Code2 },
-    { name: t("billing"), href: "/billing", icon: CreditCard },
-  ];
+  // Masquer "Organization" aux comptes gratuits (plan_type === "free").
+  // "Billing" reste toujours visible pour permettre l'upgrade.
+  const isPaidPlan = quota?.plan_type !== "free";
+
+  const navItems = useMemo(() => {
+    const items = [
+      { name: t("dashboard"), href: "/dashboard", icon: Home },
+      { name: t("documents"), href: "/documents", icon: FileText },
+      { name: t("universalMerge"), href: "/merge", icon: Combine },
+      { name: t("semanticSearch"), href: "/search", icon: ScanSearch },
+      { name: t("sharedWithMe"), href: "/shared", icon: Share2 },
+      { name: t("trash"), href: "/trash", icon: Trash2 },
+      ...(isPaidPlan
+        ? [{ name: t("organization"), href: "/organization", icon: Building2 }]
+        : []),
+      { name: t("settings"), href: "/settings", icon: Settings },
+      { name: t("developers"), href: "/developers", icon: Code2 },
+      { name: t("billing"), href: "/billing", icon: CreditCard },
+    ];
+    return items;
+  }, [t, isPaidPlan]);
 
   const handleSignOut = async () => {
     await signOut();
