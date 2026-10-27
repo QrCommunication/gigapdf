@@ -30,13 +30,27 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, backref, mapped_column, relationship
 
 # Embedding dimensionality — must match EmbeddingService.DIMENSION
 # (intfloat/multilingual-e5-small = 384) and the vector(384) column in
 # migration 019_add_semantic_search.
 EMBEDDING_DIMENSION = 384
 
+
+
+def _db_cascaded_backref(name: str):
+    """Backref for a child whose FK to stored_documents is ON DELETE CASCADE.
+
+    ``passive_deletes="all"`` leaves the children entirely to PostgreSQL, even
+    when they are loaded in the session (``True`` still nulls loaded ones).
+    With the default cascade, ``session.delete(document)`` first set their FK
+    to NULL: a 500 on NOT NULL columns (document_layers,
+    document_share_invitations) whenever a document was permanently deleted
+    or purged from the trash, and orphan rows on nullable ones
+    (share_notifications, activity_logs).
+    """
+    return backref(name, passive_deletes="all")
 
 class Base(DeclarativeBase):
     """Base class for all database models."""
@@ -342,7 +356,7 @@ class DocumentShareInvitation(Base):
 
     # Relationships
     document: Mapped["StoredDocument"] = relationship(
-        "StoredDocument", backref="share_invitations"
+        "StoredDocument", backref=_db_cascaded_backref("share_invitations")
     )
     shares: Mapped[list["DocumentShare"]] = relationship(
         "DocumentShare", back_populates="invitation"
@@ -395,7 +409,7 @@ class ShareNotification(Base):
 
     # Relationships
     document: Mapped[Optional["StoredDocument"]] = relationship(
-        "StoredDocument", backref="share_notifications"
+        "StoredDocument", backref=_db_cascaded_backref("share_notifications")
     )
     invitation: Mapped[Optional["DocumentShareInvitation"]] = relationship(
         "DocumentShareInvitation", backref="notifications"
@@ -705,7 +719,7 @@ class ActivityLog(Base):
 
     # Relationships
     document: Mapped[Optional["StoredDocument"]] = relationship(
-        "StoredDocument", backref="activity_logs"
+        "StoredDocument", backref=_db_cascaded_backref("activity_logs")
     )
 
     __table_args__ = (
@@ -848,7 +862,7 @@ class DocumentLayers(Base):
 
     # Relationship to the owning document (1:1).
     document: Mapped["StoredDocument"] = relationship(
-        "StoredDocument", backref="layers"
+        "StoredDocument", backref=_db_cascaded_backref("layers")
     )
 
     __table_args__ = (
