@@ -29,12 +29,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v6.0.9
         # Runner system Node bumped to 22 (2026-06-13, image qrcom/github-runner:noble-node22)
         # → v6's @pnpm/exe bootstrap works. No version input: pnpm reads
         # packageManager (pnpm@10.28.0) from package.json (single source of truth).
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -67,7 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -94,12 +94,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v6.0.9
         # Runner system Node bumped to 22 (2026-06-13, image qrcom/github-runner:noble-node22)
         # → v6's @pnpm/exe bootstrap works. No version input: pnpm reads
         # packageManager (pnpm@10.28.0) from package.json (single source of truth).
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: 'pnpm'
