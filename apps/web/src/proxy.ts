@@ -2,6 +2,7 @@ import createIntlMiddleware from "next-intl/middleware";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { routing } from "./i18n/routing";
+import { APP_ROUTES } from "./lib/app-routes";
 
 /**
  * Proxy Next.js 16 — périmètre PUBLIC uniquement.
@@ -27,36 +28,6 @@ const intlMiddleware = createIntlMiddleware(routing);
 
 /** Pages d'auth : un utilisateur déjà connecté est renvoyé vers le dashboard. */
 const AUTH_ROUTES = ["/login", "/register", "/forgot-password"];
-
-/**
- * Premiers segments de TOUTES les routes (app) — non localisées : servies
- * directement, jamais réécrites par next-intl (sinon elles tombent dans le
- * périmètre statique (site)/[locale] → 404 natif). Source de vérité complète,
- * à garder synchronisée avec apps/web/src/app/(app)/(dashboard)/* (+ editor,
- * embed). Toute nouvelle page-outil DOIT être ajoutée ici. Le `matcher`
- * ci-dessous en pré-exclut déjà quelques-unes (perf) ; ce Set couvre le reste —
- * notamment les pages-outils, longtemps absentes du matcher → 404 silencieux.
- */
-const APP_ROUTES = new Set<string>([
-  // Conteneurs app
-  "dashboard", "documents", "search", "settings", "billing", "organization",
-  "developers", "shared", "trash", "monitoring", "forbidden", "editor", "embed",
-  // Pages à token, URL nue JAMAIS localisée (liens copiés/e-mailés) :
-  // /invitations/[token] (landing invité, sous (app)) et /public/[token]
-  // (viewer public sans auth, root layout dédié). Sans ces entrées, next-intl
-  // réécrit /public/xxx → /fr/public/xxx → 404 (périmètre statique (site)).
-  "invitations", "public",
-  // Outils — édition / sécurité / pages
-  "merge", "split", "compress", "protect", "unlock", "sign", "watermark", "ocr",
-  "pdf-a", "extract-pages", "organize-pages",
-  // Outils — conversion VERS pdf
-  "image-to-pdf", "office-to-pdf", "html-to-pdf", "text-to-pdf", "csv-to-pdf",
-  "markdown-to-pdf", "rtf-pdf",
-  // Outils — conversion DEPUIS pdf
-  "pdf-to-word", "pdf-to-excel", "pdf-to-powerpoint", "pdf-to-image",
-  "pdf-to-odt", "pdf-to-ods", "pdf-to-odp", "pdf-to-html", "pdf-to-rtf",
-  "pdf-to-text", "pdf-to-markdown", "pdf-to-csv", "pdf-to-epub",
-]);
 
 function getSessionToken(request: NextRequest) {
   const possibleCookieNames = [
@@ -128,6 +99,6 @@ export const config = {
   // sans collision avec la page d'accès refusé MARKETING servie à /fr/403 et
   // /en/403 (le bare /403 reste, lui, géré par next-intl → marketing fr).
   matcher: [
-    "/((?!api|backend-api|dashboard|documents|search|merge|editor|settings|billing|organization|developers|shared|trash|monitoring|embed|forbidden|_next|_vercel|.*\\..*).*)",
+    "/((?!api|backend-api|dashboard|documents|search|merge|editor|settings|billing|organization|developers|shared|trash|embed|forbidden|_next|_vercel|.*\\..*).*)",
   ],
 };
