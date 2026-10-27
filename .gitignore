@@ -87,6 +87,10 @@ temp/
 # Deploy (keep scripts, ignore secrets)
 deploy/.env.production
 
+# Local Ploi panel automation: holds account credentials, never tracked
+# (purged from the whole history on 2026-10-27).
+scripts/ploi-login.ts
+
 # Production env files (secrets - copy via SSH)
 apps/web/.env.production
 apps/admin/.env.production
