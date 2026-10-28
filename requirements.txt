@@ -8,7 +8,7 @@ pydantic-settings>=2.14.2  # GHSA-4xgf-cpjx-pc3j (NestedSecrets symlink path tra
 # PDF manipulation
 pypdf>=6.13.3  # GHSA-jm82-fx9c-mx94 (memory exhaustion DoS on streams without /Length)
 pikepdf>=8.0.0
-Pillow>=10.2.0
+Pillow>=13.0.0  # 39 advisories fixed in 13.0.0 (PYSEC-2026-4326…4343, CVE-2026-112895); pulled by pikepdf, fastembed
 # fontTools: repair subset TTFs extracted from PDFs before serving them to
 # the browser FontFace API. PDF subset fonts (Type0/CIDFontType2) often have
 # incomplete cmap/name/OS-2 tables that pikepdf preserves verbatim but
@@ -39,13 +39,16 @@ pgvector>=0.3.0
 # offline to embed OCR text. The model is downloaded once into
 # FASTEMBED_CACHE_DIR, then cached. (fastembed has no multilingual-e5-small;
 # see app/services/embeddings.py for the model-choice rationale.)
-# Pinned to the 0.8.x line on purpose: 0.8.0 switched this model to *mean*
+# Pinned to one minor line on purpose: 0.8.0 switched this model to *mean*
 # pooling (the config-correct pooling for this checkpoint; older releases used
 # CLS, which produced different vectors). The pin keeps embedding behaviour —
 # and therefore the vectors already stored in ocr_blocks — reproducible across
 # deploys; a future minor could change pooling again and silently invalidate
-# the index. Server provisioning + caveats: docs/semantic-search-setup.md.
-fastembed>=0.8.0,<0.9
+# the index. A bump must pass tests/unit/services/test_embedding_stability.py
+# (reference vectors from 0.8.1): 0.9.1 reproduces them exactly (2026-10-28),
+# and is required by Pillow 13 (0.8.x caps Pillow < 13).
+# Server provisioning + caveats: docs/semantic-search-setup.md.
+fastembed>=0.9.1,<0.10
 
 # Authentication
 PyJWT[crypto]>=2.13.0
