@@ -160,7 +160,9 @@ async def delete_my_account(
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[AccountErasureResponse]:
     """Erase the caller's own account."""
-    if getattr(user, "auth_method", "session") != "session":
+    # Deny unless the identity explicitly comes from an app session (API keys
+    # are also refused upstream by api_key_scopes, defence in depth).
+    if getattr(user, "auth_method", None) != "session":
         raise AppSessionRequiredError()
 
     report = await account_erasure_service.erase(db, user.user_id)

@@ -63,6 +63,14 @@ def test_platform_admin_routes_are_never_reachable(method: str, path: str) -> No
     assert api_key_scope_denial(method, path, "read,write,admin") is not None
 
 
+@pytest.mark.parametrize("method", ["GET", "DELETE"])
+def test_account_routes_are_never_reachable_with_an_api_key(method: str) -> None:
+    # Account erasure must come from the account holder's own session.
+    assert required_api_key_scope(method, "/api/v1/account") is None
+    assert api_key_scope_denial(method, "/api/v1/account", "read,write,admin") is not None
+    assert required_api_key_scope("GET", "/api/v1/accounting") == "read"
+
+
 # ---------------------------------------------------------------------------
 # parse_scopes
 # ---------------------------------------------------------------------------

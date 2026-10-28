@@ -34,8 +34,10 @@ ADMIN_SCOPE_PREFIXES: tuple[str, ...] = (
     "/api/v1/billing",
 )
 
-# Route prefixes that an API key can never reach.
-API_KEY_FORBIDDEN_PREFIXES: tuple[str, ...] = ("/api/v1/admin",)
+# Route prefixes that an API key can never reach: platform administration,
+# and the caller's own account (erasure needs the account holder's session,
+# whatever the key's scopes — the route also checks auth_method).
+API_KEY_FORBIDDEN_PREFIXES: tuple[str, ...] = ("/api/v1/admin", "/api/v1/account")
 
 
 def _matches_prefix(path: str, prefix: str) -> bool:
@@ -97,7 +99,7 @@ def api_key_scope_denial(method: str, path: str, raw_scopes: str | None) -> str 
     """
     required = required_api_key_scope(method, path)
     if required is None:
-        return "Platform administration endpoints cannot be accessed with an API key."
+        return f"{method.upper()} {path} cannot be accessed with an API key."
     if required not in granted_scopes(raw_scopes):
         return f"This API key lacks the '{required}' scope required for {method.upper()} {path}."
     return None
