@@ -61,14 +61,9 @@ import {
 import { requireSession } from '@/lib/auth-helpers';
 import { serverLogger } from '@/lib/server-logger';
 import { sanitizeContentDisposition } from '@/lib/content-disposition';
+import { PYTHON_BACKEND_URL } from '@/lib/python-backend-url';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
-
-const PYTHON_BACKEND_URL =
-  process.env.PYTHON_BACKEND_URL ??
-  (process.env.NODE_ENV === 'production'
-    ? 'http://127.0.0.1:8000'
-    : 'http://localhost:8000');
 
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 
