@@ -17,6 +17,7 @@ sys.path.insert(0, str(project_root))
 load_dotenv(project_root / ".env")
 
 # Import models for autogenerate
+from app.core.database_url import sync_database_url
 from app.models.database import Base
 
 # Alembic Config object
@@ -25,9 +26,7 @@ config = context.config
 # Override sqlalchemy.url from environment
 database_url = os.getenv("DATABASE_URL")
 if database_url:
-    # Ensure it's not async (Alembic uses sync driver)
-    if "postgresql+asyncpg" in database_url:
-        database_url = database_url.replace("postgresql+asyncpg", "postgresql")
+    database_url = sync_database_url(database_url)
     # Escape % for ConfigParser interpolation
     database_url_escaped = database_url.replace("%", "%%")
     config.set_main_option("sqlalchemy.url", database_url_escaped)
