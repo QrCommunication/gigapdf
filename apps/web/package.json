@@ -14,8 +14,6 @@
     "test:coverage": "vitest run --coverage",
     "clean": "rm -rf .next",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate || true && node -e \"const{cpSync}=require('fs');cpSync(require.resolve('@qrcommunication/gigapdf-lib/gigapdf.wasm'),'public/gigapdf.wasm');\""
   },

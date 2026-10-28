@@ -281,7 +281,7 @@ The web app integrates with shared packages:
 2. **Build Packages**: Run `pnpm build:packages`
 3. **Setup Database**: Create PostgreSQL database
 4. **Configure Environment**: Copy and edit `.env.example`
-5. **Run Migrations**: `pnpm db:push` in web directory
+5. **Run Migrations**: `alembic upgrade head` from the repository root
 6. **Start Dev Server**: `pnpm dev:web` from root
 
 ### Integration Tasks
@@ -316,8 +316,6 @@ pnpm clean            # Clean build artifacts
 
 # Database
 pnpm db:generate      # Generate Prisma client
-pnpm db:push          # Push schema to database
-pnpm db:migrate       # Run migrations
 pnpm db:studio        # Open Prisma Studio
 ```
 

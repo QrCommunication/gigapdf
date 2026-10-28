@@ -14,11 +14,13 @@
  *     `{ id, userId }`, so a caller can never read or delete another user's row.
  *   - The dataUrl is never written to logs.
  *
- * Resilience:
- *   The shared Postgres database may not have the `user_signatures` table yet —
- *   it is created later via a one-time additive `prisma db push`. Until then,
- *   Prisma raises P2021 ("table does not exist"); we degrade gracefully instead
- *   of 500-ing (GET → empty list, POST → 503, DELETE → idempotent no-op).
+ * Storage:
+ *   The `user_signatures` table is created by Alembic
+ *   (migrations/versions/025_prisma_owned_tables.py). A missing table is a
+ *   deployment fault and answers 500 with an error log, like any other
+ *   database failure. It used to be hidden (GET → empty list, DELETE → 200),
+ *   which kept the table missing in production unnoticed after the move to
+ *   the Ploi host (2026-10-28).
  */
 
 import { NextResponse } from 'next/server';
@@ -91,19 +93,6 @@ function serialize(row: UserSignatureRow): UserSignatureDTO {
     height: row.height,
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
   };
-}
-
-/**
- * True when Prisma reports the underlying table is missing (P2021). This lets
- * the route degrade gracefully before the one-time `prisma db push` has run.
- */
-function isMissingTableError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === 'P2021'
-  );
 }
 
 /** Non-leaking error metadata for logs — never carries the dataUrl or query. */
@@ -191,10 +180,6 @@ export async function GET(): Promise<Response> {
 
     return NextResponse.json({ signatures: rows.map(serialize) });
   } catch (error: unknown) {
-    if (isMissingTableError(error)) {
-      // Table not provisioned yet — behave as if the user has no signatures.
-      return NextResponse.json({ signatures: [] });
-    }
     serverLogger.error('api.user.signatures.get', safeErrorMeta(error));
     return jsonError('Failed to load signatures.', 500);
   }
@@ -232,9 +217,6 @@ export async function POST(request: Request): Promise<Response> {
 
     return NextResponse.json({ signature: serialize(row) }, { status: 201 });
   } catch (error: unknown) {
-    if (isMissingTableError(error)) {
-      return jsonError('Signature storage is not available yet.', 503);
-    }
     // NB: never log `dataUrl` (or the raw error, which may echo the query).
     serverLogger.error('api.user.signatures.post', safeErrorMeta(error));
     return jsonError('Failed to save signature.', 500);
@@ -258,10 +240,6 @@ export async function DELETE(request: Request): Promise<Response> {
     await prisma.userSignature.deleteMany({ where: { id, userId } });
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
-    if (isMissingTableError(error)) {
-      // Nothing can exist yet — treat as an idempotent no-op delete.
-      return NextResponse.json({ ok: true });
-    }
     serverLogger.error('api.user.signatures.delete', safeErrorMeta(error));
     return jsonError('Failed to delete signature.', 500);
   }

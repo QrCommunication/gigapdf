@@ -14,6 +14,9 @@ export const auth = betterAuth({
         type: "string",
         required: false,
         defaultValue: "admin",
+        // Never settable from a request body: the role grants access to the
+        // back office. Accounts are provisioned by scripts/create-super-admin.ts.
+        input: false,
       },
     },
   },
@@ -32,6 +35,9 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
+    // Back office: no public sign-up. Any sign-up would create an AdminUser,
+    // whose default role ("admin") passes the proxy role check.
+    disableSignUp: true,
   },
   secret: process.env.BETTER_AUTH_SECRET!,
   baseURL: process.env.BETTER_AUTH_URL!,

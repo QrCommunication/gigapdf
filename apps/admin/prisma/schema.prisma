@@ -1,3 +1,14 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// This schema only READS the shared database: Alembic creates every table.
+// The admin Better Auth tables (`admin_users`, `admin_accounts`,
+// `admin_sessions`, `admin_verification`) are provisioned by
+// migrations/versions/025_prisma_owned_tables.py — changing one of them needs
+// a new Alembic migration (tests/integration/
+// test_migration_025_prisma_owned_tables.py fails otherwise). Never run
+// `prisma db push` / `prisma migrate`: they would realign the whole database,
+// SQLAlchemy tables included, on this schema.
+// ─────────────────────────────────────────────────────────────────────────────
+
 generator client {
   provider = "prisma-client-js"
   output   = "../node_modules/.prisma/admin-client"

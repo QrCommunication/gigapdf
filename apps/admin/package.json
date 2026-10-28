@@ -13,12 +13,9 @@
     "postinstall": "prisma generate || true",
     "clean": "rm -rf .next",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "seed:admin": "tsx scripts/seed-super-admin.ts",
     "create:admin": "tsx scripts/create-super-admin.ts",
-    "setup": "pnpm db:generate && pnpm db:push && pnpm seed:admin"
+    "setup": "pnpm db:generate && pnpm create:admin"
   },
   "dependencies": {
     "@giga-pdf/api": "workspace:*",

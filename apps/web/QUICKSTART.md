@@ -59,9 +59,11 @@ Make sure PostgreSQL is running and the database exists:
 # Create database if it doesn't exist
 createdb gigapdf
 
-# Generate Prisma client and push schema
+# Create every table (from the repository root, Python venv active), then
+# generate the Prisma client. Never `prisma db push`: the database is shared
+# with the backend.
+alembic upgrade head
 pnpm db:generate
-pnpm db:push
 ```
 
 ### 5. Start Development Server
@@ -192,7 +194,6 @@ apps/web/
 | `pnpm lint` | Run ESLint |
 | `pnpm type-check` | Check TypeScript types |
 | `pnpm db:generate` | Generate Prisma client |
-| `pnpm db:push` | Push schema to database |
 | `pnpm db:studio` | Open Prisma Studio |
 
 ## Support

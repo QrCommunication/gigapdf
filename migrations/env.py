@@ -7,7 +7,7 @@ from pathlib import Path
 
 from alembic import context
 from dotenv import load_dotenv
-from sqlalchemy import engine_from_config, pool, text, inspect
+from sqlalchemy import engine_from_config, inspect, pool, text
 
 # Add project root to path for imports
 project_root = Path(__file__).parents[1]
@@ -85,6 +85,17 @@ def ensure_alembic_version_table(connection) -> None:
         connection.commit()
 
 
+def include_object(object_, name, type_, reflected, compare_to) -> bool:
+    """Keep autogenerate away from tables that have no SQLAlchemy model.
+
+    The database is shared with the Next.js apps: the Better Auth tables,
+    ``font_cache`` and ``user_signatures`` are defined by the Prisma schemas
+    and only provisioned here (025_prisma_owned_tables). Without this filter
+    ``alembic revision --autogenerate`` would propose dropping them.
+    """
+    return not (type_ == "table" and reflected and compare_to is None)
+
+
 def run_migrations_offline() -> None:
     """
     Run migrations in 'offline' mode.
@@ -103,6 +114,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -129,6 +141,7 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
+            include_object=include_object,
         )
 
         with context.begin_transaction():

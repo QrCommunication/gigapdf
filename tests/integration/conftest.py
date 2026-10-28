@@ -25,13 +25,18 @@ Fixtures:
 * ``throwaway_pg`` — an EMPTY database (no extension, no table), e.g. for
   migrations;
 * ``pg_schema_db`` — the same with pgvector enabled and the full SQLAlchemy
-  schema created (``Base.metadata.create_all``).
+  schema created (``Base.metadata.create_all``);
+* ``migrated_pg`` — the same after ``alembic upgrade head``: the production
+  schema, including the Prisma-owned tables (Better Auth, ``user_signatures``…)
+  that have no SQLAlchemy model.
 """
 
 from __future__ import annotations
 
 import getpass
 import os
+import subprocess
+import sys
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -41,6 +46,7 @@ import pytest
 
 ADMIN_URL_ENV = "TEST_PG_ADMIN_URL"
 _SOCKET_DIR = "/var/run/postgresql"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass(frozen=True)
@@ -217,6 +223,27 @@ def pg_schema_db(throwaway_pg: ThrowawayDatabase) -> ThrowawayDatabase:
         Base.metadata.create_all(engine)
     finally:
         engine.dispose()
+    return throwaway_pg
+
+
+def run_alembic(database: ThrowawayDatabase, *args: str) -> subprocess.CompletedProcess:
+    """Run the alembic CLI of the project against *database* (never ``.env``'s)."""
+    env = dict(os.environ)
+    env["DATABASE_URL"] = database.dsn
+    return subprocess.run(
+        [sys.executable, "-m", "alembic", *args],
+        cwd=str(PROJECT_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+
+@pytest.fixture
+def migrated_pg(throwaway_pg: ThrowawayDatabase) -> ThrowawayDatabase:
+    """A throwaway database migrated with ``alembic upgrade head``."""
+    upgraded = run_alembic(throwaway_pg, "upgrade", "head")
+    assert upgraded.returncode == 0, upgraded.stderr
     return throwaway_pg
 
 

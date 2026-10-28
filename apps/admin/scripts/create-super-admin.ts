@@ -1,111 +1,106 @@
 /**
- * Script to create a super admin user
- * Usage: npx tsx scripts/create-super-admin.ts
+ * Create (or update) a back-office super admin.
  *
- * Environment variables required:
- * - DATABASE_URL: PostgreSQL connection string
- * - BETTER_AUTH_SECRET: Secret for password hashing
+ * Usage, from apps/admin with the production environment loaded:
+ *
+ *   pnpm create:admin                        # prompts for email, name, password
+ *   ADMIN_EMAIL=… ADMIN_NAME=… pnpm create:admin
+ *   pnpm create:admin --reset-password       # existing admin: set a new password
+ *
+ * The password is read from the ADMIN_PASSWORD environment variable or
+ * prompted for; there is no default. It is hashed with Better Auth's own
+ * hasher (the one its sign-in verifies against). The previous version stored
+ * a salted SHA-256 placeholder that Better Auth could never verify, and the
+ * seed script it replaced created admin@gigapdf.com / "Admin123!" through the
+ * public sign-up, which is now disabled.
+ *
+ * Idempotent: an existing admin is promoted to super_admin and marked
+ * verified; its password changes only with --reset-password.
  */
+import { randomUUID } from "node:crypto";
+import * as readline from "node:readline";
 
-import { PrismaClient } from ".prisma/admin-client";
-import { createHash } from "crypto";
-import * as readline from "readline";
+import { hashPassword } from "better-auth/crypto";
 
-const prisma = new PrismaClient();
+import prisma from "../src/lib/prisma";
 
-// Simple password hashing (BetterAuth uses bcrypt internally, but for seeding we'll use the API)
-async function hashPassword(password: string): Promise<string> {
-  // BetterAuth handles password hashing internally
-  // This is a placeholder - we'll use the signUp API instead
-  const hash = createHash("sha256");
-  hash.update(password + (process.env.BETTER_AUTH_SECRET || ""));
-  return hash.digest("hex");
-}
+const CREDENTIAL_PROVIDER = "credential";
+const MIN_PASSWORD_LENGTH = 12;
 
-async function prompt(question: string): Promise<string> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
+function ask(question: string): Promise<string> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => {
     rl.question(question, (answer) => {
       rl.close();
-      resolve(answer);
+      resolve(answer.trim());
     });
   });
 }
 
-async function createSuperAdmin() {
-  console.log("\n🔐 GigaPDF Super Admin Creation\n");
-  console.log("================================\n");
-
-  // Get admin details
-  const email = await prompt("Email: ");
-  const name = await prompt("Name: ");
-  const password = await prompt("Password: ");
-  const confirmPassword = await prompt("Confirm Password: ");
-
-  if (password !== confirmPassword) {
-    console.error("\n❌ Passwords do not match!");
-    process.exit(1);
-  }
-
-  if (password.length < 8) {
-    console.error("\n❌ Password must be at least 8 characters!");
-    process.exit(1);
-  }
-
-  try {
-    // Check if admin already exists
-    const existingAdmin = await prisma.adminUser.findUnique({
-      where: { email },
-    });
-
-    if (existingAdmin) {
-      console.error(`\n❌ An admin with email "${email}" already exists!`);
-      process.exit(1);
-    }
-
-    // Create the admin user
-    const adminUser = await prisma.adminUser.create({
-      data: {
-        email,
-        name,
-        role: "super_admin",
-        emailVerified: true,
-      },
-    });
-
-    // Create the account with password
-    // Note: BetterAuth uses bcrypt, but we need to create the account entry
-    // The user should login via the signup flow first, or we use a workaround
-    const hashedPassword = await hashPassword(password);
-
-    await prisma.adminAccount.create({
-      data: {
-        userId: adminUser.id,
-        accountId: adminUser.id,
-        providerId: "credential",
-        password: hashedPassword,
-      },
-    });
-
-    console.log("\n✅ Super Admin created successfully!\n");
-    console.log("================================");
-    console.log(`Email: ${email}`);
-    console.log(`Name: ${name}`);
-    console.log(`Role: super_admin`);
-    console.log("================================\n");
-    console.log("⚠️  Note: For full BetterAuth compatibility, please use the");
-    console.log("   signup endpoint or the alternative setup script.\n");
-
-  } catch (error) {
-    console.error("\n❌ Error creating super admin:", error);
-    process.exit(1);
-  } finally {
-    await prisma.$disconnect();
-  }
+async function readPassword(): Promise<string> {
+  const fromEnv = process.env.ADMIN_PASSWORD;
+  if (fromEnv) return fromEnv;
+  const password = await ask("Password: ");
+  const confirmation = await ask("Confirm password: ");
+  if (password !== confirmation) throw new Error("Passwords do not match.");
+  return password;
 }
 
-createSuperAdmin();
+async function main(): Promise<void> {
+  const resetPassword = process.argv.includes("--reset-password");
+  const email = (process.env.ADMIN_EMAIL || (await ask("Email: "))).toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("A valid email is required.");
+
+  const existing = await prisma.adminUser.findUnique({ where: { email } });
+  const name = existing?.name ?? (process.env.ADMIN_NAME || (await ask("Name: ")));
+
+  let passwordHash: string | null = null;
+  if (!existing || resetPassword) {
+    const password = await readPassword();
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      throw new Error(`The password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+    }
+    passwordHash = await hashPassword(password);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const user = existing
+      ? await tx.adminUser.update({
+          where: { id: existing.id },
+          data: { role: "super_admin", emailVerified: true },
+        })
+      : await tx.adminUser.create({
+          data: { id: randomUUID(), email, name, role: "super_admin", emailVerified: true },
+        });
+
+    if (passwordHash === null) return;
+
+    const account = await tx.adminAccount.findFirst({
+      where: { userId: user.id, providerId: CREDENTIAL_PROVIDER },
+    });
+    if (account) {
+      await tx.adminAccount.update({ where: { id: account.id }, data: { password: passwordHash } });
+    } else {
+      await tx.adminAccount.create({
+        data: {
+          id: randomUUID(),
+          userId: user.id,
+          accountId: user.id,
+          providerId: CREDENTIAL_PROVIDER,
+          password: passwordHash,
+        },
+      });
+    }
+  });
+
+  if (!existing) console.log(`Super admin created: ${email}`);
+  else if (resetPassword) console.log(`Super admin updated, password reset: ${email}`);
+  else console.log(`Super admin updated (password unchanged): ${email}`);
+}
+
+main()
+  .catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  })
+  .finally(() => prisma.$disconnect());

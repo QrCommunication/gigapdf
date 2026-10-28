@@ -103,8 +103,12 @@ done
 
 ```bash
 .venv/bin/alembic upgrade head
-sudo -u postgres psql -d gigapdf -f deploy/init-betterauth-tables.sql
 ```
+
+Alembic crée toutes les tables, y compris celles que seuls les schémas Prisma
+décrivent (Better Auth web et admin, `font_cache`, `user_signatures` —
+migration `025_prisma_owned_tables`). Ne jamais lancer `prisma db push` sur
+cette base partagée.
 
 ### Services systemd
 
@@ -190,7 +194,6 @@ curl -s -o /dev/null -w "%{http_code}" https://api.giga-pdf.com/health
 | Fichier                              | Rôle                          |
 |--------------------------------------|-------------------------------|
 | `deploy/systemd/gigapdf-*.service`   | Unités systemd (5 services)   |
-| `deploy/init-betterauth-tables.sql`  | Tables Better Auth (idempotent) |
 | `deploy/nginx.conf`                  | Config nginx complète         |
 | `docs/storage.md`                    | Configuration stockage objet  |
 | `.env`                               | Variables d'environnement     |

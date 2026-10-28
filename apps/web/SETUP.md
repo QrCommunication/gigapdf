@@ -67,18 +67,17 @@ DATABASE_URL=postgresql://username:password@localhost:5432/gigapdf
 
 ### 4. Set Up Database
 
-The BetterAuth library requires database tables. Run the migration:
+Every table — the Better Auth ones included — is created by the backend's
+Alembic migrations (`025_prisma_owned_tables` for the tables only Prisma
+models describe). From the repository root, with the Python venv active:
 
 ```bash
-# From the web app directory
-cd apps/web
-
-# Generate BetterAuth tables (if using Prisma)
-npx prisma generate
-npx prisma db push
+alembic upgrade head
+cd apps/web && npx prisma generate
 ```
 
-**Note:** You may need to install Prisma and create a schema first. See BetterAuth documentation for details.
+Never run `prisma db push` / `prisma migrate` here: the database is shared
+with the backend, and they would realign it entirely on this Prisma schema.
 
 ### 5. Run Development Server
 
@@ -101,72 +100,12 @@ The application will be available at [http://localhost:3000](http://localhost:30
 
 ### Database Schema
 
-BetterAuth uses Prisma for database management. You'll need to create a `prisma/schema.prisma` file:
-
-```prisma
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-generator client {
-  provider = "prisma-client-js"
-}
-
-model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  emailVerified Boolean   @default(false)
-  name          String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  accounts      Account[]
-  sessions      Session[]
-}
-
-model Account {
-  id                String  @id @default(uuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?
-  access_token      String?
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?
-  session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, providerAccountId])
-}
-
-model Session {
-  id           String   @id @default(uuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-
-  @@unique([identifier, token])
-}
-```
-
-Then run:
-
-```bash
-npx prisma generate
-npx prisma db push
-```
+The Better Auth models live in `apps/web/prisma/schema.prisma` (`users`,
+`sessions`, `accounts`, `verification`, `jwks`). Their tables are created by
+Alembic (`migrations/versions/025_prisma_owned_tables.py`); changing one of
+these models requires a new Alembic migration — the integration test
+`tests/integration/test_migration_025_prisma_owned_tables.py` compares the
+migrated database with the Prisma models and fails on any difference.
 
 ### JWT Configuration
 
@@ -234,7 +173,7 @@ If you see database connection errors:
 1. Verify PostgreSQL is running
 2. Check `DATABASE_URL` in `.env.local`
 3. Ensure database exists
-4. Run `npx prisma db push`
+4. Run `alembic upgrade head` from the repository root
 
 ### Port Already in Use
 

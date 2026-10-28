@@ -42,6 +42,7 @@ vi.mock('@/lib/prisma', () => ({
 
 import { GET, POST, DELETE } from '../route';
 import { requireSession } from '@/lib/auth-helpers';
+import { serverLogger } from '@/lib/server-logger';
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -158,12 +159,14 @@ describe('/api/user/signatures', () => {
       });
     });
 
-    it('degrades to an empty list when the table is missing (P2021)', async () => {
+    it('reports a missing table as a server error, not as "no signatures"', async () => {
       mockFindMany.mockRejectedValue(missingTableError());
       const res = await GET();
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json).toEqual({ signatures: [] });
+      expect(res.status).toBe(500);
+      expect(vi.mocked(serverLogger.error)).toHaveBeenCalledWith(
+        'api.user.signatures.get',
+        expect.anything(),
+      );
     });
 
     it('returns 500 (generic) on any other DB error', async () => {
@@ -253,12 +256,14 @@ describe('/api/user/signatures', () => {
       expect(res.status).toBe(201);
     });
 
-    it('returns 503 when the table is missing (P2021)', async () => {
+    it('reports a missing table as a logged server error', async () => {
       mockCreate.mockRejectedValue(missingTableError());
       const res = await POST(postRequest({ kind: 'signature', dataUrl: SMALL_PNG, width: 100, height: 100 }));
-      expect(res.status).toBe(503);
-      const json = await res.json();
-      expect(json).toEqual({ success: false, error: 'Signature storage is not available yet.' });
+      expect(res.status).toBe(500);
+      expect(vi.mocked(serverLogger.error)).toHaveBeenCalledWith(
+        'api.user.signatures.post',
+        expect.anything(),
+      );
     });
 
     it('returns 500 (generic) on any other DB error', async () => {
@@ -302,11 +307,14 @@ describe('/api/user/signatures', () => {
       expect(mockDeleteMany).not.toHaveBeenCalled();
     });
 
-    it('is an idempotent no-op (200) when the table is missing (P2021)', async () => {
+    it('does not claim a deletion when the table is missing', async () => {
       mockDeleteMany.mockRejectedValue(missingTableError());
       const res = await DELETE(deleteRequest('?id=sig-1'));
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ ok: true });
+      expect(res.status).toBe(500);
+      expect(vi.mocked(serverLogger.error)).toHaveBeenCalledWith(
+        'api.user.signatures.delete',
+        expect.anything(),
+      );
     });
 
     it('returns 500 (generic) on any other DB error', async () => {

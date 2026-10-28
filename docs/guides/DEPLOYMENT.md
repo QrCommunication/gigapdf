@@ -333,12 +333,14 @@ cp .env.example .env
 # Edit .env with production values
 nano .env
 
-# Run database migrations
+# Run database migrations — every table, the Prisma-owned ones included
+# (025_prisma_owned_tables). Never `prisma db push`: it would realign the
+# whole shared database on one Prisma schema.
 alembic upgrade head
 
-# Setup Prisma
-cd apps/web && npx prisma generate && npx prisma db push && cd ../..
-cd apps/admin && npx prisma generate && npx prisma db push && cd ../..
+# Generate the Prisma clients
+cd apps/web && npx prisma generate && cd ../..
+cd apps/admin && npx prisma generate && cd ../..
 ```
 
 ---

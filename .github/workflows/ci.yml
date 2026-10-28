@@ -226,11 +226,25 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
+      # The Prisma CLI: test_migration_025 compares the migrated database with
+      # the Prisma models (prisma migrate diff --exit-code).
+      - uses: pnpm/action-setup@v6.0.9
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Install Node dependencies (Prisma CLI)
+        run: pnpm install --frozen-lockfile
+
       - name: Run integration tests
         # -rs lists any skip with its reason: none is expected here.
         run: pytest tests/integration -q -rs
         env:
           TEST_PG_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          # A missing Prisma CLI fails the parity test instead of skipping it.
+          REQUIRE_PRISMA_CLI: '1'
           # The app lifespan creates its storage directory; the default
           # (/var/lib/gigapdf/documents) is not writable on the runner.
           STORAGE_PATH: ${{ runner.temp }}/gigapdf-storage

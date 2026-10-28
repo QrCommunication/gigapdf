@@ -1,3 +1,14 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// This schema only READS the shared database: Alembic creates every table.
+// The models with no SQLAlchemy counterpart (Better Auth `users`, `sessions`,
+// `accounts`, `verification`, `jwks`; `font_cache`; `user_signatures`) are
+// provisioned by migrations/versions/025_prisma_owned_tables.py — changing one
+// of them needs a new Alembic migration (tests/integration/
+// test_migration_025_prisma_owned_tables.py fails otherwise). Never run
+// `prisma db push` / `prisma migrate`: they would realign the whole database,
+// SQLAlchemy tables included, on this schema.
+// ─────────────────────────────────────────────────────────────────────────────
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -513,8 +524,8 @@ model font_cache {
 // Each user keeps a small set of hand-drawn / typed signature images, stored as
 // data: URLs so they can be dropped straight onto a page without a round-trip to
 // object storage. Rows are scoped per user (bare `user_id`, matching the
-// text-based owner_id convention used across the app — no FK to `users` so this
-// table can be added additively via `prisma db push` without touching auth).
+// text-based owner_id convention used across the app — no FK to `users`; the
+// account erasure deletes them explicitly).
 // ─────────────────────────────────────────────────────────────────────────────
 model UserSignature {
   id        String   @id @default(uuid())

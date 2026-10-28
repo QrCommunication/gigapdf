@@ -237,22 +237,11 @@ build_release() { # $1=release dir
 
 run_migrations() { # $1=release dir — BEFORE the switch (schema must be forward-compatible)
   local rel="$1"
-  section "Applying manual SQL migrations"
+  # Alembic is the only schema source, the Prisma-owned tables included
+  # (migrations/versions/025_prisma_owned_tables.py).
+  section "Applying alembic migrations"
   set -a; # shellcheck disable=SC1090
   source "$ENV_FILE"; set +a
-  local mig_dir="$rel/apps/web/prisma/manual-migrations" sql
-  if [ -d "$mig_dir" ] && [ -n "${DATABASE_URL:-}" ]; then
-    for sql in "$mig_dir"/*.sql; do
-      [ -f "$sql" ] || continue
-      echo "  applying $(basename "$sql")"
-      psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$sql" 2>&1 | tail -3 || \
-        warn "$(basename "$sql") failed — check schema drift"
-    done
-  else
-    echo "  no migrations dir or DATABASE_URL not set, skipping"
-  fi
-
-  section "Applying alembic migrations (Python backend)"
   if [ -x "$VENV/bin/alembic" ]; then
     ( cd "$rel" && "$VENV/bin/alembic" upgrade head 2>&1 | tail -3 ) || \
       warn "alembic upgrade failed — backend schema may be stale"

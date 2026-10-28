@@ -31,7 +31,7 @@ Use this checklist to ensure everything is properly set up.
 - [ ] PostgreSQL server is running
 - [ ] Database `gigapdf` exists (or create with `createdb gigapdf`)
 - [ ] Ran `pnpm db:generate` (from apps/web)
-- [ ] Ran `pnpm db:push` (from apps/web)
+- [ ] Ran `alembic upgrade head` (from the repository root)
 - [ ] No errors in database setup
 
 ## Development Server

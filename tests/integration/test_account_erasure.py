@@ -14,8 +14,8 @@ SQLAlchemy model):
 * a storage failure raises before the database is touched, and a retry
   completes the erasure.
 
-Runs against a throwaway PostgreSQL database (``pg_schema_db``, see
-tests/integration/conftest.py).
+Runs against a throwaway PostgreSQL database migrated with alembic
+(``migrated_pg``, see tests/integration/conftest.py).
 """
 
 from __future__ import annotations
@@ -24,48 +24,6 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-
-# Minimal DDL of the Prisma-managed Better Auth tables (apps/web/prisma/
-# schema.prisma): same names, same columns the erasure reads, same cascades.
-_BETTER_AUTH_DDL = """
-CREATE TABLE users (
-    id text PRIMARY KEY,
-    email text NOT NULL UNIQUE,
-    "emailVerified" boolean NOT NULL DEFAULT false,
-    name text,
-    "createdAt" timestamp(3) NOT NULL DEFAULT now(),
-    "updatedAt" timestamp(3) NOT NULL DEFAULT now()
-);
-CREATE TABLE sessions (
-    id text PRIMARY KEY,
-    "userId" text NOT NULL REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
-    token text NOT NULL UNIQUE,
-    "expiresAt" timestamp(3) NOT NULL,
-    "ipAddress" text,
-    "userAgent" text
-);
-CREATE TABLE accounts (
-    id text PRIMARY KEY,
-    "userId" text NOT NULL REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
-    "accountId" text NOT NULL,
-    "providerId" text NOT NULL,
-    password text
-);
-CREATE TABLE verification (
-    id text PRIMARY KEY,
-    identifier text NOT NULL,
-    value text NOT NULL,
-    "expiresAt" timestamp(3) NOT NULL
-);
-CREATE TABLE user_signatures (
-    id text PRIMARY KEY,
-    user_id text NOT NULL,
-    kind text NOT NULL DEFAULT 'signature',
-    data_url text NOT NULL,
-    width integer NOT NULL,
-    height integer NOT NULL
-);
-"""
 
 
 class FakeStorage:
@@ -90,11 +48,10 @@ class FakeStorage:
 
 
 @pytest.fixture
-def database(pg_schema_db) -> str:
-    """Throwaway database with the full SQLAlchemy schema + Better Auth tables."""
-    created = pg_schema_db.psql(_BETTER_AUTH_DDL)
-    assert created.returncode == 0, created.stderr
-    return pg_schema_db.async_url
+def database(migrated_pg) -> str:
+    """Throwaway database at ``alembic upgrade head``: the production schema,
+    Better Auth tables and ``user_signatures`` included (migration 025)."""
+    return migrated_pg.async_url
 
 
 @pytest.fixture

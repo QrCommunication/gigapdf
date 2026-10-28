@@ -232,14 +232,13 @@ log_info "Snapshot pruning complete."
 # =============================================================================
 # 8. Database Migrations
 # =============================================================================
-# IMPORTANT: Migration order matters!
-# 1. Alembic manages FastAPI tables (stored_documents, user_quotas, plans, etc.)
-# 2. Prisma manages Better Auth tables (users, sessions, accounts, verification, jwks)
-# Both share the same database but manage different tables.
-# NEVER run prisma db push with --accept-data-loss as it will delete Alembic tables!
+# Alembic creates every table of the shared database, the Prisma-owned ones
+# included (migrations/versions/025_prisma_owned_tables.py).
+# NEVER run `prisma db push`: it aligns the WHOLE database on one Prisma
+# schema and would alter or drop the SQLAlchemy tables.
 # =============================================================================
 
-log_info "Running Alembic migrations (FastAPI tables)..."
+log_info "Running Alembic migrations..."
 source .venv/bin/activate
 cd "$APP_DIR"
 
@@ -251,39 +250,6 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 alembic upgrade head || log_warn "Alembic migrations skipped or failed"
-
-# Better Auth tables (created via SQL script, NOT Prisma push)
-# Prisma push would delete Alembic tables, so we use a safe SQL script instead
-log_info "Creating Better Auth tables (SQL script)..."
-python3 -c "
-from sqlalchemy import create_engine, text
-import os
-
-# Get database URL from environment
-db_url = os.environ.get('DATABASE_URL', '')
-if not db_url:
-    print('DATABASE_URL not set, skipping Better Auth tables')
-    exit(0)
-
-# Ensure sync driver
-db_url = db_url.replace('postgresql+asyncpg', 'postgresql')
-
-engine = create_engine(db_url)
-with open('deploy/init-betterauth-tables.sql', 'r') as f:
-    sql = f.read()
-
-with engine.connect() as conn:
-    # Execute each statement separately
-    for statement in sql.split(';'):
-        statement = statement.strip()
-        if statement and not statement.startswith('--'):
-            try:
-                conn.execute(text(statement))
-            except Exception as e:
-                pass  # Table already exists, ignore
-    conn.commit()
-    print('Better Auth tables created/verified successfully')
-" || log_warn "Better Auth tables creation skipped"
 
 # =============================================================================
 # 7. Install/Update Systemd Services

@@ -524,21 +524,21 @@ GRANT ALL PRIVILEGES ON DATABASE gigapdf_celery TO gigapdf;
 # Activate virtual environment
 source venv/bin/activate
 
-# Run Alembic migrations (backend tables)
+# Run Alembic migrations: EVERY table of the shared database, including the
+# Better Auth tables, font_cache and user_signatures used by the Next.js apps
+# (migration 025_prisma_owned_tables)
 alembic upgrade head
 
-# Generate Prisma client and sync auth tables
-cd apps/web
-npx prisma generate
-npx prisma db push
-cd ../..
-
-# For admin app (if using separate Prisma schema)
-cd apps/admin
-npx prisma generate
-npx prisma db push
-cd ../..
+# Generate the Prisma clients (they only read the schema Alembic created)
+pnpm --filter web exec prisma generate
+pnpm --filter admin exec prisma generate
 ```
+
+> ⚠️ Never run `prisma db push` or `prisma migrate` against this database:
+> they align the WHOLE database on one Prisma schema and would alter or drop
+> the backend tables. A change to a Prisma-only model ships as a new Alembic
+> migration. / N'exécutez jamais `prisma db push` ni `prisma migrate` sur
+> cette base : toute évolution passe par une migration Alembic.
 
 ### Seed Initial Data / Données initiales
 
@@ -687,8 +687,8 @@ alembic stamp head
 cd apps/web
 npx prisma generate
 
-# Reset database (DELETES ALL DATA)
-npx prisma db push --force-reset
+# Rebuild a development database from scratch (DELETES ALL DATA)
+dropdb gigapdf && createdb gigapdf && alembic upgrade head
 ```
 
 ### Getting Help / Obtenir de l'aide
