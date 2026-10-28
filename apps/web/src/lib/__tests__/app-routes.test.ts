@@ -12,16 +12,21 @@ function subdirectories(dir: string): string[] {
     .map((entry) => entry.name);
 }
 
-/** First URL segments actually served by the (app) tree and the public viewer. */
+/**
+ * First URL segments actually served outside the localized (site) tree: the
+ * (app) group, the (embed) group (embeddable editor, own root layout) and the
+ * public viewer.
+ */
 function routeSegmentsOnDisk(): string[] {
   const appGroup = join(APP_DIR, "(app)");
   const dashboardPages = subdirectories(join(appGroup, "(dashboard)"));
   const appPages = subdirectories(appGroup).filter((name) => name !== "(dashboard)");
-  return [...dashboardPages, ...appPages, "public"].sort();
+  const embedPages = subdirectories(join(APP_DIR, "(embed)"));
+  return [...dashboardPages, ...appPages, ...embedPages, "public"].sort();
 }
 
 describe("APP_ROUTES", () => {
-  it("lists every (app) page so the proxy never rewrites it into a 404", () => {
+  it("lists every (app) and (embed) page so the proxy never rewrites it into a 404", () => {
     const missing = routeSegmentsOnDisk().filter((segment) => !APP_ROUTES.has(segment));
 
     expect(missing).toEqual([]);

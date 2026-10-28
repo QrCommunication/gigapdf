@@ -558,7 +558,7 @@ export function DocumentCard({
             </div>
           )}
           <div className="space-y-1 text-sm text-muted-foreground">
-            <p>{t("size")}: {formatBytes(size)}</p>
+            <p>{t("size")}: {formatBytes(size, locale)}</p>
             <p>{t("created")}: {formatDate(createdAt, locale)}</p>
             <p>{t("modified")}: {formatDate(updatedAt, locale)}</p>
           </div>

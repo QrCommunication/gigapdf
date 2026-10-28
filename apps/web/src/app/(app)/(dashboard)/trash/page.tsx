@@ -183,7 +183,7 @@ export default function TrashPage() {
                       {doc.deleted_at && (
                         <p>{t("deletedAt", { date: formatDate(doc.deleted_at, locale) })}</p>
                       )}
-                      <p>{formatBytes(doc.file_size_bytes || 0)}</p>
+                      <p>{formatBytes(doc.file_size_bytes || 0, locale)}</p>
                     </div>
                   </CardContent>
                   <CardFooter className="gap-2">

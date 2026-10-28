@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Button,
   Dialog,
@@ -43,6 +43,7 @@ import { DocumentTable, SortField, SortDirection } from "./document-table";
 import { FolderBreadcrumb, BreadcrumbFolder } from "./folder-breadcrumb";
 import { api } from "@/lib/api";
 import { clientLogger } from "@/lib/client-logger";
+import { formatBytes } from "@/lib/utils";
 
 export type ViewMode = "grid" | "list";
 
@@ -575,15 +576,6 @@ export function DocumentExplorer({
     return true;
   });
 
-  // Format file size
-  const formatSize = (bytes: number): string => {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-  };
-
   return (
     <div
       className="relative space-y-4"
@@ -796,7 +788,6 @@ export function DocumentExplorer({
                       onDrop={(e) => handleDropOnFolder(e, folder.id)}
                       isDraggedOver={dragOverFolderId === folder.id}
                       isDragging={draggedItem?.type === "folder" && draggedItem?.id === folder.id}
-                      formatSize={formatSize}
                       canDrop={draggedItem !== null && !(draggedItem.type === "folder" && draggedItem.id === folder.id)}
                       selectionMode={selectionMode}
                       isSelected={isItemSelected("folder", folder.id)}
@@ -850,7 +841,6 @@ export function DocumentExplorer({
           }}
           draggedItem={draggedItem}
           dragOverFolderId={dragOverFolderId}
-          formatSize={formatSize}
           selectionMode={selectionMode}
           selectedItems={selectedItems}
           onSelect={toggleItemSelection}
@@ -1117,7 +1107,6 @@ function FolderCard({
   onDrop,
   isDraggedOver,
   isDragging,
-  formatSize,
   canDrop,
   selectionMode,
   isSelected,
@@ -1135,7 +1124,6 @@ function FolderCard({
   onDrop: (e: React.DragEvent) => void;
   isDraggedOver: boolean;
   isDragging: boolean;
-  formatSize: (bytes: number) => string;
   canDrop: boolean;
   selectionMode: boolean;
   isSelected: boolean;
@@ -1143,6 +1131,7 @@ function FolderCard({
 }) {
   const t = useTranslations("documents.explorer");
   const tCard = useTranslations("documents.card");
+  const locale = useLocale();
   const handleDragStart = (e: React.DragEvent) => {
     if (selectionMode) {
       e.preventDefault();
@@ -1272,12 +1261,12 @@ function FolderCard({
         <span className="text-sm font-medium truncate max-w-full text-center">{folder.name}</span>
         {stats && (
           <span className="text-xs text-muted-foreground">
-            {stats.document_count} {stats.document_count === 1 ? "doc" : "docs"} • {formatSize(stats.total_size_bytes)}
+            {t("documentCount", { count: stats.document_count })} • {formatBytes(stats.total_size_bytes, locale)}
           </span>
         )}
         {isDraggedOver && (
           <span className="text-xs font-medium text-primary animate-pulse">
-            Drop here
+            {t("dropHere")}
           </span>
         )}
       </div>

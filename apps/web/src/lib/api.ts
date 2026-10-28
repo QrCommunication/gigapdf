@@ -31,6 +31,20 @@ interface APIResponse<T> {
   };
 }
 
+/** Error thrown by the API client: HTTP status + backend error code, if any. */
+export type ApiRequestError = Error & { status: number; code?: string };
+
+/** Counts returned by DELETE /api/v1/account (never personal data). */
+export interface AccountErasureResult {
+  erased: boolean;
+  storage_objects_deleted: number;
+  deleted: Record<string, number>;
+  anonymized: Record<string, number>;
+}
+
+/** Literal the user types to confirm the erasure; the backend requires it too. */
+export const ACCOUNT_DELETION_CONFIRMATION = "DELETE";
+
 interface PaginationInfo {
   total: number;
   page: number;
@@ -214,10 +228,15 @@ class APIClient {
       // on parsed-only elements that have no Redis row). Without this, the
       // retry helper falls back to "treat as transient" and triples the
       // console noise on every text edit.
+      // FastAPI's GigaPDFException envelope is `{ error: { code, message } }`;
+      // the machine-readable code lets callers branch on a specific refusal
+      // (e.g. TENANT_OWNERSHIP_TRANSFER_REQUIRED) instead of parsing text.
+      const envelope = (error as { error?: { code?: string; message?: string } }).error;
       const err = new Error(
-        error.detail || error.message || `HTTP ${response.status}`,
-      ) as Error & { status: number };
+        error.detail || envelope?.message || error.message || `HTTP ${response.status}`,
+      ) as ApiRequestError;
       err.status = response.status;
+      err.code = envelope?.code;
       throw err;
     }
 
@@ -1192,6 +1211,24 @@ class APIClient {
       `/api/v1/tenant-documents/${organizationId}/documents/${documentId}?user_id=${userId}`,
       { method: "DELETE" }
     );
+  }
+
+  // ===== Account =====
+
+  /**
+   * Permanently erase the signed-in account (GDPR art. 17). Requires an app
+   * session; rejects with `code` TENANT_OWNERSHIP_TRANSFER_REQUIRED or
+   * ACTIVE_SUBSCRIPTION_CANCELLATION_REQUIRED (HTTP 409) when blocked.
+   */
+  async deleteAccount(): Promise<AccountErasureResult> {
+    const response = await this.request<APIResponse<AccountErasureResult>>(
+      "/api/v1/account",
+      {
+        method: "DELETE",
+        body: JSON.stringify({ confirmation: ACCOUNT_DELETION_CONFIRMATION }),
+      }
+    );
+    return response.data;
   }
 
   // ===== API Keys =====

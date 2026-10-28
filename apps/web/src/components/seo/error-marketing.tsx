@@ -90,8 +90,8 @@ export async function MarketingError({ locale, variant }: MarketingErrorProps) {
         <NotFoundSuggestions locale={locale} t={t} />
       ) : (
         <ForbiddenFeatures
-          title={tFeatures("title")}
-          subtitle={tFeatures("subtitle")}
+          title={t("tools.title")}
+          subtitle={t("tools.subtitle")}
           featureName={(key) => tFeatures(`${key}.name`)}
           featureDescription={(key) => tFeatures(`${key}.description`)}
         />

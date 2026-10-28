@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useId, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Button,
   Card,
@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { triggerBlobDownload } from "./blob-download";
 import { clientLogger } from "@/lib/client-logger";
+import { formatBytes } from "@/lib/utils";
 
 /**
  * Universal Merge tool — drop a heterogeneous set of files (PDF, Office,
@@ -79,16 +80,9 @@ function iconForFile(name: string) {
   return FileIcon;
 }
 
-/** Human-readable size (KB/MB) without external deps. */
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(0)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
-}
-
 export function UniversalMergeTool() {
   const t = useTranslations("universalMerge");
+  const locale = useLocale();
   const { toast } = useToast();
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -352,7 +346,7 @@ export function UniversalMergeTool() {
                         {item.file.name}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {formatBytes(item.file.size)}
+                        {formatBytes(item.file.size, locale)}
                       </p>
                     </div>
                     <Input
@@ -422,8 +416,10 @@ export function UniversalMergeTool() {
               }`}
               aria-live="polite"
             >
-              <span>{t("totalSize", { size: formatBytes(totalSize) })}</span>
-              {overLimit && <span>{t("overLimit", { max: "100 MB" })}</span>}
+              <span>{t("totalSize", { size: formatBytes(totalSize, locale) })}</span>
+              {overLimit && (
+                <span>{t("overLimit", { max: formatBytes(MAX_TOTAL_SIZE_BYTES, locale, 0) })}</span>
+              )}
             </div>
           </CardContent>
         </Card>

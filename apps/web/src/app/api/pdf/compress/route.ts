@@ -24,6 +24,14 @@
  * Returns the (re-)serialised PDF as application/pdf with size headers:
  *   X-Original-Size   — input size in bytes
  *   X-Compressed-Size — output size in bytes
+ *   X-Kept-Original   — "true" when re-serialising did not make the file
+ *                       smaller: the uploaded bytes are returned unchanged.
+ *
+ * A small, already compact PDF can grow when it is re-serialised (object
+ * streams and an xref stream have a fixed cost), and the route used to hand
+ * that bigger file back as the "compressed" result. Compression now never
+ * returns a larger file. Linearize is the exception: it is asked for its
+ * structure (Fast Web View), not for its size.
  */
 
 import { NextResponse } from 'next/server';
@@ -44,6 +52,32 @@ import { validatePdfFile } from '@/lib/request-validation';
 /** PDF file-version banner accepted by the engine's structural serializers. */
 type PdfVersion = '1.7' | '2.0';
 
+/**
+ * The PDF response, with the uploaded bytes instead of the candidate when the
+ * candidate is not smaller (unless the caller asked for a structure, not a
+ * size, see linearize).
+ */
+function compressedPdfResponse(
+  file: File,
+  original: Uint8Array,
+  candidate: Uint8Array,
+  { keepSmaller }: { keepSmaller: boolean },
+): Response {
+  const keptOriginal = keepSmaller && candidate.byteLength >= original.byteLength;
+  const bytes = keptOriginal ? original : candidate;
+  return new Response(Buffer.from(bytes), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': sanitizeContentDisposition(file.name),
+      'Content-Length': String(bytes.byteLength),
+      'X-Original-Size': String(original.byteLength),
+      'X-Compressed-Size': String(bytes.byteLength),
+      'X-Kept-Original': String(keptOriginal),
+    },
+  });
+}
+
 export async function POST(request: Request): Promise<Response> {
   const authResult = await requireSession();
   if (!authResult.ok) return authResult.response;
@@ -56,7 +90,8 @@ export async function POST(request: Request): Promise<Response> {
     const file = fileValidation.file;
 
     const arrayBuffer = await file.arrayBuffer();
-    const originalSize = arrayBuffer.byteLength;
+    const original = new Uint8Array(arrayBuffer);
+    const originalSize = original.byteLength;
 
     const optimize = formData.get('optimize') === 'true';
     const linearize = formData.get('linearize') === 'true';
@@ -84,16 +119,7 @@ export async function POST(request: Request): Promise<Response> {
           version,
         });
 
-        return new Response(Buffer.from(bytes), {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/pdf',
-            'Content-Disposition': sanitizeContentDisposition(file.name),
-            'Content-Length': String(bytes.byteLength),
-            'X-Original-Size': String(originalSize),
-            'X-Compressed-Size': String(bytes.byteLength),
-          },
-        });
+        return compressedPdfResponse(file, original, bytes, { keepSmaller: !linearize });
       } finally {
         closeDocument(openHandle);
       }
@@ -101,10 +127,15 @@ export async function POST(request: Request): Promise<Response> {
 
     // 1. Engine round-trip: re-serialises with object streams, drops
     //    incremental-update tails and normalises the xref structure.
+    // The WASM document is freed as soon as it is serialised (it used to be
+    // left open on every default compress).
     const handle = await openDocument(Buffer.from(arrayBuffer));
-    const pdfLibBytes = await saveDocument(handle, {
-      useObjectStreams: true,
-    });
+    let pdfLibBytes: Awaited<ReturnType<typeof saveDocument>>;
+    try {
+      pdfLibBytes = await saveDocument(handle, { useObjectStreams: true });
+    } finally {
+      closeDocument(handle);
+    }
 
     // 2. Native recompression post-pass: dedupe + drop unreferenced objects,
     //    re-deflate streams. Falls back to the round-trip bytes if it fails.
@@ -118,16 +149,7 @@ export async function POST(request: Request): Promise<Response> {
       recompressed: optimized.optimized,
     });
 
-    return new Response(Buffer.from(optimized.bytes), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': sanitizeContentDisposition(file.name),
-        'Content-Length': String(optimized.bytes.byteLength),
-        'X-Original-Size': String(originalSize),
-        'X-Compressed-Size': String(optimized.bytes.byteLength),
-      },
-    });
+    return compressedPdfResponse(file, original, optimized.bytes, { keepSmaller: true });
   } catch (error: unknown) {
     if (error instanceof PDFEncryptedError) {
       return NextResponse.json(

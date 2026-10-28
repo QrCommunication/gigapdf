@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useSession, updateUser, changePassword } from "@/lib/auth-client";
+import { useRouter } from "next/navigation";
+import { useSession, updateUser, changePassword, signOut } from "@/lib/auth-client";
+import {
+  ACCOUNT_DELETION_CONFIRMATION,
+  api,
+  invalidateAuthToken,
+  type ApiRequestError,
+} from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { Button } from "@giga-pdf/ui";
 import { Input } from "@giga-pdf/ui";
@@ -17,11 +24,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@giga-pdf/ui";
+import { useToast } from "@giga-pdf/ui";
 import { Loader2 } from "lucide-react";
 import { clientLogger } from "@/lib/client-logger";
 
+/** settings.* message for a failed DELETE /api/v1/account. */
+function deleteAccountErrorKey(err: unknown) {
+  switch ((err as Partial<ApiRequestError>)?.code) {
+    case "TENANT_OWNERSHIP_TRANSFER_REQUIRED":
+      return "danger.deleteAccountTenantOwnership" as const;
+    case "ACTIVE_SUBSCRIPTION_CANCELLATION_REQUIRED":
+      return "danger.deleteAccountActiveSubscription" as const;
+    default:
+      return "danger.deleteAccountFailed" as const;
+  }
+}
+
 export default function SettingsPage() {
   const t = useTranslations("settings");
+  const { toast } = useToast();
+  const router = useRouter();
   const tCommon = useTranslations("common");
   const { data: session, isPending: sessionLoading } = useSession();
   const { theme, setTheme } = useTheme();
@@ -131,20 +153,36 @@ export default function SettingsPage() {
   };
 
   const handleDeleteAccount = async () => {
-    if (deleteConfirmation !== "DELETE") {
+    if (deleteConfirmation !== ACCOUNT_DELETION_CONFIRMATION) {
       return;
     }
 
+    setDeleteLoading(true);
     try {
-      setDeleteLoading(true);
-      alert(t("danger.deleteAccountConfirm"));
-      setDeleteDialogOpen(false);
+      await api.deleteAccount();
     } catch (err) {
       clientLogger.error("settings.delete-account-failed", err);
-    } finally {
+      toast({
+        variant: "destructive",
+        title: t("danger.deleteAccount"),
+        description: t(deleteAccountErrorKey(err)),
+      });
       setDeleteLoading(false);
-      setDeleteConfirmation("");
+      return;
     }
+
+    toast({ title: t("danger.deleteAccountSuccess") });
+    // The Better Auth user (and with it every session) no longer exists:
+    // signOut only has the cookie left to clear, so its failure is moot.
+    try {
+      await signOut();
+    } catch (err) {
+      clientLogger.warn("settings.delete-account-signout-failed", err);
+    }
+    invalidateAuthToken();
+    // "/" lives under the public site's root layout: crossing root layouts is
+    // a full page load, which also drops every in-memory cache of the account.
+    router.replace("/");
   };
 
   if (sessionLoading) {
@@ -322,12 +360,15 @@ export default function SettingsPage() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <p className="text-sm text-muted-foreground">
-              Tapez <span className="font-mono font-bold">DELETE</span> pour confirmer.
+              {t.rich("danger.deleteAccountTypeToConfirm", {
+                word: ACCOUNT_DELETION_CONFIRMATION,
+                code: (chunks) => <span className="font-mono font-bold">{chunks}</span>,
+              })}
             </p>
             <Input
               value={deleteConfirmation}
               onChange={(e) => setDeleteConfirmation(e.target.value)}
-              placeholder="DELETE"
+              placeholder={ACCOUNT_DELETION_CONFIRMATION}
             />
           </div>
           <DialogFooter>
@@ -344,7 +385,7 @@ export default function SettingsPage() {
             <Button
               variant="destructive"
               onClick={handleDeleteAccount}
-              disabled={deleteConfirmation !== "DELETE" || deleteLoading}
+              disabled={deleteConfirmation !== ACCOUNT_DELETION_CONFIRMATION || deleteLoading}
             >
               {deleteLoading ? (
                 <>

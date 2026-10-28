@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import type { Tool, Element, ShapeType, AnnotationType } from "@giga-pdf/types";
 
 import { useDocument } from "@/hooks/use-document";
@@ -36,6 +37,11 @@ const embedLogger = createDefaultLogger({ enableRemote: false });
 
 // ---------------------------------------------------------------------------
 // postMessage types (mirrors packages/embed/src/types.ts)
+//
+// The `error` event payload (`code` + `message`, e.g. "Export failed",
+// "Save failed") is a machine-facing protocol consumed by the host page, not
+// UI text: it stays in English on purpose and must NOT be translated. The host
+// decides how (and in which language) to surface it to its own users.
 // ---------------------------------------------------------------------------
 
 interface GigaPdfOutboundMessage {
@@ -180,7 +186,13 @@ function isToolAllowed(
 // Main component
 // ---------------------------------------------------------------------------
 
-export default function EmbedPage() {
+/**
+ * Client body of the embeddable editor. The locale is provided by the
+ * server page (`page.tsx`), which honours the SDK `?locale=` param.
+ */
+export function EmbedEditor() {
+  const t = useTranslations("embed");
+  const locale = useLocale();
   const params = useParams();
   const searchParams = useSearchParams();
 
@@ -863,16 +875,16 @@ export default function EmbedPage() {
         <div className="flex flex-col items-center gap-3 text-center px-4">
           <AlertCircle className="h-10 w-10 text-amber-500" />
           <p className="text-sm font-medium text-foreground">
-            Session expired
+            {t("sessionExpired.title")}
           </p>
           <p className="text-xs text-muted-foreground max-w-xs">
-            Your editing session has expired. The page will reload automatically.
+            {t("sessionExpired.description")}
           </p>
           <button
             onClick={() => window.location.reload()}
             className="mt-1 rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
           >
-            Reload now
+            {t("sessionExpired.reload")}
           </button>
         </div>
       </div>
@@ -885,11 +897,10 @@ export default function EmbedPage() {
         <div className="flex flex-col items-center gap-3 text-center px-4">
           <AlertCircle className="h-10 w-10 text-destructive" />
           <p className="text-sm font-medium text-destructive">
-            Invalid or missing session token
+            {t("invalidToken.title")}
           </p>
           <p className="text-xs text-muted-foreground max-w-xs">
-            Use the latest GigaPDF embed SDK — it automatically handles secure
-            session token exchange.
+            {t("invalidToken.description")}
           </p>
         </div>
       </div>
@@ -901,7 +912,7 @@ export default function EmbedPage() {
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-7 w-7 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading document…</p>
+          <p className="text-sm text-muted-foreground">{t("loading")}</p>
         </div>
       </div>
     );
@@ -912,7 +923,7 @@ export default function EmbedPage() {
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3 text-center px-4">
           <AlertCircle className="h-10 w-10 text-destructive" />
-          <p className="text-sm font-medium">Failed to load document</p>
+          <p className="text-sm font-medium">{t("loadError")}</p>
           <p className="text-xs text-muted-foreground">{error}</p>
         </div>
       </div>
@@ -1034,7 +1045,7 @@ export default function EmbedPage() {
             onClick={handleGetFile}
             className="rounded-md bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
           >
-            Terminé
+            {t("done")}
           </button>
         </div>
       )}
@@ -1042,19 +1053,25 @@ export default function EmbedPage() {
       {/* Minimal status bar — shows save state */}
       <footer className="flex items-center justify-between border-t px-3 py-1 text-xs text-muted-foreground bg-background">
         <span>
-          Page {currentPageIndex + 1} / {pages.length}
+          {t("status.page", {
+            current: currentPageIndex + 1,
+            total: pages.length,
+          })}
         </span>
         <div className="flex items-center gap-2">
           {saving && <Loader2 className="h-3 w-3 animate-spin" />}
           {saveError ? (
             <span className="text-destructive">{saveError}</span>
           ) : lastSaved ? (
-            <span>Saved {lastSaved.toLocaleTimeString()}</span>
+            <span>
+              {t("status.saved", {
+                time: lastSaved.toLocaleTimeString(locale),
+              })}
+            </span>
           ) : null}
           {pendingChanges > 0 && !saving && (
             <span className="text-amber-500">
-              {pendingChanges} unsaved change
-              {pendingChanges > 1 ? "s" : ""}
+              {t("status.unsavedChanges", { count: pendingChanges })}
             </span>
           )}
         </div>

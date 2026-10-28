@@ -28,6 +28,7 @@ vi.mock('next-intl', () => ({
       .join('|');
     return `${base}|${inline}`;
   },
+  useLocale: () => 'en',
 }));
 
 const clientLoggerMock = vi.hoisted(() => ({

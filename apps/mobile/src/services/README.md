@@ -58,7 +58,7 @@ Handles user authentication and account management.
 - `requestPasswordReset(email)` - Request password reset
 - `resetPassword()` - Reset password with token
 - `verifyEmail(token)` - Verify email address
-- `deleteAccount(password)` - Delete user account
+- `deleteAccount()` - Permanently erase the account (`DELETE /api/v1/account`, GDPR art. 17)
 
 **Social Auth:**
 - `socialAuthService.loginWithGoogle(idToken)`

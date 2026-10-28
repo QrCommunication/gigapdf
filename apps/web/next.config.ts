@@ -3,61 +3,9 @@ import createNextIntlPlugin from "next-intl/plugin";
 import path from "path";
 import { withSentryConfig } from "@sentry/nextjs";
 
+import { SECURITY_HEADER_RULES } from "./src/lib/security-headers";
+
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
-
-// ---------------------------------------------------------------------------
-// Security headers (WID-04 / OWASP-A05)
-// ---------------------------------------------------------------------------
-// API calls are proxied through Next.js rewrites (/backend-api/* → Python),
-// so connect-src only needs 'self' for HTTP calls.
-// WebSocket in production goes through wss://giga-pdf.com (same origin reverse
-// proxy), but we also allow wss://giga-pdf.com explicitly for clarity.
-// cdn.giga-pdf.com hosts the embeddable widget script loaded by third-party
-// sites, not by the Next.js app itself — no script-src entry needed here.
-// ---------------------------------------------------------------------------
-
-const CONNECT_SRC =
-  "connect-src 'self' wss://giga-pdf.com https://giga-pdf.com;";
-
-// Embed routes (/embed/*) are loaded inside third-party iframes.
-// frame-ancestors must be permissive (*) there, and X-Frame-Options must be
-// omitted (it cannot be set to ALLOWALL in modern browsers — CSP wins).
-const CSP_EMBED = [
-  "frame-ancestors *",
-  "default-src 'none'",
-  "script-src 'self' 'unsafe-inline' https://cdn.giga-pdf.com",
-  CONNECT_SRC,
-  "img-src 'self' data: blob: https:",
-  "style-src 'self' 'unsafe-inline'",
-  // blob: required for embedded PDF fonts loaded via FontFace.
-  "font-src 'self' data: blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-].join("; ");
-
-// All other routes: strict policy.
-// - script-src 'unsafe-eval' is required by the PDF.js worker (WASM eval).
-// - style-src 'unsafe-inline' is required by Tailwind CSS runtime and
-//   third-party UI libraries that inject inline styles.
-// - font-src includes blob: so the editor can register the PDF's embedded
-//   TTF/OTF programs as FontFace instances. Without it the browser blocks
-//   `new FontFace(name, blobUrl)` and every text run silently falls back
-//   to the system Helvetica/Arial.
-// - frame-ancestors 'none' blocks all embedding (clickjacking protection).
-// - form-action includes accounts.google.com for Google OAuth redirects.
-const CSP_DEFAULT = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data: blob:",
-  CONNECT_SRC,
-  "frame-src 'none'",
-  "frame-ancestors 'none'",
-  "form-action 'self' https://accounts.google.com",
-  "object-src 'none'",
-  "base-uri 'self'",
-].join("; ");
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -116,6 +64,11 @@ const nextConfig: NextConfig = {
   experimental: {
     // Use PPR for better static/dynamic mix
     ppr: false,
+    // src/app/global-not-found.tsx: the app has several root layouts ((site),
+    // (app), (embed), public), so an unmatched URL has no layout to render in.
+    // A root not-found.tsx was wrapped in Next's default document and served
+    // two <html>/<body>; global-not-found returns its own single document.
+    globalNotFound: true,
     // Align Server Action body size limit with the rest of the stack (100 MB).
     // Python config.py, nginx client_max_body_size, and env MAX_UPLOAD_SIZE_MB
     // are all set to 100 MB.  SESSION_20260423_023327.
@@ -161,39 +114,10 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "s3.fr-par.scw.cloud" },
     ],
   },
-  // Security headers applied at the edge before any page renders.
+  // Security headers applied at the edge before any page renders
+  // (rules and their order: src/lib/security-headers.ts).
   async headers() {
-    return [
-      {
-        // Embed widget routes — permissive frame-ancestors, no X-Frame-Options.
-        source: "/embed/:path*",
-        headers: [
-          { key: "Content-Security-Policy", value: CSP_EMBED },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-        ],
-      },
-      {
-        // All other routes — strict security posture.
-        source: "/:path*",
-        headers: [
-          { key: "Content-Security-Policy", value: CSP_DEFAULT },
-          // X-Frame-Options as defence-in-depth alongside CSP frame-ancestors.
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          // HSTS: 1 year, include subdomains.
-          {
-            key: "Strict-Transport-Security",
-            value: "max-age=31536000; includeSubDomains",
-          },
-          {
-            key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
-          },
-        ],
-      },
-    ];
+    return SECURITY_HEADER_RULES;
   },
   // Embed widget docs masquée tant que le SDK @giga-pdf/embed n'est pas publié :
   // 307 vers /docs au niveau ROUTING (s'exécute avant le middleware), donc une

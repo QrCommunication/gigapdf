@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Paperclip,
   Download,
@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { Button } from "@giga-pdf/ui";
 import type { EmbeddedFileObject } from "@giga-pdf/types";
-import { cn } from "@/lib/utils";
+import { cn, formatBytes } from "@/lib/utils";
 
 interface EmbeddedFilesPanelProps {
   files: EmbeddedFileObject[];
@@ -51,17 +51,6 @@ function getFileIcon(mimeType: string) {
 }
 
 /**
- * Format file size in human readable format
- */
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-}
-
-/**
  * Panneau des fichiers embarqués - Liste, téléchargement, ajout et suppression
  * des pièces jointes (y compris les fichiers associés Factur-X / ZUGFeRD).
  */
@@ -74,6 +63,7 @@ export function EmbeddedFilesPanel({
   className,
 }: EmbeddedFilesPanelProps) {
   const t = useTranslations("editor.attachments");
+  const locale = useLocale();
   const [expanded, setExpanded] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -132,7 +122,7 @@ export function EmbeddedFilesPanel({
             <span>{t("title")}</span>
             {files.length > 0 && (
               <span className="text-xs text-muted-foreground">
-                ({files.length} - {formatFileSize(totalSize)})
+                ({files.length} - {formatBytes(totalSize, locale)})
               </span>
             )}
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
@@ -192,7 +182,7 @@ export function EmbeddedFilesPanel({
                     {file.name}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {formatFileSize(file.sizeBytes)}
+                    {formatBytes(file.sizeBytes, locale)}
                     {file.description && ` • ${file.description}`}
                   </p>
                 </div>

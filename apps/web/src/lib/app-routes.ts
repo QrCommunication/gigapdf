@@ -4,9 +4,10 @@
  * dans le périmètre statique (site)/[locale] et répondraient 404.
  *
  * Doit correspondre exactement aux dossiers de src/app/(app)/(dashboard)/*,
- * src/app/(app)/* (editor, embed, invitations) et src/app/public. Le test
- * src/lib/__tests__/app-routes.test.ts le vérifie : /change-password et
- * /flatten ont été en 404 en production parce qu'ils manquaient ici.
+ * src/app/(app)/* (editor, invitations), src/app/(embed)/* (embed) et
+ * src/app/public. Le test src/lib/__tests__/app-routes.test.ts le vérifie :
+ * /change-password et /flatten ont été en 404 en production parce qu'ils
+ * manquaient ici.
  */
 export const APP_ROUTES: ReadonlySet<string> = new Set<string>([
   // Conteneurs app

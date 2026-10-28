@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useId, useMemo, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { zipSync, strToU8, type Zippable } from "fflate";
 import {
   Button,
@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { triggerBlobDownload } from "./blob-download";
 import { clientLogger } from "@/lib/client-logger";
+import { formatBytes } from "@/lib/utils";
 import { getAuthToken } from "@/lib/auth-token";
 import { ToolFieldControl } from "./tool-field-control";
 import { ToolTextRunner } from "./tool-text-runner";
@@ -79,14 +80,6 @@ function iconForFile(name: string) {
   return FileIcon;
 }
 
-/** Human-readable size (KB/MB) without external deps. */
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(0)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
-}
-
 /** Shape of the `splitZip` endpoint payload (parts as base64). */
 interface SplitPartsResponse {
   data?: {
@@ -121,6 +114,7 @@ export function ToolRunner({ config }: ToolRunnerProps) {
 function FileToolRunner({ config }: ToolRunnerProps) {
   const t = useTranslations(config.namespace);
   const tRunner = useTranslations("toolRunner");
+  const locale = useLocale();
   const { toast } = useToast();
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -453,7 +447,7 @@ function FileToolRunner({ config }: ToolRunnerProps) {
                         {item.file.name}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {formatBytes(item.file.size)}
+                        {formatBytes(item.file.size, locale)}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
@@ -507,11 +501,11 @@ function FileToolRunner({ config }: ToolRunnerProps) {
                 }`}
                 aria-live="polite"
               >
-                <span>{tRunner("totalSize", { size: formatBytes(totalSize) })}</span>
+                <span>{tRunner("totalSize", { size: formatBytes(totalSize, locale) })}</span>
                 {overLimit && (
                   <span>
                     {tRunner("overLimit", {
-                      max: `${Math.round(maxTotalBytes / (1024 * 1024))} MB`,
+                      max: formatBytes(maxTotalBytes, locale, 0),
                     })}
                   </span>
                 )}

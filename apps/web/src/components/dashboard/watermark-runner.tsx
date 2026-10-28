@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useId, useMemo, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Button,
   Card,
@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { triggerBlobDownload } from "./blob-download";
 import { clientLogger } from "@/lib/client-logger";
+import { formatBytes } from "@/lib/utils";
 
 /**
  * Dedicated runner for the `/watermark` tool, with a Text | Image mode toggle.
@@ -105,13 +106,6 @@ function anchorLabelKey(value: (typeof IMAGE_ANCHORS)[number]): string {
   }
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(0)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
-}
-
 /** A single-file dropzone (PDF or image) with drag highlight + clear. */
 function FileDrop({
   label,
@@ -135,6 +129,7 @@ function FileDrop({
   const inputRef = useRef<HTMLInputElement>(null);
   const hintId = useId();
   const tRunner = useTranslations("toolRunner");
+  const locale = useLocale();
   const [isDragging, setIsDragging] = useState(false);
   const dragDepthRef = useRef(0);
 
@@ -151,7 +146,7 @@ function FileDrop({
           <p className="truncate text-sm font-medium" title={file.name}>
             {file.name}
           </p>
-          <p className="text-xs text-muted-foreground">{formatBytes(file.size)}</p>
+          <p className="text-xs text-muted-foreground">{formatBytes(file.size, locale)}</p>
         </div>
         <Button
           variant="ghost"

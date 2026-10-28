@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { X, Loader2, Minimize2 } from "lucide-react";
 import { useCompressPdf, downloadBlob } from "@giga-pdf/api";
+import { formatBytes } from "@/lib/utils";
 
 export interface CompressDialogProps {
   open: boolean;
@@ -33,13 +34,11 @@ type StructureMode = "standard" | "optimize" | "linearize";
 /** %PDF header banner for the optimized / linearized output. */
 type PdfVersion = "1.7" | "2.0";
 
-/** Human-readable byte size (fr-style separator handled by toLocaleString). */
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return "—";
-  if (bytes < 1024) return `${bytes} o`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} Mo`;
-}
+/**
+ * Before/after sizes keep two fraction digits so a small gain stays visible
+ * (1.23 MB → 1.21 MB would otherwise read "1.2 MB → 1.2 MB").
+ */
+const COMPARISON_FRACTION_DIGITS = 2;
 
 /**
  * CompressDialog — run the dedicated compression pipeline (native
@@ -55,6 +54,7 @@ export function CompressDialog({
   onApplied,
 }: CompressDialogProps) {
   const t = useTranslations("editor.compress");
+  const locale = useLocale();
   const [outputMode, setOutputMode] = useState<OutputMode>("apply");
   const [structure, setStructure] = useState<StructureMode>("standard");
   const [version, setVersion] = useState<PdfVersion>("1.7");
@@ -137,7 +137,7 @@ export function CompressDialog({
         <form onSubmit={submit} className="px-6 pb-6 pt-2 space-y-4">
           <p className="text-sm text-muted-foreground">
             {t("currentSize", {
-              size: currentFile ? formatBytes(currentFile.size) : "—",
+              size: currentFile ? formatBytes(currentFile.size, locale) : "—",
             })}
           </p>
 
@@ -272,16 +272,16 @@ export function CompressDialog({
               {result.compressedSize < result.originalSize ? (
                 <p className="text-foreground">
                   {t("resultSmaller", {
-                    before: formatBytes(result.originalSize),
-                    after: formatBytes(result.compressedSize),
+                    before: formatBytes(result.originalSize, locale, COMPARISON_FRACTION_DIGITS),
+                    after: formatBytes(result.compressedSize, locale, COMPARISON_FRACTION_DIGITS),
                     percent,
                   })}
                 </p>
               ) : (
                 <p className="text-muted-foreground">
                   {t("resultNotSmaller", {
-                    before: formatBytes(result.originalSize),
-                    after: formatBytes(result.compressedSize),
+                    before: formatBytes(result.originalSize, locale, COMPARISON_FRACTION_DIGITS),
+                    after: formatBytes(result.compressedSize, locale, COMPARISON_FRACTION_DIGITS),
                   })}
                 </p>
               )}

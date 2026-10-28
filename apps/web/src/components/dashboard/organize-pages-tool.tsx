@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Button,
   Card,
@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { triggerBlobDownload } from "./blob-download";
 import { clientLogger } from "@/lib/client-logger";
+import { formatBytes } from "@/lib/utils";
 import {
   usePageOrganizer,
   PageOrganizerBoard,
@@ -44,16 +45,9 @@ const MAX_FILE_SIZE_BYTES = 250 * 1024 * 1024;
 /** Accept hint for the native picker — PDF only. */
 const ACCEPT = ".pdf,application/pdf";
 
-/** Human-readable size (KB/MB) without external deps. */
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(0)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
-}
-
 export function OrganizePagesTool() {
   const t = useTranslations("organizePages");
+  const locale = useLocale();
   const { toast } = useToast();
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -92,13 +86,13 @@ export function OrganizePagesTool() {
         toast({
           variant: "destructive",
           title: t("toastError"),
-          description: t("overLimit", { max: formatBytes(MAX_FILE_SIZE_BYTES) }),
+          description: t("overLimit", { max: formatBytes(MAX_FILE_SIZE_BYTES, locale) }),
         });
         return;
       }
       setFile(incoming);
     },
-    [t, toast],
+    [t, toast, locale],
   );
 
   const handleBrowse = useCallback(() => {
@@ -187,7 +181,7 @@ export function OrganizePagesTool() {
         </div>
         {file && (
           <p className="text-xs text-muted-foreground">
-            {file.name} · {t("totalSize", { size: formatBytes(file.size) })}
+            {file.name} · {t("totalSize", { size: formatBytes(file.size, locale) })}
           </p>
         )}
       </div>

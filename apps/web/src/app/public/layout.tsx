@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Geist, Geist_Mono } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
+import { fontVariables } from "@/lib/fonts";
 import "@/styles/globals.css";
 
 // ---------------------------------------------------------------------------
@@ -27,23 +27,6 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const geistSans = Geist({
-  subsets: ["latin"],
-  variable: "--font-geist-sans",
-});
-
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-geist-mono",
-});
-
-const bricolage = Bricolage_Grotesque({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-bricolage",
-  display: "swap",
-});
-
 export default async function PublicShareLayout({
   children,
 }: {
@@ -55,7 +38,7 @@ export default async function PublicShareLayout({
   return (
     <html lang={locale} suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} font-sans antialiased`}
+        className={`${fontVariables} font-sans antialiased`}
       >
         <NextIntlClientProvider locale={locale} messages={messages}>
           {children}

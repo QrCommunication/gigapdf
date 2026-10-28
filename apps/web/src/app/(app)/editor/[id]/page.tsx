@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useShallow } from "zustand/react/shallow";
 import Link from "next/link";
 import type {
@@ -340,6 +340,7 @@ export default function EditorPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const t = useTranslations("editor");
+  const locale = useLocale();
   const { toast } = useToast();
 
   // ID du document stocké (depuis l'URL)
@@ -5321,7 +5322,7 @@ export default function EditorPage() {
   // Format de la dernière sauvegarde
   const lastSavedText = lastSaved
     ? t("lastSaved", {
-        time: lastSaved.toLocaleTimeString(),
+        time: lastSaved.toLocaleTimeString(locale),
       })
     : t("notSaved");
 

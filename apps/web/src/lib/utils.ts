@@ -18,16 +18,26 @@ export function formatDate(date: Date | string, locale: string): string {
   });
 }
 
-export function formatBytes(bytes: number, decimals = 2): string {
-  if (bytes === 0) return "0 Bytes";
+const BYTE_UNITS = ["byte", "kilobyte", "megabyte", "gigabyte", "terabyte"] as const;
 
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+/**
+ * File size in the UI language: "1,5 Mo" in French, "1.5 MB" in English.
+ * Unit names come from Intl (CLDR), so every locale gets its own symbols
+ * (o/ko/Mo/Go in French). Binary multiples (1024), as the app always used.
+ * Returns "—" for a missing or invalid size.
+ */
+export function formatBytes(bytes: number, locale: string, maximumFractionDigits = 1): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "—";
 
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const exponent =
+    bytes < 1 ? 0 : Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), BYTE_UNITS.length - 1);
 
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
+  return new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: BYTE_UNITS[exponent],
+    unitDisplay: "short",
+    maximumFractionDigits: exponent === 0 ? 0 : maximumFractionDigits,
+  }).format(bytes / 1024 ** exponent);
 }
 
 export function truncate(str: string, length: number): string {

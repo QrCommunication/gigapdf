@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Geist, Geist_Mono } from "next/font/google";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Toaster } from "@giga-pdf/ui";
 import { Providers } from "@/components/providers";
 import { routing } from "@/i18n/routing";
+import { fontVariables } from "@/lib/fonts";
 import "@/styles/globals.css";
 
 // ---------------------------------------------------------------------------
@@ -20,23 +20,6 @@ import "@/styles/globals.css";
 // EXCLUSIVEMENT du segment [locale] (params), donc generateStaticParams +
 // setRequestLocale suffisent à pré-rendre tout le périmètre public en SSG.
 // ---------------------------------------------------------------------------
-
-const geistSans = Geist({
-  subsets: ["latin"],
-  variable: "--font-geist-sans",
-});
-
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-geist-mono",
-});
-
-const bricolage = Bricolage_Grotesque({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-bricolage",
-  display: "swap",
-});
 
 const appIcons = {
   icon: [
@@ -161,7 +144,7 @@ export default async function SiteLocaleLayout({
   return (
     <html lang={locale} suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} font-sans antialiased`}
+        className={`${fontVariables} font-sans antialiased`}
       >
         <NextIntlClientProvider locale={locale} messages={messages}>
           <Providers>{children}</Providers>

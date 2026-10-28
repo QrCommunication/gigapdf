@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import {
 import { Loader2, Trash2, FilePlus } from "lucide-react";
 import { useMergePdfs, downloadBlob } from "@giga-pdf/api";
 import { clientLogger } from "@/lib/client-logger";
+import { formatBytes } from "@/lib/utils";
 
 interface MergeDialogProps {
   open: boolean;
@@ -30,6 +31,7 @@ interface PdfEntry {
 
 export function MergeDialog({ open, onClose }: MergeDialogProps) {
   const t = useTranslations("editor.merge");
+  const locale = useLocale();
   const [entries, setEntries] = useState<PdfEntry[]>([]);
   const [outputName, setOutputName] = useState("merged.pdf");
   const [error, setError] = useState<string | null>(null);
@@ -166,7 +168,7 @@ export function MergeDialog({ open, onClose }: MergeDialogProps) {
                           {entry.file.name}
                         </span>
                         <span className="text-xs text-muted-foreground shrink-0">
-                          ({(entry.file.size / 1024).toFixed(0)} KB)
+                          ({formatBytes(entry.file.size, locale)})
                         </span>
                       </div>
                       <div className="pl-7">

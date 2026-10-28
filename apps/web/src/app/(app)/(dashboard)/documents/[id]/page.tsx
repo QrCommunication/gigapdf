@@ -410,7 +410,7 @@ export default function DocumentPage({ params }: DocumentPageProps) {
                   {t("lastModified", { date: formatDate(latestVersion.created_at, locale) })}
                 </span>
               )}
-              {currentVersion && <span>{formatBytes(currentVersion.size_bytes)}</span>}
+              {currentVersion && <span>{formatBytes(currentVersion.size_bytes, locale)}</span>}
               <Badge variant="secondary">
                 {t("info.pagesValue", { count: session.page_count })}
               </Badge>
@@ -509,7 +509,7 @@ export default function DocumentPage({ params }: DocumentPageProps) {
               <MetadataRow
                 label={t("info.fileSize")}
                 value={
-                  currentVersion ? formatBytes(currentVersion.size_bytes) : "--"
+                  currentVersion ? formatBytes(currentVersion.size_bytes, locale) : "--"
                 }
               />
               <Separator />
@@ -621,7 +621,7 @@ export default function DocumentPage({ params }: DocumentPageProps) {
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {formatDate(version.created_at, locale)} ·{" "}
-                          {formatBytes(version.size_bytes)}
+                          {formatBytes(version.size_bytes, locale)}
                         </p>
                         {version.comment && (
                           <p

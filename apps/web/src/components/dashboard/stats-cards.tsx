@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@giga-pdf/ui";
 import { FileText, FolderOpen, HardDrive } from "lucide-react";
 import { formatBytes } from "@/lib/utils";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 interface StatsCardsProps {
   totalDocuments: number;
@@ -17,6 +17,7 @@ export function StatsCards({
   recentDocuments,
 }: StatsCardsProps) {
   const t = useTranslations("dashboard.stats");
+  const locale = useLocale();
 
   return (
     <div className="grid gap-4 md:grid-cols-3">
@@ -35,7 +36,7 @@ export function StatsCards({
           <HardDrive className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{formatBytes(totalSize)}</div>
+          <div className="text-2xl font-bold">{formatBytes(totalSize, locale)}</div>
         </CardContent>
       </Card>
       <Card>

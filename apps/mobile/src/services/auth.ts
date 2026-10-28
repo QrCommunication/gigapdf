@@ -5,7 +5,7 @@
  */
 
 import axios from 'axios';
-import { AUTH_BASE_URL, tokenManager } from './api';
+import { AUTH_BASE_URL, apiClient, tokenManager } from './api';
 import {
   ApiResponse,
   AuthResponse,
@@ -13,6 +13,9 @@ import {
   RegisterData,
   User,
 } from './types';
+
+/** Literal the backend requires in the DELETE /api/v1/account body. */
+export const ACCOUNT_DELETION_CONFIRMATION = 'DELETE';
 
 // ============================================================================
 // Types for Better Auth
@@ -395,18 +398,17 @@ export const authService = {
   },
 
   /**
-   * Delete user account
-   * Note: Better Auth may require custom endpoint for this
-   * @param password - User password for confirmation
+   * Permanently erase the signed-in account (GDPR art. 17).
+   * Backend: DELETE /api/v1/account with the explicit confirmation literal.
+   * Rejects with an ApiException (status 409, code
+   * TENANT_OWNERSHIP_TRANSFER_REQUIRED or ACTIVE_SUBSCRIPTION_CANCELLATION_REQUIRED)
+   * when the erasure is blocked; tokens are cleared only once it succeeded.
    */
-  async deleteAccount(password: string): Promise<void> {
-    try {
-      // Custom endpoint - may need adjustment based on backend implementation
-      await authAxios.post('/delete-user', { password });
-      await tokenManager.clearTokens();
-    } catch (error) {
-      handleAuthError(error);
-    }
+  async deleteAccount(): Promise<void> {
+    await apiClient.delete('/account', {
+      data: { confirmation: ACCOUNT_DELETION_CONFIRMATION },
+    });
+    await tokenManager.clearTokens();
   },
 };
 

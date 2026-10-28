@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Button, Card, CardContent, CardHeader, Skeleton } from "@giga-pdf/ui";
 import { Download, Eye, FileText, LinkIcon } from "lucide-react";
 import { Logo } from "@/components/logo";
@@ -36,6 +36,7 @@ interface PublicDocumentViewerProps {
  */
 export function PublicDocumentViewer({ token }: PublicDocumentViewerProps) {
   const t = useTranslations("sharing.publicPage");
+  const locale = useLocale();
   // An empty token is invalid by construction — derived at init, no effect.
   const [state, setState] = useState<ViewState>(() =>
     token ? "loading" : "notFound"
@@ -135,7 +136,7 @@ export function PublicDocumentViewer({ token }: PublicDocumentViewerProps) {
               <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>{t("pageCount", { count: info.page_count })}</span>
                 <span aria-hidden>·</span>
-                <span>{formatBytes(info.file_size_bytes)}</span>
+                <span>{formatBytes(info.file_size_bytes, locale)}</span>
                 <span aria-hidden>·</span>
                 <span className="inline-flex items-center gap-1">
                   <Eye className="h-3 w-3" />

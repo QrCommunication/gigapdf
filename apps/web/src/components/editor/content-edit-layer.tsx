@@ -39,7 +39,7 @@ export interface ElementModification {
 
 /**
  * Backward-compatible props for the composed {@link ContentEditLayer}. Kept for
- * the embed editor (apps/web/src/app/(app)/embed) which mounts the layer as a
+ * the embed editor (apps/web/src/app/(embed)/embed) which mounts the layer as a
  * single `<main>`-cover sibling. The main editor uses the split
  * {@link ContentEditProvider} + {@link ContentEditToolbar} + {@link ContentEditZones}
  * so the same deep-edit surface works in the continuous (Word-like) view.

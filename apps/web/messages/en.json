@@ -1319,6 +1319,7 @@
         "cancel": "Cancel"
       },
       "deletedToTrash": "{count, plural, one {# item moved to trash} other {# items moved to trash}}",
+      "documentCount": "{count, plural, one {# document} other {# documents}}",
       "errors": {
         "moveItemsFailed": "Failed to move some items. Please try again.",
         "deleteItemsFailed": "Failed to delete some items. Please try again.",
@@ -1432,6 +1433,11 @@
       "deleteAccount": "Delete account",
       "deleteAccountDescription": "Permanently delete your account and all data",
       "deleteAccountConfirm": "This action cannot be undone. All your documents, settings, and data will be permanently deleted.",
+      "deleteAccountTypeToConfirm": "Type <code>{word}</code> to confirm.",
+      "deleteAccountSuccess": "Your account and all your data have been deleted.",
+      "deleteAccountFailed": "Deleting your account failed. Please try again: retrying is safe.",
+      "deleteAccountTenantOwnership": "You own an organization that has other members. Transfer its ownership before deleting your account.",
+      "deleteAccountActiveSubscription": "Your subscription is still active. Cancel it from the Billing page before deleting your account.",
       "exportData": "Export data",
       "exportDataDescription": "Download all your data"
     }
@@ -1486,6 +1492,7 @@
     "manageBillingPortal": "Manage billing",
     "confirmCancel": "Are you sure you want to cancel your subscription? You'll keep access until the end of your billing period.",
     "confirmRemovePaymentMethod": "Are you sure you want to remove this payment method?",
+    "perInterval": "{interval, select, day {/day} week {/week} month {/month} year {/year} other {/{interval}}}",
     "errors": {
       "upgradeFailed": "Failed to upgrade subscription. Please try again.",
       "cancelFailed": "Failed to cancel subscription. Please try again.",
@@ -4088,7 +4095,22 @@
       "name": "Key name",
       "namePlaceholder": "e.g. My application",
       "scopes": "Permissions",
-      "scopesPlaceholder": "read,write,admin",
+      "scopesHelp": "A request made with the key needs the matching permission. Platform administration is never reachable with an API key.",
+      "scopesRequired": "Select at least one permission.",
+      "scopeOptions": {
+        "read": {
+          "label": "Read (read)",
+          "description": "GET requests: view your documents and metadata."
+        },
+        "write": {
+          "label": "Write (write)",
+          "description": "POST, PUT, PATCH, DELETE requests: create, update and delete."
+        },
+        "admin": {
+          "label": "Account administration (admin)",
+          "description": "Manage your API keys and billing. Does not include read or write."
+        }
+      },
       "domains": "Allowed domains",
       "domainsPlaceholder": "example.com,app.example.com",
       "domainsHelp": "Separate domains with commas. Leave empty to allow all domains.",
@@ -4719,6 +4741,25 @@
       "targetAll": "Forms and annotations",
       "targetForms": "Forms only",
       "targetAnnotations": "Annotations only"
+    }
+  },
+  "embed": {
+    "sessionExpired": {
+      "title": "Session expired",
+      "description": "Your editing session has expired. Reload the page to continue.",
+      "reload": "Reload now"
+    },
+    "invalidToken": {
+      "title": "Invalid or missing session token",
+      "description": "Use the latest GigaPDF embed SDK: it automatically handles the secure session token exchange."
+    },
+    "loading": "Loading document…",
+    "loadError": "Failed to load document",
+    "done": "Done",
+    "status": {
+      "page": "Page {current} / {total}",
+      "saved": "Saved at {time}",
+      "unsavedChanges": "{count, plural, one {# unsaved change} other {# unsaved changes}}"
     }
   }
 }

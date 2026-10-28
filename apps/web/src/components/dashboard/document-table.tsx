@@ -126,7 +126,6 @@ interface DocumentTableProps {
   onDrop?: (e: React.DragEvent, folderId: string | null) => void;
   draggedItem?: DragItem | null;
   dragOverFolderId?: string | null;
-  formatSize?: (bytes: number) => string;
   selectionMode?: boolean;
   selectedItems?: SelectionItem[];
   onSelect?: (item: SelectionItem) => void;
@@ -210,7 +209,6 @@ export function DocumentTable({
   onDrop,
   draggedItem,
   dragOverFolderId,
-  formatSize,
   selectionMode = false,
   selectedItems = [],
   onSelect,
@@ -608,14 +606,14 @@ export function DocumentTable({
                       <span className="font-medium">{folder.name}</span>
                       {stats && stats.document_count > 0 && (
                         <span className="text-xs text-muted-foreground">
-                          ({stats.document_count} {stats.document_count === 1 ? "doc" : "docs"})
+                          ({t("explorer.documentCount", { count: stats.document_count })})
                         </span>
                       )}
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {stats && stats.total_size_bytes > 0
-                      ? (formatSize ? formatSize(stats.total_size_bytes) : formatBytes(stats.total_size_bytes))
+                      ? formatBytes(stats.total_size_bytes, locale)
                       : "--"
                     }
                   </TableCell>
@@ -728,7 +726,7 @@ export function DocumentTable({
                     </div>
                   </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {formatBytes(doc.size)}
+                  {formatBytes(doc.size, locale)}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {formatDate(doc.createdAt, locale)}

@@ -359,7 +359,7 @@ export default function SharedWithMePage() {
                         <span>{formatDate(new Date(doc.shared_at), locale)}</span>
                       </div>
                       {doc.file_size_bytes && (
-                        <p>{formatBytes(doc.file_size_bytes)}</p>
+                        <p>{formatBytes(doc.file_size_bytes, locale)}</p>
                       )}
                     </div>
                   </div>

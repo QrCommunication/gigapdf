@@ -1,33 +1,37 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Button, Skeleton } from "@giga-pdf/ui";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@giga-pdf/ui";
 import { Badge } from "@giga-pdf/ui";
 import { Check, CreditCard, Download, ExternalLink, Loader2, Trash2 } from "lucide-react";
 import { api, Plan, QuotaSummary, Subscription, PaymentMethod, Invoice } from "@/lib/api";
 import { clientLogger } from "@/lib/client-logger";
+import { formatBytes } from "@/lib/utils";
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-}
+/** Fallback storage quota shown before the quota summary has loaded (1 GiB). */
+const DEFAULT_STORAGE_LIMIT_BYTES = 1024 ** 3;
 
-function formatCurrency(amount: number, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
+/** Stripe invoice amounts are expressed in the currency minor unit (cents). */
+const STRIPE_MINOR_UNITS_PER_MAJOR = 100;
+
+/**
+ * Amount in the UI language ("12 €" in French, "€12" in English). The locale
+ * used to be hard-coded to "en-US", so French users read "€12" too.
+ */
+function formatCurrency(amount: number, currency: string, locale: string): string {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: currency.toUpperCase(),
     minimumFractionDigits: 0,
-  }).format(amount / 100); // Stripe amounts are in cents
+  }).format(amount);
 }
 
 export default function BillingPage() {
   const t = useTranslations("billing");
   const tCommon = useTranslations("common");
+  const locale = useLocale();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [quota, setQuota] = useState<QuotaSummary | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -37,15 +41,12 @@ export default function BillingPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const formatPrice = (price: number, currency: string, interval: string): string => {
-    const formatted = new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency.toUpperCase(),
-      minimumFractionDigits: 0,
-    }).format(price);
-
+  // The billing interval suffix ("/mois", "/an"…) is rendered separately next
+  // to the amount, so the price itself carries no suffix (it used to render
+  // twice: "10 €/mo/month").
+  const formatPrice = (price: number, currency: string): string => {
     if (price === 0) return t("free");
-    return `${formatted}/${interval === "month" ? "mo" : interval}`;
+    return formatCurrency(price, currency, locale);
   };
 
   useEffect(() => {
@@ -190,8 +191,7 @@ export default function BillingPage() {
     if (plan.storage_limit_bytes === -1) {
       features.push(t("features.unlimitedStorage"));
     } else {
-      const storageGB = plan.storage_limit_bytes / (1024 * 1024 * 1024);
-      features.push(`${storageGB >= 1 ? storageGB + "GB" : plan.storage_limit_bytes / (1024 * 1024) + "MB"} ${t("storage").toLowerCase()}`);
+      features.push(`${formatBytes(plan.storage_limit_bytes, locale)} ${t("storage").toLowerCase()}`);
     }
 
     // Documents
@@ -205,7 +205,7 @@ export default function BillingPage() {
     if (plan.api_calls_limit === -1) {
       features.push(t("features.unlimitedApiCalls"));
     } else {
-      features.push(t("features.apiCallsPerMonth", { count: plan.api_calls_limit.toLocaleString() }));
+      features.push(t("features.apiCallsPerMonth", { count: plan.api_calls_limit.toLocaleString(locale) }));
     }
 
     // Team members (-1 = unlimited). max_members is returned by the plans
@@ -317,13 +317,13 @@ export default function BillingPage() {
               <p className="text-sm text-muted-foreground">
                 {quota?.documents.count ?? 0} / {quota?.documents.limit === -1 ? "∞" : quota?.documents.limit ?? 5} documents
                 {" • "}
-                {formatBytes(quota?.storage.used_bytes ?? 0)} / {formatBytes(quota?.storage.limit_bytes ?? 1073741824)} {t("storage").toLowerCase()}
+                {formatBytes(quota?.storage.used_bytes ?? 0, locale)} / {formatBytes(quota?.storage.limit_bytes ?? DEFAULT_STORAGE_LIMIT_BYTES, locale)} {t("storage").toLowerCase()}
               </p>
               {subscription?.current_period_end && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   {subscription.cancel_at_period_end
-                    ? t("accessUntil", { date: new Date(subscription.current_period_end).toLocaleDateString() })
-                    : t("renewsOn", { date: new Date(subscription.current_period_end).toLocaleDateString() })}
+                    ? t("accessUntil", { date: new Date(subscription.current_period_end).toLocaleDateString(locale) })
+                    : t("renewsOn", { date: new Date(subscription.current_period_end).toLocaleDateString(locale) })}
                 </p>
               )}
             </div>
@@ -371,7 +371,7 @@ export default function BillingPage() {
             </div>
             <div>
               <div className="mb-1 flex justify-between text-sm">
-                <span>{t("apiCalls")} ({t("resetsOn", { date: quota?.api_calls.resets_at ? new Date(quota.api_calls.resets_at).toLocaleDateString() : t("resetsMonthly") })})</span>
+                <span>{t("apiCalls")} ({t("resetsOn", { date: quota?.api_calls.resets_at ? new Date(quota.api_calls.resets_at).toLocaleDateString(locale) : t("resetsMonthly") })})</span>
                 <span>{quota?.api_calls.percentage ?? 0}%</span>
               </div>
               <div className="h-2 rounded-full bg-muted">
@@ -424,11 +424,11 @@ export default function BillingPage() {
                       </div>
                       <CardDescription>
                         <span className="text-3xl font-bold">
-                          {formatPrice(plan.price, plan.currency, plan.interval)}
+                          {formatPrice(plan.price, plan.currency)}
                         </span>
                         {plan.price > 0 && (
                           <span className="text-muted-foreground">
-                            /{plan.interval === "month" ? "month" : plan.interval}
+                            {t("perInterval", { interval: plan.interval })}
                           </span>
                         )}
                       </CardDescription>
@@ -602,13 +602,13 @@ export default function BillingPage() {
                   <div>
                     <p className="font-medium">{invoice.number}</p>
                     <p className="text-sm text-muted-foreground">
-                      {new Date(invoice.created).toLocaleDateString()}
+                      {new Date(invoice.created).toLocaleDateString(locale)}
                     </p>
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
                       <p className="font-medium">
-                        {formatCurrency(invoice.amount_paid, invoice.currency)}
+                        {formatCurrency(invoice.amount_paid / STRIPE_MINOR_UNITS_PER_MAJOR, invoice.currency, locale)}
                       </p>
                       <Badge
                         variant={invoice.status === "paid" ? "default" : "secondary"}

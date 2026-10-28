@@ -180,6 +180,16 @@ describe('POST /api/pdf/compress', () => {
     expect(vi.mocked(optimizeAndSave)).toHaveBeenCalledTimes(1);
     expect(saveOptimized).not.toHaveBeenCalled();
     expect(saveLinearized).not.toHaveBeenCalled();
+    expect(vi.mocked(closeDocument)).toHaveBeenCalledWith(handle);
+  });
+
+  it('default pipeline frees the engine document even when serialising fails', async () => {
+    vi.mocked(saveDocument).mockRejectedValue(new Error('boom'));
+
+    const res = await compressPOST(makeRequest([{ key: 'file', value: pdfFile() }]));
+
+    expect(res.status).toBe(500);
+    expect(vi.mocked(closeDocument)).toHaveBeenCalledWith(handle);
   });
 
   it('optimize=true → saveOptimized with object/xref streams + version 1.7, closes the handle', async () => {
@@ -251,6 +261,61 @@ describe('POST /api/pdf/compress', () => {
     );
     expect(Number(res.headers.get('X-Original-Size'))).toBe(FAKE_PDF.byteLength);
     expect(Number(res.headers.get('X-Compressed-Size'))).toBe(FAKE_PDF.byteLength);
+  });
+
+  describe('never returns a larger file', () => {
+    // A re-serialised PDF that grew: same header, extra padding.
+    const BIGGER = new Uint8Array([...FAKE_PDF, ...new Array(500).fill(0x20)]);
+    const SMALLER = FAKE_PDF.slice(0, FAKE_PDF.byteLength - 4);
+
+    const bodyBytes = async (res: Response) => new Uint8Array(await res.arrayBuffer());
+
+    it('returns the uploaded bytes when the default pipeline makes the file bigger', async () => {
+      vi.mocked(optimizeAndSave).mockResolvedValue({ bytes: BIGGER, optimized: true } as never);
+
+      const res = await compressPOST(makeRequest([{ key: 'file', value: pdfFile() }]));
+
+      expect(await bodyBytes(res)).toEqual(FAKE_PDF);
+      expect(res.headers.get('X-Kept-Original')).toBe('true');
+      expect(Number(res.headers.get('X-Compressed-Size'))).toBe(FAKE_PDF.byteLength);
+    });
+
+    it('returns the compressed bytes when they are smaller', async () => {
+      vi.mocked(optimizeAndSave).mockResolvedValue({ bytes: SMALLER, optimized: true } as never);
+
+      const res = await compressPOST(makeRequest([{ key: 'file', value: pdfFile() }]));
+
+      expect(await bodyBytes(res)).toEqual(SMALLER);
+      expect(res.headers.get('X-Kept-Original')).toBe('false');
+    });
+
+    it('returns the uploaded bytes when optimize makes the file bigger', async () => {
+      saveOptimized.mockReturnValue(BIGGER);
+
+      const res = await compressPOST(
+        makeRequest([
+          { key: 'file', value: pdfFile() },
+          { key: 'optimize', value: 'true' },
+        ]),
+      );
+
+      expect(await bodyBytes(res)).toEqual(FAKE_PDF);
+      expect(res.headers.get('X-Kept-Original')).toBe('true');
+    });
+
+    it('keeps a linearized output even when it is bigger (asked for its structure)', async () => {
+      saveLinearized.mockReturnValue(BIGGER);
+
+      const res = await compressPOST(
+        makeRequest([
+          { key: 'file', value: pdfFile() },
+          { key: 'linearize', value: 'true' },
+        ]),
+      );
+
+      expect(await bodyBytes(res)).toEqual(BIGGER);
+      expect(res.headers.get('X-Kept-Original')).toBe('false');
+    });
   });
 
   it('returns 422 when the PDF is encrypted', async () => {

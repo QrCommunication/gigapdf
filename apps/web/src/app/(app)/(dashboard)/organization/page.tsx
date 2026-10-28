@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "@/lib/auth-client";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Button } from "@giga-pdf/ui";
 import { Input } from "@giga-pdf/ui";
 import { Label } from "@giga-pdf/ui";
@@ -61,14 +61,7 @@ import {
   CreateOrganizationRequest,
 } from "@/lib/api";
 import { clientLogger } from "@/lib/client-logger";
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-}
+import { formatBytes } from "@/lib/utils";
 
 function getRoleIcon(role: string) {
   switch (role) {
@@ -90,6 +83,7 @@ function getRoleIcon(role: string) {
 export default function OrganizationPage() {
   const t = useTranslations("organization");
   const tCommon = useTranslations("common");
+  const locale = useLocale();
   const { data: session, isPending: sessionLoading } = useSession();
 
   // State
@@ -379,11 +373,11 @@ export default function OrganizationPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatBytes(organization.storage_used_bytes)}
+              {formatBytes(organization.storage_used_bytes, locale)}
             </div>
             <Progress value={storagePercentage} className="mt-2" />
             <p className="text-xs text-muted-foreground mt-1">
-              {formatBytes(organization.storage_limit_bytes)} {t("stats.total")}
+              {formatBytes(organization.storage_limit_bytes, locale)} {t("stats.total")}
             </p>
           </CardContent>
         </Card>
@@ -408,10 +402,10 @@ export default function OrganizationPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {organization.api_calls_used.toLocaleString()}
+              {organization.api_calls_used.toLocaleString(locale)}
             </div>
             <p className="text-xs text-muted-foreground">
-              / {organization.api_calls_limit.toLocaleString()} {t("stats.perMonth")}
+              / {organization.api_calls_limit.toLocaleString(locale)} {t("stats.perMonth")}
             </p>
           </CardContent>
         </Card>
@@ -471,7 +465,7 @@ export default function OrganizationPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {new Date(member.joined_at).toLocaleDateString()}
+                        {new Date(member.joined_at).toLocaleDateString(locale)}
                       </TableCell>
                       <TableCell className="text-right">
                         {member.role !== "owner" && (
@@ -525,7 +519,7 @@ export default function OrganizationPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {new Date(invitation.expires_at).toLocaleDateString()}
+                          {new Date(invitation.expires_at).toLocaleDateString(locale)}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button

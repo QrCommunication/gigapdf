@@ -1319,6 +1319,7 @@
         "cancel": "Annuler"
       },
       "deletedToTrash": "{count, plural, one {# élément mis à la corbeille} other {# éléments mis à la corbeille}}",
+      "documentCount": "{count, plural, one {# document} other {# documents}}",
       "errors": {
         "moveItemsFailed": "Impossible de déplacer certains éléments. Veuillez réessayer.",
         "deleteItemsFailed": "Impossible de supprimer certains éléments. Veuillez réessayer.",
@@ -1432,6 +1433,11 @@
       "deleteAccount": "Supprimer le compte",
       "deleteAccountDescription": "Supprimer définitivement votre compte et toutes vos données",
       "deleteAccountConfirm": "Cette action est irréversible. Tous vos documents, paramètres et données seront définitivement supprimés.",
+      "deleteAccountTypeToConfirm": "Tapez <code>{word}</code> pour confirmer.",
+      "deleteAccountSuccess": "Votre compte et toutes vos données ont été supprimés.",
+      "deleteAccountFailed": "La suppression du compte a échoué. Réessayez : aucune donnée n'est perdue en recommençant.",
+      "deleteAccountTenantOwnership": "Vous êtes propriétaire d'une organisation qui compte d'autres membres. Transférez-en la propriété avant de supprimer votre compte.",
+      "deleteAccountActiveSubscription": "Votre abonnement est toujours actif. Résiliez-le depuis la page Facturation avant de supprimer votre compte.",
       "exportData": "Exporter les données",
       "exportDataDescription": "Télécharger toutes vos données"
     }
@@ -1486,6 +1492,7 @@
     "manageBillingPortal": "Gérer la facturation",
     "confirmCancel": "Êtes-vous sûr de vouloir annuler votre abonnement ? Vous conserverez l'accès jusqu'à la fin de votre période de facturation.",
     "confirmRemovePaymentMethod": "Êtes-vous sûr de vouloir supprimer ce moyen de paiement ?",
+    "perInterval": "{interval, select, day {/jour} week {/semaine} month {/mois} year {/an} other {/{interval}}}",
     "errors": {
       "upgradeFailed": "Impossible de mettre à niveau l'abonnement. Veuillez réessayer.",
       "cancelFailed": "Impossible d'annuler l'abonnement. Veuillez réessayer.",
@@ -4088,7 +4095,22 @@
       "name": "Nom de la clé",
       "namePlaceholder": "ex: Mon application",
       "scopes": "Permissions",
-      "scopesPlaceholder": "read,write,admin",
+      "scopesHelp": "Une requête faite avec la clé exige la permission correspondante. L'administration de la plateforme n'est jamais accessible par clé API.",
+      "scopesRequired": "Choisissez au moins une permission.",
+      "scopeOptions": {
+        "read": {
+          "label": "Lecture (read)",
+          "description": "Requêtes GET : consulter vos documents et métadonnées."
+        },
+        "write": {
+          "label": "Écriture (write)",
+          "description": "Requêtes POST, PUT, PATCH, DELETE : créer, modifier et supprimer."
+        },
+        "admin": {
+          "label": "Administration du compte (admin)",
+          "description": "Gérer vos clés API et votre facturation. N'inclut ni la lecture ni l'écriture."
+        }
+      },
       "domains": "Domaines autorisés",
       "domainsPlaceholder": "example.com,app.example.com",
       "domainsHelp": "Séparez les domaines par des virgules. Laissez vide pour autoriser tous les domaines.",
@@ -4719,6 +4741,25 @@
       "targetAll": "Formulaires et annotations",
       "targetForms": "Formulaires uniquement",
       "targetAnnotations": "Annotations uniquement"
+    }
+  },
+  "embed": {
+    "sessionExpired": {
+      "title": "Session expirée",
+      "description": "Votre session d'édition a expiré. Rechargez la page pour continuer.",
+      "reload": "Recharger"
+    },
+    "invalidToken": {
+      "title": "Jeton de session invalide ou manquant",
+      "description": "Utilisez la dernière version du SDK d'intégration GigaPDF : il gère automatiquement l'échange sécurisé du jeton de session."
+    },
+    "loading": "Chargement du document…",
+    "loadError": "Impossible de charger le document",
+    "done": "Terminé",
+    "status": {
+      "page": "Page {current} / {total}",
+      "saved": "Enregistré à {time}",
+      "unsavedChanges": "{count, plural, one {# modification non enregistrée} other {# modifications non enregistrées}}"
     }
   }
 }

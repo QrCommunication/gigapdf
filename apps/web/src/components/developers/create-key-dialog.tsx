@@ -17,6 +17,17 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { KeyDisplay } from "./key-display";
 import { api, CreateApiKeyResponse } from "@/lib/api";
 
+/**
+ * Scopes enforced by the backend on secret keys (see
+ * app/middleware/api_key_scopes.py): read = GET/HEAD, write = other methods,
+ * admin = API-key management and billing. Nested: write includes read,
+ * admin includes both.
+ */
+const API_KEY_SCOPES = ["read", "write", "admin"] as const;
+type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
+
+const DEFAULT_SCOPES: readonly ApiKeyScope[] = ["read", "write"];
+
 interface CreateKeyDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -30,22 +41,31 @@ export function CreateKeyDialog({ open, onOpenChange, onCreated }: CreateKeyDial
   const tCommon = useTranslations("common");
 
   const [name, setName] = useState("");
-  const [scopes, setScopes] = useState("read,write");
+  const [scopes, setScopes] = useState<readonly ApiKeyScope[]>(DEFAULT_SCOPES);
   const [domains, setDomains] = useState("");
   const [rateLimit, setRateLimit] = useState(60);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CreateApiKeyResponse | null>(null);
 
+  const toggleScope = (scope: ApiKeyScope, enabled: boolean) => {
+    setScopes((current) =>
+      // Rebuild from API_KEY_SCOPES to keep a stable, canonical order.
+      API_KEY_SCOPES.filter((s) => (s === scope ? enabled : current.includes(s))),
+    );
+  };
+
+  const canCreate = name.trim().length > 0 && scopes.length > 0;
+
   const handleCreate = async () => {
-    if (!name.trim()) return;
+    if (!canCreate) return;
 
     try {
       setLoading(true);
       setError(null);
       const response = await api.createApiKey({
         name: name.trim(),
-        scopes: scopes || undefined,
+        scopes: scopes.join(","),
         allowed_domains: domains || undefined,
         rate_limit: rateLimit,
       });
@@ -61,7 +81,7 @@ export function CreateKeyDialog({ open, onOpenChange, onCreated }: CreateKeyDial
   const handleClose = (value: boolean) => {
     if (!value) {
       setName("");
-      setScopes("read,write");
+      setScopes(DEFAULT_SCOPES);
       setDomains("");
       setRateLimit(60);
       setError(null);
@@ -127,15 +147,33 @@ export function CreateKeyDialog({ open, onOpenChange, onCreated }: CreateKeyDial
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="key-scopes">{t("scopes")}</Label>
-                <Input
-                  id="key-scopes"
-                  value={scopes}
-                  onChange={(e) => setScopes(e.target.value)}
-                  placeholder={t("scopesPlaceholder")}
-                />
-              </div>
+              <fieldset className="space-y-2" aria-describedby="key-scopes-help">
+                <legend className="text-sm font-medium leading-none">{t("scopes")}</legend>
+                {API_KEY_SCOPES.map((scope) => {
+                  const id = `key-scope-${scope}`;
+                  return (
+                    <div key={scope} className="flex items-start gap-2">
+                      <input
+                        id={id}
+                        type="checkbox"
+                        checked={scopes.includes(scope)}
+                        onChange={(e) => toggleScope(scope, e.target.checked)}
+                        aria-describedby={`${id}-description`}
+                        className="mt-0.5 h-4 w-4 rounded border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      />
+                      <div className="space-y-0.5">
+                        <Label htmlFor={id}>{t(`scopeOptions.${scope}.label`)}</Label>
+                        <p id={`${id}-description`} className="text-xs text-muted-foreground">
+                          {t(`scopeOptions.${scope}.description`)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+                <p id="key-scopes-help" className="text-xs text-muted-foreground">
+                  {scopes.length === 0 ? t("scopesRequired") : t("scopesHelp")}
+                </p>
+              </fieldset>
 
               <div className="space-y-2">
                 <Label htmlFor="key-domains">{t("domains")}</Label>
@@ -165,7 +203,7 @@ export function CreateKeyDialog({ open, onOpenChange, onCreated }: CreateKeyDial
               <Button variant="outline" onClick={() => handleClose(false)}>
                 {tCommon("cancel")}
               </Button>
-              <Button onClick={handleCreate} disabled={loading || !name.trim()}>
+              <Button onClick={handleCreate} disabled={loading || !canCreate}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {loading ? t("creating") : t("create")}
               </Button>
