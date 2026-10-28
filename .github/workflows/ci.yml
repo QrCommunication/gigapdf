@@ -159,7 +159,7 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Run ruff (lint)
-        run: ruff check app/
+        run: ruff check app/ tests/ scripts/
 
       - name: Run mypy (type-check)
         run: mypy app/ --ignore-missing-imports
@@ -189,13 +189,60 @@ jobs:
           REDIS_URL: redis://localhost:6379
 
   # ─────────────────────────────────────────────
+  # Python — Tests d'intégration (PostgreSQL + pgvector réels)
+  # ─────────────────────────────────────────────
+  # FK cascades, pgvector, alembic migrations, account erasure and the
+  # collaboration service need a real PostgreSQL. Each test creates its own
+  # throwaway database on this server (tests/integration/conftest.py) and drops
+  # it. TEST_PG_ADMIN_URL being set makes an unreachable server FAIL the tests
+  # instead of skipping them, so a broken service cannot pass silently.
+  # No Redis service: the suite does not need one (verified with Redis absent).
+  test-backend-integration:
+    name: Test (Python backend, integration)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run integration tests
+        # -rs lists any skip with its reason: none is expected here.
+        run: pytest tests/integration -q -rs
+        env:
+          TEST_PG_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          # The app lifespan creates its storage directory; the default
+          # (/var/lib/gigapdf/documents) is not writable on the runner.
+          STORAGE_PATH: ${{ runner.temp }}/gigapdf-storage
+
+  # ─────────────────────────────────────────────
   # Build final (gate de merge)
   # ─────────────────────────────────────────────
   build:
     name: Build (JS/TS)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    needs: [lint, type-check, test-packages, test-web, lint-python, test-backend]
+    needs: [lint, type-check, test-packages, test-web, lint-python, test-backend, test-backend-integration]
     env:
       NEXT_PUBLIC_API_URL: https://api.giga-pdf.com
       NEXT_PUBLIC_WS_URL: wss://api.giga-pdf.com
