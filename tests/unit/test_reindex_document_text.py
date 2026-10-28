@@ -112,7 +112,7 @@ async def test_reindex_blocks_preserves_geometry_and_syncs_fulltext(fake_embeddi
         {"page": 0, "bbox": {"x": 72, "y": 760, "w": 220, "h": 18}, "text": "INVOICE 42"},
         {"page": 1, "bbox": {"x": 36, "y": 120, "w": 150, "h": 14}, "text": "Total due 1250"},
     ]
-    count = await reindex_document_blocks(session, DOC_ID, blocks)
+    count = await reindex_document_blocks(session, doc, blocks)
 
     stored = [o for o in session.added if isinstance(o, OcrBlock)]
     assert count == len(stored) == 2
@@ -123,6 +123,35 @@ async def test_reindex_blocks_preserves_geometry_and_syncs_fulltext(fake_embeddi
     assert all(b.embedding is not None and len(b.embedding) == 384 for b in stored)
     # Full-text material synced from the block texts.
     assert doc.extracted_text == "INVOICE 42 Total due 1250"
+
+
+async def test_reindex_blocks_updates_the_given_document_without_reselecting(fake_embeddings):
+    # The caller already loaded (and authorized) the row: re-selecting it cost a
+    # round-trip and, against a session whose results were exhausted, failed.
+    doc = _make_doc()
+    session = _FakeSession(doc=None)  # any SELECT would return nothing
+
+    blocks = [{"page": 0, "bbox": {}, "text": "Facture 7"}]
+    count = await reindex_document_blocks(session, doc, blocks)
+
+    assert count == 1
+    assert doc.extracted_text == "Facture 7"
+
+
+async def test_reindex_blocks_failure_raises_instead_of_reporting_zero(monkeypatch):
+    # A failure must reach the caller (whose rollback keeps the previous index),
+    # not be swallowed into a "0 blocks" success while blocks get committed.
+    boom = MagicMock(side_effect=RuntimeError("model exploded"))
+    monkeypatch.setattr(storage_module.embedding_service, "embed_passages", boom)
+
+    doc = _make_doc(extracted_text="ancien contenu")
+    session = _FakeSession(doc)
+
+    with pytest.raises(RuntimeError, match="model exploded"):
+        await reindex_document_blocks(session, doc, [{"page": 0, "text": "nouveau"}])
+
+    assert doc.extracted_text == "ancien contenu"  # untouched on failure
+    assert [o for o in session.added if isinstance(o, OcrBlock)] == []
 
 
 async def test_strips_nul_bytes(fake_embeddings):

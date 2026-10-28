@@ -131,6 +131,32 @@ class ObjectStorageService:
             logger.error(f"Storage delete failed for {key}: {e}")
             return False
 
+    def delete_keys(self, keys: list[str]) -> int:
+        """Delete every key, raising on the first failure (unlike ``delete_file``).
+
+        For callers that must not proceed while an object survives — account
+        erasure deletes the objects BEFORE the database rows, so a silent
+        failure would leave the user's files behind. Deleting a missing key is
+        a no-op on every backend, so a retry after a partial failure is safe.
+        """
+        for key in keys:
+            self.backend.delete_object(key)
+        return len(keys)
+
+    def delete_prefix(self, prefix: str) -> int:
+        """Delete every object under ``prefix``; returns the number deleted.
+
+        Raises on any backend failure. The prefix must name a directory
+        (non-empty, ending with ``/``): an empty prefix would match the
+        whole bucket.
+        """
+        if not prefix or not prefix.endswith("/") or prefix == "/":
+            raise ValueError(f"Refusing to delete an unbounded prefix: {prefix!r}")
+        # Materialise the listing first: deleting while paginating can make
+        # the backend skip keys.
+        keys = [obj.key for obj in self.backend.iter_objects(prefix)]
+        return self.delete_keys(keys)
+
     def copy_file(
         self,
         source_key: str,

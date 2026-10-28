@@ -20,10 +20,8 @@ import io
 
 import pikepdf
 import pytest
-from fastapi.testclient import TestClient
 
-from app.core.pdf_engine import PDFEngine, LegacyDocumentProxy
-
+from app.core.pdf_engine import LegacyDocumentProxy, PDFEngine
 
 # ---------------------------------------------------------------------------
 # Fixtures

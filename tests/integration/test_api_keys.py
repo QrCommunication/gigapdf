@@ -25,8 +25,10 @@ Middleware tests:
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -72,13 +74,16 @@ def _make_api_key_orm(
     m.name = name
     m.key_prefix = raw_key[:16]
     m.key_hash = _hash_key(raw_key)
+    # Keys created before publishable keys existed have no publishable half;
+    # left unset, MagicMock would leak into ApiKeyResponse (str | None) → 422.
+    m.publishable_key_prefix = None
     m.scopes = scopes
     m.allowed_domains = allowed_domains
     m.rate_limit = rate_limit
     m.is_active = is_active
     m.last_used_at = None
     m.expires_at = expires_at
-    m.created_at = created_at or datetime(2026, 1, 1, tzinfo=timezone.utc)
+    m.created_at = created_at or datetime(2026, 1, 1, tzinfo=UTC)
     return m
 
 
@@ -278,8 +283,6 @@ class TestCreateApiKey:
         When the auth override is removed a request without a valid JWT must
         return 401.
         """
-        from app.core.database import get_db
-
         # Temporarily restore the real auth dependency
         app_with_auth_override.dependency_overrides.pop(get_current_user, None)
         try:
@@ -588,6 +591,99 @@ def raw_client(raw_app) -> TestClient:
         yield c
 
 
+KEY_OWNER_ID = "key-owner-00000000-0000-0000-0000-000000000002"
+BEARER_USER_ID = "bearer-user-0000-0000-0000-0000-000000000003"
+
+
+@contextmanager
+def _api_key_middleware_patches(
+    key_orm: MagicMock,
+    owner: tuple[str | None, str | None] | None = ("owner@example.com", "Key Owner"),
+) -> Iterator[SimpleNamespace]:
+    """
+    Run the real middleware stack with its I/O replaced.
+
+    - ``_lookup_key`` returns *key_orm* (real signature, records each call);
+    - rate limit, ``last_used_at`` update and security audit are no-ops;
+    - the ``users`` row lookup returns *owner* (``None`` = deleted account);
+    - the API-call quota allows the request.
+    """
+    calls = SimpleNamespace(lookups=[], load_owner=AsyncMock(return_value=owner))
+
+    async def _fake_lookup(self_mw, raw_key: str, *, publishable: bool = False):
+        calls.lookups.append((raw_key, publishable))
+        return key_orm
+
+    async def _no_rate_limit(self_mw, key_record):
+        return False, {}
+
+    async def _noop(self_mw, *args, **kwargs):
+        return None
+
+    quota_info = {
+        "api_calls_limit": 1000,
+        "api_calls_remaining": 999,
+        "reset_at": "2026-11-01T00:00:00Z",
+    }
+    mw = "app.middleware.api_key_auth.ApiKeyAuthMiddleware"
+    with patch(f"{mw}._lookup_key", new=_fake_lookup), patch(
+        f"{mw}._check_rate_limit", new=_no_rate_limit
+    ), patch(f"{mw}._update_last_used", new=_noop), patch(
+        f"{mw}._audit_auth_failure", new=_noop
+    ), patch("app.middleware.auth._load_account", new=calls.load_owner), patch(
+        "app.middleware.api_quota.quota_service.check_api_quota",
+        new=AsyncMock(return_value=(True, quota_info)),
+    ), patch(
+        "app.middleware.api_quota.quota_service.increment_api_calls",
+        new=AsyncMock(return_value=quota_info),
+    ):
+        yield calls
+
+
+def _queried_owner_ids(session: AsyncMock) -> set[str]:
+    """Owner ids bound into the SQL statements the route executed."""
+    owner_ids: set[str] = set()
+    for call in session.execute.call_args_list:
+        params = call.args[0].compile().params
+        owner_ids.update(v for k, v in params.items() if k.startswith("owner_id"))
+    return owner_ids
+
+
+@pytest.fixture(scope="module")
+def scoped_test_client() -> Iterator[tuple[TestClient, object]]:
+    """Real app (no auth override) + one TestClient shared by the module."""
+    from app.main import create_application
+
+    application = create_application()
+    with TestClient(application, raise_server_exceptions=False) as c:
+        yield c, application
+
+
+@pytest.fixture()
+def scoped_client(scoped_test_client) -> Iterator[tuple[TestClient, AsyncMock]]:
+    """
+    Client whose ``get_db`` yields an empty mock session.
+
+    ``execute`` returns a result with ``scalar() == 0`` and no rows, enough
+    for list endpoints (storage documents, api-keys) to answer 200.
+    """
+    from app.core.database import get_db
+
+    client, application = scoped_test_client
+    session = AsyncMock()
+    result = MagicMock()
+    result.scalar.return_value = 0
+    result.scalars.return_value.all.return_value = []
+    session.execute = AsyncMock(return_value=result)
+
+    async def _fake_get_db() -> AsyncGenerator:
+        yield session
+
+    application.dependency_overrides[get_db] = _fake_get_db
+    yield client, session
+    application.dependency_overrides.pop(get_db, None)
+
+
 class TestApiKeyAuthMiddleware:
     """
     Unit tests for ``ApiKeyAuthMiddleware``.
@@ -619,7 +715,7 @@ class TestApiKeyAuthMiddleware:
     def test_invalid_api_key_returns_401(self, raw_client):
         """An unrecognised X-API-Key must be rejected with 401 / API_KEY_INVALID."""
 
-        async def _fake_lookup(self_mw, raw_key: str):
+        async def _fake_lookup(self_mw, raw_key: str, *, publishable: bool = False):
             return None  # key not found in DB
 
         with patch(
@@ -642,10 +738,10 @@ class TestApiKeyAuthMiddleware:
         raw_key = "giga_pk_expiredkey000000000000000000000000000"
         expired_orm = _make_api_key_orm(
             raw_key=raw_key,
-            expires_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
+            expires_at=datetime(2000, 1, 1, tzinfo=UTC),
         )
 
-        async def _fake_lookup(self_mw, k: str):
+        async def _fake_lookup(self_mw, k: str, *, publishable: bool = False):
             return expired_orm
 
         with patch(
@@ -669,7 +765,7 @@ class TestApiKeyAuthMiddleware:
         so ``_lookup_key`` returns None → middleware returns 401 / API_KEY_INVALID.
         """
 
-        async def _fake_lookup(self_mw, raw_key: str):
+        async def _fake_lookup(self_mw, raw_key: str, *, publishable: bool = False):
             # Simulate: DB returns None because is_active=False filtered it out
             return None
 
@@ -699,7 +795,7 @@ class TestApiKeyAuthMiddleware:
             allowed_domains="https://allowed.example.com",
         )
 
-        async def _fake_lookup(self_mw, k: str):
+        async def _fake_lookup(self_mw, k: str, *, publishable: bool = False):
             return restricted_orm
 
         async def _no_rate_limit(self_mw, key_record):
@@ -726,39 +822,187 @@ class TestApiKeyAuthMiddleware:
         assert body["success"] is False
         assert body["error"]["code"] == "API_KEY_DOMAIN_NOT_ALLOWED"
 
-    def test_valid_active_key_passes_through_middleware(self, raw_client):
+    def test_valid_active_key_passes_through_middleware(self, scoped_client):
         """
         A valid, active, unexpired, unrestricted key must pass the middleware
-        and reach the endpoint.  The /health path is always 200 and is on the
-        middleware's EXEMPT_PATHS list — this verifies the exempt path short-
-        circuit works and the key header does not break anything.
+        and reach a protected endpoint, which then runs as the key's owner.
+
+        The probe is a real protected route (not ``/health``, which the
+        middleware exempts and would therefore never call ``_lookup_key``).
         """
+        client, session = scoped_client
         raw_key = "giga_pk_validkey000000000000000000000000000"
-        valid_orm = _make_api_key_orm(raw_key=raw_key)
+        valid_orm = _make_api_key_orm(raw_key=raw_key, user_id=KEY_OWNER_ID)
 
-        async def _fake_lookup(self_mw, k: str):
-            return valid_orm
-
-        async def _no_rate_limit(self_mw, key_record):
-            return False, {}
-
-        async def _no_update(self_mw, key_id: str):
-            pass
-
-        with patch(
-            "app.middleware.api_key_auth.ApiKeyAuthMiddleware._lookup_key",
-            new=_fake_lookup,
-        ), patch(
-            "app.middleware.api_key_auth.ApiKeyAuthMiddleware._check_rate_limit",
-            new=_no_rate_limit,
-        ), patch(
-            "app.middleware.api_key_auth.ApiKeyAuthMiddleware._update_last_used",
-            new=_no_update,
-        ):
-            response = raw_client.get(
-                "/health",
+        with _api_key_middleware_patches(valid_orm) as calls:
+            response = client.get(
+                "/api/v1/storage/documents",
                 headers={"X-API-Key": raw_key},
             )
 
-        # /health is on EXEMPT_PATHS — middleware skips it and returns 200
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
+        assert calls.lookups == [(raw_key, False)]
+        assert _queried_owner_ids(session) == {KEY_OWNER_ID}
+
+
+# ===========================================================================
+# Secret API keys on the whole /api/v1 API — identity + scope enforcement
+# ===========================================================================
+
+
+class TestApiKeyScopeEnforcement:
+    """
+    A secret key (``giga_pk_*``) authenticates the whole ``/api/v1`` API as its
+    owner, within its scopes: ``read`` for GET/HEAD, ``write`` for the other
+    methods, ``admin`` for ``/api-keys`` and ``/billing``; ``/admin/*`` never.
+    """
+
+    _RAW_KEY = "giga_pk_scopekey00000000000000000000000000000"
+
+    def _key(self, scopes: str) -> MagicMock:
+        return _make_api_key_orm(raw_key=self._RAW_KEY, user_id=KEY_OWNER_ID, scopes=scopes)
+
+    @staticmethod
+    def _assert_scope_denied(response, missing: str | None) -> None:
+        assert response.status_code == 403, response.text
+        error = response.json()["error"]
+        assert error["code"] == "API_KEY_SCOPE_DENIED"
+        if missing is not None:
+            assert f"'{missing}'" in error["message"]
+
+    def test_read_key_can_list_documents_as_owner(self, scoped_client):
+        client, session = scoped_client
+        with _api_key_middleware_patches(self._key("read")) as calls:
+            response = client.get(
+                "/api/v1/storage/documents", headers={"X-API-Key": self._RAW_KEY}
+            )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["items"] == []
+        assert _queried_owner_ids(session) == {KEY_OWNER_ID}
+        calls.load_owner.assert_awaited_once_with(KEY_OWNER_ID)
+
+    def test_read_only_key_cannot_post(self, scoped_client):
+        client, session = scoped_client
+        with _api_key_middleware_patches(self._key("read")):
+            response = client.post(
+                "/api/v1/storage/documents",
+                headers={"X-API-Key": self._RAW_KEY},
+                json={"name": "x"},
+            )
+
+        self._assert_scope_denied(response, "write")
+        session.execute.assert_not_called()
+
+    def test_write_key_can_also_read(self, scoped_client):
+        client, session = scoped_client
+        with _api_key_middleware_patches(self._key("write")):
+            response = client.get(
+                "/api/v1/storage/documents", headers={"X-API-Key": self._RAW_KEY}
+            )
+
+        assert response.status_code == 200, response.text
+        assert _queried_owner_ids(session) == {KEY_OWNER_ID}
+
+    def test_platform_admin_route_is_refused_even_with_every_scope(self, scoped_client):
+        client, session = scoped_client
+        with _api_key_middleware_patches(self._key("read,write,admin")) as calls:
+            response = client.get("/api/v1/admin/users", headers={"X-API-Key": self._RAW_KEY})
+
+        self._assert_scope_denied(response, None)
+        session.execute.assert_not_called()
+        calls.load_owner.assert_not_awaited()
+
+    @pytest.mark.parametrize("method", ["get", "post"])
+    def test_api_keys_route_requires_admin_scope(self, scoped_client, method):
+        client, session = scoped_client
+        with _api_key_middleware_patches(self._key("read,write")):
+            response = client.request(
+                method.upper(),
+                "/api/v1/api-keys",
+                headers={"X-API-Key": self._RAW_KEY},
+                json={"name": "minted by a leaked key"} if method == "post" else None,
+            )
+
+        self._assert_scope_denied(response, "admin")
+        session.add.assert_not_called()
+
+    def test_billing_route_requires_admin_scope(self, scoped_client):
+        client, _ = scoped_client
+        with _api_key_middleware_patches(self._key("read,write")):
+            response = client.get(
+                "/api/v1/billing/subscription", headers={"X-API-Key": self._RAW_KEY}
+            )
+
+        self._assert_scope_denied(response, "admin")
+
+    def test_admin_scope_can_list_own_api_keys(self, scoped_client):
+        client, _ = scoped_client
+        with _api_key_middleware_patches(self._key("admin")):
+            response = client.get("/api/v1/api-keys", headers={"X-API-Key": self._RAW_KEY})
+
+        assert response.status_code == 200, response.text
+        assert response.json()["data"] == []
+
+    def test_key_of_deleted_account_is_rejected(self, scoped_client):
+        client, session = scoped_client
+        with _api_key_middleware_patches(self._key("read"), owner=None):
+            response = client.get(
+                "/api/v1/storage/documents", headers={"X-API-Key": self._RAW_KEY}
+            )
+
+        assert response.status_code == 401, response.text
+        session.execute.assert_not_called()
+
+    def test_bearer_alone_still_works(self, scoped_client):
+        client, session = scoped_client
+        bearer_user = CurrentUser(user_id=BEARER_USER_ID, roles=["user"])
+        with patch(
+            "app.middleware.auth.authenticate_bearer",
+            new=AsyncMock(return_value=bearer_user),
+        ):
+            response = client.get(
+                "/api/v1/storage/documents",
+                headers={"Authorization": "Bearer session-token"},
+            )
+
+        assert response.status_code == 200, response.text
+        assert _queried_owner_ids(session) == {BEARER_USER_ID}
+
+    def test_bearer_wins_over_api_key_for_identity(self, scoped_client):
+        client, session = scoped_client
+        bearer_user = CurrentUser(user_id=BEARER_USER_ID, roles=["user"])
+        with _api_key_middleware_patches(self._key("read")) as calls, patch(
+            "app.middleware.auth.authenticate_bearer",
+            new=AsyncMock(return_value=bearer_user),
+        ):
+            response = client.get(
+                "/api/v1/storage/documents",
+                headers={
+                    "Authorization": "Bearer session-token",
+                    "X-API-Key": self._RAW_KEY,
+                },
+            )
+
+        assert response.status_code == 200, response.text
+        assert _queried_owner_ids(session) == {BEARER_USER_ID}
+        calls.load_owner.assert_not_awaited()
+
+    def test_key_scopes_still_apply_alongside_bearer(self, scoped_client):
+        """A Bearer header never lifts the restrictions of an X-API-Key sent with it."""
+        client, _ = scoped_client
+        bearer_user = CurrentUser(user_id=BEARER_USER_ID, roles=["admin"])
+        with _api_key_middleware_patches(self._key("read")), patch(
+            "app.middleware.auth.authenticate_bearer",
+            new=AsyncMock(return_value=bearer_user),
+        ):
+            response = client.post(
+                "/api/v1/storage/documents",
+                headers={
+                    "Authorization": "Bearer session-token",
+                    "X-API-Key": self._RAW_KEY,
+                },
+                json={"name": "x"},
+            )
+
+        self._assert_scope_denied(response, "write")

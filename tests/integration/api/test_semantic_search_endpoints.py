@@ -84,15 +84,15 @@ class FakeSession:
 
 
 def _make_doc(**overrides) -> StoredDocument:
-    defaults = dict(
-        id=DOC_ID,
-        name="Bail.pdf",
-        owner_id=TEST_USER_ID,
-        page_count=2,
-        current_version=1,
-        file_size_bytes=2048,
-        is_deleted=False,
-    )
+    defaults = {
+        "id": DOC_ID,
+        "name": "Bail.pdf",
+        "owner_id": TEST_USER_ID,
+        "page_count": 2,
+        "current_version": 1,
+        "file_size_bytes": 2048,
+        "is_deleted": False,
+    }
     defaults.update(overrides)
     doc = StoredDocument(**{k: v for k, v in defaults.items() if k != "extracted_text"})
     doc.extracted_text = overrides.get("extracted_text")
@@ -216,6 +216,32 @@ class TestIndexOcrBlocks:
         block = next(o for o in fake_db.added if isinstance(o, OcrBlock))
         assert block.embedding is None  # stored, just not searchable
         assert fake_db.commit_count == 1
+
+    def test_indexing_failure_is_an_error_not_a_zero_count(self, app, fake_db, monkeypatch):
+        # Regression: the failure used to be swallowed into ``blocks_indexed: 0``
+        # with a 200 — and the transaction committed whatever had been staged.
+        from app.api.v1 import storage as storage_module
+
+        failing = SimpleNamespace(
+            embed_passages=MagicMock(side_effect=RuntimeError("model exploded")),
+            is_available=True,
+        )
+        monkeypatch.setattr(storage_module, "embedding_service", failing)
+        doc = _make_doc(extracted_text="ancien contenu")
+        fake_db._results = [FakeResult(scalar=doc)]  # ownership lookup only
+
+        # The generic handler answers 500; don't re-raise it into the test.
+        with TestClient(app, raise_server_exceptions=False) as client:
+            resp = client.post(
+                f"/api/v1/storage/documents/{DOC_ID}/ocr-blocks",
+                json={"blocks": [{"page": 1, "text": "contenu"}]},
+            )
+
+        assert resp.status_code == 500
+        assert "blocks_indexed" not in resp.text
+        assert fake_db.commit_count == 0  # nothing committed: previous index kept
+        assert doc.extracted_text == "ancien contenu"
+        assert [o for o in fake_db.added if isinstance(o, OcrBlock)] == []
 
     def test_unknown_or_unowned_document_returns_404(self, client, fake_db, fake_embeddings):
         fake_db._results = [FakeResult(scalar=None)]  # ownership lookup misses

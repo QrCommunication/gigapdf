@@ -6,7 +6,7 @@ and cursor tracking for real-time multi-user PDF editing.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from uuid import uuid4
 
 from sqlalchemy import and_, delete, select, update
@@ -14,6 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.models.database import CollaborationSession, ElementLock
+from app.utils.helpers import now_utc
+
+# Timestamps are timezone-AWARE (now_utc): every timestamp column here is
+# TIMESTAMPTZ (migration 010), which asyncpg reads back aware — comparing it with
+# a naive datetime.utcnow() raised TypeError as soon as an element already had a
+# lock row (lock contention / extending one's own lock).
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +89,7 @@ class CollaborationManager:
             if existing:
                 # Reactivate existing session with new socket
                 existing.socket_id = socket_id
-                existing.last_seen_at = datetime.utcnow()
+                existing.last_seen_at = now_utc()
                 existing.is_active = True
                 await session.commit()
                 await session.refresh(existing)
@@ -104,8 +110,8 @@ class CollaborationManager:
                 user_color=color,
                 socket_id=socket_id,
                 is_active=True,
-                joined_at=datetime.utcnow(),
-                last_seen_at=datetime.utcnow(),
+                joined_at=now_utc(),
+                last_seen_at=now_utc(),
             )
 
             session.add(collab_session)
@@ -147,7 +153,7 @@ class CollaborationManager:
 
             # Mark as inactive
             collab_session.is_active = False
-            collab_session.last_seen_at = datetime.utcnow()
+            collab_session.last_seen_at = now_utc()
 
             # Release all locks held by this session
             await self._release_session_locks(
@@ -230,7 +236,7 @@ class CollaborationManager:
                     cursor_page=page,
                     cursor_x=x,
                     cursor_y=y,
-                    last_seen_at=datetime.utcnow(),
+                    last_seen_at=now_utc(),
                 )
                 .returning(CollaborationSession)
             )
@@ -296,7 +302,7 @@ class CollaborationManager:
             result = await session.execute(stmt)
             existing_lock = result.scalar_one_or_none()
 
-            now = datetime.utcnow()
+            now = now_utc()
 
             if existing_lock:
                 # Check if lock has expired
@@ -389,7 +395,7 @@ class CollaborationManager:
             list[ElementLock]: Active element locks.
         """
         async with get_db_session() as session:
-            now = datetime.utcnow()
+            now = now_utc()
 
             # Delete expired locks
             delete_stmt = delete(ElementLock).where(
@@ -420,7 +426,7 @@ class CollaborationManager:
             int: Number of locks removed.
         """
         async with get_db_session() as session:
-            now = datetime.utcnow()
+            now = now_utc()
 
             stmt = delete(ElementLock).where(
                 ElementLock.expires_at <= now
@@ -449,7 +455,7 @@ class CollaborationManager:
             int: Number of sessions cleaned up.
         """
         async with get_db_session() as session:
-            cutoff_time = datetime.utcnow() - timedelta(minutes=timeout_minutes)
+            cutoff_time = now_utc() - timedelta(minutes=timeout_minutes)
 
             # Find inactive sessions
             stmt = select(CollaborationSession).where(

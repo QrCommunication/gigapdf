@@ -7,6 +7,7 @@ Aggregates all sub-routers for the v1 API.
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    account,
     activity,
     api_keys,
     billing,
@@ -110,6 +111,12 @@ api_router.include_router(
     api_keys.router,
     prefix="/api-keys",
     tags=["API Keys"],
+)
+
+api_router.include_router(
+    account.router,
+    prefix="/account",
+    tags=["Account"],
 )
 
 api_router.include_router(

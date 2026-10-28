@@ -8,8 +8,9 @@ No DB / S3 / network — pure model + schema checks:
 """
 
 import pytest
+from pydantic import ValidationError
 
-from app.api.v1.storage import DocumentLayersData, _DEFAULT_LAYERS_DATA
+from app.api.v1.storage import _DEFAULT_LAYERS_DATA, DocumentLayersData
 from app.models.database import DocumentLayers
 
 
@@ -68,7 +69,7 @@ class TestDocumentLayersData:
         assert data.membership == {"elem-a": "layer-1"}
 
     def test_rejects_non_list_layers(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             DocumentLayersData(layers="not-a-list")
 
 

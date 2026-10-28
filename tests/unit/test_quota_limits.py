@@ -116,19 +116,19 @@ class TestEffectiveLimitsEnterpriseResolution:
 
     @staticmethod
     def _enterprise_limits(**overrides) -> EffectiveLimits:
-        defaults = dict(
-            storage_limit_bytes=UNLIMITED,
-            storage_used_bytes=750 * GB,
-            api_calls_limit=UNLIMITED,
-            api_calls_used=2_000_000,
-            document_limit=UNLIMITED,
-            document_count=50_000,
-            plan_type="enterprise",
-            is_tenant_based=True,
-            tenant_id="tenant-1",
-            tenant_name="Acme",
-            tenant_role="owner",
-        )
+        defaults = {
+            "storage_limit_bytes": UNLIMITED,
+            "storage_used_bytes": 750 * GB,
+            "api_calls_limit": UNLIMITED,
+            "api_calls_used": 2_000_000,
+            "document_limit": UNLIMITED,
+            "document_count": 50_000,
+            "plan_type": "enterprise",
+            "is_tenant_based": True,
+            "tenant_id": "tenant-1",
+            "tenant_name": "Acme",
+            "tenant_role": "owner",
+        }
         defaults.update(overrides)
         return EffectiveLimits(**defaults)
 

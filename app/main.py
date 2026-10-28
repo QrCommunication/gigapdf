@@ -292,7 +292,12 @@ Endpoints accept either of two credentials:
 - **JWT Bearer token** — `Authorization: Bearer <token>`, validated against the
   configured authentication service (Better Auth session or external JWKS/PEM).
 - **API key** — `X-API-Key: <key>` for server-to-server and embed integrations.
-  Keys are created from the dashboard, scoped, and SHA-256 hashed at rest.
+  Keys are created from the dashboard and SHA-256 hashed at rest. A secret key
+  (`giga_pk_*`) acts as its owner on `/api/v1` within its scopes: `read` for
+  GET/HEAD, `write` for other methods, `admin` for `/api-keys` and `/billing`;
+  `/admin/*` is never reachable with a key. A publishable key (`giga_pub_*`)
+  only reaches `/embed`. When both headers are sent, the Bearer token decides
+  the identity and the key's scopes still apply.
 
 ## Organizations / Tenants
 

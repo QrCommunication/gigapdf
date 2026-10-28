@@ -11,17 +11,18 @@ both keyword and semantic search. This script re-indexes them by:
   3. extracting the PDF text layer with the native WASM engine (Node helper
      ``apps/web/scripts/extract_pdf_text.mjs`` — the Python backend has no PDF
      parser);
-  4. calling the production :func:`reindex_document_text`, which sets
+  4. calling the production :func:`reindex_document_blocks`, which sets
      ``extracted_text`` (→ generated ``search_vector``) and (re)builds the
-     ``ocr_blocks`` embeddings via fastembed.
+     positioned ``ocr_blocks`` embeddings via fastembed. An indexing failure
+     raises: the document is counted as failed and its previous index kept.
 
-It reuses the exact production indexing path, and ``reindex_document_text`` is a
-REPLACE, so the script is **idempotent**: re-running yields the same state.
+It reuses the exact production indexing path, and ``reindex_document_blocks`` is
+a REPLACE, so the script is **idempotent**: re-running yields the same state.
 
 Usage (on the server, with the prod env loaded):
 
-    venv/bin/python scripts/backfill_index.py --email user@example.com
-    venv/bin/python scripts/backfill_index.py --owner-id <id> --all --dry-run
+    .venv/bin/python scripts/backfill_index.py --email user@example.com
+    .venv/bin/python scripts/backfill_index.py --owner-id <id> --all --dry-run
 """
 
 from __future__ import annotations
@@ -169,7 +170,16 @@ async def run(args: argparse.Namespace) -> int:
                     skipped += 1
                     continue
 
-                indexed_blocks = await reindex_document_blocks(session, doc.id, blocks)
+                # Re-load the row in THIS session: ``doc`` comes from the closed
+                # listing session, and reindex_document_blocks updates the row it
+                # is given in place (extracted_text) — a detached one is never
+                # flushed.
+                document = await session.get(StoredDocument, doc.id)
+                if document is None:
+                    print(f"  ⚠ {label} — deleted meanwhile, skip")
+                    skipped += 1
+                    continue
+                indexed_blocks = await reindex_document_blocks(session, document, blocks)
                 await session.commit()
                 total_blocks += indexed_blocks
                 indexed += 1

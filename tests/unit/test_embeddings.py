@@ -23,7 +23,6 @@ from app.services.embeddings import (
     embedding_service,
 )
 
-
 # ---------------------------------------------------------------------------
 # Detect whether the real model can be loaded (gates the heavy tests)
 # ---------------------------------------------------------------------------

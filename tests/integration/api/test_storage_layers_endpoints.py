@@ -17,7 +17,7 @@ and start returning 429.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -84,23 +84,23 @@ class FakeSession:
 
 def _make_doc(**overrides) -> StoredDocument:
     now = datetime.now(UTC)
-    defaults = dict(
-        id=DOC_ID,
-        name="Contrat.pdf",
-        owner_id=OWNER_ID,
-        folder_id=None,
-        page_count=3,
-        current_version=2,
-        file_size_bytes=1024,
-        mime_type="application/pdf",
-        original_format="pdf",
-        tags=["legal"],
-        thumbnail_path=None,
-        is_deleted=False,
-        deleted_at=None,
-        created_at=now,
-        updated_at=now,
-    )
+    defaults = {
+        "id": DOC_ID,
+        "name": "Contrat.pdf",
+        "owner_id": OWNER_ID,
+        "folder_id": None,
+        "page_count": 3,
+        "current_version": 2,
+        "file_size_bytes": 1024,
+        "mime_type": "application/pdf",
+        "original_format": "pdf",
+        "tags": ["legal"],
+        "thumbnail_path": None,
+        "is_deleted": False,
+        "deleted_at": None,
+        "created_at": now,
+        "updated_at": now,
+    }
     defaults.update(overrides)
     doc = StoredDocument(**{k: v for k, v in defaults.items() if k != "extracted_text"})
     doc.extracted_text = overrides.get("extracted_text")
@@ -108,15 +108,15 @@ def _make_doc(**overrides) -> StoredDocument:
 
 
 def _make_share(**overrides) -> DocumentShare:
-    defaults = dict(
-        id="share-layers-1",
-        document_id=DOC_ID,
-        shared_with_user_id=SHARED_ID,
-        permission="view",
-        status=ShareStatus.ACTIVE,
-        expires_at=None,
-        created_by=OWNER_ID,
-    )
+    defaults = {
+        "id": "share-layers-1",
+        "document_id": DOC_ID,
+        "shared_with_user_id": SHARED_ID,
+        "permission": "view",
+        "status": ShareStatus.ACTIVE,
+        "expires_at": None,
+        "created_by": OWNER_ID,
+    }
     defaults.update(overrides)
     return DocumentShare(**defaults)
 

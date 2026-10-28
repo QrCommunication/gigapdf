@@ -10,30 +10,44 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, Literal
 
 import httpx
 import jwt as pyjwt
 from fastapi import Depends, Header, Request
 from jwt.exceptions import InvalidTokenError as JWTError
+from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
 from app.config import get_settings
 from app.core.cache import get_redis
+from app.core.database import get_db_session
 from app.middleware.error_handler import AuthInvalidError, AuthRequiredError
 
 logger = logging.getLogger(__name__)
 
 
+AuthMethod = Literal["session", "api_key"]
+
+
 @dataclass
 class CurrentUser:
-    """Represents the authenticated user from JWT claims."""
+    """
+    Represents the authenticated caller.
+
+    ``auth_method`` tells how the identity was established: ``"session"`` for a
+    Bearer token (JWT or Better Auth session), ``"api_key"`` for a secret
+    ``X-API-Key``. ``api_key_id`` is the ``ApiKey`` primary key in the latter
+    case, ``None`` otherwise.
+    """
 
     user_id: str
     email: str | None = None
     name: str | None = None
     roles: list[str] | None = None
+    auth_method: AuthMethod = "session"
+    api_key_id: str | None = None
 
     @classmethod
     def from_claims(cls, claims: dict) -> "CurrentUser":
@@ -111,7 +125,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             parts = authorization.split()
             if len(parts) == 2 and parts[0].lower() == "bearer":
                 try:
-                    user = await get_current_user(authorization)
+                    user = await authenticate_bearer(authorization)
                     request.state.user_id = user.user_id
                     request.state.current_user = user
                     logger.debug(
@@ -413,28 +427,117 @@ async def validate_session_with_better_auth(token: str, session_url: str) -> dic
         raise AuthInvalidError("Session validation service unavailable")
 
 
+async def _load_account(user_id: str) -> tuple[str | None, str | None] | None:
+    """
+    Return ``(email, name)`` of a Better Auth user, or ``None`` if erased.
+
+    Better Auth users live in the same PostgreSQL database, table ``users``
+    (Prisma model ``User``). ``None`` means the account no longer exists: an
+    API key or a JWT issued before the account was erased must not act as it.
+    """
+    async with get_db_session() as session:
+        result = await session.execute(
+            text("SELECT email, name FROM users WHERE id = :user_id"),
+            {"user_id": user_id},
+        )
+        row = result.first()
+    if row is None:
+        return None
+    return row[0], row[1]
+
+
+async def _authenticate_api_key(request: Request) -> CurrentUser | None:
+    """
+    Build the caller identity from a secret API key validated upstream.
+
+    ``ApiKeyAuthMiddleware`` validates ``X-API-Key`` (existence, expiry,
+    domains, rate limit, scopes) and stores the owner on ``request.state``.
+    Publishable keys (``giga_pub_*``) never authenticate a user: they only
+    serve the embed routes, which read ``request.state`` themselves.
+
+    Roles are always ``["user"]``: an API key never grants platform-admin
+    rights, even when it carries the ``admin`` scope (that scope only covers
+    the owner's own API keys and billing).
+
+    Returns:
+        CurrentUser | None: The key owner, or ``None`` when no secret key
+        was validated for this request.
+
+    Raises:
+        AuthInvalidError: If the key's owner account no longer exists.
+    """
+    user_id = getattr(request.state, "api_key_user_id", None)
+    if not user_id or getattr(request.state, "api_key_is_publishable", False):
+        return None
+
+    owner = await _load_account(user_id)
+    if owner is None:
+        logger.warning("API key owner not found", extra={"user_id": user_id})
+        raise AuthInvalidError("API key owner account no longer exists")
+
+    email, name = owner
+    return CurrentUser(
+        user_id=user_id,
+        email=email,
+        name=name,
+        roles=["user"],
+        auth_method="api_key",
+        api_key_id=getattr(request.state, "api_key_id", None),
+    )
+
+
 async def get_current_user(
+    request: Request,
     authorization: Annotated[str | None, Header()] = None,
 ) -> CurrentUser:
     """
     Dependency to get the current authenticated user.
 
-    Supports both JWT tokens (from mobile app) and session tokens (from web).
+    Precedence:
+    1. ``Authorization`` header present → Bearer authentication (JWT from the
+       mobile app, Better Auth session token from the web). Unchanged
+       behaviour; an invalid header is rejected even if an API key is sent.
+    2. Otherwise, a secret ``X-API-Key`` validated by ``ApiKeyAuthMiddleware``
+       → the key owner, with ``auth_method="api_key"``.
+    3. Neither → ``AuthRequiredError``.
 
     Args:
+        request: The incoming request (carries the API-key state).
         authorization: Authorization header value.
 
     Returns:
         CurrentUser: The authenticated user.
 
     Raises:
-        AuthRequiredError: If no token is provided.
-        AuthInvalidError: If token is invalid.
+        AuthRequiredError: If no credential is provided.
+        AuthInvalidError: If the credential is invalid.
+    """
+    if authorization:
+        return await _bearer_user(request, authorization)
+
+    api_key_user = await _authenticate_api_key(request)
+    if api_key_user is not None:
+        return api_key_user
+
+    raise AuthRequiredError("Authorization header required")
+
+
+async def authenticate_bearer(authorization: str) -> CurrentUser:
+    """
+    Authenticate an ``Authorization: Bearer <token>`` header value.
+
+    Supports both JWT tokens (from mobile app) and session tokens (from web).
+
+    Args:
+        authorization: Authorization header value (non-empty).
+
+    Returns:
+        CurrentUser: The authenticated user (``auth_method="session"``).
+
+    Raises:
+        AuthInvalidError: If the header or token is invalid.
     """
     settings = get_settings()
-
-    if not authorization:
-        raise AuthRequiredError("Authorization header required")
 
     # Extract Bearer token
     parts = authorization.split()
@@ -493,11 +596,19 @@ async def get_current_user(
         try:
             logger.debug("Token looks like JWT, validating with JWKS...")
             claims = await decode_jwt_token(token)
-            logger.info(f"JWT validated successfully for user: {claims.get('sub')}")
-            return CurrentUser.from_claims(claims)
         except AuthInvalidError as e:
             logger.warning(f"JWT validation failed, will try session: {e}")
             # Fall through to session validation
+        else:
+            user = CurrentUser.from_claims(claims)
+            # A JWT stays cryptographically valid until it expires, even after
+            # the account is erased (DELETE /api/v1/account): without this
+            # check an erased user could keep writing data for its lifetime.
+            if await _load_account(user.user_id) is None:
+                logger.warning("JWT of an erased account", extra={"user_id": user.user_id})
+                raise AuthInvalidError("Account no longer exists")
+            logger.info(f"JWT validated successfully for user: {user.user_id}")
+            return user
 
     # Session validation with Better Auth
     if settings.auth_session_url:
@@ -530,23 +641,38 @@ async def get_current_user(
 
 
 async def get_optional_user(
+    request: Request,
     authorization: Annotated[str | None, Header()] = None,
 ) -> CurrentUser | None:
     """
     Dependency to optionally get the current user.
 
-    Returns None if no token is provided, raises error if token is invalid.
+    Same precedence as ``get_current_user`` (Bearer, then secret API key).
+    Returns None if no credential is provided, raises error if one is invalid.
 
     Args:
+        request: The incoming request (carries the API-key state).
         authorization: Authorization header value.
 
     Returns:
         Optional[CurrentUser]: The user if authenticated, None otherwise.
     """
-    if not authorization:
-        return None
+    if authorization:
+        return await _bearer_user(request, authorization)
 
-    return await get_current_user(authorization)
+    return await _authenticate_api_key(request)
+
+
+async def _bearer_user(request: Request, authorization: str) -> CurrentUser:
+    """
+    The Bearer identity of this request, reusing the one ``JWTAuthMiddleware``
+    already resolved from the same header (one JWKS check and one account
+    lookup per request instead of two).
+    """
+    resolved = getattr(request.state, "current_user", None)
+    if isinstance(resolved, CurrentUser):
+        return resolved
+    return await authenticate_bearer(authorization)
 
 
 # Type alias for dependency injection

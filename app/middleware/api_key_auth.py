@@ -19,6 +19,7 @@ from starlette.responses import Response
 
 from app.core.cache import get_rate_limiter
 from app.core.database import get_db_session
+from app.middleware.api_key_scopes import api_key_scope_denial
 from app.middleware.request_id import get_request_id
 from app.models.api_key import ApiKey
 from app.services.security_audit_service import SecurityAuditService, SecurityEventType
@@ -134,8 +135,13 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
     2. Hash the raw key and look it up in the database.
     3. Validate ``is_active``, ``expires_at``, and ``allowed_domains``.
     4. Apply a per-key sliding-window rate limit (``rate_limit`` req/min).
-    5. Update ``last_used_at`` asynchronously.
-    6. Inject ``request.state.api_key_user_id`` for downstream handlers.
+    5. For secret keys, enforce the key's scopes (see ``api_key_scopes``):
+       403 ``API_KEY_SCOPE_DENIED`` when the required scope is missing or the
+       route is platform administration.
+    6. Update ``last_used_at`` asynchronously.
+    7. Inject ``request.state.api_key_user_id`` for downstream handlers;
+       ``get_current_user`` turns it into the request's identity when no
+       ``Authorization`` header is sent.
     """
 
     # Paths that bypass API key auth entirely
@@ -272,6 +278,38 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
             response.headers["X-RateLimit-Reset"] = str(rl_info.get("reset_in", 60))
             response.headers["Retry-After"] = str(rl_info.get("reset_in", 60))
             return response
+
+        # Scope enforcement for secret keys (publishable keys are already
+        # confined to /api/v1/embed above). Runs after rate limiting so that
+        # denied requests still count against the key's budget. The key's
+        # scopes apply whenever X-API-Key is sent, even alongside a Bearer
+        # token: a request is never allowed to carry a key it may not use.
+        if not is_publishable:
+            denial = api_key_scope_denial(request.method, path, key_record.scopes)
+            if denial is not None:
+                logger.warning(
+                    "API key scope denied",
+                    extra={"key_id": key_record.id, "method": request.method, "path": path},
+                )
+                try:
+                    await self._audit_auth_failure(
+                        SecurityEventType.ACCESS_DENIED,
+                        request,
+                        user_id=key_record.user_id,
+                        extra_data={
+                            "reason": "API_KEY_SCOPE_DENIED",
+                            "key_id": key_record.id,
+                            "method": request.method,
+                            "path": path,
+                        },
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+                return _build_error_response(
+                    status.HTTP_403_FORBIDDEN,
+                    "API_KEY_SCOPE_DENIED",
+                    denial,
+                )
 
         # Inject user identity into request state
         request.state.api_key_user_id = key_record.user_id

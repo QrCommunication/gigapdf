@@ -105,38 +105,38 @@ def use_session(monkeypatch):
 
 def _make_doc(**overrides) -> StoredDocument:
     now = datetime.now(UTC)
-    defaults = dict(
-        id=DOC_ID,
-        name="Contrat 2026.pdf",
-        owner_id=OWNER_ID,
-        folder_id=None,
-        page_count=3,
-        current_version=1,
-        file_size_bytes=1024,
-        mime_type="application/pdf",
-        original_format="pdf",
-        tags=[],
-        thumbnail_path=None,
-        is_deleted=False,
-        deleted_at=None,
-        created_at=now,
-        updated_at=now,
-    )
+    defaults = {
+        "id": DOC_ID,
+        "name": "Contrat 2026.pdf",
+        "owner_id": OWNER_ID,
+        "folder_id": None,
+        "page_count": 3,
+        "current_version": 1,
+        "file_size_bytes": 1024,
+        "mime_type": "application/pdf",
+        "original_format": "pdf",
+        "tags": [],
+        "thumbnail_path": None,
+        "is_deleted": False,
+        "deleted_at": None,
+        "created_at": now,
+        "updated_at": now,
+    }
     defaults.update(overrides)
     return StoredDocument(**defaults)
 
 
 def _make_public_share(**overrides) -> DocumentShare:
-    defaults = dict(
-        id="share-pub-0000-0000-0000-000000000042",
-        document_id=DOC_ID,
-        shared_with_user_id=None,
-        share_token=TOKEN,
-        permission="view",
-        status=ShareStatus.ACTIVE,
-        created_by=OWNER_ID,
-        expires_at=None,
-    )
+    defaults = {
+        "id": "share-pub-0000-0000-0000-000000000042",
+        "document_id": DOC_ID,
+        "shared_with_user_id": None,
+        "share_token": TOKEN,
+        "permission": "view",
+        "status": ShareStatus.ACTIVE,
+        "created_by": OWNER_ID,
+        "expires_at": None,
+    }
     defaults.update(overrides)
     return DocumentShare(**defaults)
 

@@ -16,12 +16,12 @@ via ``get_sync_session`` / psycopg2) on 2026-06-13 to avoid corrupting the async
 event-loop pool from Celery's throwaway loops. These tests patch the sync helpers.
 """
 
-import pytest
-from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
+import pytest
+
 from app.models.database import AsyncJob
-from app.tasks.celery_app import task_postrun_handler, task_failure_handler
+from app.tasks.celery_app import task_failure_handler, task_postrun_handler
 
 
 @pytest.fixture
@@ -141,16 +141,6 @@ class TestTaskFailureSignal:
 class TestWatchdogPendingTasks:
     """Test watchdog task for detecting stuck/pending jobs."""
 
-    @pytest.mark.asyncio
-    async def test_watchdog_marks_old_pending_jobs_failed(self):
-        """Verify watchdog correctly marks old pending jobs as failed."""
-        from app.tasks.infra_tasks import watchdog_pending_tasks
-        from datetime import timedelta
-
-        # Would require DB session and actual job records
-        # Placeholder for integration test
-        pass
-
     def test_watchdog_task_name(self):
         """Verify watchdog task has correct name for beat schedule."""
         from app.tasks.infra_tasks import watchdog_pending_tasks
@@ -179,8 +169,9 @@ class TestSignalCoverage:
 
     def test_all_task_families_have_coverage(self):
         """Verify all known task families are in the handler's tracked_prefixes."""
-        from app.tasks.celery_app import task_postrun_handler
         import inspect
+
+        from app.tasks.celery_app import task_postrun_handler
 
         source = inspect.getsource(task_postrun_handler)
 

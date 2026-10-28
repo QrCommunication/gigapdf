@@ -11,6 +11,8 @@ import json
 import logging
 import time
 import uuid
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -40,6 +42,10 @@ from app.schemas.responses.common import APIResponse, MetaInfo, PaginationInfo
 from app.services import content_extraction_service
 from app.services.activity_service import ActivityAction, activity_service
 from app.services.document_service import document_service
+from app.services.document_storage_cleanup import (
+    collect_document_object_keys,
+    delete_objects_best_effort,
+)
 from app.services.embeddings import embedding_service
 from app.services.quota_service import quota_service
 from app.services.s3_service import s3_service
@@ -292,6 +298,120 @@ def _serialize_stored_document(doc: StoredDocument) -> dict:
     }
 
 
+async def _resize_stored_document(
+    session: AsyncSession, stored_doc: StoredDocument, new_size: int
+) -> None:
+    """Set a document's size and move its owner's quota by the difference.
+
+    The quota counts every active document at its current size (an upload
+    charges it, a delete frees ``file_size_bytes``). A new version or a revert
+    to v1 changes that size: without moving the counter with it, the later
+    delete would free a size that was never charged. Both writes stay in
+    ``session``'s transaction. A trashed document was freed already, so only
+    its size changes.
+    """
+    delta = new_size - (stored_doc.file_size_bytes or 0)
+    stored_doc.file_size_bytes = new_size
+    if not stored_doc.is_deleted:
+        await quota_service.adjust_document_storage(session, stored_doc, delta, 0)
+
+
+# Re-checks, in a fresh session, whether rows referencing an uploaded object
+# were really committed (see rows_for_uploaded_object).
+CommittedCheck = Callable[[AsyncSession], Awaitable[bool]]
+
+
+@asynccontextmanager
+async def rows_for_uploaded_object(
+    session: AsyncSession, object_key: str, committed: CommittedCheck
+) -> AsyncIterator[None]:
+    """Write, then commit, the rows that reference ``object_key`` (uploaded just before).
+
+    The body writes the rows and the quota move in ``session``; the commit
+    happens on exit. The object goes first so that no committed row can point
+    at a missing file. When the rows do not land, the object is deleted
+    (best-effort: an unreferenced object is invisible and harmless):
+
+    * a failure in the body or the flush is certain — nothing was written.
+      The object is deleted BEFORE the transaction rolls back, while its row
+      locks are still held: a concurrent save of the same document version
+      (same object key) is still waiting on the document lock and cannot
+      have uploaded yet;
+    * a failure of COMMIT itself is ambiguous (the server may have committed
+      before the connection dropped). ``committed`` re-checks in a fresh
+      session, under the same lock, and the object is deleted only when the
+      rows really are absent.
+    """
+    try:
+        yield
+        await session.flush()
+    except BaseException:
+        _logger.error("rows for %s not written — deleting the object", object_key)
+        s3_service.delete_file(object_key)
+        raise
+    try:
+        await session.commit()
+    except Exception:
+        await _delete_object_unless_committed(object_key, committed)
+        raise
+
+
+async def _delete_object_unless_committed(object_key: str, committed: CommittedCheck) -> None:
+    """Delete ``object_key`` unless ``committed`` finds its rows (see above)."""
+    try:
+        async with get_db_session() as check:
+            if await committed(check):
+                _logger.warning(
+                    "commit reported a failure but the rows for %s exist — object kept",
+                    object_key,
+                )
+                return
+            _logger.error("rows for %s not committed — deleting the object", object_key)
+            s3_service.delete_file(object_key)
+    except Exception:
+        # Unknown outcome: keeping an unreferenced object is the safe side.
+        _logger.error(
+            "could not verify the commit for %s — object kept", object_key, exc_info=True
+        )
+
+
+def _new_document_committed(document_id: str) -> CommittedCheck:
+    """``CommittedCheck`` of a new document (its object key is unique to it)."""
+
+    async def check(session: AsyncSession) -> bool:
+        found = await session.execute(
+            select(StoredDocument.id).where(StoredDocument.id == document_id)
+        )
+        return found.first() is not None
+
+    return check
+
+
+def _version_committed(document_id: str, version_number: int) -> CommittedCheck:
+    """``CommittedCheck`` of a new version, under the document lock.
+
+    Version objects have deterministic keys (``…/v{n}``): the lock makes a
+    concurrent save of the same document wait until the decision is taken,
+    so the object deleted here can only be this save's.
+    """
+
+    async def check(session: AsyncSession) -> bool:
+        await session.execute(
+            select(StoredDocument.id)
+            .where(StoredDocument.id == document_id)
+            .with_for_update()
+        )
+        found = await session.execute(
+            select(DocumentVersion.id).where(
+                DocumentVersion.document_id == document_id,
+                DocumentVersion.version_number == version_number,
+            )
+        )
+        return found.first() is not None
+
+    return check
+
+
 async def store_ocr_blocks(
     session: AsyncSession,
     document_id: str,
@@ -486,7 +606,7 @@ async def reindex_document_text(
 
 async def reindex_document_blocks(
     session: AsyncSession,
-    document_id: str,
+    document: StoredDocument,
     blocks: list[dict],
 ) -> int:
     """(Re)build a document's index from POSITIONED blocks (text + page + bbox).
@@ -503,32 +623,25 @@ async def reindex_document_blocks(
       generated ``search_vector`` (keyword search) stays in sync.
 
     This is the single positioned-index entry point shared by the ``/ocr-blocks``
-    endpoint, the upload/version-save paths and the server-side backfill — so every
-    path produces the SAME index. The caller owns the transaction. Best-effort:
-    never raises. Returns the number of blocks indexed.
+    endpoint and the server-side backfill (``scripts/backfill_index.py``) — so
+    both produce the SAME index.
+
+    *document* is the row the caller already loaded (and authorized) in
+    *session*: it is updated in place, never re-selected. The caller owns the
+    transaction. Unlike :func:`reindex_document_text`, this is NOT best-effort:
+    indexing IS the caller's job here, so a failure raises and the caller's
+    rollback keeps the previous index intact. The returned count is therefore
+    always the number of blocks added to the session — never a 0 standing in
+    for an error while the blocks are committed anyway.
     """
-    try:
-        indexed = await store_ocr_blocks(session, document_id, blocks)
-        combined = (
-            " ".join((b.get("text") or "") for b in blocks if (b.get("text") or "").strip())
-            .replace("\x00", "")
-            .strip()[:_MAX_EXTRACTED_TEXT_CHARS]
-        )
-        doc = (
-            await session.execute(
-                select(StoredDocument).where(StoredDocument.id == document_id)
-            )
-        ).scalar_one_or_none()
-        if doc is not None:
-            doc.extracted_text = combined or None
-        return indexed
-    except Exception:  # noqa: BLE001 — indexing must never break the caller
-        _logger.warning(
-            "reindex_document_blocks: indexing failed (doc=%s)",
-            document_id,
-            exc_info=True,
-        )
-        return 0
+    indexed = await store_ocr_blocks(session, document.id, blocks)
+    combined = (
+        " ".join((b.get("text") or "") for b in blocks if (b.get("text") or "").strip())
+        .replace("\x00", "")
+        .strip()[:_MAX_EXTRACTED_TEXT_CHARS]
+    )
+    document.extracted_text = combined or None
+    return indexed
 
 
 class CreateFolderRequest(BaseModel):
@@ -707,14 +820,14 @@ async def save_document(
     The frontend sends the rendered PDF bytes (produced by the TypeScript pdf-engine)
     directly as a multipart upload — no active editing session is required.
 
-    Atomicity guarantee (Saga pattern):
-      1. Validate PDF bytes (magic bytes + size) + quota.
-      2. Commit DB records (StoredDocument + DocumentVersion) first.
-      3. Upload to S3 after successful commit.
-      4. If S3 upload fails after commit → delete the orphan S3 key (compensation)
-         and re-raise so the caller gets a clean error.
-         The DB records remain; a reconciliation job can clean them up or
-         the next save attempt will reuse/overwrite the same s3_key.
+    Ordering (a stored document must never point at a missing object):
+      1. Validate the bytes (format + size) + quota.
+      2. Upload the object. A failure here writes nothing.
+      3. Commit the rows (StoredDocument + DocumentVersion) and the quota
+         charge in ONE transaction.
+      4. If that transaction fails, delete the uploaded object (best-effort:
+         an unreferenced object is invisible and harmless, a row without its
+         object is a broken document).
     """
     start_time = time.time()
 
@@ -801,14 +914,38 @@ async def save_document(
             f"Document limit exceeded. Limit: {effective_limits.document_limit}"
         )
 
-    # ── 5. Derive IDs before DB commit so S3 key is deterministic ───────
+    # ── 5. Derive IDs first: the object key embeds the document id ──────
     stored_doc_id = generate_uuid()
     s3_key = _original_document_key(user.user_id, stored_doc_id, 1, original_format)
 
-    # ── 6. Commit DB records first (rollback-safe) ───────────────────────
-    # If anything inside the `async with` block raises, SQLAlchemy rolls
-    # back automatically — no S3 side-effect has happened yet.
-    async with get_db_session() as session:
+    # ── 6. Object first: the rows below must never point at a missing file ─
+    try:
+        s3_service.upload_file(
+            file_data=file_bytes,
+            key=s3_key,
+            content_type=mime_type,
+            metadata={
+                "document_id": stored_doc_id,
+                "user_id": user.user_id,
+                "version": "1",
+                "name": name,
+                "original_format": original_format,
+            },
+        )
+    except Exception as exc:
+        _logger.error(
+            "save_document: S3 upload failed (key=%s) — nothing written to the database",
+            s3_key,
+            exc_info=True,
+        )
+        raise InvalidOperationError(f"File upload failed: {exc}") from exc
+    _logger.info("save_document: S3 upload OK (key=%s)", s3_key)
+
+    # ── 7. Rows + quota in one transaction; the object is dropped on failure ─
+    async with (
+        get_db_session() as session,
+        rows_for_uploaded_object(session, s3_key, _new_document_committed(stored_doc_id)),
+    ):
         stored_doc = StoredDocument(
             id=stored_doc_id,
             name=name,
@@ -834,54 +971,15 @@ async def save_document(
             created_by=user.user_id,
         )
         session.add(version)
-        # session commits on __aexit__ — DB is durable at this point
+        # The quota counts the document in the same transaction as its rows:
+        # both are committed together or not at all.
+        await quota_service.adjust_document_storage(
+            session, stored_doc, file_size, 1, limits=effective_limits
+        )
 
     _logger.info("save_document: DB committed (stored_doc_id=%s)", stored_doc_id)
 
-    # ── 7. Upload to S3 after DB commit (compensation on failure) ────────
-    try:
-        s3_service.upload_file(
-            file_data=file_bytes,
-            key=s3_key,
-            content_type=mime_type,
-            metadata={
-                "document_id": stored_doc_id,
-                "user_id": user.user_id,
-                "version": "1",
-                "name": name,
-                "original_format": original_format,
-            },
-        )
-        _logger.info("save_document: S3 upload OK (key=%s)", s3_key)
-    except Exception as exc:
-        # Compensation: the DB row references this s3_key but the file is
-        # absent. Attempt a best-effort delete of any partial upload, then
-        # surface the error. The DB rows are left in place; the orphan-gc
-        # Celery task will reconcile them.
-        _logger.error(
-            "save_document: S3 upload failed after DB commit — "
-            "compensation: deleting partial s3_key=%s (doc=%s)",
-            s3_key,
-            stored_doc_id,
-            exc_info=True,
-        )
-        s3_service.delete_file(s3_key)  # best-effort; ignore return value
-
-        raise InvalidOperationError(
-            f"Document saved to database but file upload failed: {exc}"
-        ) from exc
-
-    # ── 8. Update quota counters ─────────────────────────────────────────
-    if effective_limits.is_tenant_based and effective_limits.tenant_id:
-        await quota_service.update_tenant_storage(
-            effective_limits.tenant_id, file_size, delta_documents=1
-        )
-    else:
-        await quota_service.update_storage_usage(
-            user.user_id, file_size, delta_documents=1
-        )
-
-    # ── 9. Index content for search (best-effort, never fails the import) ─
+    # ── 8. Index content for search (best-effort, never fails the import) ─
     # The client (TS/WASM engine) ships the document text via extracted_text;
     # we index it for BOTH full-text and semantic search (chunked). When the
     # client did not supply any text we fall back to server-side extraction —
@@ -1733,7 +1831,11 @@ async def duplicate_stored_document(
     # ── 4. Copy the file on S3 ───────────────────────────────────────────
     new_doc_id = generate_uuid()
     source_key = source_version.file_path
-    new_key = s3_service.get_document_key(user.user_id, new_doc_id, 1)
+    # The copy keeps the source's format (a DOCX stays a DOCX): it used to be
+    # stored under a .pdf key, typed application/pdf and recorded as a PDF.
+    source_format = source_doc.original_format or "pdf"
+    source_mime_type = source_doc.mime_type or "application/pdf"
+    new_key = _original_document_key(user.user_id, new_doc_id, 1, source_format)
 
     new_encryption_key: str | None = None
     new_is_encrypted = False
@@ -1771,7 +1873,7 @@ async def duplicate_stored_document(
             s3_service.copy_file(
                 source_key=source_key,
                 dest_key=new_key,
-                content_type="application/pdf",
+                content_type=source_mime_type,
                 metadata={
                     "document_id": new_doc_id,
                     "user_id": user.user_id,
@@ -1787,58 +1889,48 @@ async def duplicate_stored_document(
         )
         raise InvalidOperationError(f"Failed to copy document file: {exc}") from exc
 
-    # ── 5. DB records (compensation: drop the S3 copy on failure) ────────
+    # ── 5. Rows + quota in one transaction (the copy is dropped on failure) ─
     created_at = now_utc()
     try:
-        new_doc = StoredDocument(
-            id=new_doc_id,
-            name=copy_name,
-            owner_id=user.user_id,
-            folder_id=source_doc.folder_id,
-            page_count=source_doc.page_count,
-            current_version=1,
-            file_size_bytes=file_size,
-            mime_type=source_doc.mime_type,
-            tags=list(source_doc.tags or []),
-            extracted_text=source_doc.extracted_text,
-            created_at=created_at,
-            updated_at=created_at,
-        )
-        db.add(new_doc)
+        async with rows_for_uploaded_object(db, new_key, _new_document_committed(new_doc_id)):
+            new_doc = StoredDocument(
+                id=new_doc_id,
+                name=copy_name,
+                owner_id=user.user_id,
+                folder_id=source_doc.folder_id,
+                page_count=source_doc.page_count,
+                current_version=1,
+                file_size_bytes=file_size,
+                mime_type=source_mime_type,
+                original_format=source_format,
+                tags=list(source_doc.tags or []),
+                extracted_text=source_doc.extracted_text,
+                created_at=created_at,
+                updated_at=created_at,
+            )
+            db.add(new_doc)
 
-        new_version = DocumentVersion(
-            document_id=new_doc_id,
-            version_number=1,
-            file_path=new_key,
-            file_size_bytes=source_version.file_size_bytes,
-            file_hash=source_version.file_hash,
-            comment=f"Duplicated from '{source_doc.name}'",
-            created_by=user.user_id,
-            encryption_key=new_encryption_key,
-            is_encrypted=new_is_encrypted,
-        )
-        db.add(new_version)
-        await db.commit()
+            new_version = DocumentVersion(
+                document_id=new_doc_id,
+                version_number=1,
+                file_path=new_key,
+                file_size_bytes=source_version.file_size_bytes,
+                file_hash=source_version.file_hash,
+                comment=f"Duplicated from '{source_doc.name}'",
+                created_by=user.user_id,
+                encryption_key=new_encryption_key,
+                is_encrypted=new_is_encrypted,
+            )
+            db.add(new_version)
+            # The copy counts on the quota in the same transaction as its rows.
+            await quota_service.adjust_document_storage(
+                db, new_doc, file_size, 1, limits=effective_limits
+            )
     except Exception as exc:
-        _logger.error(
-            "duplicate: DB commit failed — compensation: deleting s3_key=%s",
-            new_key,
-            exc_info=True,
-        )
-        s3_service.delete_file(new_key)  # best-effort compensation
+        _logger.error("duplicate: rows not committed (copy %s)", new_key, exc_info=True)
         raise InvalidOperationError(f"Failed to duplicate document: {exc}") from exc
 
-    # ── 6. Quota counters — same as an upload ────────────────────────────
-    if effective_limits.is_tenant_based and effective_limits.tenant_id:
-        await quota_service.update_tenant_storage(
-            effective_limits.tenant_id, file_size, delta_documents=1
-        )
-    else:
-        await quota_service.update_storage_usage(
-            user.user_id, file_size, delta_documents=1
-        )
-
-    # ── 7. Activity log ──────────────────────────────────────────────────
+    # ── 6. Activity log ──────────────────────────────────────────────────
     await activity_service.log_activity(
         user_id=user.user_id,
         action=ActivityAction.COPY,
@@ -1852,7 +1944,7 @@ async def duplicate_stored_document(
         tenant_id=effective_limits.tenant_id if effective_limits.is_tenant_based else None,
     )
 
-    # ── 8. Build the duplicate's search index (best-effort) ──────────────
+    # ── 7. Build the duplicate's search index (best-effort) ──────────────
     # ocr_blocks are keyed by document_id, so the copy starts with an EMPTY
     # semantic index even though extracted_text was copied verbatim. Re-index
     # from the source text so the duplicate is immediately searchable (full-text
@@ -2235,13 +2327,12 @@ async def create_version(
     from it (full-text material + chunked semantic ``ocr_blocks``, a REPLACE) so
     the index always reflects the latest edited content.
 
-    Atomicity guarantee (Saga pattern):
+    Ordering (a version must never point at a missing object), all under the
+    document row lock:
       1. Validate PDF bytes (magic bytes + size) + authorize (owner-or-edit-share).
-      2. Commit new DocumentVersion + updated StoredDocument to DB first.
-      3. Upload new version to S3 after successful commit.
-      4. If S3 upload fails → compensate by deleting the partial upload
-         and rolling back current_version in a separate DB transaction,
-         then re-raise so the caller gets a clean error.
+      2. Upload the version object. A failure here writes nothing.
+      3. Commit the DocumentVersion, the updated StoredDocument and the quota
+         move in ONE transaction; if it fails, the object is deleted.
     """
     start_time = time.time()
 
@@ -2268,18 +2359,20 @@ async def create_version(
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Cannot read PDF structure: {exc}") from exc
 
-    # ── 3. Commit DB records first ───────────────────────────────────────
-    new_version_number: int
-    s3_key: str
-
+    # ── 3. Under the document lock: object first, then rows + quota ─────
+    # The row lock is held from the version-number read to the commit: a
+    # concurrent save of this document waits, so it can neither upload to
+    # the same ``…/v{n}`` key nor ever see a version whose object is missing.
     async with get_db_session() as session:
         # Load by id; the access guard (not the query) enforces owner-or-shared
         # — EXACTLY the same pattern as the editor load endpoint above.
         result = await session.execute(
-            select(StoredDocument).where(
+            select(StoredDocument)
+            .where(
                 StoredDocument.id == stored_document_id,
                 ~StoredDocument.is_deleted,
             )
+            .with_for_update()
         )
         stored_doc = result.scalar_one_or_none()
 
@@ -2300,94 +2393,61 @@ async def create_version(
         # load path) so an invited editor's save stays with the document.
         s3_key = s3_service.get_document_key(owner_id, stored_document_id, new_version_number)
 
-        version = DocumentVersion(
-            document_id=stored_document_id,
-            version_number=new_version_number,
-            file_path=s3_key,
-            file_size_bytes=file_size,
-            file_hash=file_hash,
-            comment=comment,
-            created_by=user.user_id,
-        )
-        session.add(version)
+        try:
+            s3_service.upload_file(
+                file_data=doc_bytes,
+                key=s3_key,
+                content_type="application/pdf",
+                metadata={
+                    "document_id": stored_document_id,
+                    # Object metadata mirrors the key prefix (the document
+                    # OWNER); author_id records who actually saved (may be an
+                    # edit grantee).
+                    "user_id": owner_id,
+                    "author_id": user.user_id,
+                    "version": str(new_version_number),
+                },
+            )
+        except Exception as exc:
+            _logger.error(
+                "create_version: S3 upload failed (key=%s) — nothing written to the database",
+                s3_key,
+                exc_info=True,
+            )
+            raise InvalidOperationError(f"File upload failed: {exc}") from exc
 
-        stored_doc.current_version = new_version_number
-        stored_doc.page_count = page_count
-        stored_doc.file_size_bytes = file_size
+        async with rows_for_uploaded_object(
+            session, s3_key, _version_committed(stored_document_id, new_version_number)
+        ):
+            version = DocumentVersion(
+                document_id=stored_document_id,
+                version_number=new_version_number,
+                file_path=s3_key,
+                file_size_bytes=file_size,
+                file_hash=file_hash,
+                comment=comment,
+                created_by=user.user_id,
+            )
+            session.add(version)
 
-        # Re-vectorize from the edited text (best-effort, same transaction):
-        # rebuilds full-text + semantic index so search reflects the new
-        # version. Skipped when the client did not ship updated text — the
-        # previous index then stays as-is. ``ocr_blocks`` are keyed by
-        # document_id (unchanged across versions), so this is a clean REPLACE.
-        if extracted_text is not None:
-            await reindex_document_text(session, stored_document_id, extracted_text)
-        # session commits on __aexit__ — version row + updated StoredDocument are durable
+            stored_doc.current_version = new_version_number
+            stored_doc.page_count = page_count
+            await _resize_stored_document(session, stored_doc, file_size)
+
+            # Re-vectorize from the edited text (same transaction): rebuilds
+            # full-text + semantic index so search reflects the new version.
+            # Skipped when the client did not ship updated text — the previous
+            # index then stays as-is. ``ocr_blocks`` are keyed by document_id
+            # (unchanged across versions), so this is a clean REPLACE.
+            if extracted_text is not None:
+                await reindex_document_text(session, stored_document_id, extracted_text)
 
     _logger.info(
-        "create_version: DB committed (stored_doc_id=%s, version=%d)",
+        "create_version: committed (stored_doc_id=%s, version=%d, key=%s)",
         stored_document_id,
         new_version_number,
+        s3_key,
     )
-
-    # ── 4. Upload to S3 after DB commit (compensation on failure) ────────
-    try:
-        s3_service.upload_file(
-            file_data=doc_bytes,
-            key=s3_key,
-            content_type="application/pdf",
-            metadata={
-                "document_id": stored_document_id,
-                # Object metadata mirrors the key prefix (the document OWNER);
-                # author_id records who actually saved (may be an edit grantee).
-                "user_id": owner_id,
-                "author_id": user.user_id,
-                "version": str(new_version_number),
-            },
-        )
-        _logger.info(
-            "create_version: S3 upload OK (key=%s)", s3_key
-        )
-    except Exception as exc:
-        # Compensation: revert current_version in DB and delete any partial upload.
-        _logger.error(
-            "create_version: S3 upload failed after DB commit — "
-            "compensation: reverting version to %d, deleting s3_key=%s",
-            new_version_number - 1,
-            s3_key,
-            exc_info=True,
-        )
-        s3_service.delete_file(s3_key)  # best-effort; ignore return value
-
-        # Revert DB: roll back version bump and delete orphan DocumentVersion row.
-        try:
-            async with get_db_session() as rollback_session:
-                result = await rollback_session.execute(
-                    select(StoredDocument).where(
-                        StoredDocument.id == stored_document_id,
-                    )
-                )
-                stored_doc_rb = result.scalar_one_or_none()
-                if stored_doc_rb:
-                    stored_doc_rb.current_version = new_version_number - 1
-
-                ver_result = await rollback_session.execute(
-                    select(DocumentVersion).where(
-                        DocumentVersion.document_id == stored_document_id,
-                        DocumentVersion.version_number == new_version_number,
-                    )
-                )
-                orphan_version = ver_result.scalar_one_or_none()
-                if orphan_version:
-                    await rollback_session.delete(orphan_version)
-        except Exception as rb_exc:
-            _logger.error(
-                "create_version: compensation DB rollback also failed: %s", rb_exc
-            )
-
-        raise InvalidOperationError(
-            f"Version {new_version_number} committed to database but file upload failed: {exc}"
-        ) from exc
 
     processing_time = int((time.time() - start_time) * 1000)
 
@@ -2497,17 +2557,23 @@ async def restore_original(
     except Exception as exc:
         raise InvalidOperationError(f"Cannot read v1 PDF structure: {exc}") from exc
 
-    # ── 4. Commit DB: bump current_version, insert version row ──────────
+    # ── 4. Under the document lock: object first, then rows + quota ─────
+    # Same ordering as a new version: the lock is held from the
+    # version-number read to the commit, and the new version is only
+    # committed once its object exists.
     new_version_number: int
     new_s3_key: str
     new_version_created_at: datetime
 
     async with get_db_session() as session:
         result = await session.execute(
-            select(StoredDocument).where(
+            select(StoredDocument)
+            .where(
                 StoredDocument.id == stored_document_id,
                 StoredDocument.owner_id == user.user_id,
+                ~StoredDocument.is_deleted,
             )
+            .with_for_update()
         )
         stored_doc = result.scalar_one_or_none()
         if not stored_doc:
@@ -2518,79 +2584,51 @@ async def restore_original(
             user.user_id, stored_document_id, new_version_number
         )
 
-        version = DocumentVersion(
-            document_id=stored_document_id,
-            version_number=new_version_number,
-            file_path=new_s3_key,
-            file_size_bytes=file_size,
-            file_hash=file_hash,
-            comment="Restored from v1 (original)",
-            created_by=user.user_id,
-        )
-        session.add(version)
+        try:
+            s3_service.upload_file(
+                file_data=v1_bytes,
+                key=new_s3_key,
+                content_type="application/pdf",
+                metadata={
+                    "document_id": stored_document_id,
+                    "user_id": user.user_id,
+                    "version": str(new_version_number),
+                    "restored_from": "1",
+                },
+            )
+        except Exception as exc:
+            _logger.error(
+                "restore_original: S3 upload failed (key=%s) — nothing written to the database",
+                new_s3_key,
+                exc_info=True,
+            )
+            raise InvalidOperationError(f"File upload failed: {exc}") from exc
 
-        stored_doc.current_version = new_version_number
-        stored_doc.page_count = page_count
-        stored_doc.file_size_bytes = file_size
-        await session.flush()
-        new_version_created_at = version.created_at
+        async with rows_for_uploaded_object(
+            session, new_s3_key, _version_committed(stored_document_id, new_version_number)
+        ):
+            version = DocumentVersion(
+                document_id=stored_document_id,
+                version_number=new_version_number,
+                file_path=new_s3_key,
+                file_size_bytes=file_size,
+                file_hash=file_hash,
+                comment="Restored from v1 (original)",
+                created_by=user.user_id,
+            )
+            session.add(version)
+
+            stored_doc.current_version = new_version_number
+            stored_doc.page_count = page_count
+            await _resize_stored_document(session, stored_doc, file_size)
+            await session.flush()
+            new_version_created_at = version.created_at
 
     _logger.info(
-        "restore_original: DB committed (stored_doc_id=%s, new_version=%d)",
+        "restore_original: committed (stored_doc_id=%s, new_version=%d)",
         stored_document_id,
         new_version_number,
     )
-
-    # ── 5. Upload to S3 with compensation on failure ─────────────────────
-    try:
-        s3_service.upload_file(
-            file_data=v1_bytes,
-            key=new_s3_key,
-            content_type="application/pdf",
-            metadata={
-                "document_id": stored_document_id,
-                "user_id": user.user_id,
-                "version": str(new_version_number),
-                "restored_from": "1",
-            },
-        )
-    except Exception as exc:
-        _logger.error(
-            "restore_original: S3 upload failed — compensation: revert to v%d, "
-            "delete s3_key=%s",
-            new_version_number - 1,
-            new_s3_key,
-            exc_info=True,
-        )
-        s3_service.delete_file(new_s3_key)  # best-effort
-        try:
-            async with get_db_session() as rb:
-                rb_doc = (
-                    await rb.execute(
-                        select(StoredDocument).where(
-                            StoredDocument.id == stored_document_id
-                        )
-                    )
-                ).scalar_one_or_none()
-                if rb_doc:
-                    rb_doc.current_version = new_version_number - 1
-                orphan = (
-                    await rb.execute(
-                        select(DocumentVersion).where(
-                            DocumentVersion.document_id == stored_document_id,
-                            DocumentVersion.version_number == new_version_number,
-                        )
-                    )
-                ).scalar_one_or_none()
-                if orphan:
-                    await rb.delete(orphan)
-        except Exception as rb_exc:
-            _logger.error(
-                "restore_original: compensation rollback also failed: %s", rb_exc
-            )
-        raise InvalidOperationError(
-            f"Restore committed to DB but S3 upload failed: {exc}"
-        ) from exc
 
     return APIResponse(
         success=True,
@@ -2978,8 +3016,10 @@ async def index_ocr_blocks(
 
     # Single positioned-index entry point: stores the geometry-carrying blocks
     # (semantic) AND keeps StoredDocument.extracted_text (keyword search) in sync.
+    # A failure propagates: get_db rolls back (previous index kept) and the
+    # client gets an error instead of a success claiming 0 blocks.
     blocks_payload = [block.model_dump() for block in request.blocks]
-    indexed = await reindex_document_blocks(db, stored_document_id, blocks_payload)
+    indexed = await reindex_document_blocks(db, stored_doc, blocks_payload)
     stored_doc.updated_at = now_utc()
 
     await db.commit()
@@ -3154,7 +3194,12 @@ async def delete_stored_document(
     if not permanent:
         doc_filter.append(~StoredDocument.is_deleted)
 
-    result = await db.execute(select(StoredDocument).where(*doc_filter))
+    # Row-locked until the commit: two concurrent deletes (or a delete racing
+    # a restore) are serialized, and the second one re-reads the committed
+    # state, so the quota moves exactly once.
+    result = await db.execute(
+        select(StoredDocument).where(*doc_filter).with_for_update()
+    )
     stored_doc = result.scalar_one_or_none()
 
     if not stored_doc:
@@ -3163,15 +3208,17 @@ async def delete_stored_document(
     file_size = stored_doc.file_size_bytes or 0
     was_trashed = stored_doc.is_deleted
 
+    # Free the counter that holds the document (recorded on it when it was
+    # charged, whatever the owner's membership is today) in the same
+    # transaction as the delete. It was already freed at soft-delete time, so
+    # a permanent delete of an already-trashed document must NOT free it twice.
+    counted_on_tenant = stored_doc.quota_tenant_id is not None
+    if not was_trashed:
+        await quota_service.adjust_document_storage(db, stored_doc, -file_size, -1)
+
     if permanent:
         # ── Hard delete: S3 files + versions + DB row ────────────────────
-        versions_result = await db.execute(
-            select(DocumentVersion.file_path).where(
-                DocumentVersion.document_id == stored_document_id
-            )
-        )
-        s3_keys = [row[0] for row in versions_result.all() if row[0]]
-        thumbnail_key = stored_doc.thumbnail_path
+        object_keys = await collect_document_object_keys(db, [stored_doc])
 
         # DB first (cascades versions, shares, invitations, activity logs);
         # S3 cleanup after commit is best-effort — an orphan S3 object is
@@ -3179,28 +3226,12 @@ async def delete_stored_document(
         await db.delete(stored_doc)
         await db.commit()
 
-        for key in s3_keys:
-            s3_service.delete_file(key)  # best-effort
-        if thumbnail_key:
-            s3_service.delete_file(thumbnail_key)  # best-effort
+        delete_objects_best_effort(object_keys)
     else:
         # ── Soft delete: move to trash ───────────────────────────────────
         stored_doc.is_deleted = True
         stored_doc.deleted_at = now_utc()
         await db.commit()
-
-    # Update quota (tenant or personal based on membership).
-    # The quota was already freed at soft-delete time, so a permanent
-    # delete of an already-trashed document must NOT free it twice.
-    if not was_trashed and file_size > 0:
-        if effective_limits.is_tenant_based and effective_limits.tenant_id:
-            await quota_service.update_tenant_storage(
-                effective_limits.tenant_id, -file_size, delta_documents=-1
-            )
-        else:
-            await quota_service.update_storage_usage(
-                user.user_id, -file_size, delta_documents=-1
-            )
 
     # Log the delete activity.
     # For a permanent delete the document row (and its FK-cascaded activity
@@ -3226,7 +3257,7 @@ async def delete_stored_document(
             "stored_document_id": stored_document_id,
             "deleted": True,
             "permanent": permanent,
-            "quota_source": "tenant" if effective_limits.is_tenant_based else "personal",
+            "quota_source": "tenant" if counted_on_tenant else "personal",
         },
         meta=MetaInfo(
             request_id=get_request_id(),
@@ -3325,13 +3356,16 @@ async def restore_stored_document(
 
     effective_limits = await quota_service.get_effective_limits(user.user_id)
 
-    # Only documents currently in the trash can be restored
+    # Only documents currently in the trash can be restored. Row-locked: a
+    # concurrent restore waits, then no longer finds the document in the trash.
     result = await db.execute(
-        select(StoredDocument).where(
+        select(StoredDocument)
+        .where(
             StoredDocument.id == stored_document_id,
             StoredDocument.owner_id == user.user_id,
             StoredDocument.is_deleted,
         )
+        .with_for_update()
     )
     stored_doc = result.scalar_one_or_none()
 
@@ -3340,22 +3374,15 @@ async def restore_stored_document(
 
     file_size = stored_doc.file_size_bytes or 0
 
-    # Restore
+    # Restore, re-consuming in the same transaction the quota that was freed
+    # at soft-delete time
     stored_doc.is_deleted = False
     stored_doc.deleted_at = None
     stored_doc.updated_at = now_utc()
+    await quota_service.adjust_document_storage(
+        db, stored_doc, file_size, 1, limits=effective_limits
+    )
     await db.commit()
-
-    # Re-consume the quota that was freed at soft-delete time
-    if file_size > 0:
-        if effective_limits.is_tenant_based and effective_limits.tenant_id:
-            await quota_service.update_tenant_storage(
-                effective_limits.tenant_id, file_size, delta_documents=1
-            )
-        else:
-            await quota_service.update_storage_usage(
-                user.user_id, file_size, delta_documents=1
-            )
 
     # Log the restore activity
     await activity_service.log_activity(
@@ -4124,9 +4151,9 @@ async def rename_folder(
     response_model=APIResponse[dict],
     summary="Delete folder",
     description="""
-Delete a folder and optionally its contents.
+Delete a folder, its sub-folders and optionally their contents.
 
-By default, folders containing documents cannot be deleted (returns 400 error). Use the cascade parameter to soft-delete all documents within the folder along with the folder itself.
+By default, a folder containing documents — directly or in any sub-folder — cannot be deleted (returns 400 error). Use the cascade parameter to move every document of the folder and of its sub-folders to the trash along with the folders.
 
 ## Path Parameters
 | Parameter | Type | Description |
@@ -4136,12 +4163,13 @@ By default, folders containing documents cannot be deleted (returns 400 error). 
 ## Query Parameters
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| cascade | boolean | false | If true, soft-delete all documents in folder |
+| cascade | boolean | false | If true, move all documents of the folder and its sub-folders to the trash |
 
 ## Behavior
-- Without cascade: Fails if folder contains documents
-- With cascade: Soft-deletes all documents, then deletes folder
-- Child folders are also deleted (SQL cascade)
+- Without cascade: fails if the folder or any sub-folder contains active documents
+- With cascade: moves those documents to the trash (their storage quota is freed), then deletes the folders
+- Sub-folders are always deleted with the folder
+- Folders have no trash: documents of a deleted folder are restored at the root
 """,
     responses={
         200: {
@@ -4152,7 +4180,9 @@ By default, folders containing documents cannot be deleted (returns 400 error). 
                         "success": True,
                         "data": {
                             "folder_id": "660e8400-e29b-41d4-a716-446655440001",
-                            "deleted": True
+                            "deleted": True,
+                            "deleted_folders": 3,
+                            "trashed_documents": 0
                         },
                         "meta": {"request_id": "uuid", "timestamp": "2024-01-18T13:30:00Z"}
                     }
@@ -4265,49 +4295,61 @@ async def delete_folder(
     cascade: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
-    """Delete folder."""
+    """Delete a folder and its whole sub-tree.
+
+    A folder is "empty" only when NO active document is left anywhere below
+    it — sub-folders included. Without ``cascade`` a non-empty folder is
+    refused (400), which is what the web app tells the user ("move or delete
+    its contents first"). With ``cascade`` every active document of the
+    sub-tree goes to the trash, each freed from the counter that holds it.
+
+    Folders themselves have no trash: once the folder is gone, its trashed
+    documents (moved there by this cascade or trashed earlier) are restored
+    at the root. Active documents are never re-homed: the previous check only
+    looked at the folder's DIRECT documents, so the documents of its
+    sub-folders survived the delete as active documents, silently moved to
+    the root by the ``folder_id ON DELETE SET NULL`` foreign key.
+    """
     start_time = time.time()
 
-    # Get folder
-    result = await db.execute(
-        select(Folder).where(
-            Folder.id == folder_id,
-            Folder.owner_id == user.user_id,
-        )
-    )
-    folder = result.scalar_one_or_none()
-
-    if not folder:
+    # The whole sub-tree, row-locked: a document cannot be moved or uploaded
+    # into it (the folder FK check waits on these locks, then fails) between
+    # the emptiness check and the delete.
+    subtree_ids = await _lock_folder_subtree(db, folder_id, user.user_id)
+    if not subtree_ids:
         raise NotFoundError(f"Folder not found: {folder_id}")
 
-    # Check if folder has documents
-    count_result = await db.execute(
-        select(func.count()).select_from(StoredDocument).where(
-            StoredDocument.folder_id == folder_id,
-            ~StoredDocument.is_deleted,
-        )
-    )
-    doc_count = count_result.scalar() or 0
-
-    if doc_count > 0 and not cascade:
-        raise InvalidOperationError(
-            f"Folder contains {doc_count} documents. Use cascade=true to delete all."
-        )
-
-    # Delete documents if cascade
-    if cascade:
-        docs_result = await db.execute(
-            select(StoredDocument).where(
-                StoredDocument.folder_id == folder_id
+    active_docs = (
+        await db.execute(
+            select(StoredDocument)
+            .where(
+                StoredDocument.folder_id.in_(subtree_ids),
+                ~StoredDocument.is_deleted,
             )
+            .with_for_update()
         )
-        docs = docs_result.scalars().all()
-        for doc in docs:
-            doc.is_deleted = True
-            doc.deleted_at = now_utc()
+    ).scalars().all()
 
-    # Delete folder (cascade delete children via SQLAlchemy relationship)
-    await db.delete(folder)
+    if active_docs and not cascade:
+        raise InvalidOperationError(
+            f"Folder contains {len(active_docs)} documents (sub-folders included). "
+            "Use cascade=true to move them to the trash."
+        )
+
+    # Each document leaves the active set exactly like a single delete: its
+    # counter is freed in this same transaction (documents already in the
+    # trash were freed then, and keep their original deletion date for the
+    # 30-day purge).
+    deleted_at = now_utc()
+    for doc in active_docs:
+        doc.is_deleted = True
+        doc.deleted_at = deleted_at
+    await quota_service.release_documents(db, active_docs)
+    await db.flush()
+
+    # Sub-folders go with it (parent_id ON DELETE CASCADE); the trashed
+    # documents of the sub-tree are detached (folder_id ON DELETE SET NULL).
+    await db.execute(delete(Folder).where(Folder.id == folder_id))
     await db.commit()
 
     processing_time = int((time.time() - start_time) * 1000)
@@ -4317,6 +4359,8 @@ async def delete_folder(
         data={
             "folder_id": folder_id,
             "deleted": True,
+            "deleted_folders": len(subtree_ids),
+            "trashed_documents": len(active_docs),
         },
         meta=MetaInfo(
             request_id=get_request_id(),
@@ -4324,6 +4368,28 @@ async def delete_folder(
             processing_time_ms=processing_time,
         ),
     )
+
+
+async def _lock_folder_subtree(db: AsyncSession, folder_id: str, owner_id: str) -> list[str]:
+    """Ids of ``folder_id`` and all its descendants (owned by ``owner_id``), row-locked.
+
+    Empty when the folder does not exist or belongs to someone else.
+    """
+    subtree = (
+        select(Folder.id)
+        .where(Folder.id == folder_id, Folder.owner_id == owner_id)
+        .cte("folder_subtree", recursive=True)
+    )
+    subtree = subtree.union_all(
+        select(Folder.id).where(Folder.parent_id == subtree.c.id)
+    )
+    locked = await db.execute(
+        select(Folder.id)
+        .where(Folder.id.in_(select(subtree.c.id)))
+        .order_by(Folder.id)
+        .with_for_update()
+    )
+    return list(locked.scalars().all())
 
 
 class MoveDocumentRequest(BaseModel):

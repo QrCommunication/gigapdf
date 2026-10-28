@@ -101,6 +101,9 @@ class FakeSession:
     async def delete(self, obj):
         self.deleted.append(obj)
 
+    async def flush(self):
+        pass
+
     async def commit(self):
         self.commit_count += 1
 
@@ -117,22 +120,22 @@ class FakeSession:
 
 def _make_doc(**overrides) -> StoredDocument:
     now = datetime.now(UTC)
-    defaults = dict(
-        id=DOC_ID,
-        name="Contrat.pdf",
-        owner_id=TEST_USER_ID,
-        folder_id=None,
-        page_count=3,
-        current_version=2,
-        file_size_bytes=1024,
-        mime_type="application/pdf",
-        tags=["legal"],
-        thumbnail_path=None,
-        is_deleted=False,
-        deleted_at=None,
-        created_at=now,
-        updated_at=now,
-    )
+    defaults = {
+        "id": DOC_ID,
+        "name": "Contrat.pdf",
+        "owner_id": TEST_USER_ID,
+        "folder_id": None,
+        "page_count": 3,
+        "current_version": 2,
+        "file_size_bytes": 1024,
+        "mime_type": "application/pdf",
+        "tags": ["legal"],
+        "thumbnail_path": None,
+        "is_deleted": False,
+        "deleted_at": None,
+        "created_at": now,
+        "updated_at": now,
+    }
     defaults.update(overrides)
     doc = StoredDocument(**{k: v for k, v in defaults.items() if k != "extracted_text"})
     doc.extracted_text = overrides.get("extracted_text")
@@ -140,44 +143,44 @@ def _make_doc(**overrides) -> StoredDocument:
 
 
 def _make_version(**overrides) -> DocumentVersion:
-    defaults = dict(
-        document_id=DOC_ID,
-        version_number=2,
-        file_path=f"documents/{TEST_USER_ID}/{DOC_ID}/v2.pdf",
-        file_size_bytes=1024,
-        file_hash="a" * 64,
-        created_by=TEST_USER_ID,
-        is_encrypted=False,
-        encryption_key=None,
-    )
+    defaults = {
+        "document_id": DOC_ID,
+        "version_number": 2,
+        "file_path": f"documents/{TEST_USER_ID}/{DOC_ID}/v2.pdf",
+        "file_size_bytes": 1024,
+        "file_hash": "a" * 64,
+        "created_by": TEST_USER_ID,
+        "is_encrypted": False,
+        "encryption_key": None,
+    }
     defaults.update(overrides)
     return DocumentVersion(**defaults)
 
 
 def _make_folder(**overrides) -> Folder:
     now = datetime.now(UTC)
-    defaults = dict(
-        id=FOLDER_ID,
-        name="Dossier",
-        owner_id=TEST_USER_ID,
-        parent_id=None,
-        path="/",
-        created_at=now,
-        updated_at=now,
-    )
+    defaults = {
+        "id": FOLDER_ID,
+        "name": "Dossier",
+        "owner_id": TEST_USER_ID,
+        "parent_id": None,
+        "path": "/",
+        "created_at": now,
+        "updated_at": now,
+    }
     defaults.update(overrides)
     return Folder(**defaults)
 
 
 def _personal_limits(**overrides) -> SimpleNamespace:
-    defaults = dict(
-        storage_used_bytes=0,
-        storage_limit_bytes=5 * 1024 * 1024 * 1024,
-        document_count=1,
-        document_limit=1000,
-        is_tenant_based=False,
-        tenant_id=None,
-    )
+    defaults = {
+        "storage_used_bytes": 0,
+        "storage_limit_bytes": 5 * 1024 * 1024 * 1024,
+        "document_count": 1,
+        "document_limit": 1000,
+        "is_tenant_based": False,
+        "tenant_id": None,
+    }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
 
@@ -223,10 +226,18 @@ def services(monkeypatch):
     """Monkeypatch the service singletons referenced by the storage router."""
     from app.api.v1 import storage as storage_module
 
+    # Records how many commits the document session had made when the quota
+    # moved: the counter must move BEFORE the commit of the write it accounts
+    # for (same transaction), never after it.
+    commits_at_quota: list[int] = []
+
+    async def _record_quota(session, *_args, **_kwargs):
+        commits_at_quota.append(session.commit_count)
+
     mocks = SimpleNamespace(
         get_effective_limits=AsyncMock(return_value=_personal_limits()),
-        update_storage_usage=AsyncMock(),
-        update_tenant_storage=AsyncMock(),
+        adjust_document_storage=AsyncMock(side_effect=_record_quota),
+        commits_at_quota=commits_at_quota,
         log_activity=AsyncMock(return_value="activity-id"),
         copy_file=MagicMock(return_value={"dest_key": "x"}),
         upload_file=MagicMock(return_value={"key": "x"}),
@@ -242,8 +253,7 @@ def services(monkeypatch):
 
     qs = storage_module.quota_service
     monkeypatch.setattr(qs, "get_effective_limits", mocks.get_effective_limits)
-    monkeypatch.setattr(qs, "update_storage_usage", mocks.update_storage_usage)
-    monkeypatch.setattr(qs, "update_tenant_storage", mocks.update_tenant_storage)
+    monkeypatch.setattr(qs, "adjust_document_storage", mocks.adjust_document_storage)
 
     monkeypatch.setattr(
         storage_module.activity_service, "log_activity", mocks.log_activity
@@ -313,10 +323,37 @@ class TestDuplicateDocument:
         # One commit for the duplicate row + one for its search index.
         assert fake_db.commit_count == 2
 
-        # Quota consumed like an upload
-        services.update_storage_usage.assert_awaited_once_with(
-            TEST_USER_ID, 1024, delta_documents=1
+        # Quota consumed like an upload, in the copy's own transaction
+        services.adjust_document_storage.assert_awaited_once_with(
+            fake_db,
+            _DocumentOwnedBy(TEST_USER_ID),
+            1024,
+            1,
+            limits=services.get_effective_limits.return_value,
         )
+        assert services.commits_at_quota == [0]
+
+    def test_duplicate_keeps_the_format_of_a_non_pdf_document(self, client, fake_db, services):
+        docx_mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        source = _make_doc(name="Contrat.docx", original_format="docx", mime_type=docx_mime)
+        version = _make_version(file_path=f"documents/{TEST_USER_ID}/{DOC_ID}/v2.docx")
+        fake_db._results = [
+            FakeResult(scalar=source),
+            FakeResult(scalar=version),
+            FakeResult(rows=[("Contrat.docx",)]),
+            FakeResult(scalar=_make_doc(original_format="docx", mime_type=docx_mime)),
+        ]
+
+        resp = client.post(f"/api/v1/storage/documents/{DOC_ID}/duplicate")
+
+        assert resp.status_code == 201
+        new_id = resp.json()["data"]["stored_document_id"]
+        kwargs = services.copy_file.call_args.kwargs
+        assert kwargs["dest_key"] == f"documents/{TEST_USER_ID}/{new_id}/v1.docx"
+        assert kwargs["content_type"] == docx_mime
+        new_doc = next(o for o in fake_db.added if isinstance(o, StoredDocument))
+        assert new_doc.original_format == "docx"
+        assert new_doc.mime_type == docx_mime
 
     def test_duplicate_increments_suffix_on_collision(self, client, fake_db, services):
         source = _make_doc()
@@ -374,9 +411,11 @@ class TestDeleteDocument:
         assert doc.deleted_at is not None
         assert fake_db.deleted == []  # row NOT removed
         services.delete_file.assert_not_called()  # S3 file kept
-        services.update_storage_usage.assert_awaited_once_with(
-            TEST_USER_ID, -1024, delta_documents=-1
+        # Freed from the counter recorded on the document (no current limits).
+        services.adjust_document_storage.assert_awaited_once_with(
+            fake_db, _DocumentOwnedBy(TEST_USER_ID), -1024, -1
         )
+        assert services.commits_at_quota == [0]  # freed in the delete's transaction
 
     def test_permanent_delete_removes_s3_and_db(self, client, fake_db, services):
         doc = _make_doc(thumbnail_path=f"thumbnails/{TEST_USER_ID}/{DOC_ID}.png")
@@ -398,10 +437,11 @@ class TestDeleteDocument:
         assert v1_key in deleted_keys
         assert v2_key in deleted_keys
         assert doc.thumbnail_path in deleted_keys
-        # Active document → quota freed once
-        services.update_storage_usage.assert_awaited_once_with(
-            TEST_USER_ID, -1024, delta_documents=-1
+        # Active document → quota freed once, before the commit
+        services.adjust_document_storage.assert_awaited_once_with(
+            fake_db, _DocumentOwnedBy(TEST_USER_ID), -1024, -1
         )
+        assert services.commits_at_quota == [0]
 
     def test_permanent_delete_of_trashed_doc_does_not_free_quota_twice(
         self, client, fake_db, services
@@ -419,7 +459,7 @@ class TestDeleteDocument:
         assert resp.status_code == 200
         assert fake_db.deleted == [doc]
         # Quota was already freed at soft-delete time
-        services.update_storage_usage.assert_not_awaited()
+        services.adjust_document_storage.assert_not_awaited()
 
     def test_soft_delete_of_already_trashed_doc_returns_404(self, client, fake_db, services):
         # The soft-delete query filters out trashed documents → scripted None
@@ -447,10 +487,15 @@ class TestRestoreDocument:
         assert data["name"] == "Contrat.pdf"
         assert doc.is_deleted is False
         assert doc.deleted_at is None
-        # Quota re-consumed after restore
-        services.update_storage_usage.assert_awaited_once_with(
-            TEST_USER_ID, 1024, delta_documents=1
+        # Quota re-consumed in the restore's transaction
+        services.adjust_document_storage.assert_awaited_once_with(
+            fake_db,
+            _DocumentOwnedBy(TEST_USER_ID),
+            1024,
+            1,
+            limits=services.get_effective_limits.return_value,
         )
+        assert services.commits_at_quota == [0]
 
     def test_restore_of_non_trashed_doc_returns_404(self, client, fake_db, services):
         # The restore query only matches trashed docs → scripted None
@@ -459,7 +504,7 @@ class TestRestoreDocument:
         resp = client.post(f"/api/v1/storage/documents/{DOC_ID}/restore")
 
         assert resp.status_code == 404
-        services.update_storage_usage.assert_not_awaited()
+        services.adjust_document_storage.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
@@ -724,3 +769,16 @@ class TestGetStoredDocument:
         data = resp.json()["data"]
         assert data["stored_document_id"] == DOC_ID
         assert data["deleted_at"] is not None  # trashed document exposes deletion timestamp
+
+
+class _DocumentOwnedBy:
+    """Matches the document passed to ``adjust_document_storage`` (by owner)."""
+
+    def __init__(self, owner_id: str):
+        self.owner_id = owner_id
+
+    def __eq__(self, other) -> bool:
+        return getattr(other, "owner_id", None) == self.owner_id
+
+    def __repr__(self) -> str:
+        return f"<document owned by {self.owner_id}>"

@@ -17,6 +17,11 @@ service module, returning the results each call will consume in order.
 
 from __future__ import annotations
 
+# NB: the package __init__ rebinds the ``invitation_service`` attribute to the
+# module-level SINGLETON, shadowing the submodule — both ``from … import`` and
+# ``import … as`` resolve to the instance. Go through sys.modules to get the
+# real module object (needed to monkeypatch get_db_session).
+import importlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -28,11 +33,6 @@ from app.models.database import (
     StoredDocument,
     UserQuota,
 )
-# NB: the package __init__ rebinds the ``invitation_service`` attribute to the
-# module-level SINGLETON, shadowing the submodule — both ``from … import`` and
-# ``import … as`` resolve to the instance. Go through sys.modules to get the
-# real module object (needed to monkeypatch get_db_session).
-import importlib
 
 invitation_module = importlib.import_module(
     "app.services.sharing.invitation_service"
@@ -117,23 +117,23 @@ def use_session(monkeypatch):
 
 def _make_doc(**overrides) -> StoredDocument:
     now = datetime.now(UTC)
-    defaults = dict(
-        id=DOC_ID,
-        name="Contrat.pdf",
-        owner_id=OWNER_ID,
-        folder_id=None,
-        page_count=3,
-        current_version=1,
-        file_size_bytes=1024,
-        mime_type="application/pdf",
-        original_format="pdf",
-        tags=[],
-        thumbnail_path=None,
-        is_deleted=False,
-        deleted_at=None,
-        created_at=now,
-        updated_at=now,
-    )
+    defaults = {
+        "id": DOC_ID,
+        "name": "Contrat.pdf",
+        "owner_id": OWNER_ID,
+        "folder_id": None,
+        "page_count": 3,
+        "current_version": 1,
+        "file_size_bytes": 1024,
+        "mime_type": "application/pdf",
+        "original_format": "pdf",
+        "tags": [],
+        "thumbnail_path": None,
+        "is_deleted": False,
+        "deleted_at": None,
+        "created_at": now,
+        "updated_at": now,
+    }
     defaults.update(overrides)
     return StoredDocument(**defaults)
 
@@ -144,20 +144,20 @@ def _make_invitee_quota() -> UserQuota:
 
 def _make_invitation(**overrides) -> DocumentShareInvitation:
     now = datetime.now(UTC)
-    defaults = dict(
-        id="inv-0000-0000-0000-000000000042",
-        document_id=DOC_ID,
-        inviter_id=OWNER_ID,
-        invitee_email=INVITEE_EMAIL,
-        invitee_user_id=None,
-        token="tok-secret",
-        permission="edit",
-        message=None,
-        status=InvitationStatus.PENDING,
-        expires_at=now + timedelta(days=7),
-        responded_at=None,
-        created_at=now,
-    )
+    defaults = {
+        "id": "inv-0000-0000-0000-000000000042",
+        "document_id": DOC_ID,
+        "inviter_id": OWNER_ID,
+        "invitee_email": INVITEE_EMAIL,
+        "invitee_user_id": None,
+        "token": "tok-secret",
+        "permission": "edit",
+        "message": None,
+        "status": InvitationStatus.PENDING,
+        "expires_at": now + timedelta(days=7),
+        "responded_at": None,
+        "created_at": now,
+    }
     defaults.update(overrides)
     invitation = DocumentShareInvitation(**defaults)
     invitation.document = _make_doc()

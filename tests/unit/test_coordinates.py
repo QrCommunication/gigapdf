@@ -2,11 +2,9 @@
 Unit tests for coordinate conversion utilities.
 """
 
-import pytest
 
 from app.utils.coordinates import (
     Point,
-    Rect,
     pdf_rect_to_web,
     pdf_to_web,
     web_rect_to_pdf,

@@ -132,13 +132,28 @@ Create a new programmatic API key for the authenticated user.
 The full plaintext key is returned **once** in the ``data.key`` field.
 **Store it securely** — it cannot be retrieved again after this response.
 
+## Authenticating with the key
+
+Send the secret key as ``X-API-Key: giga_pk_...`` on any ``/api/v1``
+endpoint. The request then acts as the key's owner. When an
+``Authorization: Bearer`` header is also present, the Bearer token decides
+the identity; the key is still validated and its scopes still apply.
+
 ## Scopes
 
-| Scope | Access |
+Scopes are enforced on every request made with the key. They are nested:
+``write`` includes ``read``, and ``admin`` includes both. A missing scope
+returns ``403 API_KEY_SCOPE_DENIED``.
+
+| Scope | Grants |
 |-------|--------|
-| `read` | Read-only access to documents and metadata |
-| `write` | Create, update, and delete documents |
-| `admin` | Full access including billing and tenant management |
+| `read` | `GET` / `HEAD` requests, outside the routes below |
+| `write` | `read`, plus `POST` / `PUT` / `PATCH` / `DELETE` outside the routes below |
+| `admin` | `write`, plus every method on `/api/v1/api-keys` (key management) and `/api/v1/billing` |
+
+Platform administration (``/api/v1/admin/...``) is never reachable with an
+API key, whatever its scopes: an API key never grants platform-admin rights.
+Default scopes: ``read,write``.
 
 ## Domain Restrictions
 

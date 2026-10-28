@@ -17,7 +17,7 @@ server side of that contract:
 - document:update is relayed untouched (client_id preserved for anti-echo)
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -33,7 +33,7 @@ from app.api.websocket import (
 )
 
 SID = "socket-emitter"
-NOW = datetime(2026, 7, 3, 12, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 3, 12, 0, 0, tzinfo=UTC)
 
 
 class _FakeSessionCtx:

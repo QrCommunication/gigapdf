@@ -113,6 +113,9 @@ class FakeSession:
     async def delete(self, obj):
         self.deleted.append(obj)
 
+    async def flush(self):
+        pass
+
     async def commit(self):
         self.commit_count += 1
 
@@ -129,23 +132,23 @@ class FakeSession:
 
 def _make_doc(**overrides) -> StoredDocument:
     now = datetime.now(UTC)
-    defaults = dict(
-        id=DOC_ID,
-        name="Contrat.pdf",
-        owner_id=OWNER_ID,
-        folder_id=None,
-        page_count=3,
-        current_version=2,
-        file_size_bytes=1024,
-        mime_type="application/pdf",
-        original_format="pdf",
-        tags=["legal"],
-        thumbnail_path=None,
-        is_deleted=False,
-        deleted_at=None,
-        created_at=now,
-        updated_at=now,
-    )
+    defaults = {
+        "id": DOC_ID,
+        "name": "Contrat.pdf",
+        "owner_id": OWNER_ID,
+        "folder_id": None,
+        "page_count": 3,
+        "current_version": 2,
+        "file_size_bytes": 1024,
+        "mime_type": "application/pdf",
+        "original_format": "pdf",
+        "tags": ["legal"],
+        "thumbnail_path": None,
+        "is_deleted": False,
+        "deleted_at": None,
+        "created_at": now,
+        "updated_at": now,
+    }
     defaults.update(overrides)
     doc = StoredDocument(**{k: v for k, v in defaults.items() if k != "extracted_text"})
     doc.extracted_text = overrides.get("extracted_text")
@@ -153,30 +156,30 @@ def _make_doc(**overrides) -> StoredDocument:
 
 
 def _make_share(**overrides) -> DocumentShare:
-    defaults = dict(
-        id="share-rls-1",
-        document_id=DOC_ID,
-        shared_with_user_id=SHARED_ID,
-        permission="view",
-        status=ShareStatus.ACTIVE,
-        expires_at=None,
-        created_by=OWNER_ID,
-    )
+    defaults = {
+        "id": "share-rls-1",
+        "document_id": DOC_ID,
+        "shared_with_user_id": SHARED_ID,
+        "permission": "view",
+        "status": ShareStatus.ACTIVE,
+        "expires_at": None,
+        "created_by": OWNER_ID,
+    }
     defaults.update(overrides)
     return DocumentShare(**defaults)
 
 
 def _make_folder(**overrides) -> Folder:
     now = datetime.now(UTC)
-    defaults = dict(
-        id=FOLDER_ID,
-        name="Dossier",
-        owner_id=OWNER_ID,
-        parent_id=None,
-        path="/",
-        created_at=now,
-        updated_at=now,
-    )
+    defaults = {
+        "id": FOLDER_ID,
+        "name": "Dossier",
+        "owner_id": OWNER_ID,
+        "parent_id": None,
+        "path": "/",
+        "created_at": now,
+        "updated_at": now,
+    }
     defaults.update(overrides)
     return Folder(**defaults)
 
@@ -399,8 +402,14 @@ class TestCreateVersionRLS:
 
         upload_file = MagicMock(return_value={"key": "x"})
         monkeypatch.setattr(storage_module.s3_service, "upload_file", upload_file)
+        # Never reach a real bucket: a failed row write deletes the object.
+        monkeypatch.setattr(
+            storage_module.s3_service, "delete_file", MagicMock(return_value=True)
+        )
+        adjust = AsyncMock()
+        monkeypatch.setattr(storage_module.quota_service, "adjust_document_storage", adjust)
 
-        yield SimpleNamespace(session=session, upload_file=upload_file)
+        yield SimpleNamespace(session=session, upload_file=upload_file, adjust=adjust)
         app.dependency_overrides.pop(get_current_user, None)
 
     def _post_version(self, client):
@@ -422,6 +431,10 @@ class TestCreateVersionRLS:
         assert resp.json()["data"]["version"] == 3
         kwargs = harness.upload_file.call_args.kwargs
         assert kwargs["key"] == f"documents/{OWNER_ID}/{DOC_ID}/v3.pdf"
+        # The new size replaces the old one on the quota, in the same session.
+        harness.adjust.assert_awaited_once_with(
+            harness.session, _DocumentOwnedBy(OWNER_ID), len(self.PDF_BYTES) - 1024, 0
+        )
 
     def test_edit_grantee_can_save_under_owner_prefix(self, client, app, harness):
         _as_user(app, SHARED_ID)
@@ -438,6 +451,10 @@ class TestCreateVersionRLS:
         # Version file lands under the OWNER's prefix, never the grantee's.
         kwargs = harness.upload_file.call_args.kwargs
         assert kwargs["key"] == f"documents/{OWNER_ID}/{DOC_ID}/v3.pdf"
+        # ...and the size change is charged to the OWNER's quota, not the editor's.
+        harness.adjust.assert_awaited_once_with(
+            harness.session, _DocumentOwnedBy(OWNER_ID), len(self.PDF_BYTES) - 1024, 0
+        )
         assert kwargs["metadata"]["user_id"] == OWNER_ID
         assert kwargs["metadata"]["author_id"] == SHARED_ID
 
@@ -501,7 +518,7 @@ class TestUploadKeepsOriginalFormat:
         )
         mocks = SimpleNamespace(
             get_effective_limits=AsyncMock(return_value=limits),
-            update_storage_usage=AsyncMock(),
+            adjust_document_storage=AsyncMock(),
             upload_file=MagicMock(return_value={"key": "x"}),
             delete_file=MagicMock(return_value=True),
             log_activity=AsyncMock(return_value="activity-id"),
@@ -509,7 +526,7 @@ class TestUploadKeepsOriginalFormat:
         )
         qs = storage_module.quota_service
         monkeypatch.setattr(qs, "get_effective_limits", mocks.get_effective_limits)
-        monkeypatch.setattr(qs, "update_storage_usage", mocks.update_storage_usage)
+        monkeypatch.setattr(qs, "adjust_document_storage", mocks.adjust_document_storage)
         s3 = storage_module.s3_service
         monkeypatch.setattr(s3, "upload_file", mocks.upload_file)
         monkeypatch.setattr(s3, "delete_file", mocks.delete_file)
@@ -526,8 +543,6 @@ class TestUploadKeepsOriginalFormat:
         from app.api.v1 import storage as storage_module
 
         _as_user(app, OWNER_ID)
-
-        captured = {}
 
         # The upload path uses get_db_session() (not the get_db dependency).
         # Patch it to a context manager yielding a FakeSession we can inspect.
@@ -617,3 +632,16 @@ class TestUploadKeepsOriginalFormat:
         kwargs = services.upload_file.call_args.kwargs
         assert kwargs["content_type"] == "application/pdf"
         assert kwargs["key"].endswith("/v1.pdf")
+
+
+class _DocumentOwnedBy:
+    """Matches the document passed to ``adjust_document_storage`` (by owner)."""
+
+    def __init__(self, owner_id: str):
+        self.owner_id = owner_id
+
+    def __eq__(self, other) -> bool:
+        return getattr(other, "owner_id", None) == self.owner_id
+
+    def __repr__(self) -> str:
+        return f"<document owned by {self.owner_id}>"

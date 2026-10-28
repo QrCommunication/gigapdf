@@ -13,6 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.database import DocumentVersion, StoredDocument
+from app.services.document_storage_cleanup import (
+    collect_document_object_keys,
+    delete_objects_best_effort,
+)
+from app.services.quota_service import quota_service
+from app.utils.helpers import now_utc
 
 router = APIRouter()
 
@@ -648,8 +654,9 @@ async def get_document_versions(
 
 - **Soft delete** (default, `permanent=false`): sets `is_deleted=true` and records `deleted_at`.
   The document remains in the database and can be restored via `POST /{document_id}/restore`.
-- **Hard delete** (`permanent=true`): permanently removes the document record from the database.
-  **This action is irreversible.**
+- **Hard delete** (`permanent=true`): permanently removes the document record from the database
+  (PostgreSQL cascades its versions, shares, invitations and logs), then deletes its stored
+  objects (every version and the thumbnail). **This action is irreversible.**
 
 Use permanent deletion only when you are certain the document and all its versions should be
 purged (e.g. GDPR right-to-erasure requests).""",
@@ -747,21 +754,37 @@ async def delete_document(
 
     By default, performs a soft delete. Use permanent=true for hard delete.
     """
+    # Row-locked until the commit, like the owner's delete: concurrent
+    # deletes/restores are serialized and the quota moves exactly once.
     result = await db.execute(
-        select(StoredDocument).where(StoredDocument.id == document_id)
+        select(StoredDocument).where(StoredDocument.id == document_id).with_for_update()
     )
     doc = result.scalar_one_or_none()
 
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
+    file_size = doc.file_size_bytes or 0
+    was_trashed = doc.is_deleted
+
+    # Free the counter that holds the document, like the owner's own delete
+    # does, in the same transaction: once, when the document leaves the
+    # active set (a trashed document was already freed).
+    if not was_trashed:
+        await quota_service.adjust_document_storage(db, doc, -file_size, -1)
+
     if permanent:
+        # Same order as the owner's permanent delete: rows first, objects
+        # after the commit — an orphan object is harmless, a row pointing to a
+        # deleted object is not.
+        object_keys = await collect_document_object_keys(db, [doc])
         await db.delete(doc)
+        await db.commit()
+        delete_objects_best_effort(object_keys)
     else:
         doc.is_deleted = True
-        doc.deleted_at = datetime.now()
-
-    await db.commit()
+        doc.deleted_at = now_utc()
+        await db.commit()
 
     action = "permanently deleted" if permanent else "soft deleted"
     return {"message": f"Document {document_id} {action} successfully"}
@@ -854,10 +877,12 @@ async def restore_document(
     Restore a soft-deleted document.
     """
     result = await db.execute(
-        select(StoredDocument).where(
+        select(StoredDocument)
+        .where(
             StoredDocument.id == document_id,
-            StoredDocument.is_deleted
+            StoredDocument.is_deleted,
         )
+        .with_for_update()
     )
     doc = result.scalar_one_or_none()
 
@@ -866,6 +891,9 @@ async def restore_document(
 
     doc.is_deleted = False
     doc.deleted_at = None
+    # The document counts again on its owner's quota (freed when trashed), in
+    # the same transaction as the restore.
+    await quota_service.adjust_document_storage(db, doc, doc.file_size_bytes or 0, 1)
 
     await db.commit()
 

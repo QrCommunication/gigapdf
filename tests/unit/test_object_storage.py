@@ -5,6 +5,7 @@ No network: S3 backends are exercised with a fake boto3 client, the local
 backend on a temp directory.
 """
 
+import os
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,6 +29,24 @@ from app.storage_backends import (
 from app.storage_backends.migration import migrate_objects
 
 
+@pytest.fixture(autouse=True)
+def _isolated_storage_env(monkeypatch):
+    """Keep the developer's storage configuration out of these tests.
+
+    ``Settings`` reads environment variables (and ``.env``, disabled below):
+    a local ``S3_ENDPOINT``/``S3_REGION`` would otherwise satisfy or override
+    the very defaults the provider presets are tested on.
+    """
+    for name in list(os.environ):
+        if name.upper().startswith(("S3_", "STORAGE_")):
+            monkeypatch.delenv(name)
+
+
+def _isolated_settings(**values) -> Settings:
+    """``Settings`` built from *values* and defaults only — never ``.env``."""
+    return Settings(_env_file=None, **values)
+
+
 def _settings(**overrides) -> Settings:
     base = {
         "app_secret_key": "x" * 40,
@@ -36,7 +55,7 @@ def _settings(**overrides) -> Settings:
         "s3_bucket_name": "bucket",
     }
     base.update(overrides)
-    return Settings(**base)
+    return _isolated_settings(**base)
 
 
 class _ClientError(Exception):
@@ -57,7 +76,7 @@ class TestRegistry:
         )
 
     def test_default_provider_is_idrive(self):
-        assert Settings(app_secret_key="x" * 40).storage_provider == "idrive"
+        assert _isolated_settings(app_secret_key="x" * 40).storage_provider == "idrive"
 
     def test_idrive_requires_endpoint(self):
         with pytest.raises(StorageConfigurationError, match="S3_ENDPOINT"):
@@ -314,6 +333,30 @@ class TestFacade:
         backend = MagicMock(spec=StorageBackend)
         backend.delete_object.side_effect = RuntimeError("boom")
         assert ObjectStorageService(backend).delete_file("k") is False
+
+    def test_delete_prefix_removes_only_that_directory(self, tmp_path):
+        svc = ObjectStorageService(LocalFilesystemBackend(tmp_path))
+        svc.upload_file(b"1", "documents/u1/d/v1.pdf")
+        svc.upload_file(b"2", "documents/u1/d/v2.pdf")
+        svc.upload_file(b"3", "documents/u10/d/v1.pdf")  # shares the "u1" start
+
+        assert svc.delete_prefix("documents/u1/") == 2
+        assert svc.download_file("documents/u1/d/v1.pdf") is None
+        assert svc.download_file("documents/u10/d/v1.pdf") == b"3"
+        assert svc.delete_prefix("documents/u1/") == 0  # idempotent
+
+    @pytest.mark.parametrize("prefix", ["", "/", "documents/u1"])
+    def test_delete_prefix_refuses_unbounded_prefix(self, prefix):
+        backend = MagicMock(spec=StorageBackend)
+        with pytest.raises(ValueError):
+            ObjectStorageService(backend).delete_prefix(prefix)
+        backend.iter_objects.assert_not_called()
+
+    def test_delete_keys_raises_instead_of_swallowing(self):
+        backend = MagicMock(spec=StorageBackend)
+        backend.delete_object.side_effect = RuntimeError("boom")
+        with pytest.raises(RuntimeError):
+            ObjectStorageService(backend).delete_keys(["k"])
 
     def test_key_layout_unchanged(self):
         svc = ObjectStorageService(MagicMock(spec=StorageBackend))

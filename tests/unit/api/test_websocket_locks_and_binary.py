@@ -17,22 +17,22 @@ Pins the server side of the v1.26 collaboration completion:
   events (the client does not consume the join ack).
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.api.websocket import (
+    _join_document_impl,
     disconnect,
     document_update_relay,
     element_lock,
     element_unlock,
-    _join_document_impl,
 )
 
 SID = "socket-emitter"
-NOW = datetime(2026, 7, 5, 12, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 5, 12, 0, 0, tzinfo=UTC)
 
 
 class _FakeSessionCtx:

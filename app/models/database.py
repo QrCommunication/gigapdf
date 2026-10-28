@@ -95,6 +95,18 @@ class StoredDocument(Base):
     )
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Which storage counter holds this document: the organization charged when
+    # it entered the active set (upload, duplicate, restore), NULL = the
+    # owner's personal quota. Frees and size changes move THIS counter, even if
+    # the owner has left or joined an organization since. RESTRICT: deleting
+    # an organization must first hand its documents over (quota_service).
+    quota_tenant_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+        comment="Organization whose storage counter holds the document; NULL = personal quota",
+    )
     # Full-text search material — deferred: never loaded by list queries
     # (extracted_text can be up to 500k characters).
     extracted_text: Mapped[str | None] = mapped_column(

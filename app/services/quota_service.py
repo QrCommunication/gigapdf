@@ -10,24 +10,47 @@ Handles:
 """
 
 import logging
+from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Protocol
+from uuid import uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
-from app.models.database import Plan, UserQuota
+from app.models.database import Plan, StoredDocument, UserQuota
 from app.models.tenant import Tenant, TenantMember, TenantStatus
 
 logger = logging.getLogger(__name__)
+
+
+class AttributedDocument(Protocol):
+    """What the quota needs from a document: its owner and recorded counter."""
+
+    owner_id: str
+    quota_tenant_id: str | None
+    file_size_bytes: int | None
 
 # Sentinel for unlimited quotas (mirrors the plans table convention where
 # storage_limit_bytes / api_calls_limit / document_limit == -1 means
 # "no limit", e.g. the enterprise plan seeded by
 # apps/admin/scripts/seed-plans.ts).
 UNLIMITED = -1
+
+
+def _clamped_increment(column, delta: int):
+    """SQL ``GREATEST(0, COALESCE(column, 0) + delta)``: an in-place increment.
+
+    Evaluated by PostgreSQL on the row it locks, so concurrent increments
+    compose instead of overwriting each other (a read-modify-write would lose
+    all but one of them).
+    """
+    return func.greatest(0, func.coalesce(column, 0) + delta)
 
 
 def is_unlimited(limit: int) -> bool:
@@ -170,24 +193,27 @@ class QuotaService:
             quota = result.scalar_one_or_none()
 
             if not quota:
-                # Create new quota with free tier
-                quota = UserQuota(
-                    user_id=user_id,
-                    storage_used_bytes=0,
-                    storage_limit_bytes=PLANS["free"]["storage_limit_bytes"],
-                    document_count=0,
-                    document_limit=PLANS["free"]["document_limit"],
-                    api_calls_used=0,
-                    api_calls_limit=PLANS["free"]["api_calls_limit"],
-                    api_calls_reset_at=self._get_next_reset_date(),
-                    plan_type="free",
-                )
+                quota = UserQuota(**self.free_quota_values(user_id))
                 session.add(quota)
                 await session.commit()
                 await session.refresh(quota)
                 logger.info(f"Created free tier quota for user {user_id}")
 
             return quota
+
+    def free_quota_values(self, user_id: str) -> dict:
+        """Column values of a new, empty free-tier quota for ``user_id``."""
+        return {
+            "user_id": user_id,
+            "storage_used_bytes": 0,
+            "storage_limit_bytes": PLANS["free"]["storage_limit_bytes"],
+            "document_count": 0,
+            "document_limit": PLANS["free"]["document_limit"],
+            "api_calls_used": 0,
+            "api_calls_limit": PLANS["free"]["api_calls_limit"],
+            "api_calls_reset_at": self._get_next_reset_date(),
+            "plan_type": "free",
+        }
 
     async def check_storage_quota(
         self, user_id: str, additional_bytes: int = 0
@@ -294,44 +320,207 @@ class QuotaService:
                 "reset_at": quota.api_calls_reset_at.isoformat(),
             }
 
-    async def update_storage_usage(
-        self, user_id: str, delta_bytes: int, delta_documents: int = 0
-    ) -> dict:
+    async def adjust_document_storage(
+        self,
+        session: AsyncSession,
+        document: AttributedDocument,
+        delta_bytes: int,
+        delta_documents: int,
+        limits: EffectiveLimits | None = None,
+    ) -> None:
         """
-        Update storage usage for user.
+        Move the storage counter that holds ``document`` by the deltas.
+
+        Single place for the attribution rule. Every write that adds a
+        document to the active set, removes it, or changes its size goes
+        through it (upload, duplicate, restore, delete, new version, folder
+        cascade, admin paths, account erasure):
+
+        * ``delta_documents > 0`` — the document ENTERS the active set: it is
+          charged to its owner's counter as of now (their organization when
+          they belong to one, their personal quota otherwise), and that
+          choice is recorded on ``document.quota_tenant_id``;
+        * otherwise (it leaves the active set, or only its size changes) —
+          the counter RECORDED on the document moves, whatever the owner's
+          membership is today. Re-resolving it here freed a document charged
+          to an organization on the personal quota of an owner who had left
+          it (and vice versa), so neither counter ever matched its documents.
+
+        The counters are updated in the CALLER'S transaction and never
+        committed here: the caller commits them together with the document
+        rows they account for, so a failure between "document written" and
+        "counter updated" cannot exist — both land or neither does. The
+        update is an atomic SQL increment (no read-modify-write), so
+        concurrent requests on the same quota are all counted.
 
         Args:
-            user_id: User identifier.
-            delta_bytes: Bytes to add (negative to subtract).
-            delta_documents: Documents to add (negative to subtract).
+            session: The caller's session, holding the document write.
+            document: The document (a ``StoredDocument`` or anything with
+                ``owner_id`` and ``quota_tenant_id``). Its ``quota_tenant_id``
+                is set when it is charged.
+            delta_bytes: Bytes to add (negative to free).
+            delta_documents: +1 when the document enters the active set, -1
+                when it leaves it, 0 for a size change.
+            limits: The owner's effective limits when the caller already
+                loaded them (avoids a second lookup on a charge). Otherwise
+                the counting quota is resolved in ``session``.
 
-        Returns:
-            dict: Updated quota info.
+        Raises:
+            ValueError: the organization to move no longer exists (the
+                caller's transaction must then roll back).
         """
-        async with get_db_session() as session:
-            stmt = select(UserQuota).where(UserQuota.user_id == user_id)
-            result = await session.execute(stmt)
-            quota = result.scalar_one_or_none()
+        if delta_documents > 0:
+            if limits is not None:
+                tenant_id = limits.tenant_id if limits.is_tenant_based else None
+            else:
+                tenant_id = await self._counting_tenant_id(session, document.owner_id)
+            document.quota_tenant_id = tenant_id
+        else:
+            tenant_id = document.quota_tenant_id
+        await self._move_counter(
+            session, document.owner_id, tenant_id, delta_bytes, delta_documents
+        )
 
-            if not quota:
-                await self.get_or_create_quota(user_id)
-                result = await session.execute(stmt)
-                quota = result.scalar_one()
+    async def release_documents(
+        self, session: AsyncSession, documents: Iterable[AttributedDocument]
+    ) -> None:
+        """Free active documents leaving the active set, each from its recorded counter.
 
-            quota.storage_used_bytes = max(0, quota.storage_used_bytes + delta_bytes)
-            quota.document_count = max(0, quota.document_count + delta_documents)
+        Bulk form of ``adjust_document_storage(doc, -size, -1)`` (folder
+        cascade, account erasure): one increment per counter instead of one
+        per document. The documents must be active (a trashed document was
+        freed when it was trashed).
+        """
+        freed: dict[tuple[str, str | None], tuple[int, int]] = defaultdict(lambda: (0, 0))
+        for document in documents:
+            key = (document.owner_id, document.quota_tenant_id)
+            size, count = freed[key]
+            freed[key] = (size + (document.file_size_bytes or 0), count + 1)
+        for (owner_id, tenant_id), (size, count) in freed.items():
+            await self._move_counter(session, owner_id, tenant_id, -size, -count)
 
-            await session.commit()
+    async def hand_over_tenant_documents(
+        self, session: AsyncSession, tenant_ids: Sequence[str]
+    ) -> None:
+        """Before organizations are deleted, move their documents to their owners.
 
-            return {
-                "storage_used_bytes": quota.storage_used_bytes,
-                "storage_limit_bytes": quota.storage_limit_bytes,
-                "storage_available_bytes": remaining_amount(
-                    quota.storage_used_bytes, quota.storage_limit_bytes
-                ),
-                "document_count": quota.document_count,
-                "document_limit": quota.document_limit,
-            }
+        Documents charged to an organization that disappears (an account
+        erasure deletes the organizations its user was the only member of)
+        would otherwise be counted nowhere: the active ones are charged to
+        their owner's personal quota and every one of them stops pointing at
+        the organization — which the ``RESTRICT`` foreign key requires before
+        the organization row can go.
+        """
+        if not tenant_ids:
+            return
+        ids = [str(tenant_id) for tenant_id in tenant_ids]
+        documents = (
+            await session.execute(
+                select(
+                    StoredDocument.owner_id,
+                    StoredDocument.file_size_bytes,
+                    StoredDocument.is_deleted,
+                )
+                .where(StoredDocument.quota_tenant_id.in_(ids))
+                .with_for_update()
+            )
+        ).all()
+        charged: dict[str, tuple[int, int]] = defaultdict(lambda: (0, 0))
+        for document in documents:
+            if document.is_deleted:
+                continue
+            size, count = charged[document.owner_id]
+            charged[document.owner_id] = (size + (document.file_size_bytes or 0), count + 1)
+        for owner_id, (size, count) in charged.items():
+            await self._increment_user_storage(session, owner_id, size, count)
+        if documents:
+            await session.execute(
+                update(StoredDocument)
+                .where(StoredDocument.quota_tenant_id.in_(ids))
+                .values(quota_tenant_id=None)
+                .execution_options(synchronize_session=False)
+            )
+
+    async def _move_counter(
+        self,
+        session: AsyncSession,
+        owner_id: str,
+        tenant_id: str | None,
+        delta_bytes: int,
+        delta_documents: int,
+    ) -> None:
+        """Increment the organization's counters, or the owner's personal ones."""
+        if delta_bytes == 0 and delta_documents == 0:
+            return
+        if tenant_id:
+            await self._increment_tenant_storage(
+                session, tenant_id, delta_bytes, delta_documents
+            )
+        else:
+            await self._increment_user_storage(
+                session, owner_id, delta_bytes, delta_documents
+            )
+
+    async def _counting_tenant_id(self, session: AsyncSession, owner_id: str) -> str | None:
+        """The organization whose counters hold ``owner_id``'s documents, if any.
+
+        Same rule as :meth:`get_effective_limits`: an active membership of an
+        active organization. A user without a quota row has no membership.
+        """
+        quota_id = (
+            await session.execute(select(UserQuota.id).where(UserQuota.user_id == owner_id))
+        ).scalar_one_or_none()
+        if quota_id is None:
+            return None
+        membership = await self._get_active_tenant_membership(session, quota_id)
+        return str(membership.tenant_id) if membership else None
+
+    async def _increment_user_storage(
+        self, session: AsyncSession, user_id: str, delta_bytes: int, delta_documents: int
+    ) -> None:
+        """Atomically add the deltas to a personal quota, creating it if missing.
+
+        ``INSERT ... ON CONFLICT (user_id) DO UPDATE`` both creates a missing
+        free-tier row and increments an existing one in a single statement;
+        PostgreSQL serializes concurrent callers on the row, and each sees the
+        value committed by the previous one. Counters never go below zero.
+        """
+        values = self.free_quota_values(user_id)
+        values["id"] = str(uuid4())
+        values["storage_used_bytes"] = max(0, delta_bytes)
+        values["document_count"] = max(0, delta_documents)
+        stmt = (
+            pg_insert(UserQuota)
+            .values(**values)
+            .on_conflict_do_update(
+                index_elements=[UserQuota.user_id],
+                set_={
+                    "storage_used_bytes": _clamped_increment(
+                        UserQuota.storage_used_bytes, delta_bytes
+                    ),
+                    "document_count": _clamped_increment(
+                        UserQuota.document_count, delta_documents
+                    ),
+                },
+            )
+        )
+        await session.execute(stmt)
+
+    async def _increment_tenant_storage(
+        self, session: AsyncSession, tenant_id: str, delta_bytes: int, delta_documents: int
+    ) -> None:
+        """Atomically add the deltas to an organization's counters."""
+        result = await session.execute(
+            update(Tenant)
+            .where(Tenant.id == tenant_id)
+            .values(
+                storage_used_bytes=_clamped_increment(Tenant.storage_used_bytes, delta_bytes),
+                document_count=_clamped_increment(Tenant.document_count, delta_documents),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount == 0:
+            raise ValueError(f"Tenant not found: {tenant_id}")
 
     async def upgrade_plan(
         self, user_id: str, plan_type: str, expires_at: datetime | None = None
@@ -594,44 +783,6 @@ class QuotaService:
                 "is_allowed": is_allowed,
                 "tenant_id": str(tenant.id),
                 "tenant_name": tenant.name,
-            }
-
-    async def update_tenant_storage(
-        self, tenant_id: str, delta_bytes: int, delta_documents: int = 0
-    ) -> dict:
-        """
-        Update storage usage for a tenant.
-
-        Args:
-            tenant_id: Tenant UUID.
-            delta_bytes: Bytes to add (negative to subtract).
-            delta_documents: Documents to add (negative to subtract).
-
-        Returns:
-            dict: Updated quota info.
-        """
-        async with get_db_session() as session:
-            stmt = select(Tenant).where(Tenant.id == tenant_id)
-            result = await session.execute(stmt)
-            tenant = result.scalar_one_or_none()
-
-            if not tenant:
-                raise ValueError(f"Tenant not found: {tenant_id}")
-
-            tenant.storage_used_bytes = max(0, tenant.storage_used_bytes + delta_bytes)
-            tenant.document_count = max(0, tenant.document_count + delta_documents)
-
-            await session.commit()
-
-            return {
-                "storage_used_bytes": tenant.storage_used_bytes,
-                "storage_limit_bytes": tenant.storage_limit_bytes,
-                "storage_available_bytes": remaining_amount(
-                    tenant.storage_used_bytes, tenant.storage_limit_bytes
-                ),
-                "document_count": tenant.document_count,
-                "document_limit": tenant.document_limit,
-                "tenant_id": str(tenant.id),
             }
 
     async def increment_tenant_api_calls(self, tenant_id: str, count: int = 1) -> dict:

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.database import StoredDocument, UserQuota
+from app.services.account_erasure_service import account_erasure_service
 
 router = APIRouter()
 
@@ -499,16 +500,21 @@ async def update_user(
     "/{user_id}",
     summary="Delete a user",
     description="""
-Permanently delete a user's quota record from the platform.
+Permanently erase a user account (GDPR art. 17, right to erasure).
 
-**Admin access required.** This operation removes the user's `UserQuota` entry,
-which includes their plan, storage, and API call counters.
+**Admin access required.** Runs the same erasure as the self-service
+`DELETE /api/v1/account`: every stored object (document versions, thumbnails) is
+deleted first, then in one transaction the user's documents, folders, jobs, API keys,
+notifications, shares, invitations, quota, signatures and sign-in identity (sessions
+and accounts cascade). Contributions to documents owned by other users are kept but
+anonymised. The response carries per-table counts.
 
-> **Warning:** This action is **irreversible**. The user's documents are **not**
-> automatically deleted by this endpoint — handle document cleanup separately
-> before or after calling this endpoint to avoid orphaned storage entries.
+> **Warning:** This action is **irreversible**.
 
-Returns `404` if no user with the given ID exists.
+Returns `404` if no user with the given ID exists, `409` with code
+`TENANT_OWNERSHIP_TRANSFER_REQUIRED` when the user owns an organization that still
+has other members, and `409` with code `ACTIVE_SUBSCRIPTION_CANCELLATION_REQUIRED`
+while a paid subscription is running.
 """,
     response_description="Confirmation message with the deleted user ID",
     responses={
@@ -516,6 +522,7 @@ Returns `404` if no user with the given ID exists.
         401: {"description": "Missing or invalid authentication token"},
         403: {"description": "Admin access required"},
         404: {"description": "User not found"},
+        409: {"description": "Organization ownership or active subscription blocks the erasure"},
         500: {"description": "Internal server error while deleting user"},
     },
     openapi_extra={
@@ -580,23 +587,22 @@ async def delete_user(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Delete a user and their data.
-
-    This will delete the user's quota record.
-    Documents should be handled separately.
+    Erase a user account (GDPR art. 17), exactly like the user's own
+    ``DELETE /api/v1/account``: documents, storage objects, identity and
+    quota are removed, and contributions to other users' documents are
+    anonymised.
     """
-    result = await db.execute(
-        select(UserQuota).where(UserQuota.user_id == user_id)
-    )
-    quota = result.scalar_one_or_none()
-
-    if not quota:
+    if not await account_erasure_service.user_exists(db, user_id):
         raise HTTPException(status_code=404, detail="User not found")
 
-    await db.delete(quota)
-    await db.commit()
+    report = await account_erasure_service.erase(db, user_id)
 
-    return {"message": f"User {user_id} deleted successfully"}
+    return {
+        "message": f"User {user_id} deleted successfully",
+        "storage_objects_deleted": report.storage_objects_deleted,
+        "deleted": report.deleted,
+        "anonymized": report.anonymized,
+    }
 
 
 @router.get(

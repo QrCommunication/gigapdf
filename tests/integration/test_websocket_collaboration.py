@@ -9,15 +9,12 @@ Tests real-time collaboration features including:
 """
 
 import asyncio
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from contextlib import asynccontextmanager
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-import socketio
-from sqlalchemy import select
 
-from app.models.database import CollaborationSession, ElementLock
 from app.services.collaboration_service import collaboration_manager
 
 
@@ -345,30 +342,71 @@ class TestCollaborationManager:
 
 
 @pytest.fixture
-async def db_session():
-    """Provide a database session for tests."""
-    from app.core.database import get_db_session
+async def db_session(pg_schema_db, monkeypatch):
+    """Point the app's database layer at a throwaway PostgreSQL database.
 
-    async with get_db_session() as session:
-        yield session
+    ``collaboration_manager`` opens its own sessions through
+    ``app.core.database.get_db_session``, so the module-level engine and
+    session factory are swapped (and restored by monkeypatch) rather than
+    handing a session to the code under test. Never the ``DATABASE_URL`` of
+    ``.env``: the developer's database stays untouched.
+    """
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+    from app.core import database
+
+    engine = create_async_engine(pg_schema_db.async_url)
+    factory = async_sessionmaker(
+        bind=engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+    monkeypatch.setattr(database, "_engine", engine)
+    monkeypatch.setattr(database, "_session_factory", factory)
+    try:
+        async with database.get_db_session() as session:
+            yield session
+    finally:
+        await engine.dispose()
+
+
+class _RecordingSioSession:
+    """Stand-in for ``sio.session``: an in-memory store per socket id.
+
+    The ``connect`` handler is called directly, so the sid was never registered
+    with Engine.IO and the real ``sio.session(sid)`` cannot resolve it.
+    """
+
+    def __init__(self):
+        self.stores: dict[str, dict] = {}
+
+    def __call__(self, sid: str):
+        store = self.stores.setdefault(sid, {})
+
+        @asynccontextmanager
+        async def _session():
+            yield store
+
+        return _session()
 
 
 @pytest.fixture
-def mock_socket_io():
-    """Mock Socket.IO server for testing."""
-    mock = MagicMock(spec=socketio.AsyncServer)
-    mock.emit = AsyncMock()
-    mock.enter_room = MagicMock()
-    mock.leave_room = MagicMock()
-    return mock
+def sio_session(monkeypatch):
+    from app.api.websocket import sio
+
+    recorder = _RecordingSioSession()
+    monkeypatch.setattr(sio, "session", recorder)
+    return recorder
 
 
 class TestWebSocketEvents:
     """Test WebSocket event handlers."""
 
     @pytest.mark.asyncio
-    async def test_connect_with_valid_token(self, mock_socket_io):
-        """Test connecting with a valid JWT token."""
+    async def test_connect_with_valid_token(self, sio_session):
+        """A valid JWT is accepted and the user is stored on the socket session."""
         with patch("app.api.websocket.decode_jwt_token") as mock_decode:
             mock_decode.return_value = {
                 "sub": "user-123",
@@ -377,7 +415,6 @@ class TestWebSocketEvents:
 
             from app.api.websocket import sio
 
-            # Mock connection
             auth = {"token": "valid-jwt-token"}
             result = await sio.handlers["/"]["connect"](
                 "socket-123",
@@ -386,16 +423,20 @@ class TestWebSocketEvents:
             )
 
             assert result is True
+            mock_decode.assert_awaited_once_with("valid-jwt-token")
+            assert sio_session.stores["socket-123"] == {
+                "user_id": "user-123",
+                "user_name": "John Doe",
+            }
 
     @pytest.mark.asyncio
-    async def test_connect_with_invalid_token(self, mock_socket_io):
-        """Test connecting with an invalid token."""
+    async def test_connect_with_invalid_token(self, sio_session):
+        """An invalid JWT is rejected: nothing is stored for the socket."""
         with patch("app.api.websocket.decode_jwt_token") as mock_decode:
             mock_decode.side_effect = Exception("Invalid token")
 
             from app.api.websocket import sio
 
-            # Mock connection
             auth = {"token": "invalid-token"}
             result = await sio.handlers["/"]["connect"](
                 "socket-123",
@@ -404,6 +445,10 @@ class TestWebSocketEvents:
             )
 
             assert result is False
+            # The token was actually checked (the rejection is the token's,
+            # not a failure before or after it) and no identity was recorded.
+            mock_decode.assert_awaited_once_with("invalid-token")
+            assert sio_session.stores.get("socket-123", {}) == {}
 
 
 if __name__ == "__main__":
