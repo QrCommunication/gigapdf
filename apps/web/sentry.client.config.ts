@@ -1,5 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 
+import { SENTRY_DATA_COLLECTION } from "./src/lib/sentry-options";
+
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   enabled: !!process.env.NEXT_PUBLIC_SENTRY_DSN,
@@ -8,7 +10,7 @@ Sentry.init({
   tracesSampleRate: 0.1,
   replaysSessionSampleRate: 0.0,
   replaysOnErrorSampleRate: 0.1,
-  sendDefaultPii: false,
+  dataCollection: SENTRY_DATA_COLLECTION,
   integrations: [
     Sentry.replayIntegration({
       maskAllText: true,

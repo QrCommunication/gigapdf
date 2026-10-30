@@ -113,7 +113,13 @@ export function MetricsChart({ timeRange = "24h", onTimeRangeChange }: MetricsCh
                 border: "1px solid hsl(var(--border))",
                 borderRadius: "8px",
               }}
-              labelFormatter={(label) => format(new Date(label), "PPpp", { locale: dateLocale })}
+              // recharts 3.10 types the label as ReactNode: only a timestamp
+              // (string or number) is formatted as a date, anything else is shown as is.
+              labelFormatter={(label) =>
+                typeof label === "string" || typeof label === "number"
+                  ? format(new Date(label), "PPpp", { locale: dateLocale })
+                  : label
+              }
               formatter={(value, name) => {
                 const v = value as number;
                 if (name === "cpu") return [`${v.toFixed(1)}%`, t("cpu")];

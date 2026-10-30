@@ -2,7 +2,9 @@
  * Setup global pour les tests Vitest du web app.
  * Configuré dans vitest.config.ts → test.setupFiles.
  */
-import '@testing-library/jest-dom';
+// Point d'entrée Vitest de jest-dom : étend le `expect` de Vitest et ses types
+// (Vitest 5 ne lit plus l'interface globale `jest.Matchers`).
+import '@testing-library/jest-dom/vitest';
 import { vi } from 'vitest';
 
 // ---------------------------------------------------------------------------

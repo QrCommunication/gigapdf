@@ -266,7 +266,7 @@ async def upload_document(
             # Validate PDF magic bytes before accepting any data
             if not chunk.startswith(PDF_MAGIC):
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail=(
                         "Invalid file type. Only PDF files are accepted "
                         "(%PDF- header missing)."

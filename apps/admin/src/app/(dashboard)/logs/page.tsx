@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { DataTable } from "@/components/data-table";
-import { ColumnDef } from "@tanstack/react-table";
+import { DataTable, type DataTableColumnDef } from "@/components/data-table";
 import { formatDistanceToNow } from "date-fns";
 import { Badge } from "@giga-pdf/ui";
 import { AlertCircle, Info, AlertTriangle, CheckCircle, Loader2, RefreshCw, Download } from "lucide-react";
@@ -32,7 +31,7 @@ export default function LogsPage() {
   const [levelFilter, setLevelFilter] = useState<string>("");
   const [sourceFilter, setSourceFilter] = useState<string>("");
 
-  const columns = useMemo<ColumnDef<LogEntry>[]>(() => ([
+  const columns = useMemo<DataTableColumnDef<LogEntry>[]>(() => ([
     {
       accessorKey: "level",
       header: t("table.level"),

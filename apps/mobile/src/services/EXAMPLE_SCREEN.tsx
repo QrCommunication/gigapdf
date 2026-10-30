@@ -188,7 +188,12 @@ export function DocumentsScreen() {
           </View>
         }
         refreshControl={
-          <RefreshControl refreshing={isFetching} onRefresh={refetch} />
+          <RefreshControl
+            refreshing={isFetching}
+            onRefresh={() => {
+              void refetch();
+            }}
+          />
         }
       />
 

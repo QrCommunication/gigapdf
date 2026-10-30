@@ -26,13 +26,15 @@ export default defineConfig({
       reporter: ['text', 'json', 'html'],
       include: ['src/**/*.ts'],
       exclude: ['src/index.ts', 'src/**/index.ts'],
+      // Seuils globaux directement sous `thresholds` : une clé `global` y serait
+      // lue comme un motif de fichier (aucun fichier ne correspond → jamais appliqué).
+      // Cliquet : couverture mesurée le 2026-10-29 (arrondie à l'entier inférieur),
+      // à relever à chaque progrès. L'objectif de 80 % est suivi en dette technique.
       thresholds: {
-        global: {
-          branches: 80,
-          functions: 80,
-          lines: 80,
-          statements: 80,
-        },
+        branches: 57,
+        functions: 73,
+        lines: 71,
+        statements: 69,
         // Seuils spécifiques pour les fichiers critiques Wave 2 fonts.
         // Ces seuils sont activés après le fix (les fichiers n'existent pas encore sur main).
         // Décommenter après le merge Wave 2 :

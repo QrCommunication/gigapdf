@@ -8,7 +8,7 @@ their programmatic API keys.
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CreateApiKeyRequest(BaseModel):
@@ -70,8 +70,8 @@ class CreateApiKeyRequest(BaseModel):
             )
         return ",".join(tokens)
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "My mobile app",
                 "scopes": "read,write",
@@ -79,7 +79,8 @@ class CreateApiKeyRequest(BaseModel):
                 "rate_limit": 60,
                 "expires_at": None,
             }
-        }
+        },
+    )
 
 
 class UpdateApiKeyRequest(BaseModel):
@@ -137,13 +138,14 @@ class UpdateApiKeyRequest(BaseModel):
             )
         return ",".join(tokens)
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "Renamed key",
                 "is_active": False,
             }
-        }
+        },
+    )
 
 
 class ApiKeyResponse(BaseModel):
@@ -182,9 +184,9 @@ class ApiKeyResponse(BaseModel):
     )
     created_at: datetime = Field(description="Creation timestamp.")
 
-    class Config:
-        from_attributes = True
-        json_schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
             "example": {
                 "id": "550e8400-e29b-41d4-a716-446655440000",
                 "name": "My mobile app",
@@ -198,7 +200,8 @@ class ApiKeyResponse(BaseModel):
                 "expires_at": None,
                 "created_at": "2026-01-01T12:00:00Z",
             }
-        }
+        },
+    )
 
 
 class CreateApiKeyResponse(BaseModel):
@@ -228,8 +231,8 @@ class CreateApiKeyResponse(BaseModel):
     )
     api_key: ApiKeyResponse = Field(description="Persisted API key metadata.")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "key": "giga_pk_AbCdEfGhIjKlMnOpQrStUvWxYz012345",
                 "publishable_key": "giga_pub_XyZaBcDeFgHiJkLmNoPqRsTuVwXy012345",
@@ -247,7 +250,8 @@ class CreateApiKeyResponse(BaseModel):
                     "created_at": "2026-01-01T12:00:00Z",
                 },
             }
-        }
+        },
+    )
 
 
 class RegenerateKeyResponse(BaseModel):

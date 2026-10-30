@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { DataTable } from "@/components/data-table";
-import { ColumnDef } from "@tanstack/react-table";
+import { DataTable, type DataTableColumnDef } from "@/components/data-table";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@giga-pdf/ui";
 import { Eye, Trash2, RotateCcw, Loader2, AlertCircle, RefreshCw } from "lucide-react";
@@ -17,7 +16,7 @@ export default function DocumentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [includeDeleted, setIncludeDeleted] = useState(false);
 
-  const columns: ColumnDef<Document>[] = useMemo(() => [
+  const columns: DataTableColumnDef<Document>[] = useMemo(() => [
     {
       accessorKey: "name",
       header: t("table.name"),
@@ -40,8 +39,9 @@ export default function DocumentsPage() {
       ),
     },
     {
-      accessorKey: "file_size_formatted",
+      accessorKey: "file_size_bytes",
       header: t("table.size"),
+      cell: ({ row }) => row.original.file_size_formatted,
     },
     {
       accessorKey: "page_count",

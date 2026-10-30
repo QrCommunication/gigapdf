@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AddPageRequest(BaseModel):
@@ -14,13 +14,14 @@ class AddPageRequest(BaseModel):
         description="Page source configuration",
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "position": 2,
                 "source": {"type": "blank", "dimensions": {"width": 612, "height": 792}},
             }
-        }
+        },
+    )
 
 
 class RotatePageRequest(BaseModel):
@@ -30,8 +31,9 @@ class RotatePageRequest(BaseModel):
         description="Rotation angle (90, 180, 270, -90, -180, -270)"
     )
 
-    class Config:
-        json_schema_extra = {"example": {"angle": 90}}
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"angle": 90}},
+    )
 
 
 class ResizePageRequest(BaseModel):
@@ -48,10 +50,11 @@ class ResizePageRequest(BaseModel):
         default=False, description="Scale page content with resize"
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"width": 612, "height": 792, "anchor": "center", "scale_content": False}
-        }
+        },
+    )
 
 
 class ReorderPagesRequest(BaseModel):
@@ -59,8 +62,9 @@ class ReorderPagesRequest(BaseModel):
 
     new_order: list[int] = Field(description="New page order (1-indexed)")
 
-    class Config:
-        json_schema_extra = {"example": {"new_order": [3, 1, 2, 5, 4]}}
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"new_order": [3, 1, 2, 5, 4]}},
+    )
 
 
 class ExtractPagesRequest(BaseModel):
@@ -73,7 +77,8 @@ class ExtractPagesRequest(BaseModel):
         default=None, description="Page ranges like '1-5', '10-15'"
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"page_numbers": [1, 3, 5], "page_ranges": ["10-15"]}
-        }
+        },
+    )

@@ -29,8 +29,8 @@
     "test:coverage": "vitest run --coverage"
   },
   "peerDependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   },
   "peerDependenciesMeta": {
     "react": {
@@ -41,13 +41,14 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^25.9.3",
-    "@types/react": "^19.2.17",
-    "@vitest/coverage-v8": "^4.1.12",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "tsup": "^8.5.1",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@vitest/coverage-v8": "^5.0.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tsup": "^9.0.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.12"
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
   }
 }

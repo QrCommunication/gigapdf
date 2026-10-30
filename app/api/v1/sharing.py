@@ -10,7 +10,7 @@ from typing import Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query, Response
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.middleware.auth import AuthenticatedUser
 from app.middleware.request_id import get_request_id
@@ -39,8 +39,8 @@ class ShareDocumentRequest(BaseModel):
         default=7, ge=1, le=30, description="Days until invitation expires"
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "invitee_email": "teammate@example.com",
@@ -48,7 +48,8 @@ class ShareDocumentRequest(BaseModel):
                 "message": "Here is the Q1 report — feel free to edit.",
                 "expires_in_days": 7,
             }
-        }
+        },
+    )
 
 
 class UpdatePermissionRequest(BaseModel):
@@ -56,8 +57,9 @@ class UpdatePermissionRequest(BaseModel):
 
     permission: Literal["view", "edit"] = Field(..., description="New permission level")
 
-    class Config:
-        json_schema_extra = {"example": {"permission": "view"}}
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"permission": "view"}},
+    )
 
 
 class CreatePublicLinkRequest(BaseModel):
@@ -67,8 +69,9 @@ class CreatePublicLinkRequest(BaseModel):
         default=None, ge=1, le=365, description="Days until link expires (optional)"
     )
 
-    class Config:
-        json_schema_extra = {"example": {"expires_in_days": 30}}
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"expires_in_days": 30}},
+    )
 
 
 # Endpoints

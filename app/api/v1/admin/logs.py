@@ -567,7 +567,7 @@ Optionally narrow the export window with `start_date` and `end_date`
     },
 )
 async def export_logs(
-    format: str = Query("json", regex="^(json|csv)$"),
+    format: str = Query("json", pattern="^(json|csv)$"),
     start_date: datetime | None = Query(None),
     end_date: datetime | None = Query(None),
     db: AsyncSession = Depends(get_db),

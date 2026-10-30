@@ -1,9 +1,10 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 import path from "path";
-import { withSentryConfig } from "@sentry/nextjs";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 import { SECURITY_HEADER_RULES } from "./src/lib/security-headers";
+import { SENTRY_TUNNEL_ROUTE } from "./src/lib/sentry-options";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
@@ -154,16 +155,18 @@ export default withSentryConfig(nextConfigWithIntl, {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
 
-  // Tunnel Sentry requests through /monitoring to avoid ad-blockers
-  tunnelRoute: "/monitoring",
+  // Tunnel Sentry requests through /monitoring to avoid ad-blockers. The route
+  // goes through src/proxy.ts, whose matcher excludes it.
+  tunnelRoute: SENTRY_TUNNEL_ROUTE,
 
-  // Webpack-only options (Sentry v10 relocated these under `webpack`).
-  // No-ops under Turbopack (Next 16 default); retained for any webpack fallback.
+  // Annotate React components for readable error stacks (webpack and
+  // Turbopack since v11, which deprecated `webpack.reactComponentAnnotation`).
+  reactComponentAnnotation: { enabled: true },
+
+  // Webpack-only options: no-ops under Turbopack (Next 16 default).
   webpack: {
     // Tree-shake Sentry debug statements in production
     treeshake: { removeDebugLogging: true },
-    // Automatically annotate React components for readable error stacks
-    reactComponentAnnotation: { enabled: true },
   },
 
   // Source maps upload configuration (v9+ API)

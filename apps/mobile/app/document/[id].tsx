@@ -19,6 +19,7 @@ import {
   Platform,
   Share,
   ScrollView,
+  type ScrollViewInstance,
 } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -96,7 +97,8 @@ export default function DocumentEditorScreen() {
   } = useAnnotations();
 
   // Refs
-  const thumbnailScrollRef = useRef<ScrollView>(null);
+  // RN 0.87+: refs are typed by the host instance, not the component.
+  const thumbnailScrollRef = useRef<ScrollViewInstance>(null);
 
   // ===========================================================================
   // Data Loading

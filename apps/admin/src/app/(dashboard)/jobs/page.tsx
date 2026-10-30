@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { DataTable } from "@/components/data-table";
-import { ColumnDef } from "@tanstack/react-table";
+import { DataTable, type DataTableColumnDef } from "@/components/data-table";
 import { formatDistanceToNow } from "date-fns";
 import { fr, enUS } from "date-fns/locale";
 import { Badge } from "@giga-pdf/ui";
@@ -36,7 +35,7 @@ export default function JobsPage() {
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("");
 
-  const columns: ColumnDef<Job>[] = useMemo(() => [
+  const columns: DataTableColumnDef<Job>[] = useMemo(() => [
     {
       accessorKey: "job_type",
       header: t("table.type"),

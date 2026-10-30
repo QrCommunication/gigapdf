@@ -21,18 +21,18 @@
   },
   "dependencies": {
     "@giga-pdf/types": "workspace:*",
-    "@tanstack/react-query": "^5.101.0",
+    "@tanstack/react-query": "^5.105.0",
     "axios": "^1.21.0",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.4"
   },
   "devDependencies": {
     "@giga-pdf/typescript-config": "workspace:*",
-    "@types/node": "^25.9.3",
-    "react": "19.2.3",
-    "tsup": "^8.5.1",
+    "@types/node": "^24.19.2",
+    "react": "19.3.0",
+    "tsup": "^9.0.0",
     "typescript": "^6.0.3"
   },
   "peerDependencies": {
-    "react": "^19.0.0"
+    "react": "^19.3.0"
   }
 }

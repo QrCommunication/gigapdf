@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import cast, delete, func, literal_column, or_, select, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import array as pg_array
@@ -657,13 +657,14 @@ class CreateFolderRequest(BaseModel):
         description="Parent folder ID (null for root)",
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "Invoices 2026",
                 "parent_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             }
-        }
+        },
+    )
 
 
 @router.post(
@@ -2680,14 +2681,15 @@ class UpdateDocumentRequest(BaseModel):
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "Q1 Financial Report (final).pdf",
                 "extracted_text": "Quarterly results... revenue grew 12% ...",
                 "tags": ["finance", "q1", "report"],
             }
-        }
+        },
+    )
 
 
 # Backwards-compatible alias (historical name of the rename-only request model)
@@ -2923,14 +2925,15 @@ class OcrBlockIn(BaseModel):
     text: str = Field(min_length=1, description="OCR text of the block")
     bbox: OcrBlockBBox | None = Field(default=None, description="Block bounding box")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "page": 0,
                 "text": "INVOICE N° 2026-0042",
                 "bbox": {"x": 72.0, "y": 760.0, "w": 220.0, "h": 18.0},
             }
-        }
+        },
+    )
 
 
 class IndexOcrBlocksRequest(BaseModel):
@@ -2940,8 +2943,8 @@ class IndexOcrBlocksRequest(BaseModel):
         description="OCR blocks to index (replaces any existing index for the document)",
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "blocks": [
                     {
@@ -2956,7 +2959,8 @@ class IndexOcrBlocksRequest(BaseModel):
                     },
                 ]
             }
-        }
+        },
+    )
 
 
 @router.post(
@@ -3960,8 +3964,9 @@ class RenameFolderRequest(BaseModel):
         max_length=255,
     )
 
-    class Config:
-        json_schema_extra = {"example": {"name": "Archived invoices"}}
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"name": "Archived invoices"}},
+    )
 
 
 @router.patch(
@@ -4400,10 +4405,11 @@ class MoveDocumentRequest(BaseModel):
         description="Target folder ID (null for root)",
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"folder_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"}
-        }
+        },
+    )
 
 
 @router.patch(
@@ -4631,10 +4637,11 @@ class MoveFolderRequest(BaseModel):
         description="Target parent folder ID (null for root)",
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"parent_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"}
-        }
+        },
+    )
 
 
 @router.patch(
@@ -5087,8 +5094,8 @@ class DocumentLayersData(BaseModel):
         description="Map of elementId → layerId (opaque to the server)",
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "layers": [
                     {"id": "layer-1", "name": "Background", "visible": True},
@@ -5099,7 +5106,8 @@ class DocumentLayersData(BaseModel):
                     "elem-bbbb": "layer-2",
                 },
             }
-        }
+        },
+    )
 
 
 async def _load_document_for_layers(

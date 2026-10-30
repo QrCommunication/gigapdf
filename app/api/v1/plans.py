@@ -9,7 +9,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from app.core.database import get_db_session
@@ -58,8 +58,8 @@ class PlanCreate(BaseModel):
     cta_text: str = Field(default="Get Started", description="Call-to-action text")
     trial_days: int | None = Field(None, description="Trial period in days")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "slug": "pro",
                 "name": "Pro",
@@ -87,7 +87,8 @@ class PlanCreate(BaseModel):
                 "cta_text": "Upgrade to Pro",
                 "trial_days": 14,
             }
-        }
+        },
+    )
 
 
 class PlanUpdate(BaseModel):
@@ -112,8 +113,8 @@ class PlanUpdate(BaseModel):
     cta_text: str | None = None
     trial_days: int | None = None
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "Pro (annual)",
                 "price": 190.0,
@@ -121,7 +122,8 @@ class PlanUpdate(BaseModel):
                 "is_popular": True,
                 "cta_text": "Save 2 months",
             }
-        }
+        },
+    )
 
 
 class PlanResponse(BaseModel):

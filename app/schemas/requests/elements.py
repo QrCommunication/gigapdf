@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CreateElementRequest(BaseModel):
@@ -23,15 +23,16 @@ class CreateElementRequest(BaseModel):
     field_type: str | None = Field(default=None, description="Form field type")
     field_name: str | None = Field(default=None, description="Form field name")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "type": "text",
                 "bounds": {"x": 100, "y": 100, "width": 200, "height": 50},
                 "content": "Hello, World!",
                 "style": {"font_size": 14, "color": "#000000"},
             }
-        }
+        },
+    )
 
 
 class UpdateElementRequest(BaseModel):
@@ -45,13 +46,14 @@ class UpdateElementRequest(BaseModel):
     locked: bool | None = Field(default=None, description="Lock state")
     visible: bool | None = Field(default=None, description="Visibility state")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "bounds": {"x": 150, "y": 150, "width": 200, "height": 50},
                 "style": {"color": "#FF0000"},
             }
-        }
+        },
+    )
 
 
 class MoveElementRequest(BaseModel):
@@ -60,10 +62,11 @@ class MoveElementRequest(BaseModel):
     target_page_number: int = Field(ge=1, description="Target page number")
     new_bounds: dict | None = Field(default=None, description="New position")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"target_page_number": 3, "new_bounds": {"x": 100, "y": 200}}
-        }
+        },
+    )
 
 
 class DuplicateElementRequest(BaseModel):
@@ -76,10 +79,11 @@ class DuplicateElementRequest(BaseModel):
         default={"x": 10, "y": 10}, description="Offset from original position"
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"target_page_number": None, "offset": {"x": 20, "y": 20}}
-        }
+        },
+    )
 
 
 class BatchOperationRequest(BaseModel):
@@ -87,8 +91,8 @@ class BatchOperationRequest(BaseModel):
 
     operations: list[dict] = Field(description="List of operations to perform")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "operations": [
                     {
@@ -103,4 +107,5 @@ class BatchOperationRequest(BaseModel):
                     {"action": "delete", "element_id": "element-uuid-here"},
                 ]
             }
-        }
+        },
+    )

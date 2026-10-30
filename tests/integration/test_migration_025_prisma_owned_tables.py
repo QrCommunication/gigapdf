@@ -29,6 +29,16 @@ import pytest
 
 from tests.integration.conftest import PROJECT_ROOT, run_alembic
 
+
+def _head_revision() -> str:
+    """The head of the migration chain, read from the scripts (not hard-coded)."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config(str(PROJECT_ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(PROJECT_ROOT / "migrations"))
+    return ScriptDirectory.from_config(config).get_current_head()
+
 _REV_024 = "024_document_quota_attribution"
 _REV_025 = "025_prisma_owned_tables"
 
@@ -236,7 +246,7 @@ def _existing_tables(db) -> set[str]:
 
 def test_fresh_upgrade_creates_every_prisma_owned_table(migrated_pg):
     assert _existing_tables(migrated_pg) == set(_OWNED)
-    assert _sql(migrated_pg, "SELECT version_num FROM alembic_version") == _REV_025
+    assert _sql(migrated_pg, "SELECT version_num FROM alembic_version") == _head_revision()
 
     cascades = _sql(
         migrated_pg,
@@ -378,7 +388,8 @@ def test_production_shaped_database_only_gains_missing_tables(throwaway_pg):
     before = _snapshot(throwaway_pg, existing)
     rows_before = _row_counts(throwaway_pg)
 
-    _alembic_ok(throwaway_pg, "upgrade", "head")
+    # 025 alone (026 then adds jwks columns: test_migration_026_jwks_key_algorithm.py).
+    _alembic_ok(throwaway_pg, "upgrade", _REV_025)
 
     assert _snapshot(throwaway_pg, existing) == before
     assert _row_counts(throwaway_pg) == rows_before
@@ -419,9 +430,12 @@ def test_upgrade_twice_and_downgrade_then_upgrade_change_nothing(migrated_pg):
             VALUES ('aa1', 'adm1', 'adm1', 'credential');
         """,
     )
+    # This test is about 025 alone: step back to it, so later revisions
+    # (026 adds columns to jwks) do not enter the round trip.
+    _alembic_ok(migrated_pg, "downgrade", _REV_025)
     before, rows_before = _snapshot(migrated_pg), _row_counts(migrated_pg)
 
-    _alembic_ok(migrated_pg, "upgrade", "head")
+    _alembic_ok(migrated_pg, "upgrade", _REV_025)
     assert _snapshot(migrated_pg) == before
 
     # Downgrade keeps every table and row (documented no-op)…
@@ -431,7 +445,7 @@ def test_upgrade_twice_and_downgrade_then_upgrade_change_nothing(migrated_pg):
     assert _row_counts(migrated_pg) == rows_before
 
     # …and upgrading again is a no-op on them.
-    _alembic_ok(migrated_pg, "upgrade", "head")
+    _alembic_ok(migrated_pg, "upgrade", _REV_025)
     assert _sql(migrated_pg, "SELECT version_num FROM alembic_version") == _REV_025
     assert _snapshot(migrated_pg) == before
     assert _row_counts(migrated_pg) == rows_before

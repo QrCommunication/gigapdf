@@ -246,7 +246,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
         return create_error_response(
             "VALIDATION_ERROR",
             "Request validation failed",
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             {"errors": errors},
         )
 
@@ -266,7 +266,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
         return create_error_response(
             "VALIDATION_ERROR",
             "Data validation failed",
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             {"errors": errors},
         )
 

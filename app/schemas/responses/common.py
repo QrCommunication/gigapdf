@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.middleware.request_id import get_request_id
 from app.utils.helpers import now_utc
@@ -52,8 +52,8 @@ class APIResponse[T](BaseModel):
     error: ErrorDetail | None = Field(default=None, description="Error details")
     meta: MetaInfo = Field(description="Response metadata")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "success": True,
                 "data": {"document_id": "uuid-here"},
@@ -64,7 +64,8 @@ class APIResponse[T](BaseModel):
                     "processing_time_ms": 150,
                 },
             }
-        }
+        },
+    )
 
 
 class SuccessResponse[T](BaseModel):

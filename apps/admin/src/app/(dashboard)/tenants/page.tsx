@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { DataTable } from "@/components/data-table";
-import { ColumnDef } from "@tanstack/react-table";
+import { DataTable, type DataTableColumnDef } from "@/components/data-table";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@giga-pdf/ui";
 import {
@@ -47,7 +46,7 @@ export default function TenantsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const columns: ColumnDef<Tenant>[] = [
+  const columns: DataTableColumnDef<Tenant>[] = [
     {
       accessorKey: "name",
       header: t("table.name"),
@@ -101,7 +100,7 @@ export default function TenantsPage() {
       ),
     },
     {
-      accessorKey: "storage_used_formatted",
+      accessorKey: "storage_used_bytes",
       header: t("table.storage"),
       cell: ({ row }) => (
         <div>

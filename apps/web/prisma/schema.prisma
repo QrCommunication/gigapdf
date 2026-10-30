@@ -87,6 +87,10 @@ model Jwks {
   privateKey String
   createdAt  DateTime
   expiresAt  DateTime?
+  // Better Auth 1.7: algorithm and curve of the key (NULL = configured alg).
+  // Provisioned by Alembic 026_jwks_key_algorithm.
+  alg        String?
+  crv        String?
 
   @@map("jwks")
 }

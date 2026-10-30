@@ -6,7 +6,7 @@ Defines request and response models for costs and performance monitoring.
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # =============================================================================
 # Cost Schemas
@@ -40,8 +40,8 @@ class CurrentCostsResponse(BaseModel):
     by_category: list[CategoryCost] = Field(description="Costs grouped by category")
     resources: list[ResourceCost] = Field(default=[], description="Detailed resource costs")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "total_eur": 23.45,
                 "billing_period": "2026-01",
@@ -53,7 +53,8 @@ class CurrentCostsResponse(BaseModel):
                 ],
                 "resources": [],
             }
-        }
+        },
+    )
 
 
 class MonthCost(BaseModel):
@@ -69,8 +70,8 @@ class CostHistoryResponse(BaseModel):
 
     history: list[MonthCost] = Field(description="Monthly cost history")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "history": [
                     {"period": "2025-11", "total": 21.30, "by_category": {"Compute": 10.0, "Storage": 11.30}},
@@ -78,7 +79,8 @@ class CostHistoryResponse(BaseModel):
                     {"period": "2026-01", "total": 23.45, "by_category": {"Compute": 10.2, "Storage": 13.25}},
                 ]
             }
-        }
+        },
+    )
 
 
 # =============================================================================
@@ -133,8 +135,8 @@ class CurrentMetricsResponse(BaseModel):
     s3: S3Metrics = Field(description="S3 storage metrics")
     network: NetworkMetrics | None = Field(default=None, description="Network metrics")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "recorded_at": "2026-01-20T16:30:00Z",
                 "cpu_percent": 34.5,
@@ -164,7 +166,8 @@ class CurrentMetricsResponse(BaseModel):
                     "tx_mb": 512.0,
                 },
             }
-        }
+        },
+    )
 
 
 class MetricPoint(BaseModel):
@@ -183,8 +186,8 @@ class MetricsHistoryResponse(BaseModel):
     range: str = Field(description="Time range (24h, 7d, 30d)")
     points: list[MetricPoint] = Field(description="Data points")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "range": "24h",
                 "points": [
@@ -192,4 +195,5 @@ class MetricsHistoryResponse(BaseModel):
                     {"time": "2026-01-20T10:15:00Z", "cpu": 45.0, "memory": 53.0, "disk": 30.0, "s3_mb": 5.6},
                 ],
             }
-        }
+        },
+    )

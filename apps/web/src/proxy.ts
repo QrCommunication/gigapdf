@@ -19,8 +19,8 @@ import { APP_ROUTES } from "./lib/app-routes";
  *
  * Le matcher EXCLUT volontairement : /api, /backend-api, /embed, toutes les
  * routes app (/dashboard, /documents, /search, /merge, /editor, /settings,
- * /billing, /organization, /developers, /shared, /trash, /monitoring), /_next
- * et les fichiers statiques. Ces routes conservent la résolution de locale par
+ * /billing, /organization, /developers, /shared, /trash), le tunnel Sentry
+ * (/monitoring), /_next et les fichiers statiques. Ces routes conservent la résolution de locale par
  * cookie (request.ts) et la protection client AuthGuard.
  */
 
@@ -98,7 +98,10 @@ export const config = {
   // sous (app)/(dashboard)) : exclue pour qu'elle reste non préfixée (cookie),
   // sans collision avec la page d'accès refusé MARKETING servie à /fr/403 et
   // /en/403 (le bare /403 reste, lui, géré par next-intl → marketing fr).
+  // `monitoring` = tunnel Sentry (SENTRY_TUNNEL_ROUTE, src/lib/sentry-options.ts) :
+  // depuis @sentry/nextjs v11 il traverse le proxy ; non exclu, next-intl le
+  // réécrirait en /fr/monitoring (404) et les événements seraient perdus.
   matcher: [
-    "/((?!api|backend-api|dashboard|documents|search|merge|editor|settings|billing|organization|developers|shared|trash|embed|forbidden|_next|_vercel|.*\\..*).*)",
+    "/((?!api|backend-api|monitoring|dashboard|documents|search|merge|editor|settings|billing|organization|developers|shared|trash|embed|forbidden|_next|_vercel|.*\\..*).*)",
   ],
 };

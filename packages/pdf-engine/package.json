@@ -77,12 +77,13 @@
   "devDependencies": {
     "@giga-pdf/eslint-config": "workspace:*",
     "@giga-pdf/typescript-config": "workspace:*",
-    "@types/node": "^25.9.3",
-    "@vitest/coverage-v8": "^4.1.12",
-    "pdfjs-dist": "6.2.108",
-    "tsup": "^8.5.1",
+    "@types/node": "^24.19.2",
+    "@vitest/coverage-v8": "^5.0.5",
+    "pdfjs-dist": "6.4.299",
+    "tsup": "^9.0.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.12"
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
   },
   "engines": {
     "node": ">=20.0.0"

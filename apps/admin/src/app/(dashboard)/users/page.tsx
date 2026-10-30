@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { DataTable } from "@/components/data-table";
-import { ColumnDef } from "@tanstack/react-table";
+import { DataTable, type DataTableColumnDef } from "@/components/data-table";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@giga-pdf/ui";
 import { Eye, Edit, Trash2, Loader2, AlertCircle, RefreshCw } from "lucide-react";
@@ -16,7 +15,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const columns: ColumnDef<User>[] = useMemo(() => [
+  const columns: DataTableColumnDef<User>[] = useMemo(() => [
     {
       accessorKey: "id",
       header: t("table.name"),
@@ -39,7 +38,7 @@ export default function UsersPage() {
       },
     },
     {
-      accessorKey: "storage_used_formatted",
+      accessorKey: "storage_used_bytes",
       header: t("table.tenant"),
       cell: ({ row }) => (
         <div className="text-sm">

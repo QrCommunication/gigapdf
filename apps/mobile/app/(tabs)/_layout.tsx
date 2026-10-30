@@ -3,7 +3,7 @@
  * Bottom tab navigation for main screens with safe area support
  */
 
-import React from 'react';
+import React, { type ComponentProps } from 'react';
 import { StyleSheet, Platform, View, type ColorValue } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +16,17 @@ type TabBarIconProps = {
   color: ColorValue;
   size: number;
 };
+
+type IconColor = ComponentProps<typeof Ionicons>['color'];
+
+/**
+ * react-navigation hands the tint as RN's ColorValue, which since RN 0.88 also
+ * covers `null` and processed numeric colors; Ionicons only takes a string or a
+ * platform color. Our tints are theme strings, so only those two cases are dropped.
+ */
+function toIconColor(color: ColorValue): IconColor {
+  return typeof color === 'number' || color === null ? undefined : color;
+}
 
 export default function TabsLayout() {
   const { theme, colors } = useTheme();
@@ -72,7 +83,7 @@ export default function TabsLayout() {
             <Ionicons
               name={focused ? 'document-text' : 'document-text-outline'}
               size={IconSizes.md}
-              color={color}
+              color={toIconColor(color)}
             />
           ),
         }}
@@ -86,7 +97,7 @@ export default function TabsLayout() {
             <Ionicons
               name={focused ? 'share-social' : 'share-social-outline'}
               size={IconSizes.md}
-              color={color}
+              color={toIconColor(color)}
             />
           ),
         }}
@@ -100,7 +111,7 @@ export default function TabsLayout() {
             <Ionicons
               name={focused ? 'settings' : 'settings-outline'}
               size={IconSizes.md}
-              color={color}
+              color={toIconColor(color)}
             />
           ),
         }}

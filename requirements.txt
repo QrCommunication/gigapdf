@@ -1,13 +1,13 @@
 # FastAPI and web
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-python-multipart>=0.0.27
-pydantic[email]>=2.5.0
-pydantic-settings>=2.14.2  # GHSA-4xgf-cpjx-pc3j (NestedSecrets symlink path traversal / size-cap bypass)
+fastapi>=0.162.0
+uvicorn[standard]>=0.54.0
+python-multipart>=0.0.32
+pydantic[email]>=2.14.1
+pydantic-settings>=2.16.2  # GHSA-4xgf-cpjx-pc3j (NestedSecrets symlink path traversal / size-cap bypass)
 
 # PDF manipulation
-pypdf>=6.13.3  # GHSA-jm82-fx9c-mx94 (memory exhaustion DoS on streams without /Length)
-pikepdf>=8.0.0
+pypdf>=6.21.4  # GHSA-jm82-fx9c-mx94 (memory exhaustion DoS on streams without /Length)
+pikepdf>=10.17.0
 Pillow>=13.0.0  # 39 advisories fixed in 13.0.0 (PYSEC-2026-4326…4343, CVE-2026-112895); pulled by pikepdf, fastembed
 # fontTools: repair subset TTFs extracted from PDFs before serving them to
 # the browser FontFace API. PDF subset fonts (Type0/CIDFontType2) often have
@@ -15,24 +15,24 @@ Pillow>=13.0.0  # 39 advisories fixed in 13.0.0 (PYSEC-2026-4326…4343, CVE-202
 # Chrome's OTS rejects ("hmtx: Failed to read side bearing"). Re-saving
 # through fontTools rebuilds the missing tables and produces a TTF that
 # every browser accepts.
-fonttools>=4.50.0
+fonttools>=4.68.0
 
 # WebSocket
-python-socketio>=5.10.0
+python-socketio>=5.17.0
 
 # Task queue
-celery>=5.3.0
-redis>=5.0.0
+celery>=5.6.3
+redis>=8.1.0
 
 # Database
-psycopg2-binary>=2.9.9
-asyncpg>=0.29.0
-SQLAlchemy[asyncio]>=2.0.25
-alembic>=1.13.0
+psycopg2-binary>=2.9.13
+asyncpg>=0.32.0
+SQLAlchemy[asyncio]>=2.1.6
+alembic>=1.20.1
 # pgvector: `vector` SQLAlchemy type + asyncpg/psycopg2 codecs for the
 # ocr_blocks.embedding column (semantic search, #85). Requires the `vector`
 # PostgreSQL extension (postgresql-17-pgvector) on the server.
-pgvector>=0.3.0
+pgvector>=0.5.1
 
 # Semantic search (#85): fastembed runs a 384-d multilingual model
 # (sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2, FR+EN) fully
@@ -51,34 +51,34 @@ pgvector>=0.3.0
 fastembed>=0.9.1,<0.10
 
 # Authentication
-PyJWT[crypto]>=2.13.0
-httpx>=0.26.0
+PyJWT[crypto]>=2.15.1
+httpx>=0.28.1
 
 # Encryption
-cryptography>=42.0.0
+cryptography>=50.0.2
 
 # Export formats
-python-docx>=1.1.0
-openpyxl>=3.1.2
+python-docx>=1.2.0
+openpyxl>=3.1.5
 
 # Utilities
-python-dateutil>=2.8.2
-aiofiles>=23.2.1
-psutil>=5.9.0
+python-dateutil>=2.9.0.post0
+aiofiles>=25.1.0
+psutil>=7.2.2
 
 # S3 Storage (Scaleway)
-boto3>=1.34.0
+boto3>=1.43.121
 
 # Payments
-stripe>=7.0.0
+stripe>=16.0.1
 
 # Error tracking & performance monitoring
-sentry-sdk[fastapi]>=2.0.0,<3.0
+sentry-sdk[fastapi]>=2.73.0,<3.0
 
 # Transitive security pins (CVE fixes — 2026-06-13). Forced above the version
 # their parents would otherwise resolve, to clear `pip-audit --strict`.
-idna>=3.15          # CVE-2026-45409 (via httpx/requests)
-urllib3>=2.7.0      # PYSEC-2026-141 / PYSEC-2026-142 (via boto3/requests)
-starlette>=1.0.1    # PYSEC-2026-161 (via fastapi)
-Mako>=1.3.12        # CVE-2026-44307 (via alembic)
-msgpack>=1.2.1      # GHSA-6v7p-g79w-8964 (SEGV DoS on Unpacker reuse; via CacheControl)
+idna>=3.20          # CVE-2026-45409 (via httpx/requests)
+urllib3>=2.8.0      # PYSEC-2026-141 / PYSEC-2026-142 (via boto3/requests)
+starlette>=1.10.0   # PYSEC-2026-161 (via fastapi)
+Mako>=1.4.3         # CVE-2026-44307 (via alembic)
+msgpack>=1.2.4      # GHSA-6v7p-g79w-8964 (SEGV DoS on Unpacker reuse; via CacheControl)

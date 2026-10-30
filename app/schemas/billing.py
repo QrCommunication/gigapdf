@@ -6,7 +6,7 @@ Defines request and response models for all billing operations.
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # =============================================================================
 # Request Schemas
@@ -20,14 +20,15 @@ class CreateCheckoutRequest(BaseModel):
     success_url: str = Field(description="URL to redirect after successful payment")
     cancel_url: str = Field(description="URL to redirect if payment is cancelled")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "plan_id": "starter",
                 "success_url": "https://giga-pdf.com/billing/success",
                 "cancel_url": "https://giga-pdf.com/billing/cancel",
             }
-        }
+        },
+    )
 
 
 class CreatePortalRequest(BaseModel):
@@ -35,12 +36,13 @@ class CreatePortalRequest(BaseModel):
 
     return_url: str = Field(description="URL to return after portal session")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "return_url": "https://giga-pdf.com/settings/billing",
             }
-        }
+        },
+    )
 
 
 class UpdateSubscriptionRequest(BaseModel):
@@ -48,12 +50,13 @@ class UpdateSubscriptionRequest(BaseModel):
 
     plan_id: str = Field(description="New plan slug")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "plan_id": "pro",
             }
-        }
+        },
+    )
 
 
 class CancelSubscriptionRequest(BaseModel):
@@ -64,12 +67,13 @@ class CancelSubscriptionRequest(BaseModel):
         description="If true, cancel immediately. Otherwise, cancel at period end.",
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "immediately": False,
             }
-        }
+        },
+    )
 
 
 class AddPaymentMethodRequest(BaseModel):
@@ -77,12 +81,13 @@ class AddPaymentMethodRequest(BaseModel):
 
     payment_method_id: str = Field(description="Stripe PaymentMethod ID")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "payment_method_id": "pm_1234567890",
             }
-        }
+        },
+    )
 
 
 # =============================================================================
@@ -103,8 +108,8 @@ class SubscriptionResponse(BaseModel):
     stripe_customer_id: str | None = Field(default=None, description="Stripe Customer ID")
     stripe_subscription_id: str | None = Field(default=None, description="Stripe Subscription ID")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "status": "active",
                 "current_plan": "starter",
@@ -116,7 +121,8 @@ class SubscriptionResponse(BaseModel):
                 "stripe_customer_id": "cus_abc123",
                 "stripe_subscription_id": "sub_xyz789",
             }
-        }
+        },
+    )
 
 
 class CheckoutSessionResponse(BaseModel):
@@ -125,13 +131,14 @@ class CheckoutSessionResponse(BaseModel):
     session_id: str = Field(description="Stripe Checkout Session ID")
     url: str = Field(description="URL to redirect user for checkout")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "session_id": "cs_test_abc123",
                 "url": "https://checkout.stripe.com/c/pay/cs_test_abc123",
             }
-        }
+        },
+    )
 
 
 class PortalSessionResponse(BaseModel):
@@ -139,12 +146,13 @@ class PortalSessionResponse(BaseModel):
 
     url: str = Field(description="URL to redirect user to billing portal")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "url": "https://billing.stripe.com/p/session/test_abc123",
             }
-        }
+        },
+    )
 
 
 class CardDetails(BaseModel):
@@ -155,15 +163,16 @@ class CardDetails(BaseModel):
     exp_month: int = Field(description="Card expiration month")
     exp_year: int = Field(description="Card expiration year")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "brand": "visa",
                 "last4": "4242",
                 "exp_month": 12,
                 "exp_year": 2025,
             }
-        }
+        },
+    )
 
 
 class PaymentMethodResponse(BaseModel):
@@ -175,8 +184,8 @@ class PaymentMethodResponse(BaseModel):
     is_default: bool = Field(default=False, description="If this is the default payment method")
     created_at: datetime | None = Field(default=None, description="When payment method was created")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "pm_1234567890",
                 "type": "card",
@@ -189,7 +198,8 @@ class PaymentMethodResponse(BaseModel):
                 "is_default": True,
                 "created_at": "2025-01-01T00:00:00Z",
             }
-        }
+        },
+    )
 
 
 class InvoiceResponse(BaseModel):
@@ -208,8 +218,8 @@ class InvoiceResponse(BaseModel):
     period_start: datetime | None = Field(default=None, description="Billing period start")
     period_end: datetime | None = Field(default=None, description="Billing period end")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "in_abc123",
                 "number": "INV-0001",
@@ -224,7 +234,8 @@ class InvoiceResponse(BaseModel):
                 "period_start": "2025-01-01T00:00:00Z",
                 "period_end": "2025-02-01T00:00:00Z",
             }
-        }
+        },
+    )
 
 
 class UsageMetrics(BaseModel):
@@ -234,14 +245,15 @@ class UsageMetrics(BaseModel):
     storage_gb: float = Field(description="Storage used in GB")
     api_calls: int = Field(description="Number of API calls made")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "documents": 42,
                 "storage_gb": 1.5,
                 "api_calls": 500,
             }
-        }
+        },
+    )
 
 
 class UsageLimits(BaseModel):
@@ -251,14 +263,15 @@ class UsageLimits(BaseModel):
     storage_gb: float | None = Field(default=None, description="Storage limit in GB (null = unlimited)")
     api_calls: int | None = Field(default=None, description="API call limit (null = unlimited)")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "documents": 500,
                 "storage_gb": 25.0,
                 "api_calls": 10000,
             }
-        }
+        },
+    )
 
 
 class UsageSummaryResponse(BaseModel):
@@ -269,8 +282,8 @@ class UsageSummaryResponse(BaseModel):
     usage: UsageMetrics = Field(description="Current usage metrics")
     limits: UsageLimits = Field(description="Plan limits")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "current_period_start": "2025-01-01T00:00:00Z",
                 "current_period_end": "2025-02-01T00:00:00Z",
@@ -285,7 +298,8 @@ class UsageSummaryResponse(BaseModel):
                     "api_calls": 10000,
                 },
             }
-        }
+        },
+    )
 
 
 class BillingPlanResponse(BaseModel):
@@ -306,8 +320,8 @@ class BillingPlanResponse(BaseModel):
     stripe_price_id: str | None = Field(default=None, description="Stripe Price ID")
     trial_days: int | None = Field(default=None, description="Free trial days")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "uuid-here",
                 "slug": "starter",
@@ -327,4 +341,5 @@ class BillingPlanResponse(BaseModel):
                 "stripe_price_id": "price_abc123",
                 "trial_days": 14,
             }
-        }
+        },
+    )

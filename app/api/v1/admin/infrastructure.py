@@ -97,7 +97,7 @@ async def get_current_costs(
     billing_period: str | None = Query(
         None,
         description="Billing period in YYYY-MM format. Defaults to current month.",
-        regex=r"^\d{4}-\d{2}$",
+        pattern=r"^\d{4}-\d{2}$",
     ),
 ):
     """

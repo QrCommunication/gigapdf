@@ -137,6 +137,12 @@ async function loadPdfJsDoc(pdfBytes: Uint8Array | Buffer): Promise<PDFDocumentP
     useSystemFonts: false,
     // Éviter l'avertissement "standardFontDataUrl" qui pollue les logs de test
     disableFontFace: true,
+    // Depuis pdfjs-dist 6.4, le worker n'exporte le nom PDF de la police
+    // (`fontObj.name`, ex. "DejaVuSans-8450") que si fontExtraProperties est
+    // activé. Sans lui, `name` vaut undefined et extractFontsFromPdf retombait
+    // sur l'identifiant interne `g_d<N>_f<M>`, dont <N> change à chaque document
+    // chargé : la comparaison de polices entre deux PDF échouait.
+    fontExtraProperties: true,
   });
 
   return loadingTask.promise;

@@ -12,19 +12,20 @@ export default defineConfig({
     fileParallelism: false,
     maxConcurrency: 1,
     maxWorkers: 1,
-    minWorkers: 1,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: ['src/**/*.ts', 'src/**/*.tsx'],
       exclude: ['src/index.ts', 'src/**/__tests__/**'],
+      // Seuils globaux directement sous `thresholds` : une clé `global` y serait
+      // lue comme un motif de fichier (aucun fichier ne correspond → jamais appliqué).
+      // Cliquet : couverture mesurée le 2026-10-29 (arrondie à l'entier inférieur),
+      // à relever à chaque progrès. L'objectif de 80 % est suivi en dette technique.
       thresholds: {
-        global: {
-          branches: 80,
-          functions: 80,
-          lines: 80,
-          statements: 80,
-        },
+        branches: 30,
+        functions: 17,
+        lines: 29,
+        statements: 28,
       },
     },
   },
