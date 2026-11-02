@@ -125,7 +125,7 @@
   "devDependencies": {
     "@giga-pdf/eslint-config": "workspace:*",
     "@giga-pdf/typescript-config": "workspace:*",
-    "@types/node": "^24.19.2",
+    "@types/node": "^26.6.6",
     "autoprefixer": "^10.6.2",
     "concurrently": "^10.0.6",
     "eslint": "^10.13.0",
