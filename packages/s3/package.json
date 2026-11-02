@@ -28,7 +28,7 @@
     "@giga-pdf/typescript-config": "workspace:*",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
-    "react": "19.3.0",
+    "react": "19.3.1",
     "tsup": "^9.0.0",
     "typescript": "^6.0.3"
   },

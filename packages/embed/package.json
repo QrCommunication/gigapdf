@@ -44,7 +44,7 @@
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@vitest/coverage-v8": "^5.0.5",
-    "react": "19.3.0",
+    "react": "19.3.1",
     "react-dom": "19.3.0",
     "tsup": "^9.0.0",
     "typescript": "^6.0.3",
