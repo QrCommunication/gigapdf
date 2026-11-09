@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v6.0.9
+      - uses: pnpm/action-setup@v6.1.1
         # Runner system Node bumped to 22 (2026-06-13, image qrcom/github-runner:noble-node22)
         # → v6's @pnpm/exe bootstrap works. No version input: pnpm reads
         # packageManager (pnpm@10.28.0) from package.json (single source of truth).
@@ -54,7 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v6.0.9
+      - uses: pnpm/action-setup@v6.1.1
         # Runner system Node bumped to 22 (2026-06-13, image qrcom/github-runner:noble-node22)
         # → v6's @pnpm/exe bootstrap works. No version input: pnpm reads
         # packageManager (pnpm@10.28.0) from package.json (single source of truth).
@@ -84,7 +84,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v6.0.9
+      - uses: pnpm/action-setup@v6.1.1
         # Runner system Node bumped to 22 (2026-06-13, image qrcom/github-runner:noble-node22)
         # → v6's @pnpm/exe bootstrap works. No version input: pnpm reads
         # packageManager (pnpm@10.28.0) from package.json (single source of truth).
@@ -115,7 +115,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v6.0.9
+      - uses: pnpm/action-setup@v6.1.1
         # Runner system Node bumped to 22 (2026-06-13, image qrcom/github-runner:noble-node22)
         # → v6's @pnpm/exe bootstrap works. No version input: pnpm reads
         # packageManager (pnpm@10.28.0) from package.json (single source of truth).
@@ -228,7 +228,7 @@ jobs:
 
       # The Prisma CLI: test_migration_025 compares the migrated database with
       # the Prisma models (prisma migrate diff --exit-code).
-      - uses: pnpm/action-setup@v6.0.9
+      - uses: pnpm/action-setup@v6.1.1
 
       - uses: actions/setup-node@v7
         with:
@@ -287,7 +287,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v6.0.9
+      - uses: pnpm/action-setup@v6.1.1
         # Runner system Node bumped to 22 (2026-06-13, image qrcom/github-runner:noble-node22)
         # → v6's @pnpm/exe bootstrap works. No version input: pnpm reads
         # packageManager (pnpm@10.28.0) from package.json (single source of truth).
