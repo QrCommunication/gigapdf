@@ -29,8 +29,8 @@
     "@giga-pdf/types": "workspace:*",
     "@giga-pdf/ui": "workspace:*",
     "@stripe/react-stripe-js": "^7.0.1",
-    "@stripe/stripe-js": "^10.2.0",
-    "lucide-react": "^1.64.0"
+    "@stripe/stripe-js": "^10.2.1",
+    "lucide-react": "^1.69.0"
   },
   "devDependencies": {
     "@giga-pdf/eslint-config": "workspace:*",
