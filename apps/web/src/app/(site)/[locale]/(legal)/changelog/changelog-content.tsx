@@ -15,6 +15,17 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "1.28.0",
+    date: "2026-11-24",
+    type: "minor",
+    changes: [
+      { type: "fix", description: "Hebrew and Arabic text now displays parentheses, brackets and braces in the correct orientation. Previously these characters appeared reversed around right-to-left text because the extraction engine only reversed character order without applying Unicode bidi mirroring (engine 0.123.0)." },
+      { type: "fix", description: "Pitch decks and similar documents no longer show duplicated text at different sizes. Shadow and glow layers that overlay body text are now automatically deduplicated during reconstruction, keeping only the primary content (engine 0.123.0)." },
+      { type: "feature", description: "Scanned documents (image-only PDFs with no extractable text) are now automatically OCR'd on open when the OCR service is available, making them editable without manual intervention. You can opt out of auto-OCR in your browser settings." },
+      { type: "fix", description: "The editor no longer shows a blank white page for certain scanned PDFs. When the text-free background render fails silently, the editor now falls back to a full raster render so you always see the page content." },
+    ],
+  },
+  {
     version: "1.27.2",
     date: "2026-07-06",
     type: "patch",
