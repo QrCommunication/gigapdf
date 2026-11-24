@@ -3108,34 +3108,70 @@ export function EditorCanvas({
             // Rendre à une résolution plus élevée (HiDPI) pour un rendu net,
             // puis réduire l'image via scaleX/scaleY pour garder les dimensions PDF correctes.
             const renderScale = backgroundRenderScale(window.devicePixelRatio);
-            const dataUrl = await renderer.renderPageToDataURL(pageData.pageNumber, {
-              scale: renderScale,
-              // Text-free raster: the engine renders everything EXCEPT text
-              // (vector art, gradients/shadings, IMAGES and SHAPES stay 1:1).
-              // The REAL editable text is painted as a visible Fabric overlay on
-              // top, so editing is direct and works on any background — no colour
-              // mask. SHAPES stay in this raster (= visual ground truth) and the
-              // overlay paints them as transparent, editable hit-targets revealed
-              // on selection (render-elements.ts). We deliberately do NOT pass
-              // `excludeIndices` for shapes: `renderPageExcluding` is fed by the
-              // unified element index, but the engine honours it only for SOME
-              // vector paths (e.g. it drops index 34 yet keeps 101 on real docs),
-              // and mixing in the text-run ordinals (a different index space)
-              // over-excludes unrelated content — both left whole colored
-              // section backgrounds blank. Keeping shapes in the raster makes
-              // their fidelity exact and independent of that engine quirk.
-              skipText: true,
-              // In Word-like H/F edit mode, drop the baked `/GPHF` band so the
-              // editable HeaderFooterZone overlaid on top never doubles it.
-              ...(headerFooterActiveRef.current
-                ? { excludeMarkedContent: true }
-                : {}),
-            });
+
+            // Helper: render + validate + add background. Returns true on success.
+            // Some scanned PDFs produce an empty/invalid raster when skipText:true
+            // (engine silently fails on certain encodings). We detect that and let
+            // the caller retry with skipText:false as a degraded-but-visible fallback.
+            const MIN_VALID_DATA_URL_LENGTH = 100;
+            const tryRenderBackground = async (skipText: boolean): Promise<boolean> => {
+              try {
+                const dataUrl = await renderer.renderPageToDataURL(pageData.pageNumber, {
+                  scale: renderScale,
+                  // Text-free raster: the engine renders everything EXCEPT text
+                  // (vector art, gradients/shadings, IMAGES and SHAPES stay 1:1).
+                  // The REAL editable text is painted as a visible Fabric overlay on
+                  // top, so editing is direct and works on any background — no colour
+                  // mask. SHAPES stay in this raster (= visual ground truth) and the
+                  // overlay paints them as transparent, editable hit-targets revealed
+                  // on selection (render-elements.ts). We deliberately do NOT pass
+                  // `excludeIndices` for shapes: `renderPageExcluding` is fed by the
+                  // unified element index, but the engine honours it only for SOME
+                  // vector paths (e.g. it drops index 34 yet keeps 101 on real docs),
+                  // and mixing in the text-run ordinals (a different index space)
+                  // over-excludes unrelated content — both left whole colored
+                  // section backgrounds blank. Keeping shapes in the raster makes
+                  // their fidelity exact and independent of that engine quirk.
+                  skipText,
+                  // In Word-like H/F edit mode, drop the baked `/GPHF` band so the
+                  // editable HeaderFooterZone overlaid on top never doubles it.
+                  ...(headerFooterActiveRef.current
+                    ? { excludeMarkedContent: true }
+                    : {}),
+                });
+
+                if (!dataUrl || typeof dataUrl !== "string" || dataUrl.length < MIN_VALID_DATA_URL_LENGTH) {
+                  return false;
+                }
+
+                const bg = await addPdfBackground(canvas, fabricModule, dataUrl, renderScale);
+                return bg !== null;
+              } catch (renderErr) {
+                clientLogger.warn(
+                  `[EditorCanvas] renderPageToDataURL failed (skipText=${skipText}):`,
+                  renderErr,
+                );
+                return false;
+              }
+            };
+
+            // Primary attempt: text-free raster for the editable-overlay workflow.
+            let bgOk = await tryRenderBackground(true);
+
+            // Fallback: if skipText:true produced nothing (scanned PDF encoding issue),
+            // retry with the full page raster so the user at least sees the content.
+            if (!bgOk) {
+              clientLogger.warn(
+                "[EditorCanvas] skipText:true background invalid, falling back to full raster",
+              );
+              bgOk = await tryRenderBackground(false);
+            }
+
             renderer.dispose();
 
-            // Build the index-0 PDF-background image via the shared helper
-            // (same construction as the continuous-view PageCanvasHost).
-            await addPdfBackground(canvas, fabricModule, dataUrl, renderScale);
+            if (!bgOk) {
+              clientLogger.warn("[EditorCanvas] PDF background render failed after fallback");
+            }
           }
         } catch (e) {
           clientLogger.warn("[EditorCanvas] Could not render PDF background:", e);

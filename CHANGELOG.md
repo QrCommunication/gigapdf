@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **RTL Hebrew parentheses mirrored correctly.** Text extraction now applies
+  Unicode bidi-mirrored bracket substitution after reversing visual-order
+  runs, so parentheses, brackets and braces around Hebrew/Arabic text appear
+  in the correct orientation in the editor overlay. (lib 0.123.0)
+- **Duplicate text removed from pitch decks.** Overlapping text runs with
+  identical content but different font sizes (shadow/glow layers) are now
+  deduplicated during reconstruction, keeping only the body-size run.
+  (lib 0.123.0)
+- **Auto-OCR for scanned documents.** Image-only PDFs (no extractable text)
+  are now automatically OCR'd on open when the OCR service is available,
+  making scanned documents editable without manual intervention. Users can
+  opt out via localStorage. New `useAutoOcr` hook.
+- **Blank editor page fallback for scanned PDFs.** When `renderPageNoText`
+  fails silently on certain scanned PDF encodings, the editor now falls back
+  to a full raster render so the page is never blank. The user sees the
+  content even if text isn't immediately editable.
+
 ### Changed
 
 - **Legal pages list the file storage provider.** Privacy policy, terms,

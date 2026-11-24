@@ -81,8 +81,8 @@ importers:
   .:
     dependencies:
       '@better-auth/expo':
-        specifier: ~1.7.14
-        version: 1.7.14(24086a1de469c94b523d3733f93d5f20)
+        specifier: ~1.7.27
+        version: 1.7.27(23679cd8bf95213d4ec783d657407de9)
       '@better-auth/utils':
         specifier: 0.5.1
         version: 0.5.1
@@ -624,8 +624,8 @@ importers:
         specifier: workspace:*
         version: link:../types
       '@qrcommunication/gigapdf-lib':
-        specifier: 0.122.0
-        version: 0.122.0
+        specifier: file:/home/rony/Projets/gigapdf-lib/sdk
+        version: file:../gigapdf-lib/sdk
       fabric:
         specifier: ^7.4.0
         version: 7.4.0
@@ -798,8 +798,8 @@ importers:
         specifier: workspace:*
         version: link:../types
       '@qrcommunication/gigapdf-lib':
-        specifier: 0.122.0
-        version: 0.122.0
+        specifier: file:/home/rony/Projets/gigapdf-lib/sdk
+        version: file:../gigapdf-lib/sdk
     devDependencies:
       '@giga-pdf/eslint-config':
         specifier: workspace:*
@@ -1506,6 +1506,29 @@ packages:
     peerDependencies:
       '@better-auth/core': ^1.7.14
       better-auth: ~1.7.14
+      expo-constants: '>=17.0.0'
+      expo-linking: '>=7.0.0'
+      expo-network: '>=8.0.7'
+      expo-secure-store: '>=12.5.0'
+      expo-web-browser: '>=14.0.0'
+    peerDependenciesMeta:
+      expo-constants:
+        optional: true
+      expo-linking:
+        optional: true
+      expo-network:
+        optional: true
+      expo-secure-store:
+        optional: true
+      expo-web-browser:
+        optional: true
+
+  '@better-auth/expo@1.7.27':
+    resolution: {integrity: sha512-ergHZ0rS/Go/d5hJlVDewTC1Kp8BCwmI7KZYuF9I+hFftNPrwaj+UdIRpxfYohLpKQqGv2/0UiY0Ro0F3S+Mtg==}
+    peerDependencies:
+      '@better-auth/core': ^1.7.27
+      better-auth: ~1.7.14
+      better-call: ~1.4.5
       expo-constants: '>=17.0.0'
       expo-linking: '>=7.0.0'
       expo-network: '>=8.0.7'
@@ -2806,8 +2829,8 @@ packages:
       react: 19.3.0
       react-dom: 19.3.0
 
-  '@qrcommunication/gigapdf-lib@0.122.0':
-    resolution: {integrity: sha512-79VJbxK+4WX9JWIxqV9DTgMPFMioMHYUwALkki1tSuoQ2lqNt++/1upWN7TOWAUOk+p601dn5KvV0Yc9sfoFcg==}
+  '@qrcommunication/gigapdf-lib@file:../gigapdf-lib/sdk':
+    resolution: {directory: ../gigapdf-lib/sdk, type: directory}
     engines: {node: '>=18.17.0'}
 
   '@radix-ui/number@1.1.3':
@@ -9608,6 +9631,20 @@ snapshots:
       expo-secure-store: 58.0.2(expo@58.0.21)
       expo-web-browser: 58.0.7(expo@58.0.21)(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))
 
+  '@better-auth/expo@1.7.27(23679cd8bf95213d4ec783d657407de9)':
+    dependencies:
+      '@better-auth/core': 1.7.14(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.9.1)(better-call@1.4.4(zod@4.6.7))(jose@6.2.13)(kysely@0.29.7)(nanostores@1.5.5)
+      '@better-fetch/fetch': 1.3.3
+      better-auth: 1.7.14(@opentelemetry/api@1.9.1)(@prisma/client@7.10.1(prisma@7.10.1(@types/node@24.19.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(typescript@6.0.3))(mysql2@3.24.4(@types/node@24.19.2))(next@16.4.3(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@24.19.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(pg@8.23.1)(prisma@7.10.1(@types/node@24.19.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.5)
+      better-call: 1.4.4(zod@4.6.7)
+      zod: 4.6.7
+    optionalDependencies:
+      expo-constants: 58.0.14(expo@58.0.21)(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(typescript@6.0.3)
+      expo-linking: 58.0.15(expo@58.0.21)(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
+      expo-network: 58.0.4(expo@58.0.21)(react@19.3.0)
+      expo-secure-store: 58.0.2(expo@58.0.21)
+      expo-web-browser: 58.0.7(expo@58.0.21)(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))
+
   '@better-auth/kysely-adapter@1.7.14(@better-auth/core@1.7.14(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.9.1)(better-call@1.4.4(zod@4.6.7))(jose@6.2.13)(kysely@0.29.7)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(kysely@0.29.7)':
     dependencies:
       '@better-auth/core': 1.7.14(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.9.1)(better-call@1.4.4(zod@4.6.7))(jose@6.2.13)(kysely@0.29.7)(nanostores@1.5.5)
@@ -10830,7 +10867,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react-dom'
 
-  '@qrcommunication/gigapdf-lib@0.122.0': {}
+  '@qrcommunication/gigapdf-lib@file:../gigapdf-lib/sdk': {}
 
   '@radix-ui/number@1.1.3': {}
 

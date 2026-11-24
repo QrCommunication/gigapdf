@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@giga-pdf/types": "workspace:*",
-    "@qrcommunication/gigapdf-lib": "0.122.0",
+    "@qrcommunication/gigapdf-lib": "file:/home/rony/Projets/gigapdf-lib/sdk",
     "fabric": "^7.4.0"
   },
   "devDependencies": {
