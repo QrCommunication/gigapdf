@@ -12,11 +12,12 @@ import {
   Legend,
 } from "recharts";
 import { Loader2 } from "lucide-react";
-import { infrastructureApi, type MonthCost } from "@/lib/api";
+import { infrastructureApi, type CostHistory, type MonthCost } from "@/lib/api";
 import { useTranslations } from "next-intl";
 
 interface CostsChartProps {
   months?: number;
+  history?: CostHistory;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -27,13 +28,24 @@ const CATEGORY_COLORS: Record<string, string> = {
   Other: "#6b7280",
 };
 
-export function CostsChart({ months = 12 }: CostsChartProps) {
+export function CostsChart({ months = 12, history }: CostsChartProps) {
   const t = useTranslations("infrastructure.charts.costs");
   const [data, setData] = useState<MonthCost[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (history) {
+      setData(history.history);
+      const allCategories = new Set<string>();
+      history.history.forEach((month) => {
+        Object.keys(month.by_category).forEach((cat) => allCategories.add(cat));
+      });
+      setCategories(Array.from(allCategories));
+      setLoading(false);
+      return;
+    }
+
     async function fetchData() {
       try {
         const response = await infrastructureApi.getCostHistory(months);
@@ -54,7 +66,7 @@ export function CostsChart({ months = 12 }: CostsChartProps) {
     }
 
     fetchData();
-  }, [months]);
+  }, [months, history]);
 
   if (loading) {
     return (
