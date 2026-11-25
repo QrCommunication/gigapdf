@@ -11,13 +11,13 @@ export function AdminHeader() {
   const t = useTranslations("nav");
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50 w-full border-b backdrop-blur">
       <div className="flex h-16 items-center px-6">
         <div className="flex flex-1 items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/dashboard" className="flex items-center gap-3">
               <Logo size="sm" />
-              <span className="text-sm font-medium text-muted-foreground">{t("adminLabel")}</span>
+              <span className="text-muted-foreground text-sm font-medium">{t("adminLabel")}</span>
             </Link>
           </div>
 
@@ -25,26 +25,27 @@ export function AdminHeader() {
             <ThemeSwitcher />
             <LanguageSwitcher />
 
-            <button className="relative rounded-full p-2 hover:bg-accent" title={t("notifications")}>
+            <button
+              className="hover:bg-accent relative rounded-full p-2"
+              title={t("notifications")}
+            >
               <Bell className="h-5 w-5" />
-              <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />
+              <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />
             </button>
 
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
+              <div className="bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded-full">
                 <User className="h-4 w-4" />
               </div>
               <div className="flex flex-col">
                 <span className="text-sm font-medium">{t("superAdmin")}</span>
-                <span className="text-xs text-muted-foreground">
-                  admin@gigapdf.com
-                </span>
+                <span className="text-muted-foreground text-xs">admin@gigapdf.com</span>
               </div>
             </div>
 
             <Link
               href="/login"
-              className="rounded-full p-2 hover:bg-accent"
+              className="hover:bg-accent rounded-full p-2"
               title={t("logout")}
             >
               <LogOut className="h-5 w-5" />

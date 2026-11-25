@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { ADMIN_BASE_PATH } from "@/lib/base-path";
 
 interface LogoProps {
   className?: string;
@@ -29,7 +30,7 @@ export function Logo({ className, showText = true, size = "md", href }: LogoProp
   }, []);
 
   // Use light logo as default during SSR to avoid hydration mismatch
-  const logoSrc = mounted && resolvedTheme === "dark" ? "/logo-dark.png" : "/logo.png";
+  const logoSrc = `${ADMIN_BASE_PATH}${mounted && resolvedTheme === "dark" ? "/logo-dark.png" : "/logo.png"}`;
 
   const content = (
     <div className={cn("flex items-center gap-2", className)}>
@@ -45,7 +46,7 @@ export function Logo({ className, showText = true, size = "md", href }: LogoProp
         />
       ) : (
         <Image
-          src="/favicon-32x32.png"
+          src={`${ADMIN_BASE_PATH}/favicon-32x32.png`}
           alt="GigaPDF"
           width={sizes[size].icon}
           height={sizes[size].icon}
@@ -71,7 +72,7 @@ export function Logo({ className, showText = true, size = "md", href }: LogoProp
 export function LogoIcon({ className, size = 24 }: { className?: string; size?: number }) {
   return (
     <Image
-      src="/favicon-32x32.png"
+      src={`${ADMIN_BASE_PATH}/favicon-32x32.png`}
       alt="GigaPDF"
       width={size}
       height={size}
