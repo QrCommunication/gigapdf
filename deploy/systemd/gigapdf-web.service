@@ -26,7 +26,7 @@ MemoryMax=2G
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome=false
 ReadWritePaths=/home/ploi/giga-pdf.com /var/log/gigapdf
 
 [Install]
