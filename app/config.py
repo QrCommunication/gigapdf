@@ -54,6 +54,14 @@ class Settings(BaseSettings):
     # Better Auth session validation URL (e.g., https://giga-pdf.com/api/auth/get-session)
     auth_session_url: str = ""
 
+    # Read-only bucket containing the source bucket's access logs.
+    s3_access_log_endpoint: str = ""
+    s3_access_log_bucket: str = "gigapdf-access-logs-eu-west-4"
+    s3_access_log_access_key_id: str = ""
+    s3_access_log_secret_access_key: str = ""
+    s3_access_log_region: str = "eu-west-4"
+    s3_access_log_prefix: str = "access/"
+
     # -------------------------------------------------------------------------
     # Storage
     # -------------------------------------------------------------------------
