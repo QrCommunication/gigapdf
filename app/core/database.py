@@ -28,11 +28,16 @@ logger = logging.getLogger(__name__)
 
 def _register_pgvector_sync(engine: Engine) -> None:
     """Register the pgvector codec on every new psycopg2 connection (Celery)."""
-    from pgvector.psycopg2 import register_vector
-
     @event.listens_for(engine, "connect")
     def _on_connect(dbapi_connection, _connection_record):  # noqa: ANN001
-        register_vector(dbapi_connection)
+        try:
+            from pgvector.psycopg import register_vector as register_modern
+
+            register_modern(dbapi_connection.driver_connection)
+        except (ImportError, AttributeError):
+            from pgvector.psycopg2 import register_vector as register_legacy
+
+            register_legacy(dbapi_connection)
 
 # Global async engine and session factory
 _engine: AsyncEngine | None = None
