@@ -141,11 +141,11 @@ record_restore_finish() {
     local status="$1"
     local details="$2"
     [ -z "${RESTORE_RUN_ID:-}" ] && return 0
-    psql -v filename="${BACKUP_FILE_KEY:-}" \
-        -v size_bytes="${RESTORE_SIZE_BYTES:-}" \
-        -v destination="${S3_KEY:-}" \
-        -v details="$details" \
-        -c "UPDATE backup_runs SET finished_at=CURRENT_TIMESTAMP,status='${status}',filename=NULLIF(:'filename',''),size_bytes=NULLIF(:'size_bytes','')::bigint,destination=NULLIF(:'destination',''),details=:'details' WHERE id=${RESTORE_RUN_ID};" || true
+    local filename_escaped destination_escaped details_escaped
+    filename_escaped=$(printf '%s' "${BACKUP_FILE_KEY:-}" | sed "s/'/''/g")
+    destination_escaped=$(printf '%s' "${S3_KEY:-}" | sed "s/'/''/g")
+    details_escaped=$(printf '%s' "$details" | sed "s/'/''/g")
+    psql -c "UPDATE backup_runs SET finished_at=CURRENT_TIMESTAMP,status='${status}',filename='${filename_escaped}',size_bytes=${RESTORE_SIZE_BYTES:-NULL},destination='${destination_escaped}',details='${details_escaped}' WHERE id=${RESTORE_RUN_ID};" || true
 }
 
 restore_cleanup() {
