@@ -22,7 +22,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("run_type", sa.String(length=20), nullable=False),
         sa.Column("status", sa.String(length=20), nullable=False),
-        sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("filename", sa.String(length=255), nullable=True),
         sa.Column("size_bytes", sa.BigInteger(), nullable=True),

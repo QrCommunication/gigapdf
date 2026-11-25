@@ -23,7 +23,7 @@ def upgrade() -> None:
         sa.Column("period", sa.String(length=7), nullable=False),
         sa.Column("storage_bytes", sa.BigInteger(), nullable=False, server_default="0"),
         sa.Column("downloaded_bytes", sa.BigInteger(), nullable=False, server_default="0"),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("period"),
     )
@@ -35,7 +35,7 @@ def upgrade() -> None:
         sa.Column("period", sa.String(length=7), nullable=False),
         sa.Column("user_id", sa.String(length=255), nullable=False),
         sa.Column("downloaded_bytes", sa.BigInteger(), nullable=False, server_default="0"),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("period", "user_id", name="uq_s3_bandwidth_user_period"),
     )
@@ -52,7 +52,7 @@ def upgrade() -> None:
         sa.Column("object_key", sa.String(length=1024), nullable=False),
         sa.Column("downloaded_bytes", sa.BigInteger(), nullable=False, server_default="0"),
         sa.Column("request_count", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("processed_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("processed_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("object_key"),
     )
