@@ -7,7 +7,7 @@ const baseURL =
   (typeof window === "undefined" ? "http://localhost:3001" : window.location.origin);
 
 export const authClient: ReturnType<typeof createAuthClient> = createAuthClient({
-  baseURL: withAdminBasePath(baseURL),
+  baseURL: `${withAdminBasePath(baseURL)}/api/auth`,
 });
 
 export const { signIn, signOut, signUp, useSession } = authClient;
