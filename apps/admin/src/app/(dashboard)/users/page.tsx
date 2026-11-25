@@ -21,7 +21,9 @@ export default function UsersPage() {
       header: t("table.name"),
       cell: ({ row }) => (
         <div>
-          <div className="font-medium font-mono text-xs">{row.original.id.slice(0, 8)}...</div>
+          <div className="font-medium">
+            {row.original.name || `${row.original.id.slice(0, 8)}...`}
+          </div>
           <div className="text-xs text-muted-foreground">
             {row.original.email || tCommon("noData")}
           </div>

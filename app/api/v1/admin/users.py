@@ -8,7 +8,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import column, func, or_, select, table
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -16,6 +16,7 @@ from app.models.database import StoredDocument, UserQuota
 from app.services.account_erasure_service import account_erasure_service
 
 router = APIRouter()
+auth_users = table("users", column("id"), column("email"), column("name"))
 
 
 class UserResponse(BaseModel):
@@ -174,11 +175,20 @@ async def list_users(
     Supports filtering by plan type and search by user ID.
     """
     # Build query
-    query = select(UserQuota)
+    query = select(UserQuota, auth_users.c.email, auth_users.c.name).outerjoin(
+        auth_users, auth_users.c.id == UserQuota.user_id
+    )
 
     # Apply filters
     if search:
-        query = query.where(UserQuota.user_id.ilike(f"%{search}%"))
+        pattern = f"%{search}%"
+        query = query.where(
+            or_(
+                UserQuota.user_id.ilike(pattern),
+                auth_users.c.email.ilike(pattern),
+                auth_users.c.name.ilike(pattern),
+            )
+        )
 
     if plan_type:
         query = query.where(UserQuota.plan_type == plan_type)
@@ -194,11 +204,10 @@ async def list_users(
 
     # Execute query
     result = await db.execute(query)
-    quotas = result.scalars().all()
 
     # Build response
     users = []
-    for quota in quotas:
+    for quota, email, name in result.all():
         # Determine status based on plan expiry
         user_status = "active"
         if quota.plan_expires_at and quota.plan_expires_at < datetime.now():
@@ -206,6 +215,8 @@ async def list_users(
 
         users.append(UserResponse(
             id=quota.user_id,
+            email=email or quota.email,
+            name=name,
             plan_type=quota.plan_type,
             storage_used_bytes=quota.storage_used_bytes,
             storage_limit_bytes=quota.storage_limit_bytes,
@@ -321,12 +332,16 @@ async def get_user(
     Get a specific user's details.
     """
     result = await db.execute(
-        select(UserQuota).where(UserQuota.user_id == user_id)
+        select(UserQuota, auth_users.c.email, auth_users.c.name)
+        .outerjoin(auth_users, auth_users.c.id == UserQuota.user_id)
+        .where(UserQuota.user_id == user_id)
     )
-    quota = result.scalar_one_or_none()
+    row = result.first()
 
-    if not quota:
+    if not row:
         raise HTTPException(status_code=404, detail="User not found")
+
+    quota, email, name = row
 
     user_status = "active"
     if quota.plan_expires_at and quota.plan_expires_at < datetime.now():
@@ -334,6 +349,8 @@ async def get_user(
 
     return UserResponse(
         id=quota.user_id,
+        email=email or quota.email,
+        name=name,
         plan_type=quota.plan_type,
         storage_used_bytes=quota.storage_used_bytes,
         storage_limit_bytes=quota.storage_limit_bytes,
@@ -476,6 +493,11 @@ async def update_user(
 
     await db.commit()
     await db.refresh(quota)
+    identity_result = await db.execute(
+        select(auth_users.c.email, auth_users.c.name).where(auth_users.c.id == user_id)
+    )
+    identity = identity_result.first()
+    email, name = identity or (None, None)
 
     user_status = "active"
     if quota.plan_expires_at and quota.plan_expires_at < datetime.now():
@@ -483,6 +505,8 @@ async def update_user(
 
     return UserResponse(
         id=quota.user_id,
+        email=email or quota.email,
+        name=name,
         plan_type=quota.plan_type,
         storage_used_bytes=quota.storage_used_bytes,
         storage_limit_bytes=quota.storage_limit_bytes,
