@@ -4,12 +4,12 @@ After=network.target
 
 [Service]
 Type=simple
-User=gigapdf
-Group=gigapdf
-WorkingDirectory=/opt/gigapdf
-Environment="PATH=/opt/gigapdf/.venv/bin"
-EnvironmentFile=/opt/gigapdf/.env
-ExecStart=/opt/gigapdf/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+User=ploi
+Group=ploi
+WorkingDirectory=/home/ploi/giga-pdf.com
+Environment="PATH=/home/ploi/giga-pdf.com/.venv/bin"
+EnvironmentFile=/home/ploi/giga-pdf.com/.env
+ExecStart=/home/ploi/giga-pdf.com/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5
@@ -27,7 +27,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/gigapdf /var/lib/gigapdf /var/log/gigapdf
+ReadWritePaths=/home/ploi/giga-pdf.com /var/lib/gigapdf /var/log/gigapdf
 
 [Install]
 WantedBy=multi-user.target

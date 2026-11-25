@@ -4,13 +4,13 @@ After=network.target
 
 [Service]
 Type=simple
-User=gigapdf
-Group=gigapdf
-WorkingDirectory=/opt/gigapdf/apps/web
+User=ploi
+Group=ploi
+WorkingDirectory=/home/ploi/giga-pdf.com/apps/web
 Environment="NODE_ENV=production"
 Environment="PORT=3000"
-EnvironmentFile=/opt/gigapdf/.env
-ExecStart=/usr/bin/node /opt/gigapdf/apps/web/.next/standalone/apps/web/server.js
+EnvironmentFile=/home/ploi/giga-pdf.com/.env
+ExecStart=/usr/bin/node /home/ploi/giga-pdf.com/apps/web/.next/standalone/apps/web/server.js
 Restart=on-failure
 RestartSec=5
 StartLimitBurst=5
@@ -27,7 +27,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/gigapdf /var/log/gigapdf
+ReadWritePaths=/home/ploi/giga-pdf.com /var/log/gigapdf
 
 [Install]
 WantedBy=multi-user.target

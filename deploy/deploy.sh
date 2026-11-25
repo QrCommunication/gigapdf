@@ -1,430 +1,333 @@
 #!/bin/bash
 # =============================================================================
-# GigaPDF Deployment Script
-# This script is executed by the post-receive hook on each deployment
+# GigaPDF Deployment Script — Ploi Server (giga-pdf.com)
+#
+# Executed by Ploi post-deploy hook or manually via SSH.
+# Target: ~/giga-pdf.com/ (flat clone, git pull in-place)
+# Services: systemd (gigapdf-{api,web,admin,celery,celery-billing,ocr})
+# User: ploi (owner of the checkout and runtime services)
+#
+# Sequence:
+#   1. Bootstrap dirs + fix permissions
+#   2. Python venv + deps
+#   3. Node deps (pnpm install)
+#   4. Build packages (sequential, OOM-safe)
+#   5. Prisma generate
+#   6. Build Next.js apps (web + admin)
+#   7. Copy static → standalone
+#   8. Snapshot build artefacts (rollback support)
+#   9. Alembic migrations
+#  10. Install/update systemd units
+#  11. Fetch OCR engine (idempotent)
+#  12. Nginx config + maintenance page
+#  13. Zero-downtime service restart with health gates
+#  14. Final health checks
+#
+# Usage:
+#   bash deploy/deploy.sh              # full deploy
+#   bash deploy/deploy.sh --web-only   # skip celery/ocr restart
+#   bash deploy/deploy.sh --skip-build # assume build artefacts are current
 # =============================================================================
 
-set -e
+set -euo pipefail
 
-# =============================================================================
-# LEGACY GUARD — this in-place flat-clone deploy is DISABLED once the
-# blue/green release layout is active (it would chown releases/, restart the
-# retired legacy units on ports already used by the blue color, and race the
-# zero-downtime switch). Use deploy/redeploy.sh (laptop) or
-# deploy/server-deploy.sh (on the VPS) instead. See deploy/README.md.
-# =============================================================================
-if [ -f /opt/gigapdf/shared/state/active-color ]; then
-    echo "FATAL: blue/green release layout is active — legacy deploy.sh is disabled." >&2
-    echo "Use deploy/redeploy.sh (laptop) or deploy/server-deploy.sh deploy (VPS)." >&2
-    exit 1
-fi
-
-echo "=========================================="
-echo "  GigaPDF Deployment"
-echo "  $(date '+%Y-%m-%d %H:%M:%S')"
-echo "=========================================="
-
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
-log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
-log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
-
-APP_DIR="/opt/gigapdf"
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+APP_DIR="${GIGAPDF_APP_DIR:-$HOME/giga-pdf.com}"
 ENV_FILE="$APP_DIR/.env"
-SNAPSHOT_BASE="/opt/gigapdf-snapshots"
+LOG_DIR="/var/log/gigapdf"
+SNAPSHOT_BASE="$APP_DIR/.deploy-snapshots"
 DEPLOY_TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 SNAPSHOT_DIR="$SNAPSHOT_BASE/$DEPLOY_TIMESTAMP"
+DEPLOY_USER="$(whoami)"
 
-cd "$APP_DIR"
+WEB_ONLY=false
+SKIP_BUILD=false
+for arg in "$@"; do
+  case "$arg" in
+    --web-only)   WEB_ONLY=true ;;
+    --skip-build) SKIP_BUILD=true ;;
+    -h|--help)
+      sed -n '2,/^# ==/p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0 ;;
+    *) echo "[warn] unknown flag: $arg" >&2 ;;
+  esac
+done
 
-# =============================================================================
-# 0. Bootstrap directories
-# =============================================================================
-log_info "Bootstrapping directories..."
-sudo mkdir -p "$SNAPSHOT_BASE"
-sudo chown ubuntu:ubuntu "$SNAPSHOT_BASE"
-mkdir -p /var/log/gigapdf
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
+log_info()  { printf "${GREEN}[INFO]${NC} %s\n" "$*"; }
+log_warn()  { printf "${YELLOW}[WARN]${NC} %s\n" "$*"; }
+log_error() { printf "${RED}[ERROR]${NC} %s\n" "$*" >&2; }
+log_step()  { printf "${BLUE}[STEP]${NC} %s\n" "$*"; }
 
-# Ensure rollback script is executable
-chmod +x "$APP_DIR/scripts/rollback.sh" 2>/dev/null || true
+die() { log_error "$*"; exit 1; }
 
-# =============================================================================
-# 0.5 Fix permissions
-# =============================================================================
-log_info "Fixing permissions..."
-# /var/lib/gigapdf is written at runtime by the services (User=gigapdf) — the
-# celery export task does os.makedirs(storage_path/exports). Owner=ubuntu keeps
-# it deployer-editable; group=gigapdf + setgid (2) makes new files/dirs
-# group-writable by the worker. Plain ubuntu:ubuntu made exports fail with
-# PermissionError ([Errno 13]).
-sudo mkdir -p /var/lib/gigapdf/documents/exports
-sudo chown -R ubuntu:gigapdf /var/lib/gigapdf 2>/dev/null || true
-sudo chmod -R 2775 /var/lib/gigapdf 2>/dev/null || true
-sudo chown -R ubuntu:ubuntu /var/log/gigapdf 2>/dev/null || true
-# Reclaim turbo / next caches written by the systemd service user. Without
-# this, the upcoming "rm -rf .turbo" fails with EPERM and `set -e` kills
-# the deploy mid-way (silent cause of "deploy didn't pick up my code").
-sudo chown -R ubuntu:ubuntu "$APP_DIR/.turbo" 2>/dev/null || true
-sudo find "$APP_DIR/packages" -maxdepth 2 -name '.turbo' -exec chown -R ubuntu:ubuntu {} + 2>/dev/null || true
-sudo find "$APP_DIR/apps" -maxdepth 2 -name '.turbo' -exec chown -R ubuntu:ubuntu {} + 2>/dev/null || true
-sudo find "$APP_DIR/apps" -maxdepth 2 -name '.next' -exec chown -R ubuntu:ubuntu {} + 2>/dev/null || true
+# Wait for an HTTP endpoint to return 2xx/3xx (max N attempts × delay seconds)
+wait_healthy() {
+  local name="$1" url="$2" max="${3:-12}" delay="${4:-5}"
+  log_info "Waiting for $name at $url ..."
+  for i in $(seq 1 "$max"); do
+    if curl -sf "$url" > /dev/null 2>&1; then
+      log_info "$name healthy (attempt $i/$max)."
+      return 0
+    fi
+    sleep "$delay"
+  done
+  log_error "$name NOT healthy after $((max * delay))s."
+  return 1
+}
 
-# =============================================================================
-# 1. Copy Production Environment if not exists
-# =============================================================================
-if [ ! -f "$ENV_FILE" ]; then
-    log_info "Creating .env from template..."
-    cp deploy/.env.production "$ENV_FILE"
-    log_warn "Please edit /opt/gigapdf/.env with production values!"
-fi
+echo "=========================================="
+echo "  GigaPDF Deployment (Ploi)"
+echo "  $(date '+%Y-%m-%d %H:%M:%S')"
+echo "  APP_DIR=$APP_DIR"
+echo "  USER=$DEPLOY_USER"
+echo "=========================================="
 
-# =============================================================================
-# 1.5 Clean turbo cache to avoid build issues
-# =============================================================================
-log_info "Cleaning turbo cache..."
-# Use sudo because previous deploys ran the build under the gigapdf service
-# user, leaving cache files owned by that user. Without sudo, rm fails with
-# EPERM and (set -e) silently kills the deploy.
-sudo rm -rf .turbo packages/*/.turbo apps/*/.turbo
+cd "$APP_DIR" || die "Cannot cd to $APP_DIR"
 
-# =============================================================================
-# 1.6 Create .env symlinks for apps
-# =============================================================================
-log_info "Creating .env symlinks..."
-ln -sf /opt/gigapdf/.env /opt/gigapdf/apps/web/.env
-ln -sf /opt/gigapdf/.env /opt/gigapdf/apps/admin/.env
+# ===========================================================================
+# STEP 1 — Bootstrap directories + fix permissions
+# ===========================================================================
+log_step "1/14 Bootstrapping directories..."
+mkdir -p "$LOG_DIR" "$SNAPSHOT_BASE"
 
-# =============================================================================
-# 1.7 Lock down .env so only the gigapdf runtime user (and ubuntu owner) can
-# read it. The Python services use pydantic-settings which calls open('.env')
-# from the process itself — systemd's EnvironmentFile= load as root is not
-# enough, the file must be readable by User=gigapdf or celery crash-loops with
-# PermissionError. Owner=ubuntu keeps the file editable by the deployer.
-# =============================================================================
-if [ -f "$ENV_FILE" ]; then
-    log_info "Securing .env (owner=ubuntu, group=gigapdf, mode=640)..."
-    sudo chown ubuntu:gigapdf "$ENV_FILE"
-    sudo chmod 640 "$ENV_FILE"
-fi
+# Reclaim caches that may have been written by a different user (e.g. root
+# during a previous sudo-based deploy). Without this, rm/cp fails with EPERM
+# and set -e kills the deploy mid-way.
+for cache_dir in .turbo packages/*/.turbo apps/*/.turbo apps/*/.next; do
+  [ -e "$cache_dir" ] && sudo chown -R "$DEPLOY_USER:$DEPLOY_USER" "$cache_dir" 2>/dev/null || true
+done
 
-# =============================================================================
-# 2. Python Virtual Environment & Dependencies
-# =============================================================================
-log_info "Setting up Python environment..."
+# ===========================================================================
+# STEP 2 — Python virtual environment + dependencies
+# ===========================================================================
+log_step "2/14 Setting up Python environment..."
 if [ ! -d ".venv" ]; then
-    python3 -m venv .venv
+  python3 -m venv .venv
 fi
 source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+pip install --upgrade pip -q
+pip install -r requirements.txt -q
 
-# =============================================================================
-# 2.5 Scaleway CLI (for infrastructure monitoring)
-# =============================================================================
-log_info "Setting up Scaleway CLI..."
+# ===========================================================================
+# STEP 3 — Node.js dependencies
+# ===========================================================================
+log_step "3/14 Installing Node.js dependencies..."
+pnpm install --no-frozen-lockfile 2>&1 | tail -5
 
-# Install scw CLI if not present
-if ! command -v scw &> /dev/null; then
-    log_info "Installing Scaleway CLI..."
-    curl -s https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | sh
-fi
-
-# Note: scw CLI uses environment variables (SCW_ACCESS_KEY, SCW_SECRET_KEY, etc.)
-# These are loaded from /opt/gigapdf/.env via systemd EnvironmentFile
-# No config file needed - variables take priority over config files
-if [ -n "$SCW_ACCESS_KEY" ]; then
-    log_info "Scaleway CLI installed (credentials configured via environment)"
+# ===========================================================================
+# STEP 4 — Build shared packages (sequential, OOM-safe)
+# ===========================================================================
+if ! $SKIP_BUILD; then
+  log_step "4/14 Building shared packages (sequential)..."
+  export NODE_OPTIONS="--max-old-space-size=1024"
+  pnpm exec turbo build --filter='./packages/*' --concurrency=1 2>&1 | tail -10
 else
-    log_warn "SCW_ACCESS_KEY not set - infrastructure costs API will not work"
-    log_warn "Add to .env: SCW_ACCESS_KEY, SCW_SECRET_KEY, SCW_DEFAULT_ORGANIZATION_ID, SCW_DEFAULT_PROJECT_ID"
+  log_step "4/14 Skipping package build (--skip-build)"
 fi
 
-# =============================================================================
-# 3. Node.js Dependencies
-# =============================================================================
-log_info "Installing Node.js dependencies..."
-pnpm install --frozen-lockfile
+# ===========================================================================
+# STEP 5 — Generate Prisma clients
+# ===========================================================================
+log_step "5/14 Generating Prisma clients..."
+(cd apps/web  && pnpm db:generate 2>&1 | tail -3) || log_warn "Web Prisma generate skipped"
+(cd apps/admin && pnpm db:generate 2>&1 | tail -3) || log_warn "Admin Prisma generate skipped"
 
-# =============================================================================
-# 4. Build Packages (sequential to avoid OOM on small VPS)
-# =============================================================================
-log_info "Building shared packages (sequential mode)..."
-export NODE_OPTIONS="--max-old-space-size=1024"
-pnpm exec turbo build --filter='./packages/*' --concurrency=1
+# ===========================================================================
+# STEP 6 — Build Next.js applications
+# ===========================================================================
+if ! $SKIP_BUILD; then
+  log_step "6/14 Building Next.js Web..."
+  (cd apps/web && NODE_OPTIONS="--max-old-space-size=1536" pnpm build 2>&1 | tail -10)
 
-# =============================================================================
-# 5. Generate Prisma clients
-# =============================================================================
-log_info "Generating Prisma clients..."
-cd apps/web
-pnpm db:generate || log_warn "Web Prisma generate skipped"
-cd ../..
+  log_step "6/14 Building Next.js Admin..."
+  (cd apps/admin && NODE_OPTIONS="--max-old-space-size=1536" pnpm build 2>&1 | tail -10)
+else
+  log_step "6/14 Skipping Next.js build (--skip-build)"
+fi
 
-cd apps/admin
-pnpm db:generate || log_warn "Admin Prisma generate skipped"
-cd ../..
+# ===========================================================================
+# STEP 7 — Copy static files to standalone directories
+# ===========================================================================
+log_step "7/14 Syncing static assets to standalone..."
 
-# =============================================================================
-# 6. Build Next.js Applications
-# =============================================================================
-log_info "Building Next.js Web application..."
-cd apps/web
-NODE_OPTIONS="--max-old-space-size=1536" pnpm build
-cd ../..
+sync_standalone() {
+  local app="$1" port="$2"
+  local standalone="$APP_DIR/apps/$app/.next/standalone/apps/$app"
+  mkdir -p "$standalone/.next"
+  cp -r "$APP_DIR/apps/$app/.next/static" "$standalone/.next/" 2>/dev/null || true
+  cp -r "$APP_DIR/apps/$app/public" "$standalone/" 2>/dev/null || true
+  log_info "  $app standalone synced."
+}
+sync_standalone web 3000
+sync_standalone admin 3001
 
-log_info "Building Next.js Admin application..."
-cd apps/admin
-NODE_OPTIONS="--max-old-space-size=1536" pnpm build
-cd ../..
-
-# =============================================================================
-# 7. Copy static files to standalone directories
-# =============================================================================
-log_info "Copying static files to standalone directories..."
-
-# Web app
-mkdir -p /opt/gigapdf/apps/web/.next/standalone/apps/web/.next
-cp -r /opt/gigapdf/apps/web/.next/static /opt/gigapdf/apps/web/.next/standalone/apps/web/.next/
-cp -r /opt/gigapdf/apps/web/public /opt/gigapdf/apps/web/.next/standalone/apps/web/ 2>/dev/null || true
-
-# Admin app
-mkdir -p /opt/gigapdf/apps/admin/.next/standalone/apps/admin/.next
-cp -r /opt/gigapdf/apps/admin/.next/static /opt/gigapdf/apps/admin/.next/standalone/apps/admin/.next/
-cp -r /opt/gigapdf/apps/admin/public /opt/gigapdf/apps/admin/.next/standalone/apps/admin/ 2>/dev/null || true
-
-# =============================================================================
-# 7.5. Snapshot build artefacts (zero-downtime rollback support)
-# =============================================================================
-# Build is done BEFORE any service restart. We snapshot the artefacts now so
-# that rollback.sh can restore them without needing a full rebuild.
-log_info "Snapshotting build artefacts to $SNAPSHOT_DIR ..."
+# ===========================================================================
+# STEP 8 — Snapshot build artefacts (rollback support)
+# ===========================================================================
+log_step "8/14 Snapshotting build artefacts..."
 mkdir -p "$SNAPSHOT_DIR/apps/web" "$SNAPSHOT_DIR/apps/admin"
-
-# Copy .next directories (they contain standalone + static)
 cp -a "$APP_DIR/apps/web/.next"   "$SNAPSHOT_DIR/apps/web/.next"
 cp -a "$APP_DIR/apps/admin/.next" "$SNAPSHOT_DIR/apps/admin/.next"
 
-# Copy package dist artefacts if present
+# Package dist artefacts
 if [ -d "$APP_DIR/packages" ]; then
-    mkdir -p "$SNAPSHOT_DIR/packages"
-    # Only copy compiled output, not node_modules (saves space)
-    find "$APP_DIR/packages" -maxdepth 2 -name "dist" -type d | while read -r dist_dir; do
-        rel="${dist_dir#"$APP_DIR/"}"
-        mkdir -p "$SNAPSHOT_DIR/$rel"
-        cp -a "$dist_dir/." "$SNAPSHOT_DIR/$rel/"
-    done
+  mkdir -p "$SNAPSHOT_DIR/packages"
+  find "$APP_DIR/packages" -maxdepth 2 -name "dist" -type d | while read -r d; do
+    rel="${d#"$APP_DIR/"}"
+    mkdir -p "$SNAPSHOT_DIR/$rel"
+    cp -a "$d/." "$SNAPSHOT_DIR/$rel/"
+  done
 fi
 
-# Update the "latest" symlink atomically
 ln -sfn "$SNAPSHOT_DIR" "$SNAPSHOT_BASE/latest"
-log_info "Snapshot created. Total snapshots: $(ls -1 "$SNAPSHOT_BASE" | grep -c '^[0-9]' || echo 0)"
+log_info "Snapshot created. Total: $(ls -1d "$SNAPSHOT_BASE"/[0-9]* 2>/dev/null | wc -l)"
 
-# Prune snapshots older than 7 days (keep at most 5)
-log_info "Pruning old snapshots (keeping last 5)..."
+# Prune old snapshots (keep last 5)
 ls -1dt "$SNAPSHOT_BASE"/[0-9]* 2>/dev/null | tail -n +6 | xargs -r rm -rf
-log_info "Snapshot pruning complete."
 
-# =============================================================================
-# 8. Database Migrations
-# =============================================================================
-# Alembic creates every table of the shared database, the Prisma-owned ones
-# included (migrations/versions/025_prisma_owned_tables.py).
-# NEVER run `prisma db push`: it aligns the WHOLE database on one Prisma
-# schema and would alter or drop the SQLAlchemy tables.
-# =============================================================================
-
-log_info "Running Alembic migrations..."
+# ===========================================================================
+# STEP 9 — Database migrations (Alembic only — NEVER prisma db push)
+# ===========================================================================
+log_step "9/14 Running Alembic migrations..."
 source .venv/bin/activate
-cd "$APP_DIR"
-
-# Source .env for database scripts
 if [ -f "$ENV_FILE" ]; then
-    set -a
-    source "$ENV_FILE"
-    set +a
+  set -a; source "$ENV_FILE"; set +a
 fi
-
 alembic upgrade head || log_warn "Alembic migrations skipped or failed"
 
-# =============================================================================
-# 7. Install/Update Systemd Services
-# =============================================================================
-log_info "Installing systemd services..."
-sudo cp deploy/systemd/*.service /etc/systemd/system/
+# ===========================================================================
+# STEP 10 — Install/update systemd service units
+# ===========================================================================
+log_step "10/14 Installing systemd service units..."
+sudo cp "$APP_DIR/deploy/systemd/"*.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
-# Enable services on boot
-sudo systemctl enable gigapdf-api
-sudo systemctl enable gigapdf-web
-sudo systemctl enable gigapdf-admin
-sudo systemctl enable gigapdf-celery
-sudo systemctl enable gigapdf-celery-billing
-sudo systemctl enable gigapdf-ocr
+for svc in gigapdf-api gigapdf-web gigapdf-admin gigapdf-celery gigapdf-celery-billing gigapdf-ocr; do
+  sudo systemctl enable "$svc" 2>/dev/null || true
+done
 
-# =============================================================================
-# 7b. Fetch host-side OCR engine (gigapdf-ocr-rten binary + .rten models)
-# =============================================================================
-# Recognition runs in the gigapdf-ocr service (PaddleOCR PP-OCR via RTen). The
-# prebuilt x86_64 binary + the 14-language model set ship as the lib's
-# "ocr-rten-v1" release asset (kept out of git). Idempotent: a SHA marker skips
-# the ~250MB re-download when nothing changed.
-log_info "Fetching OCR engine (gigapdf-ocr-rten)..."
+# ===========================================================================
+# STEP 11 — Fetch host-side OCR engine (idempotent)
+# ===========================================================================
+log_step "11/14 Checking OCR engine..."
 OCR_REL="https://github.com/QrCommunication/gigapdf-lib/releases/download/ocr-rten-v1"
 OCR_BIN="$APP_DIR/bin/ocr_serve"
 OCR_MODELS_ROOT="/var/lib/gigapdf/rten-models"
 sudo mkdir -p "$APP_DIR/bin" "$OCR_MODELS_ROOT"
+
 OCR_TMP="$(mktemp -d)"
-if curl -fsSL -o "$OCR_TMP/gigapdf-ocr.sha256" "$OCR_REL/gigapdf-ocr.sha256"; then
-    OCR_NEWSHA="$(grep "gigapdf-ocr-models.tar.gz" "$OCR_TMP/gigapdf-ocr.sha256" | awk '{print $1}')"
-    OCR_MARKER="$OCR_MODELS_ROOT/.asset-sha"
-    if [ ! -x "$OCR_BIN" ] || [ ! -d "$OCR_MODELS_ROOT/models" ] || [ "$(cat "$OCR_MARKER" 2>/dev/null)" != "$OCR_NEWSHA" ]; then
-        log_info "  downloading OCR binary + 14-language models (~250MB)..."
-        curl -fsSL -o "$OCR_TMP/ocr_serve" "$OCR_REL/ocr_serve"
-        curl -fsSL -o "$OCR_TMP/gigapdf-ocr-models.tar.gz" "$OCR_REL/gigapdf-ocr-models.tar.gz"
-        ( cd "$OCR_TMP" && sha256sum -c gigapdf-ocr.sha256 )
-        sudo install -m 0755 -o gigapdf -g gigapdf "$OCR_TMP/ocr_serve" "$OCR_BIN"
-        sudo rm -rf "$OCR_MODELS_ROOT/models"
-        sudo tar xzf "$OCR_TMP/gigapdf-ocr-models.tar.gz" -C "$OCR_MODELS_ROOT"
-        sudo chown -R gigapdf:gigapdf "$OCR_MODELS_ROOT"
-        echo "$OCR_NEWSHA" | sudo tee "$OCR_MARKER" >/dev/null
-        log_info "  OCR engine updated."
-    else
-        log_info "  OCR engine up-to-date — skipping ~250MB fetch."
-    fi
+if curl -fsSL -o "$OCR_TMP/gigapdf-ocr.sha256" "$OCR_REL/gigapdf-ocr.sha256" 2>/dev/null; then
+  OCR_NEWSHA="$(grep "gigapdf-ocr-models.tar.gz" "$OCR_TMP/gigapdf-ocr.sha256" | awk '{print $1}')"
+  OCR_MARKER="$OCR_MODELS_ROOT/.asset-sha"
+  if [ ! -x "$OCR_BIN" ] || [ ! -d "$OCR_MODELS_ROOT/models" ] || [ "$(cat "$OCR_MARKER" 2>/dev/null)" != "$OCR_NEWSHA" ]; then
+    log_info "  Downloading OCR binary + models (~250MB)..."
+    curl -fsSL -o "$OCR_TMP/ocr_serve" "$OCR_REL/ocr_serve"
+    curl -fsSL -o "$OCR_TMP/gigapdf-ocr-models.tar.gz" "$OCR_REL/gigapdf-ocr-models.tar.gz"
+    (cd "$OCR_TMP" && sha256sum -c gigapdf-ocr.sha256)
+    sudo install -m 0755 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$OCR_TMP/ocr_serve" "$OCR_BIN"
+    sudo rm -rf "$OCR_MODELS_ROOT/models"
+    sudo tar xzf "$OCR_TMP/gigapdf-ocr-models.tar.gz" -C "$OCR_MODELS_ROOT"
+    sudo chown -R "$DEPLOY_USER:$DEPLOY_USER" "$OCR_MODELS_ROOT"
+    echo "$OCR_NEWSHA" | sudo tee "$OCR_MARKER" >/dev/null
+    log_info "  OCR engine updated."
+  else
+    log_info "  OCR engine up-to-date."
+  fi
 else
-    log_warn "  could not reach OCR release asset — leaving existing OCR engine in place."
+  log_warn "  Could not reach OCR release asset — keeping existing engine."
 fi
 rm -rf "$OCR_TMP"
-# Upsert OCR env keys into .env (idempotent — never duplicates a key).
+
+# Upsert OCR env keys into .env (idempotent)
 for kv in "OCR_MODELS_DIR=/var/lib/gigapdf/rten-models/models" "OCR_BIND=127.0.0.1:8077" "OCR_SERVICE_URL=http://127.0.0.1:8077"; do
-    k="${kv%%=*}"
-    sudo grep -q "^$k=" "$APP_DIR/.env" 2>/dev/null || echo "$kv" | sudo tee -a "$APP_DIR/.env" >/dev/null
+  k="${kv%%=*}"
+  grep -q "^$k=" "$ENV_FILE" 2>/dev/null || echo "$kv" >> "$ENV_FILE"
 done
 
-# =============================================================================
-# 8. Update Nginx Configuration + Maintenance Page
-# =============================================================================
-log_info "Updating Nginx configuration..."
-
-# Install maintenance page (served by nginx on 502/503/504 during restarts)
+# ===========================================================================
+# STEP 12 — Nginx configuration + maintenance page
+# ===========================================================================
+log_step "12/14 Updating Nginx configuration..."
 sudo mkdir -p /var/www/gigapdf-maintenance
-sudo cp "$APP_DIR/deploy/nginx/maintenance.html" /var/www/gigapdf-maintenance/maintenance.html
-sudo chown -R www-data:www-data /var/www/gigapdf-maintenance
-log_info "Maintenance page installed at /var/www/gigapdf-maintenance/maintenance.html"
+[ -f "$APP_DIR/deploy/nginx/maintenance.html" ] && \
+  sudo cp "$APP_DIR/deploy/nginx/maintenance.html" /var/www/gigapdf-maintenance/maintenance.html
 
 if [ -f /etc/letsencrypt/live/giga-pdf.com/fullchain.pem ]; then
-    sudo cp deploy/nginx.conf /etc/nginx/sites-available/gigapdf
-    sudo nginx -t && sudo systemctl reload nginx
+  sudo cp "$APP_DIR/deploy/nginx.conf" /etc/nginx/sites-available/gigapdf
+  sudo nginx -t && sudo systemctl reload nginx
+  log_info "Nginx reloaded."
 else
-    log_warn "SSL certificate not found, skipping Nginx update"
-    log_warn "Run: sudo certbot --nginx -d giga-pdf.com -d www.giga-pdf.com"
+  log_warn "SSL certificate not found — skipping Nginx update."
 fi
 
-# =============================================================================
-# 9. Zero-downtime service restart (build already complete — services up so far)
-# =============================================================================
-# Strategy:
-#   a) API (uvicorn multi-worker): send SIGHUP for graceful reload.
-#      Workers finish in-flight requests then reload the new code.
-#      Falls back to stop+start if the service was not running.
-#   b) Celery workers: restart AFTER API is healthy. Celery tasks survive
-#      restarts via Redis broker, so this causes no data loss.
-#   c) Next.js apps (web + admin): restart AFTER API is healthy.
-#      Each restart takes ~3-5 s; nginx serves existing keepalive connections
-#      during that window.
-#
-# Error handling: if any critical service fails to become healthy, the script
-# exits non-zero so the calling CI/CD system can trigger rollback.sh.
-# =============================================================================
+# ===========================================================================
+# STEP 13 — Zero-downtime service restart with health gates
+# ===========================================================================
+log_step "13/14 Restarting services..."
 
-# Helper: wait for an HTTP endpoint to return 2xx (max N attempts x delay)
-wait_healthy() {
-    local name="$1"
-    local url="$2"
-    local max_attempts="${3:-12}"
-    local delay="${4:-5}"
-    log_info "Waiting for $name to become healthy at $url ..."
-    for i in $(seq 1 "$max_attempts"); do
-        if curl -sf "$url" > /dev/null 2>&1; then
-            log_info "$name is healthy (attempt $i)."
-            return 0
-        fi
-        sleep "$delay"
-    done
-    log_error "$name did NOT become healthy after $((max_attempts * delay))s — triggering rollback."
-    bash "$APP_DIR/scripts/rollback.sh" --non-interactive 2>&1 || true
-    exit 1
-}
-
-log_info "--- Step 9a: Restart FastAPI (load new code) ---"
+# --- 13a. FastAPI (uvicorn --workers: MUST restart, SIGHUP doesn't reload code) ---
 if sudo systemctl is-active --quiet gigapdf-api; then
-    # IMPORTANT: gigapdf-api runs `uvicorn --workers N` (multiprocessing). That
-    # process manager does NOT hot-reload Python code on SIGHUP, so a plain
-    # `systemctl reload` (ExecReload=kill -HUP) leaves the OLD code running while
-    # still answering /health — the deploy reports success but ships nothing.
-    # A real restart is required (~2-3s; nginx retries the upstream).
-    # Regression: 2026-06-21 rate-limiter fix never took effect until restarted.
-    sudo systemctl restart gigapdf-api
-    log_info "gigapdf-api restarted (new code loaded)."
+  sudo systemctl restart gigapdf-api
+  log_info "gigapdf-api restarted (new code loaded)."
 else
-    log_warn "gigapdf-api was stopped — performing cold start."
-    sudo systemctl start gigapdf-api
+  sudo systemctl start gigapdf-api
+  log_info "gigapdf-api cold-started."
+fi
+wait_healthy "gigapdf-api" "http://localhost:8000/health" 12 5 || \
+  die "API unhealthy — aborting deploy. Previous services unchanged."
+
+# --- 13b. Celery workers (tasks survive via Redis broker) ---
+if ! $WEB_ONLY; then
+  sudo systemctl restart gigapdf-celery
+  sudo systemctl restart gigapdf-celery-billing
+  log_info "Celery workers restarted."
 fi
 
-# Gate: API must be healthy before touching anything else
-wait_healthy "gigapdf-api" "http://localhost:8000/health" 12 5
+# --- 13b-bis. OCR engine ---
+if ! $WEB_ONLY; then
+  sudo systemctl restart gigapdf-ocr
+  log_info "gigapdf-ocr restarted."
+fi
 
-log_info "--- Step 9b: Restart Celery workers (tasks survive via broker) ---"
-sudo systemctl restart gigapdf-celery
-sudo systemctl restart gigapdf-celery-billing
-log_info "Celery workers restarted."
-
-log_info "--- Step 9b-bis: Restart OCR engine (loads ~250MB models at boot) ---"
-sudo systemctl restart gigapdf-ocr
-log_info "gigapdf-ocr restarted (model load takes a few seconds)."
-
-log_info "--- Step 9c: Restart Next.js Web (nginx serves stale keepalives) ---"
+# --- 13c. Next.js Web ---
 sudo systemctl restart gigapdf-web
-# Brief grace period so the new process binds port 3000 before admin restarts
-sleep 4
+sleep 4  # grace period before admin restart
 
-log_info "--- Step 9d: Restart Next.js Admin ---"
+# --- 13d. Next.js Admin ---
 sudo systemctl restart gigapdf-admin
 
-# =============================================================================
-# 10. Final Health Checks
-# =============================================================================
-log_info "Performing final health checks..."
+# ===========================================================================
+# STEP 14 — Final health checks
+# ===========================================================================
+log_step "14/14 Final health checks..."
 sleep 5
 
 DEPLOY_OK=true
 
 check_service() {
-    local svc="$1"
-    if sudo systemctl is-active --quiet "$svc"; then
-        echo -e "  ${GREEN}✓${NC} $svc is running"
-    else
-        echo -e "  ${RED}✗${NC} $svc failed to start"
-        sudo systemctl status "$svc" --no-pager -l 2>/dev/null | tail -20 || true
-        DEPLOY_OK=false
-    fi
+  if sudo systemctl is-active --quiet "$1"; then
+    printf "  ${GREEN}✓${NC} %s running\n" "$1"
+  else
+    printf "  ${RED}✗${NC} %s FAILED\n" "$1"
+    sudo systemctl status "$1" --no-pager -l 2>/dev/null | tail -10 || true
+    DEPLOY_OK=false
+  fi
 }
 
 check_http() {
-    local label="$1"
-    local url="$2"
-    local http_code
-    http_code="$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")"
-    if echo "$http_code" | grep -qE "^[23]"; then
-        echo -e "  ${GREEN}✓${NC} $label responded HTTP $http_code"
-    else
-        echo -e "  ${YELLOW}!${NC} $label responded HTTP $http_code (may still be warming up)"
-    fi
+  local code
+  code="$(curl -s -o /dev/null -w "%{http_code}" "$2" 2>/dev/null || echo "000")"
+  if echo "$code" | grep -qE "^[23]"; then
+    printf "  ${GREEN}✓${NC} %s → HTTP %s\n" "$1" "$code"
+  else
+    printf "  ${YELLOW}!${NC} %s → HTTP %s (warming up?)\n" "$1" "$code"
+  fi
 }
 
 echo ""
@@ -435,33 +338,22 @@ check_service gigapdf-admin
 check_service gigapdf-celery
 check_service gigapdf-celery-billing
 check_service gigapdf-ocr
-check_http "OCR /health" "http://localhost:8077/health"
 
 echo ""
 echo "HTTP endpoints:"
-check_http "API     (localhost:8000)" "http://localhost:8000/health"
-check_http "Web     (localhost:3000)" "http://localhost:3000"
-check_http "Admin   (localhost:3001)" "http://localhost:3001"
+check_http "API /health"       "http://localhost:8000/health"
+check_http "Web (port 3000)"   "http://localhost:3000"
+check_http "Admin (port 3001)" "http://localhost:3001"
+check_http "OCR /health"       "http://localhost:8077/health"
 
 if [ "$DEPLOY_OK" = false ]; then
-    log_error "One or more services failed. Triggering automatic rollback..."
-    bash "$APP_DIR/scripts/rollback.sh" 2>&1 || true
-    exit 1
+  log_error "One or more services failed!"
+  exit 1
 fi
 
 echo ""
 echo "=========================================="
-echo "  Deployment Complete!"
+echo "  ✅ Deployment Complete!"
 echo "  $(date '+%Y-%m-%d %H:%M:%S')"
+echo "  HEAD: $(git rev-parse --short HEAD)"
 echo "=========================================="
-echo ""
-echo "Services:"
-echo "  - API:    http://localhost:8000"
-echo "  - Web:    http://localhost:3000"
-echo "  - Admin:  http://localhost:3001"
-echo ""
-echo "Logs:"
-echo "  - API:    /var/log/gigapdf/api.log"
-echo "  - Web:    /var/log/gigapdf/web.log"
-echo "  - Celery: /var/log/gigapdf/celery.log"
-echo ""
