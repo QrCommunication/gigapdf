@@ -25,7 +25,7 @@ async function proxyRequest(
 
   const endpoint = path.map(encodeURIComponent).join("/");
   const headers = new Headers(request.headers);
-  headers.set("Authorization", `Bearer ${sessionCookie.value}`);
+  headers.set("Authorization", `Bearer ${sessionCookie.value.split(".")[0]}`);
   headers.set("X-Admin-Session", "1");
   for (const header of [
     "accept-encoding",
