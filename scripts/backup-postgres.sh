@@ -116,11 +116,11 @@ record_run_finish() {
     local status="$1"
     local details="$2"
     [ -z "${BACKUP_RUN_ID:-}" ] && return 0
-    psql -v filename="${BACKUP_FILENAME:-}" \
-        -v size_bytes="${BACKUP_SIZE_BYTES:-}" \
-        -v destination="${S3_PREFIX:-}/${BACKUP_FILENAME:-}" \
-        -v details="$details" \
-        -c "UPDATE backup_runs SET finished_at=CURRENT_TIMESTAMP,status='${status}',filename=NULLIF(:'filename',''),size_bytes=NULLIF(:'size_bytes','')::bigint,destination=NULLIF(:'destination',''),details=:'details' WHERE id=${BACKUP_RUN_ID};" || true
+    local filename_escaped destination_escaped details_escaped
+    filename_escaped=$(printf '%s' "${BACKUP_FILENAME:-}" | sed "s/'/''/g")
+    destination_escaped=$(printf '%s' "${S3_PREFIX:-}/${BACKUP_FILENAME:-}" | sed "s/'/''/g")
+    details_escaped=$(printf '%s' "$details" | sed "s/'/''/g")
+    psql -c "UPDATE backup_runs SET finished_at=CURRENT_TIMESTAMP,status='${status}',filename='${filename_escaped}',size_bytes=${BACKUP_SIZE_BYTES:-NULL},destination='${destination_escaped}',details='${details_escaped}' WHERE id=${BACKUP_RUN_ID};" || true
 }
 
 cleanup() {
