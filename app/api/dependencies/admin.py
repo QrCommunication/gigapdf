@@ -2,7 +2,7 @@
 Admin authentication dependency.
 
 Provides a dependency that enforces admin-only access on protected routes.
-Any valid JWT that does not carry the 'admin' role is rejected with HTTP 403.
+Any authenticated caller without the 'admin' role is rejected with HTTP 403.
 """
 
 import logging
