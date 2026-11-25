@@ -126,6 +126,7 @@ interface User {
   api_calls_used: number;
   api_calls_limit: number;
   status: string;
+  email_verified: boolean;
   created_at?: string;
   updated_at: string;
 }
@@ -399,6 +400,20 @@ export const usersApi = {
     return fetchApi<{ documents: Document[]; total: number }>(
       `/api/v1/admin/users/${userId}/documents?page=${page}&page_size=${pageSize}`
     );
+  },
+
+  resetPassword: async (userId: string, password: string): Promise<{ success: boolean }> => {
+    return fetchApi<{ success: boolean }>(`/user-actions/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ action: "reset-password", password }),
+    });
+  },
+
+  verifyEmail: async (userId: string): Promise<{ success: boolean }> => {
+    return fetchApi<{ success: boolean }>(`/user-actions/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ action: "verify-email" }),
+    });
   },
 };
 
@@ -813,16 +828,42 @@ interface CurrentCosts {
   billing_period: string;
   by_category: CategoryCost[];
   resources: ResourceCost[];
+  downloaded_bytes: number;
+  free_bandwidth_bytes: number;
+  bandwidth_overage_bytes: number;
+  bandwidth_overage_usd: number;
+  storage_tb_started: number;
+  storage_cost_eur: number;
+  hosting_cost_eur: number;
 }
 
 interface MonthCost {
   period: string;
   total: number;
   by_category: Record<string, number>;
+  downloaded_bytes: number;
+  free_bandwidth_bytes: number;
+  bandwidth_overage_usd: number;
+  storage_tb_started: number;
+  storage_cost_eur: number;
+  hosting_cost_eur: number;
 }
 
 interface CostHistory {
   history: MonthCost[];
+}
+
+interface UserBandwidth {
+  period: string;
+  user_id: string;
+  email: string | null;
+  name: string | null;
+  storage_bytes: number;
+  downloaded_bytes: number;
+  free_bandwidth_bytes: number;
+  bandwidth_overage_usd: number;
+  storage_tb_started: number;
+  storage_cost_eur: number;
 }
 
 interface MemoryMetrics {
@@ -886,6 +927,14 @@ export const infrastructureApi = {
 
   getCostHistory: async (months = 12): Promise<CostHistory> => {
     return fetchApi<CostHistory>(`/api/v1/admin/infrastructure/costs/history?months=${months}`);
+  },
+
+  getBandwidthUsers: async (period?: string, userId?: string): Promise<UserBandwidth[]> => {
+    const params = new URLSearchParams();
+    if (period) params.set("period", period);
+    if (userId) params.set("user_id", userId);
+    params.set("limit", userId ? "1" : "10");
+    return fetchApi<UserBandwidth[]>(`/api/v1/admin/infrastructure/bandwidth/users?${params}`);
   },
 
   // Metrics
@@ -996,6 +1045,7 @@ export type {
   CurrentCosts,
   MonthCost,
   CostHistory,
+  UserBandwidth,
   MemoryMetrics,
   DiskMetrics,
   S3Metrics,

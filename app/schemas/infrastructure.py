@@ -39,6 +39,13 @@ class CurrentCostsResponse(BaseModel):
     billing_period: str = Field(description="Billing period (YYYY-MM)")
     by_category: list[CategoryCost] = Field(description="Costs grouped by category")
     resources: list[ResourceCost] = Field(default=[], description="Detailed resource costs")
+    downloaded_bytes: int = Field(default=0, description="S3 bytes downloaded during the period")
+    free_bandwidth_bytes: int = Field(default=0, description="Included bandwidth (3× storage)")
+    bandwidth_overage_bytes: int = Field(default=0, description="Billable excess bytes")
+    bandwidth_overage_usd: float = Field(default=0.0, description="Bandwidth surcharge in USD")
+    storage_tb_started: int = Field(default=0, description="Started decimal TB billed")
+    storage_cost_eur: float = Field(default=0.0, description="Storage tier cost in EUR")
+    hosting_cost_eur: float = Field(default=10.0, description="Base hosting cost in EUR")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -63,6 +70,12 @@ class MonthCost(BaseModel):
     period: str = Field(description="Billing period (YYYY-MM)")
     total: float = Field(description="Total cost in EUR")
     by_category: dict[str, float] = Field(description="Costs by category")
+    downloaded_bytes: int = Field(default=0, description="S3 bytes downloaded")
+    free_bandwidth_bytes: int = Field(default=0, description="Included bandwidth (3× storage)")
+    bandwidth_overage_usd: float = Field(default=0.0, description="Bandwidth surcharge in USD")
+    storage_tb_started: int = Field(default=0, description="Started decimal TB billed")
+    storage_cost_eur: float = Field(default=0.0, description="Storage tier cost in EUR")
+    hosting_cost_eur: float = Field(default=10.0, description="Base hosting cost in EUR")
 
 
 class CostHistoryResponse(BaseModel):
@@ -81,6 +94,21 @@ class CostHistoryResponse(BaseModel):
             }
         },
     )
+
+
+class UserBandwidth(BaseModel):
+    """Per-user S3 usage and storage charges for one month."""
+
+    period: str
+    user_id: str
+    email: str | None
+    name: str | None
+    storage_bytes: int
+    downloaded_bytes: int
+    free_bandwidth_bytes: int
+    bandwidth_overage_usd: float
+    storage_tb_started: int
+    storage_cost_eur: float
 
 
 # =============================================================================

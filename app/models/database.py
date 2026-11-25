@@ -27,6 +27,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
@@ -741,6 +742,51 @@ class ActivityLog(Base):
         Index("idx_activity_logs_created", "created_at"),
         Index("idx_activity_logs_tenant", "tenant_id"),
         Index("idx_activity_logs_document_created", "document_id", "created_at"),
+    )
+
+
+class S3BandwidthMonth(Base):
+    """Download volume and storage inventory for one UTC calendar month."""
+
+    __tablename__ = "s3_bandwidth_months"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    period: Mapped[str] = mapped_column(String(7), nullable=False, unique=True, index=True)
+    storage_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    downloaded_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class S3BandwidthUserMonth(Base):
+    """Download volume for one user and one UTC calendar month."""
+
+    __tablename__ = "s3_bandwidth_user_months"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    period: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    downloaded_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
+    )
+    __table_args__ = (
+        UniqueConstraint("period", "user_id", name="uq_s3_bandwidth_user_period"),
+    )
+
+
+class S3AccessLogFile(Base):
+    """Access-log object processed exactly once by the bandwidth collector."""
+
+    __tablename__ = "s3_access_log_files"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    object_key: Mapped[str] = mapped_column(String(1024), nullable=False, unique=True, index=True)
+    downloaded_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), nullable=False
     )
 
 
