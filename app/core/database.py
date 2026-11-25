@@ -38,7 +38,7 @@ def _register_pgvector_sync(engine: Engine) -> None:
             "(to_regtype('vector'), to_regtype('_vector'))"
         )
         type_info = dict(cursor.fetchall())
-        register_vector_info(type_info["vector"], type_info["_vector"], dbapi_connection)
+        register_vector_info(type_info["vector"], type_info["_vector"], cursor)
 
 # Global async engine and session factory
 _engine: AsyncEngine | None = None
