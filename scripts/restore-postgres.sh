@@ -238,7 +238,7 @@ log_info "Downloaded $LOCAL_FILE ($BACKUP_SIZE)"
 # 9. Dry-run: restore to isolated test DB
 # ---------------------------------------------------------------------------
 if [ "$MODE" != "production" ]; then
-    RESTORE_RUN_ID=$(psql -tAXq "INSERT INTO backup_runs(run_type,status) VALUES ('restore_test','running') RETURNING id" || true)
+    RESTORE_RUN_ID=$(psql -tAXq -c "INSERT INTO backup_runs(run_type,status) VALUES ('restore_test','running') RETURNING id" || true)
     trap restore_cleanup EXIT
     log_info "DRY-RUN: restoring into isolated database '$RESTORE_DB'"
 
