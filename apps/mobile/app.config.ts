@@ -51,6 +51,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     "expo-secure-store",
+    "expo-status-bar",
     "expo-font",
     "expo-web-browser",
     "expo-sharing",
