@@ -116,6 +116,18 @@ s3_aws() {
     aws "$@" --endpoint-url "$BACKUP_S3_ENDPOINT_URL"
 }
 
+admin_psql() {
+    local database="$1"
+    shift
+    if [[ "$PGHOST" =~ ^(localhost|127\.0\.0\.1|::1)$ ]] \
+        && command -v sudo >/dev/null \
+        && sudo -n -u postgres true 2>/dev/null; then
+        sudo -n -u postgres psql -p "$PGPORT" -d "$database" "$@"
+    else
+        psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$database" "$@"
+    fi
+}
+
 list_backups() {
     local prefix="$1"
     s3_aws s3 ls "${prefix}/" 2>/dev/null \
@@ -210,12 +222,14 @@ if [ "$MODE" != "production" ]; then
     log_info "DRY-RUN: restoring into isolated database '$RESTORE_DB'"
 
     # Drop and recreate the test database
-    psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres \
+    admin_psql postgres \
         -c "DROP DATABASE IF EXISTS \"${RESTORE_DB}\";" \
         -c "CREATE DATABASE \"${RESTORE_DB}\" OWNER \"${PGUSER}\";"
+    admin_psql "$RESTORE_DB" -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
     # Restore
     gunzip -c "$LOCAL_FILE" \
+        | sed '/^COMMENT ON EXTENSION vector IS /d' \
         | psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$RESTORE_DB" \
               --set ON_ERROR_STOP=1 \
               -q
@@ -227,8 +241,7 @@ if [ "$MODE" != "production" ]; then
     log_info "Tables found in $RESTORE_DB: $TABLE_COUNT"
 
     # Cleanup test database (comment out to keep for inspection)
-    psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres \
-        -c "DROP DATABASE IF EXISTS \"${RESTORE_DB}\";" || true
+    admin_psql postgres -c "DROP DATABASE IF EXISTS \"${RESTORE_DB}\";" || true
 
     rm -f "$LOCAL_FILE"
     log_info "Dry-run complete — backup is healthy (tables=$TABLE_COUNT)"
@@ -242,15 +255,15 @@ log_warn "Stopping GigaPDF services before restore …"
 sudo systemctl stop gigapdf-api gigapdf-web gigapdf-admin gigapdf-celery gigapdf-celery-billing || true
 
 log_info "Dropping existing database '$RESTORE_DB' …"
-psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres \
+admin_psql postgres \
     -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='${RESTORE_DB}';"
-psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres \
-    -c "DROP DATABASE IF EXISTS \"${RESTORE_DB}\";"
-psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres \
-    -c "CREATE DATABASE \"${RESTORE_DB}\" OWNER \"${PGUSER}\";"
+admin_psql postgres -c "DROP DATABASE IF EXISTS \"${RESTORE_DB}\";"
+admin_psql postgres -c "CREATE DATABASE \"${RESTORE_DB}\" OWNER \"${PGUSER}\";"
+admin_psql "$RESTORE_DB" -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
 log_info "Restoring from $LOCAL_FILE …"
 gunzip -c "$LOCAL_FILE" \
+    | sed '/^COMMENT ON EXTENSION vector IS /d' \
     | psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$RESTORE_DB" \
           --set ON_ERROR_STOP=1
 
