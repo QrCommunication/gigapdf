@@ -85,6 +85,16 @@ Après chaque run réussi, télécharger une archive dans un répertoire tempora
 et exécuter `gzip -t` avant de la supprimer. La purge ne doit jamais concerner
 d'objets hors du préfixe `backups/postgres`.
 
+## Écran Admin et test hebdomadaire
+
+La page Admin **Sauvegardes** affiche chaque exécution dans `backup_runs` :
+type, statut, date, fichier, taille, destination et détails. Elle permet aussi de
+lancer une sauvegarde ou un test isolé à la demande.
+
+Le timer `gigapdf-restore-test.timer` exécute le dry-run chaque dimanche à
+04:00 UTC. Les succès et échecs sont enregistrés dans la même table, avec les
+journaux `/var/log/gigapdf/backup.log` et `restore-test.log` pour le diagnostic.
+
 ## Restauration
 
 ### Dry-run recommandé

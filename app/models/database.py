@@ -745,6 +745,24 @@ class ActivityLog(Base):
     )
 
 
+class BackupRun(Base):
+    """Execution journal for scheduled and manual backup operations."""
+
+    __tablename__ = "backup_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    destination: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class S3BandwidthMonth(Base):
     """Download volume and storage inventory for one UTC calendar month."""
 

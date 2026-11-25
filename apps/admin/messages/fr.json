@@ -68,6 +68,7 @@
     "logs": "Journaux système",
     "plans": "Forfaits",
     "infrastructure": "Infrastructure",
+    "backups": "Sauvegardes",
     "settings": "Paramètres",
     "logout": "Déconnexion",
     "notifications": "Notifications",
@@ -762,6 +763,31 @@
           "30d": "30 jours"
         }
       }
+    }
+  },
+  "backups": {
+    "title": "Sauvegardes",
+    "subtitle": "Sauvegarde quotidienne sur iDrive, rétention 45 jours et tests de restauration",
+    "schedule": "Sauvegarde quotidienne à 03:00 UTC. Test de restauration isolée chaque dimanche à 04:00 UTC. Toutes les opérations sont journalisées.",
+    "runNow": "Sauvegarder maintenant",
+    "runTest": "Tester la restauration",
+    "history": "Journal des opérations",
+    "type": "Type",
+    "status": "Statut",
+    "started": "Début",
+    "file": "Fichier / destination",
+    "size": "Taille",
+    "details": "Détails",
+    "empty": "Aucune opération enregistrée pour le moment.",
+    "types": {
+      "daily": "Quotidienne",
+      "weekly": "Hebdomadaire",
+      "restore_test": "Test de restauration"
+    },
+    "statuses": {
+      "running": "En cours",
+      "success": "Réussie",
+      "failed": "Échouée"
     }
   },
   "errors": {

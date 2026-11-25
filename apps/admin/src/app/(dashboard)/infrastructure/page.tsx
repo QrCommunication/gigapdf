@@ -302,9 +302,7 @@ export default function InfrastructurePage() {
                   <td className="px-4 py-3 text-right">{formatBytes(user.downloaded_bytes)}</td>
                   <td className="px-4 py-3 text-right">{formatBytes(user.free_bandwidth_bytes)}</td>
                   <td className="px-4 py-3 text-right">${user.bandwidth_overage_usd.toFixed(4)}</td>
-                  <td className="px-4 py-3 text-right">
-                    {user.storage_tb_started} To · {user.storage_cost_eur.toFixed(2)}€
-                  </td>
+                  <td className="px-4 py-3 text-right">{formatBytes(user.storage_bytes)}</td>
                 </tr>
               ))}
             </tbody>

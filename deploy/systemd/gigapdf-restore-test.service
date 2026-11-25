@@ -1,0 +1,14 @@
+[Unit]
+Description=GigaPDF isolated restore test
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=ploi
+Group=ploi
+WorkingDirectory=/home/ploi/giga-pdf.com
+Environment=ENV_FILE=/home/ploi/giga-pdf.com/.env
+ExecStart=/home/ploi/giga-pdf.com/scripts/restore-postgres.sh --dry-run
+StandardOutput=append:/var/log/gigapdf/restore-test.log
+StandardError=append:/var/log/gigapdf/restore-test-error.log

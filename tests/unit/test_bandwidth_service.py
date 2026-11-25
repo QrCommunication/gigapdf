@@ -90,6 +90,6 @@ def test_per_user_cost_contains_identity_and_no_hosting_allocation() -> None:
         users = service.get_user_costs("2026-11")
 
     assert users[0]["email"] == "user@example.com"
-    assert users[0]["storage_cost_eur"] == 5.0
     assert users[0]["bandwidth_overage_usd"] == 10.0
+    assert "storage_cost_eur" not in users[0]
     assert "hosting_cost_eur" not in users[0]

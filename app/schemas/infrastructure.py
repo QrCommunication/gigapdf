@@ -107,8 +107,6 @@ class UserBandwidth(BaseModel):
     downloaded_bytes: int
     free_bandwidth_bytes: int
     bandwidth_overage_usd: float
-    storage_tb_started: int
-    storage_cost_eur: float
 
 
 # =============================================================================

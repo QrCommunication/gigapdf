@@ -112,7 +112,22 @@ notify_failure() {
     fi
 }
 
+record_run_finish() {
+    local status="$1"
+    local details="$2"
+    [ -z "${BACKUP_RUN_ID:-}" ] && return 0
+    psql -v filename="${BACKUP_FILENAME:-}" \
+        -v size_bytes="${BACKUP_SIZE_BYTES:-}" \
+        -v destination="${S3_PREFIX:-}/${BACKUP_FILENAME:-}" \
+        -v details="$details" \
+        -c "UPDATE backup_runs SET finished_at=CURRENT_TIMESTAMP,status='${status}',filename=NULLIF(:'filename',''),size_bytes=NULLIF(:'size_bytes','')::bigint,destination=NULLIF(:'destination',''),details=:'details' WHERE id=${BACKUP_RUN_ID};" || true
+}
+
 cleanup() {
+    local exit_status=$?
+    if [ "$exit_status" -ne 0 ]; then
+        record_run_finish "failed" "Backup failed with exit code ${exit_status}"
+    fi
     rm -f "${BACKUP_FILE:-}" "${BACKUP_FILE:-}.gz" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -141,6 +156,7 @@ fi
 BACKUP_FILENAME="gigapdf_${BACKUP_TYPE}_${TIMESTAMP}.sql.gz"
 BACKUP_FILE="$BACKUP_DIR/$BACKUP_FILENAME"
 S3_PREFIX="${BACKUP_S3_BUCKET}/postgres/${BACKUP_TYPE}"
+BACKUP_RUN_ID=$(psql -tAc "INSERT INTO backup_runs(run_type,status) VALUES ('${BACKUP_TYPE}','running') RETURNING id" || true)
 
 log_info "Starting $BACKUP_TYPE backup — db=$PGDATABASE host=$PGHOST"
 
@@ -164,6 +180,7 @@ if ! gzip -t "$BACKUP_FILE"; then
     exit 1
 fi
 
+BACKUP_SIZE_BYTES=$(stat -c '%s' "$BACKUP_FILE")
 BACKUP_SIZE=$(du -sh "$BACKUP_FILE" | cut -f1)
 log_info "Dump complete and archive verified — size=$BACKUP_SIZE file=$BACKUP_FILENAME"
 
@@ -234,4 +251,5 @@ apply_retention "${BACKUP_S3_BUCKET}/postgres/weekly" "weekly"
 # ---------------------------------------------------------------------------
 # 8. Done
 # ---------------------------------------------------------------------------
+record_run_finish "success" "Backup completed and archive verified"
 log_info "Backup finished successfully — type=$BACKUP_TYPE size=$BACKUP_SIZE"
