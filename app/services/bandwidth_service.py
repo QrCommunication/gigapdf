@@ -188,7 +188,7 @@ class S3BandwidthService:
                 (S3BandwidthUserMonth.user_id == UserQuota.user_id)
                 & (S3BandwidthUserMonth.period == period),
             )
-            .group_by(UserQuota.id, auth_users.c.email, auth_users.c.name)
+            .group_by(UserQuota.id, UserQuota.user_id, auth_users.c.email, auth_users.c.name)
             .order_by(downloaded.desc().nullslast())
             .limit(limit)
         )
