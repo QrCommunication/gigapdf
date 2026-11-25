@@ -49,7 +49,7 @@ export default function UsersPage() {
     },
     {
       accessorKey: "document_count",
-      header: t("table.status"),
+      header: t("table.documents"),
     },
     {
       accessorKey: "api_calls_used",

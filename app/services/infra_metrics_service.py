@@ -7,15 +7,10 @@ Handles collection and retrieval of system performance metrics.
 import logging
 from datetime import datetime, timedelta
 
-import boto3
 import psutil
-from botocore.exceptions import ClientError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
-
-settings = get_settings()
 from app.models.database import InfrastructureMetric
 from app.schemas.infrastructure import (
     CurrentMetricsResponse,
@@ -26,28 +21,13 @@ from app.schemas.infrastructure import (
     NetworkMetrics,
     S3Metrics,
 )
+from app.storage_backends import get_storage_backend
 
 logger = logging.getLogger(__name__)
 
 
 class InfraMetricsService:
     """Service for infrastructure metrics collection and retrieval."""
-
-    def __init__(self):
-        """Initialize the metrics service."""
-        self._s3_client: boto3.client | None = None
-
-    def _get_s3_client(self) -> boto3.client:
-        """Get or create S3 client."""
-        if self._s3_client is None:
-            self._s3_client = boto3.client(
-                "s3",
-                endpoint_url=settings.S3_ENDPOINT,
-                aws_access_key_id=settings.S3_ACCESS_KEY_ID,
-                aws_secret_access_key=settings.S3_SECRET_ACCESS_KEY,
-                region_name=settings.S3_REGION,
-            )
-        return self._s3_client
 
     def collect_current_metrics(self) -> dict:
         """
@@ -97,16 +77,13 @@ class InfraMetricsService:
 
         # S3
         try:
-            s3 = self._get_s3_client()
-            response = s3.list_objects_v2(Bucket=settings.S3_BUCKET_NAME)
-            metrics["s3_objects_count"] = response.get("KeyCount", 0)
-            metrics["s3_total_bytes"] = sum(
-                obj["Size"] for obj in response.get("Contents", [])
-            )
-        except ClientError as e:
-            logger.warning(f"Failed to collect S3 metrics: {e}")
-            metrics["s3_objects_count"] = None
-            metrics["s3_total_bytes"] = None
+            object_count = 0
+            total_bytes = 0
+            for obj in get_storage_backend().iter_objects():
+                object_count += 1
+                total_bytes += obj.size
+            metrics["s3_objects_count"] = object_count
+            metrics["s3_total_bytes"] = total_bytes
         except Exception as e:
             logger.warning(f"Failed to collect S3 metrics: {e}")
             metrics["s3_objects_count"] = None
