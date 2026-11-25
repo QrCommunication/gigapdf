@@ -354,7 +354,16 @@
       "selectRole": "Sélectionnez un rôle",
       "tenant": "Organisation",
       "selectTenant": "Sélectionnez une organisation",
-      "status": "Statut"
+      "status": "Statut",
+      "newPassword": "Nouveau mot de passe",
+      "passwordHint": "12 caractères minimum. Les sessions existantes seront déconnectées."
+    },
+    "actions": {
+      "resetPassword": "Réinitialiser le mot de passe",
+      "verifyEmail": "Valider l'e-mail",
+      "confirmReset": "Réinitialiser",
+      "passwordReset": "Mot de passe réinitialisé, sessions révoquées",
+      "emailVerified": "E-mail validé"
     },
     "modal": {
       "createTitle": "Créer un utilisateur",
@@ -698,10 +707,27 @@
     "costs": {
       "title": "Coûts d'hébergement",
       "period": "Période de facturation",
+      "interval": "Intervalle affiché",
+      "month": "Mois",
+      "year": "Année",
+      "ht": "montants HT",
       "total": "Coût total",
       "compute": "Calcul",
       "database": "Base de données",
       "storage": "Stockage"
+    },
+    "bandwidth": {
+      "title": "Bande passante S3",
+      "subtitle": "Volume téléchargé par mois UTC, réinitialisé automatiquement au début du mois",
+      "downloaded": "Téléchargé",
+      "included": "Inclus (3× stockage)",
+      "overage": "Supplément",
+      "storageTier": "Tranche de stockage",
+      "byUser": "Coût par utilisateur",
+      "byUserSubtitle": "Top 10 ou utilisateur sélectionné, hors part fixe de l'hébergement",
+      "userFilter": "Utilisateur",
+      "topTen": "Top 10",
+      "user": "Utilisateur"
     },
     "performance": {
       "title": "Performances système",

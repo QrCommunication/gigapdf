@@ -49,7 +49,7 @@ async def test_list_users_joins_identity_and_document_count() -> None:
     db = _Db(
         [
             _Result(scalar=1),
-            _Result(rows=[(_quota(), "alice@example.com", "Alice Doe")]),
+            _Result(rows=[(_quota(), "alice@example.com", "Alice Doe", True)]),
         ]
     )
 
@@ -66,12 +66,13 @@ async def test_list_users_joins_identity_and_document_count() -> None:
     assert response.users[0].email == "alice@example.com"
     assert response.users[0].name == "Alice Doe"
     assert response.users[0].document_count == 4
+    assert response.users[0].email_verified is True
 
 
 async def test_get_user_uses_quota_email_as_fallback() -> None:
     quota = _quota()
     quota.email = "fallback@example.com"
-    db = _Db([_Result(rows=[(quota, None, None)])])
+    db = _Db([_Result(rows=[(quota, None, None, False)])])
 
     response = await get_user("user-1", db=db)
 

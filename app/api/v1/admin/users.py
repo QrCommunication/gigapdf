@@ -16,7 +16,7 @@ from app.models.database import StoredDocument, UserQuota
 from app.services.account_erasure_service import account_erasure_service
 
 router = APIRouter()
-auth_users = table("users", column("id"), column("email"), column("name"))
+auth_users = table("users", column("id"), column("email"), column("name"), column("emailVerified"))
 
 
 class UserResponse(BaseModel):
@@ -33,6 +33,7 @@ class UserResponse(BaseModel):
     api_calls_used: int
     api_calls_limit: int
     status: str  # active, suspended, pending
+    email_verified: bool = False
     created_at: datetime | None = None
     updated_at: datetime
 
@@ -175,7 +176,7 @@ async def list_users(
     Supports filtering by plan type and search by user ID.
     """
     # Build query
-    query = select(UserQuota, auth_users.c.email, auth_users.c.name).outerjoin(
+    query = select(UserQuota, auth_users.c.email, auth_users.c.name, auth_users.c.emailVerified).outerjoin(
         auth_users, auth_users.c.id == UserQuota.user_id
     )
 
@@ -207,7 +208,7 @@ async def list_users(
 
     # Build response
     users = []
-    for quota, email, name in result.all():
+    for quota, email, name, email_verified in result.all():
         # Determine status based on plan expiry
         user_status = "active"
         if quota.plan_expires_at and quota.plan_expires_at < datetime.now():
@@ -226,6 +227,7 @@ async def list_users(
             api_calls_used=quota.api_calls_used,
             api_calls_limit=quota.api_calls_limit,
             status=user_status,
+            email_verified=email_verified,
             updated_at=quota.updated_at,
         ))
 
@@ -332,7 +334,7 @@ async def get_user(
     Get a specific user's details.
     """
     result = await db.execute(
-        select(UserQuota, auth_users.c.email, auth_users.c.name)
+        select(UserQuota, auth_users.c.email, auth_users.c.name, auth_users.c.emailVerified)
         .outerjoin(auth_users, auth_users.c.id == UserQuota.user_id)
         .where(UserQuota.user_id == user_id)
     )
@@ -341,7 +343,7 @@ async def get_user(
     if not row:
         raise HTTPException(status_code=404, detail="User not found")
 
-    quota, email, name = row
+    quota, email, name, email_verified = row
 
     user_status = "active"
     if quota.plan_expires_at and quota.plan_expires_at < datetime.now():
@@ -494,10 +496,12 @@ async def update_user(
     await db.commit()
     await db.refresh(quota)
     identity_result = await db.execute(
-        select(auth_users.c.email, auth_users.c.name).where(auth_users.c.id == user_id)
+        select(auth_users.c.email, auth_users.c.name, auth_users.c.emailVerified).where(
+            auth_users.c.id == user_id
+        )
     )
     identity = identity_result.first()
-    email, name = identity or (None, None)
+    email, name, email_verified = identity or (None, None, False)
 
     user_status = "active"
     if quota.plan_expires_at and quota.plan_expires_at < datetime.now():

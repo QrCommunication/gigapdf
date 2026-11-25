@@ -354,7 +354,16 @@
       "selectRole": "Select role",
       "tenant": "Organization",
       "selectTenant": "Select organization",
-      "status": "Status"
+      "status": "Status",
+      "newPassword": "New password",
+      "passwordHint": "At least 12 characters. Existing sessions will be signed out."
+    },
+    "actions": {
+      "resetPassword": "Reset password",
+      "verifyEmail": "Verify email",
+      "confirmReset": "Reset",
+      "passwordReset": "Password reset, sessions revoked",
+      "emailVerified": "Email verified"
     },
     "modal": {
       "createTitle": "Create User",
@@ -698,10 +707,27 @@
     "costs": {
       "title": "Hosting Costs",
       "period": "Billing Period",
+      "interval": "Displayed interval",
+      "month": "Month",
+      "year": "Year",
+      "ht": "prices excluding tax",
       "total": "Total Cost",
       "compute": "Compute",
       "database": "Database",
       "storage": "Storage"
+    },
+    "bandwidth": {
+      "title": "S3 bandwidth",
+      "subtitle": "Downloaded volume per UTC month, reset automatically at month start",
+      "downloaded": "Downloaded",
+      "included": "Included (3× storage)",
+      "overage": "Surcharge",
+      "storageTier": "Storage tier",
+      "byUser": "Cost per user",
+      "byUserSubtitle": "Top 10 or selected user, excluding the fixed hosting share",
+      "userFilter": "User",
+      "topTen": "Top 10",
+      "user": "User"
     },
     "performance": {
       "title": "System Performance",
