@@ -34,7 +34,7 @@ ajouter de directive `listen 443` dans le site pour éviter les conflits.
 
 ```bash
 sudo apt update && sudo apt install -y \
-  python3.14-venv postgresql-18-pgvector redis-server nginx curl git
+  python3.14-venv postgresql-18-pgvector redis-server nginx curl git awscli
 sudo corepack enable
 sudo corepack prepare pnpm@9 --activate
 ```
