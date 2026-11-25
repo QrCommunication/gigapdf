@@ -16,6 +16,10 @@
   },
   "pnpm": {
     "overrides": {
+      "react": "19.3.1",
+      "react-dom": "19.3.1",
+      "gigapdf-mobile@0.7.0-alpha>react": "19.3.0",
+      "gigapdf-mobile@0.7.0-alpha>react-dom": "19.3.0",
       "@eslint/config-array@<0.23.0": "^0.23.0",
       "@hono/node-server@<1.19.13": "^1.19.13",
       "@hono/node-server@>=2.0.0 <2.0.10": "^2.0.10",

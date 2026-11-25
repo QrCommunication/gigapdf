@@ -17,6 +17,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    server: {
+      deps: {
+        inline: ['zustand', '@tanstack/react-query'],
+      },
+    },
     setupFiles: ['src/hooks/__tests__/vitest-setup.ts'],
     include: ['src/**/__tests__/**/*.test.{ts,tsx}'],
     pool: 'forks',
@@ -66,8 +71,11 @@ export default defineConfig({
     testTimeout: 10000,
   },
   resolve: {
+    dedupe: ['react', 'react-dom'],
     alias: {
       '@': resolve(import.meta.dirname ?? __dirname, './src'),
+      react: resolve(import.meta.dirname ?? __dirname, '../../node_modules/react'),
+      'react-dom': resolve(import.meta.dirname ?? __dirname, '../../node_modules/react-dom'),
     },
   },
 });
