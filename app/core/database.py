@@ -30,14 +30,15 @@ def _register_pgvector_sync(engine: Engine) -> None:
     """Register the pgvector codec on every new psycopg2 connection (Celery)."""
     @event.listens_for(engine, "connect")
     def _on_connect(dbapi_connection, _connection_record):  # noqa: ANN001
-        try:
-            from pgvector.psycopg import register_vector as register_modern
+        from pgvector.psycopg2.vector import register_vector_info
 
-            register_modern(dbapi_connection.driver_connection)
-        except (ImportError, AttributeError):
-            from pgvector.psycopg2 import register_vector as register_legacy
-
-            register_legacy(dbapi_connection)
+        cursor = dbapi_connection.cursor()
+        cursor.execute(
+            "SELECT typname, oid FROM pg_type WHERE oid IN "
+            "(to_regtype('vector'), to_regtype('_vector'))"
+        )
+        type_info = dict(cursor.fetchall())
+        register_vector_info(type_info["vector"], type_info["_vector"], dbapi_connection)
 
 # Global async engine and session factory
 _engine: AsyncEngine | None = None
