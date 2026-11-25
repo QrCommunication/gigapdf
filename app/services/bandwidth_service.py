@@ -202,11 +202,6 @@ class S3BandwidthService:
                 downloaded_bytes = downloaded_bytes or 0
                 free_bytes = storage_bytes * 3
                 overage_bytes = max(0, downloaded_bytes - free_bytes)
-                storage_tb_started = (
-                    (storage_bytes + 1_000_000_000_000 - 1) // 1_000_000_000_000
-                    if storage_bytes
-                    else 0
-                )
                 results.append(
                     {
                         "period": period,
@@ -217,8 +212,6 @@ class S3BandwidthService:
                         "downloaded_bytes": downloaded_bytes,
                         "free_bandwidth_bytes": free_bytes,
                         "bandwidth_overage_usd": overage_bytes / 1_000_000_000 * 0.01,
-                        "storage_tb_started": storage_tb_started,
-                        "storage_cost_eur": storage_tb_started * 5.0,
                     }
                 )
         return results

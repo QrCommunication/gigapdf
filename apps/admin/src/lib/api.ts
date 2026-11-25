@@ -853,6 +853,18 @@ interface CostHistory {
   history: MonthCost[];
 }
 
+interface BackupRun {
+  id: number;
+  run_type: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  filename: string | null;
+  size_bytes: number | null;
+  destination: string | null;
+  details: string | null;
+}
+
 interface UserBandwidth {
   period: string;
   user_id: string;
@@ -862,8 +874,6 @@ interface UserBandwidth {
   downloaded_bytes: number;
   free_bandwidth_bytes: number;
   bandwidth_overage_usd: number;
-  storage_tb_started: number;
-  storage_cost_eur: number;
 }
 
 interface MemoryMetrics {
@@ -951,6 +961,25 @@ export const infrastructureApi = {
       "/api/v1/admin/infrastructure/metrics/collect",
       { method: "POST" }
     );
+  },
+};
+
+// ============ Backup API ============
+export const backupApi = {
+  listRuns: async (): Promise<BackupRun[]> => {
+    return fetchApi<BackupRun[]>("/api/v1/admin/backups/runs");
+  },
+
+  runBackup: async (): Promise<{ success: boolean; message: string }> => {
+    return fetchApi<{ success: boolean; message: string }>("/api/v1/admin/backups/run", {
+      method: "POST",
+    });
+  },
+
+  runRestoreTest: async (): Promise<{ success: boolean; message: string }> => {
+    return fetchApi<{ success: boolean; message: string }>("/api/v1/admin/backups/test", {
+      method: "POST",
+    });
   },
 };
 
@@ -1045,6 +1074,7 @@ export type {
   CurrentCosts,
   MonthCost,
   CostHistory,
+  BackupRun,
   UserBandwidth,
   MemoryMetrics,
   DiskMetrics,

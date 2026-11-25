@@ -68,6 +68,7 @@
     "logs": "System Logs",
     "plans": "Plans",
     "infrastructure": "Infrastructure",
+    "backups": "Backups",
     "settings": "Settings",
     "logout": "Logout",
     "notifications": "Notifications",
@@ -762,6 +763,31 @@
           "30d": "30 days"
         }
       }
+    }
+  },
+  "backups": {
+    "title": "Backups",
+    "subtitle": "Daily backups to iDrive with 45-day retention and restore testing",
+    "schedule": "Daily backup at 03:00 UTC. Isolated restore test every Sunday at 04:00 UTC. Every operation is logged.",
+    "runNow": "Back up now",
+    "runTest": "Test restore",
+    "history": "Operation history",
+    "type": "Type",
+    "status": "Status",
+    "started": "Started",
+    "file": "File / destination",
+    "size": "Size",
+    "details": "Details",
+    "empty": "No operations recorded yet.",
+    "types": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "restore_test": "Restore test"
+    },
+    "statuses": {
+      "running": "Running",
+      "success": "Succeeded",
+      "failed": "Failed"
     }
   },
   "errors": {

@@ -13,13 +13,29 @@ check — the dependency is applied once at the router level via
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies.admin import get_current_admin_user
-from app.api.v1.admin import documents, infrastructure, jobs, logs, settings, stats, tenants, users
+from app.api.v1.admin import (
+    backups,
+    documents,
+    infrastructure,
+    jobs,
+    logs,
+    settings,
+    stats,
+    tenants,
+    users,
+)
 
 # The Depends(get_current_admin_user) applied here runs before EVERY route
 # registered on admin_router (including all sub-routers included below).
 # Individual endpoints do not need to redeclare this dependency.
 admin_router = APIRouter(
     dependencies=[Depends(get_current_admin_user)]
+)
+
+admin_router.include_router(
+    backups.router,
+    prefix="/backups",
+    tags=["Admin - Backups"],
 )
 
 admin_router.include_router(

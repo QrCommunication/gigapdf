@@ -10,6 +10,7 @@ import {
   CreditCard,
   Settings,
   Server,
+  DatabaseBackup,
   LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -63,6 +64,11 @@ const navigation: NavItem[] = [
     key: "infrastructure",
     href: "/infrastructure",
     icon: Server,
+  },
+  {
+    key: "backups",
+    href: "/backups",
+    icon: DatabaseBackup,
   },
   {
     key: "settings",

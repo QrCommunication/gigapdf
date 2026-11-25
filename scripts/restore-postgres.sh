@@ -137,6 +137,24 @@ list_backups() {
         || true
 }
 
+record_restore_finish() {
+    local status="$1"
+    local details="$2"
+    [ -z "${RESTORE_RUN_ID:-}" ] && return 0
+    psql -v filename="${BACKUP_FILE_KEY:-}" \
+        -v size_bytes="${RESTORE_SIZE_BYTES:-}" \
+        -v destination="${S3_KEY:-}" \
+        -v details="$details" \
+        -c "UPDATE backup_runs SET finished_at=CURRENT_TIMESTAMP,status='${status}',filename=NULLIF(:'filename',''),size_bytes=NULLIF(:'size_bytes','')::bigint,destination=NULLIF(:'destination',''),details=:'details' WHERE id=${RESTORE_RUN_ID};" || true
+}
+
+restore_cleanup() {
+    local exit_status=$?
+    if [ "$exit_status" -ne 0 ]; then
+        record_restore_finish "failed" "Restore test failed with exit code ${exit_status}"
+    fi
+}
+
 # ---------------------------------------------------------------------------
 # 4. List mode — show available backups
 # ---------------------------------------------------------------------------
@@ -213,12 +231,15 @@ LOCAL_FILE="$RESTORE_DIR/$BACKUP_FILE_KEY"
 log_info "Downloading $S3_KEY …"
 s3_aws s3 cp "$S3_KEY" "$LOCAL_FILE"
 BACKUP_SIZE=$(du -sh "$LOCAL_FILE" | cut -f1)
+RESTORE_SIZE_BYTES=$(stat -c '%s' "$LOCAL_FILE")
 log_info "Downloaded $LOCAL_FILE ($BACKUP_SIZE)"
 
 # ---------------------------------------------------------------------------
 # 9. Dry-run: restore to isolated test DB
 # ---------------------------------------------------------------------------
 if [ "$MODE" != "production" ]; then
+    RESTORE_RUN_ID=$(psql -tAc "INSERT INTO backup_runs(run_type,status) VALUES ('restore_test','running') RETURNING id" || true)
+    trap restore_cleanup EXIT
     log_info "DRY-RUN: restoring into isolated database '$RESTORE_DB'"
 
     # Drop and recreate the test database
@@ -243,6 +264,7 @@ if [ "$MODE" != "production" ]; then
     # Cleanup test database (comment out to keep for inspection)
     admin_psql postgres -c "DROP DATABASE IF EXISTS \"${RESTORE_DB}\";" || true
 
+    record_restore_finish "success" "Restore test healthy (tables=$TABLE_COUNT)"
     rm -f "$LOCAL_FILE"
     log_info "Dry-run complete — backup is healthy (tables=$TABLE_COUNT)"
     exit 0
