@@ -125,7 +125,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             parts = authorization.split()
             if len(parts) == 2 and parts[0].lower() == "bearer":
                 try:
-                    user = await authenticate_bearer(authorization)
+                    user = await _bearer_user(request, authorization)
                     request.state.user_id = user.user_id
                     request.state.current_user = user
                     logger.debug(
@@ -427,6 +427,31 @@ async def validate_session_with_better_auth(token: str, session_url: str) -> dic
         raise AuthInvalidError("Session validation service unavailable")
 
 
+async def authenticate_admin_session(token: str) -> CurrentUser:
+    """Authenticate a back-office session against the Admin Better Auth tables."""
+    async with get_db_session() as session:
+        result = await session.execute(
+            text(
+                'SELECT u.id, u.email, u.name, u.role '
+                'FROM admin_sessions s '
+                'JOIN admin_users u ON u.id = s."userId" '
+                'WHERE s.token = :token AND s."expiresAt" > CURRENT_TIMESTAMP'
+            ),
+            {"token": token},
+        )
+        row = result.first()
+
+    if row is None or row[3] not in {"admin", "super_admin"}:
+        raise AuthInvalidError("Invalid admin session")
+
+    return CurrentUser(
+        user_id=row[0],
+        email=row[1],
+        name=row[2],
+        roles=["admin"],
+    )
+
+
 async def _load_account(user_id: str) -> tuple[str | None, str | None] | None:
     """
     Return ``(email, name)`` of a Better Auth user, or ``None`` if erased.
@@ -672,6 +697,11 @@ async def _bearer_user(request: Request, authorization: str) -> CurrentUser:
     resolved = getattr(request.state, "current_user", None)
     if isinstance(resolved, CurrentUser):
         return resolved
+    if getattr(request, "headers", {}).get("X-Admin-Session") == "1":
+        parts = authorization.split()
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            raise AuthInvalidError("Invalid authorization header format")
+        return await authenticate_admin_session(parts[1])
     return await authenticate_bearer(authorization)
 
 
