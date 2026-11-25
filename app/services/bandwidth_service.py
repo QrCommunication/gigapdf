@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import shlex
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -12,12 +11,14 @@ import boto3
 from sqlalchemy import column, func, select, table
 from sqlalchemy.dialects.postgresql import insert
 
+from app.config import get_settings
 from app.core.database import get_sync_session
 from app.models.database import S3AccessLogFile, S3BandwidthMonth, S3BandwidthUserMonth, UserQuota
 from app.storage_backends import get_storage_backend
 
 logger = logging.getLogger(__name__)
 auth_users = table("users", column("id"), column("email"), column("name"))
+settings = get_settings()
 
 
 class S3BandwidthService:
@@ -28,10 +29,10 @@ class S3BandwidthService:
         if self._client is None:
             self._client = boto3.client(
                 "s3",
-                endpoint_url=os.environ["S3_ACCESS_LOG_ENDPOINT"],
-                aws_access_key_id=os.environ["S3_ACCESS_LOG_ACCESS_KEY_ID"],
-                aws_secret_access_key=os.environ["S3_ACCESS_LOG_SECRET_ACCESS_KEY"],
-                region_name=os.environ.get("S3_ACCESS_LOG_REGION", "eu-west-4"),
+                endpoint_url=settings.s3_access_log_endpoint,
+                aws_access_key_id=settings.s3_access_log_access_key_id,
+                aws_secret_access_key=settings.s3_access_log_secret_access_key,
+                region_name=settings.s3_access_log_region,
             )
         return self._client
 
@@ -109,8 +110,8 @@ class S3BandwidthService:
 
     def collect_access_logs(self) -> dict[str, int]:
         client = self._get_client()
-        bucket = os.environ["S3_ACCESS_LOG_BUCKET"]
-        prefix = os.environ.get("S3_ACCESS_LOG_PREFIX", "access/")
+        bucket = settings.s3_access_log_bucket
+        prefix = settings.s3_access_log_prefix
         with get_sync_session() as session:
             processed = set(session.execute(select(S3AccessLogFile.object_key)).scalars())
 
