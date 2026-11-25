@@ -17,6 +17,7 @@ from app.schemas.infrastructure import (
     MonthCost,
     ResourceCost,
 )
+from app.services.bandwidth_service import bandwidth_service
 
 logger = logging.getLogger(__name__)
 
@@ -100,13 +101,7 @@ class ScalewayService:
                 self._billing_cache_time = datetime.utcnow()
 
         if not data:
-            # Return empty response on error
-            return CurrentCostsResponse(
-                total_eur=0.0,
-                billing_period=billing_period or datetime.utcnow().strftime("%Y-%m"),
-                by_category=[],
-                resources=[],
-            )
+            data = []
 
         # Parse consumption data
         total = 0.0
@@ -136,7 +131,35 @@ class ScalewayService:
                 )
             )
 
-        # Build category list
+        period = billing_period or datetime.utcnow().strftime("%Y-%m")
+        if period == datetime.utcnow().strftime("%Y-%m"):
+            bandwidth_service.refresh_storage()
+        bandwidth = bandwidth_service.get_cost_for_period(period)
+        total += bandwidth["hosting_cost_eur"] + bandwidth["storage_cost_eur"]
+        categories["Compute"]["cost"] += bandwidth["hosting_cost_eur"]
+        categories["Compute"]["count"] += 1
+        categories["Storage"]["cost"] += bandwidth["storage_cost_eur"]
+        categories["Storage"]["count"] += 1
+        resources.extend(
+            [
+                ResourceCost(
+                    product_name="Hébergement VPS",
+                    resource_name="Forfait de base",
+                    category="Compute",
+                    cost=bandwidth["hosting_cost_eur"],
+                    unit="month",
+                    quantity="1",
+                ),
+                ResourceCost(
+                    product_name="Stockage objet S3",
+                    resource_name="Tranche de stockage entamée",
+                    category="Storage",
+                    cost=bandwidth["storage_cost_eur"],
+                    unit="To",
+                    quantity=str(bandwidth["storage_tb_started"]),
+                ),
+            ]
+        )
         by_category = [
             CategoryCost(
                 name=name,
@@ -148,9 +171,16 @@ class ScalewayService:
 
         return CurrentCostsResponse(
             total_eur=round(total, 2),
-            billing_period=billing_period or datetime.utcnow().strftime("%Y-%m"),
+            billing_period=period,
             by_category=by_category,
             resources=resources,
+            downloaded_bytes=bandwidth["downloaded_bytes"],
+            free_bandwidth_bytes=bandwidth["free_bandwidth_bytes"],
+            bandwidth_overage_bytes=bandwidth["bandwidth_overage_bytes"],
+            bandwidth_overage_usd=round(bandwidth["bandwidth_overage_usd"], 4),
+            storage_tb_started=bandwidth["storage_tb_started"],
+            storage_cost_eur=bandwidth["storage_cost_eur"],
+            hosting_cost_eur=bandwidth["hosting_cost_eur"],
         )
 
     def get_cost_history(self, months: int = 12) -> CostHistoryResponse:
@@ -187,6 +217,12 @@ class ScalewayService:
                     period=period,
                     total=costs.total_eur,
                     by_category=by_category,
+                    downloaded_bytes=costs.downloaded_bytes,
+                    free_bandwidth_bytes=costs.free_bandwidth_bytes,
+                    bandwidth_overage_usd=costs.bandwidth_overage_usd,
+                    storage_tb_started=costs.storage_tb_started,
+                    storage_cost_eur=costs.storage_cost_eur,
+                    hosting_cost_eur=costs.hosting_cost_eur,
                 )
             )
 

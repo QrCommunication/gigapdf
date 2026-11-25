@@ -19,11 +19,28 @@ from app.schemas.infrastructure import (
     CurrentMetricsResponse,
     MetricPoint,
     MetricsHistoryResponse,
+    UserBandwidth,
 )
+from app.services.bandwidth_service import bandwidth_service
 from app.services.infra_metrics_service import infra_metrics_service
 from app.services.scaleway_service import scaleway_service
 
 router = APIRouter()
+
+
+@router.get(
+    "/bandwidth/users",
+    response_model=list[UserBandwidth],
+    summary="Get per-user S3 download and storage charges",
+    description="Return the top users by downloaded bytes for a UTC month, or one selected user.",
+)
+async def get_bandwidth_users(
+    period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    user_id: str | None = Query(None),
+    limit: int = Query(10, ge=1, le=100),
+):
+    period = period or datetime.utcnow().strftime("%Y-%m")
+    return bandwidth_service.get_user_costs(period, user_id=user_id, limit=limit)
 
 
 # =============================================================================
