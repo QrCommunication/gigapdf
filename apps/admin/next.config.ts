@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 import path from "path";
+import { ADMIN_BASE_PATH } from "./src/lib/base-path";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
@@ -9,7 +10,7 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@giga-pdf/ui", "@giga-pdf/types", "@giga-pdf/api"],
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
-  basePath: process.env.NODE_ENV === "production" ? "/admin" : "",
+  basePath: ADMIN_BASE_PATH,
   experimental: {
     optimizePackageImports: ["@giga-pdf/ui"],
   },

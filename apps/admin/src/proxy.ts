@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { ADMIN_BASE_PATH, withAdminBasePath } from "./lib/base-path";
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -19,12 +20,12 @@ export async function proxy(request: NextRequest) {
 
   if (!sessionCookie) {
     // No session, redirect to login
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(new URL(`${ADMIN_BASE_PATH}/login`, request.url));
   }
 
   // Verify session by calling the auth API
   try {
-    const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3001";
+    const baseUrl = withAdminBasePath(process.env.BETTER_AUTH_URL || "http://localhost:3001");
     const response = await fetch(`${baseUrl}/api/auth/get-session`, {
       headers: {
         cookie: `better-auth.session_token=${sessionCookie.value}`,
@@ -33,19 +34,21 @@ export async function proxy(request: NextRequest) {
 
     if (!response.ok) {
       // Session invalid, redirect to login
-      return NextResponse.redirect(new URL("/login", request.url));
+      return NextResponse.redirect(new URL(`${ADMIN_BASE_PATH}/login`, request.url));
     }
 
     const session = await response.json();
 
     if (!session || !session.user) {
-      return NextResponse.redirect(new URL("/login", request.url));
+      return NextResponse.redirect(new URL(`${ADMIN_BASE_PATH}/login`, request.url));
     }
 
     // Verify the user has admin or super_admin role
     const userRole = session.user.role as string | undefined;
     if (userRole !== "admin" && userRole !== "super_admin") {
-      return NextResponse.redirect(new URL("/login?error=forbidden", request.url));
+      return NextResponse.redirect(
+        new URL(`${ADMIN_BASE_PATH}/login?error=forbidden`, request.url)
+      );
     }
 
     // Session is valid and user has admin role, allow access
@@ -53,7 +56,7 @@ export async function proxy(request: NextRequest) {
   } catch (error) {
     console.error("Proxy auth error:", error);
     // On error, redirect to login
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(new URL(`${ADMIN_BASE_PATH}/login`, request.url));
   }
 }
 
