@@ -39,7 +39,7 @@ function sum(values: number[]): number {
   return values.reduce((total, value) => total + value, 0);
 }
 
-function aggregateYear(history: MonthCost[]): CurrentCosts {
+function aggregateYear(history: MonthCost[], year: string): CurrentCosts {
   const categories = new Map<string, { cost: number; product_count: number }>();
   history.forEach((month) => {
     Object.entries(month.by_category).forEach(([name, cost]) => {
@@ -52,7 +52,7 @@ function aggregateYear(history: MonthCost[]): CurrentCosts {
 
   return {
     total_eur: sum(history.map((month) => month.total)),
-    billing_period: `${new Date().getFullYear()} — 12 mois glissants`,
+    billing_period: `${year} — année complète`,
     by_category: Array.from(categories, ([name, value]) => ({ name, ...value })),
     resources: [],
     downloaded_bytes: sum(history.map((month) => month.downloaded_bytes)),
@@ -71,6 +71,11 @@ export default function InfrastructurePage() {
   const [costs, setCosts] = useState<CurrentCosts | null>(null);
   const [metrics, setMetrics] = useState<CurrentMetrics | null>(null);
   const [viewMode, setViewMode] = useState<"month" | "year">("month");
+  const currentPeriod = new Date().toISOString().slice(0, 7);
+  const currentYear = currentPeriod.slice(0, 4);
+  const [selectedPeriod, setSelectedPeriod] = useState(currentPeriod);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [history, setHistory] = useState<MonthCost[]>([]);
   const [metricsTimeRange, setMetricsTimeRange] = useState<"24h" | "7d" | "30d">("24h");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,18 +89,26 @@ export default function InfrastructurePage() {
       setError(null);
       const [metricsData, historyData, monthCosts, bandwidthUsersData] = await Promise.all([
         infrastructureApi.getCurrentMetrics(),
-        infrastructureApi.getCostHistory(viewMode === "year" ? 12 : 1),
-        viewMode === "month" ? infrastructureApi.getCurrentCosts() : Promise.resolve(null),
+        infrastructureApi.getCostHistory(24),
+        viewMode === "month"
+          ? infrastructureApi.getCurrentCosts(selectedPeriod)
+          : Promise.resolve(null),
         infrastructureApi.getBandwidthUsers(undefined, selectedBandwidthUser || undefined),
       ]);
+      const filteredHistory = historyData.history.filter((month) =>
+        viewMode === "year"
+          ? month.period.startsWith(selectedYear)
+          : month.period === selectedPeriod
+      );
+      setHistory(filteredHistory);
       setMetrics(metricsData);
-      setCosts(monthCosts || aggregateYear(historyData.history));
+      setCosts(monthCosts || aggregateYear(filteredHistory, selectedYear));
       setBandwidthUsers(bandwidthUsersData);
     } catch (err) {
       console.error("Failed to fetch infrastructure data:", err);
       setError(err instanceof Error ? err.message : tCommon("error"));
     }
-  }, [selectedBandwidthUser, tCommon, viewMode]);
+  }, [selectedBandwidthUser, selectedPeriod, selectedYear, tCommon, viewMode]);
 
   useEffect(() => {
     async function load() {
@@ -181,7 +194,33 @@ export default function InfrastructurePage() {
               {t("costs.period")}: {costs?.billing_period} · {t("costs.ht")}
             </p>
           </div>
-          <div className="inline-flex rounded-md border p-1" aria-label={t("costs.interval")}>
+          <div className="flex flex-wrap items-center gap-2">
+            {viewMode === "month" ? (
+              <label className="text-sm text-muted-foreground">
+                {t("costs.month")}
+                <input
+                  type="month"
+                  value={selectedPeriod}
+                  max={currentPeriod}
+                  onChange={(event) => setSelectedPeriod(event.target.value)}
+                  className="ml-2 rounded-md border bg-background px-3 py-1.5 text-foreground"
+                />
+              </label>
+            ) : (
+              <label className="text-sm text-muted-foreground">
+                {t("costs.year")}
+                <select
+                  value={selectedYear}
+                  onChange={(event) => setSelectedYear(event.target.value)}
+                  className="ml-2 rounded-md border bg-background px-3 py-1.5 text-foreground"
+                >
+                  {Array.from({ length: 3 }, (_, index) => String(Number(currentYear) - index)).map((year) => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <div className="inline-flex rounded-md border p-1" aria-label={t("costs.interval")}>
             {(["month", "year"] as const).map((mode) => (
               <button
                 key={mode}
@@ -344,7 +383,7 @@ export default function InfrastructurePage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <CostsChart months={viewMode === "year" ? 12 : 1} />
+        <CostsChart history={{ history }} />
         <MetricsChart
           timeRange={metricsTimeRange}
           onTimeRangeChange={setMetricsTimeRange}
@@ -382,6 +421,7 @@ export default function InfrastructurePage() {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }
