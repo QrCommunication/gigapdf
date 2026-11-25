@@ -2,7 +2,12 @@
  * API client for admin panel.
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const configuredApiBaseURL = process.env.NEXT_PUBLIC_API_URL;
+const isLocalApiURL = configuredApiBaseURL?.match(/^https?:\/\/(localhost|127\.0\.0\.1)(?::|\/|$)/);
+const API_BASE_URL =
+  process.env.NODE_ENV === "production" && (!configuredApiBaseURL || isLocalApiURL)
+    ? "https://api.giga-pdf.com"
+    : configuredApiBaseURL || "http://localhost:8000";
 
 // ============ Types ============
 
