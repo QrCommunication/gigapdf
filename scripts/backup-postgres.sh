@@ -3,17 +3,11 @@
 # GigaPDF — PostgreSQL Backup Script
 #
 # Performs pg_dump backups, compresses with gzip, and uploads to S3-compatible
-# storage (Scaleway Object Storage).  Applies retention:
-#   - 7 daily backups
-#   - 4 weekly backups (Sunday runs kept for 4 weeks)
+# storage (iDrive e2 by default). Daily and weekly backups older than 45 days
+# are pruned from the dedicated backups prefix.
 #
-# Setup (run as root or via sudo crontab for ubuntu user):
-#
-#   # Edit ubuntu crontab:
-#   sudo -u ubuntu crontab -e
-#
-#   # Add this line (daily at 03:00 UTC):
-#   0 3 * * * /opt/gigapdf/scripts/backup-postgres.sh >> /var/log/gigapdf/backup.log 2>&1
+# Setup: install deploy/systemd/gigapdf-backup.service and its timer.
+# The timer runs daily at 03:00 UTC.
 #
 # Required environment variables (loaded from /opt/gigapdf/.env):
 #   BACKUP_S3_BUCKET        e.g. s3://gigapdf-backups
@@ -47,8 +41,11 @@ BACKUP_DIR="${BACKUP_TEMP_DIR:-/tmp/gigapdf-backups}"
 LOG_TAG="gigapdf-backup"
 
 # Retention
-DAILY_KEEP="${BACKUP_DAILY_KEEP:-7}"
-WEEKLY_KEEP="${BACKUP_WEEKLY_KEEP:-4}"
+RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-45}"
+if ! [[ "$RETENTION_DAYS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "[ERROR] BACKUP_RETENTION_DAYS must be a positive integer" >&2
+    exit 1
+fi
 
 # Derived from DATABASE_URL: postgresql://user:pass@host:port/dbname
 # Parse using parameter expansion — no external tool required
@@ -74,6 +71,14 @@ PGDATABASE="${_rest#*/}"
 PGDATABASE="${PGDATABASE%%\?*}"
 
 export PGPASSWORD PGHOST PGPORT PGUSER PGDATABASE
+
+# Reuse the application object-storage configuration unless dedicated backup
+# credentials are supplied. The default prefix is isolated from user documents.
+BACKUP_S3_BUCKET="${BACKUP_S3_BUCKET:-${S3_BUCKET_NAME:+s3://${S3_BUCKET_NAME}/backups}}"
+BACKUP_S3_ENDPOINT_URL="${BACKUP_S3_ENDPOINT_URL:-${S3_ENDPOINT:-}}"
+BACKUP_S3_ACCESS_KEY="${BACKUP_S3_ACCESS_KEY:-${S3_ACCESS_KEY_ID:-}}"
+BACKUP_S3_SECRET_KEY="${BACKUP_S3_SECRET_KEY:-${S3_SECRET_ACCESS_KEY:-}}"
+BACKUP_S3_REGION="${BACKUP_S3_REGION:-${S3_REGION:-}}"
 
 # Validate required S3 vars
 for var in BACKUP_S3_BUCKET BACKUP_S3_ENDPOINT_URL BACKUP_S3_ACCESS_KEY BACKUP_S3_SECRET_KEY BACKUP_S3_REGION; do
@@ -154,8 +159,13 @@ if ! pg_dump \
     exit 1
 fi
 
+if ! gzip -t "$BACKUP_FILE"; then
+    notify_failure "Backup archive integrity check failed for $BACKUP_FILENAME"
+    exit 1
+fi
+
 BACKUP_SIZE=$(du -sh "$BACKUP_FILE" | cut -f1)
-log_info "Dump complete — size=$BACKUP_SIZE file=$BACKUP_FILENAME"
+log_info "Dump complete and archive verified — size=$BACKUP_SIZE file=$BACKUP_FILENAME"
 
 # ---------------------------------------------------------------------------
 # 6. Upload to S3-compatible storage
@@ -181,12 +191,12 @@ log_info "Upload successful — ${S3_PREFIX}/${BACKUP_FILENAME}"
 # ---------------------------------------------------------------------------
 apply_retention() {
     local prefix="$1"
-    local keep="$2"
-    local type_label="$3"
+    local type_label="$2"
+    local cutoff
+    cutoff=$(date -u -d "$RETENTION_DAYS days ago" '+%Y%m%d_%H%M%S')
 
-    log_info "Applying $type_label retention (keep=$keep) on $prefix"
+    log_info "Applying $type_label retention (days=$RETENTION_DAYS) on $prefix"
 
-    # List all backup files for this type, sorted by key name (chronological because of YYYYMMDD prefix)
     local files
     files=$(
         AWS_ACCESS_KEY_ID="$BACKUP_S3_ACCESS_KEY" \
@@ -201,31 +211,25 @@ apply_retention() {
         || true
     )
 
-    local count
-    count=$(echo "$files" | grep -c . || true)
-
-    if [ "$count" -le "$keep" ]; then
-        log_info "Retention: $count file(s) found, nothing to prune (keep=$keep)"
-        return 0
-    fi
-
-    local to_delete
-    to_delete=$(echo "$files" | head -n $(( count - keep )))
-
+    local f timestamp
     while IFS= read -r f; do
         [ -z "$f" ] && continue
-        log_info "Retention: deleting old backup ${prefix}/${f}"
-        AWS_ACCESS_KEY_ID="$BACKUP_S3_ACCESS_KEY" \
-        AWS_SECRET_ACCESS_KEY="$BACKUP_S3_SECRET_KEY" \
-        AWS_DEFAULT_REGION="$BACKUP_S3_REGION" \
-        aws s3 rm \
-            --endpoint-url "$BACKUP_S3_ENDPOINT_URL" \
-            "${prefix}/${f}" || log_error "Failed to delete ${prefix}/${f}"
-    done <<< "$to_delete"
+        timestamp="${f#gigapdf_${type_label}_}"
+        timestamp="${timestamp%.sql.gz}"
+        if [[ "$timestamp" < "$cutoff" ]]; then
+            log_info "Retention: deleting expired backup ${prefix}/${f}"
+            AWS_ACCESS_KEY_ID="$BACKUP_S3_ACCESS_KEY" \
+            AWS_SECRET_ACCESS_KEY="$BACKUP_S3_SECRET_KEY" \
+            AWS_DEFAULT_REGION="$BACKUP_S3_REGION" \
+            aws s3 rm \
+                --endpoint-url "$BACKUP_S3_ENDPOINT_URL" \
+                "${prefix}/${f}" || log_error "Failed to delete ${prefix}/${f}"
+        fi
+    done <<< "$files"
 }
 
-apply_retention "${BACKUP_S3_BUCKET}/postgres/daily"  "$DAILY_KEEP"  "daily"
-apply_retention "${BACKUP_S3_BUCKET}/postgres/weekly" "$WEEKLY_KEEP" "weekly"
+apply_retention "${BACKUP_S3_BUCKET}/postgres/daily" "daily"
+apply_retention "${BACKUP_S3_BUCKET}/postgres/weekly" "weekly"
 
 # ---------------------------------------------------------------------------
 # 8. Done

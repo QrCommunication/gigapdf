@@ -1,0 +1,15 @@
+[Unit]
+Description=GigaPDF PostgreSQL backup to S3-compatible storage
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=ploi
+Group=ploi
+WorkingDirectory=/home/ploi/giga-pdf.com
+Environment=ENV_FILE=/home/ploi/giga-pdf.com/.env
+Environment=BACKUP_RETENTION_DAYS=45
+ExecStart=/home/ploi/giga-pdf.com/scripts/backup-postgres.sh
+StandardOutput=append:/var/log/gigapdf/backup.log
+StandardError=append:/var/log/gigapdf/backup-error.log

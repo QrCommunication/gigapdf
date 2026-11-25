@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily GigaPDF PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

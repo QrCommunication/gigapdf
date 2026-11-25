@@ -1,142 +1,134 @@
-# GigaPDF — Backup & Restore PostgreSQL
+# GigaPDF — Sauvegarde et restauration PostgreSQL
 
-## Architecture de backup
+## Architecture
 
 | Type | Fréquence | Rétention | Déclencheur |
 |------|-----------|-----------|-------------|
-| Daily | Tous les jours à 03:00 UTC | 7 jours | cron |
-| Weekly | Dimanche à 03:00 UTC (Sunday = day 7) | 4 semaines | même script, détecte le jour |
+| Daily | Tous les jours à 03:00 UTC | 45 jours | `gigapdf-backup.timer` |
+| Weekly | Dimanche à 03:00 UTC | 45 jours | Même script, détection du dimanche |
 
-Le script `scripts/backup-postgres.sh` détecte automatiquement le jour de la semaine : un run du dimanche produit un backup `weekly`, tous les autres produisent un backup `daily`.
+Le script `scripts/backup-postgres.sh` crée un dump SQL compressé, vérifie son
+intégrité avec `gzip -t`, l'envoie sur le stockage objet puis supprime les
+archives de plus de 45 jours. Le nommage horodaté UTC permet un tri chronologique.
 
-Les backups sont stockés sur un stockage objet compatible S3 (bucket dédié — iDrive e2 par défaut, Scaleway, AWS… le script utilise `aws s3 cp --endpoint-url`) :
+Les sauvegardes utilisent par défaut la configuration iDrive e2 de
+l'application et un préfixe isolé des documents utilisateurs :
 
 ```
-s3://<BACKUP_S3_BUCKET>/postgres/daily/gigapdf_daily_YYYYMMDD_HHMMSS.sql.gz
-s3://<BACKUP_S3_BUCKET>/postgres/weekly/gigapdf_weekly_YYYYMMDD_HHMMSS.sql.gz
+s3://gigapdf/backups/postgres/daily/gigapdf_daily_YYYYMMDD_HHMMSS.sql.gz
+s3://gigapdf/backups/postgres/weekly/gigapdf_weekly_YYYYMMDD_HHMMSS.sql.gz
 ```
 
-## Variables d'environnement requises
+Le bucket `gigapdf` a son chiffrement par défaut activé. Les dumps SQL ne sont
+pas chiffrés par le script : le chiffrement au repos est assuré par le bucket.
+La clé iDrive doit être limitée au bucket et autoriser la lecture, l'écriture
+et la suppression (cette dernière uniquement pour appliquer la rétention).
 
-Ajouter à `/opt/gigapdf/.env` :
+## Configuration
+
+Aucune variable supplémentaire n'est nécessaire si `DATABASE_URL`,
+`S3_BUCKET_NAME`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` et
+`S3_REGION` sont déjà configurés pour l'application.
+
+Il est possible de dédier d'autres identifiants ou un autre bucket aux backups :
 
 ```env
-# Backup S3 (iDrive e2 — ou tout service compatible S3)
-BACKUP_S3_BUCKET=s3://gigapdf-backups
-BACKUP_S3_ENDPOINT_URL=https://xxxx.par.idrivee2-NN.com   # Scaleway : https://s3.fr-par.scw.cloud
+BACKUP_RETENTION_DAYS=45
+BACKUP_S3_BUCKET=s3://gigapdf/backups
+BACKUP_S3_ENDPOINT_URL=https://s3.eu-west-4.idrivee2.com
 BACKUP_S3_ACCESS_KEY=<clé d'accès>
 BACKUP_S3_SECRET_KEY=<secret>
-BACKUP_S3_REGION=us-east-1                                # Scaleway : fr-par
+BACKUP_S3_REGION=eu-west-4
 
-# Notifications en cas d'échec (optionnel)
+# Notifications d'échec facultatives
 BACKUP_NOTIFY_EMAIL=ops@giga-pdf.com
 BACKUP_NOTIFY_WEBHOOK=https://hooks.slack.com/services/xxx
 ```
 
-Créer un bucket dédié (ne pas réutiliser le bucket documents) et **activer
-son chiffrement par défaut** : les dumps ne sont pas chiffrés par
-l'application, c'est le bucket qui les chiffre au repos.
+`BACKUP_S3_BUCKET` contient le préfixe racine des backups, pas seulement le
+nom du bucket. Le chemin `/postgres/{daily,weekly}` est ajouté par les scripts.
 
-- iDrive e2 : console e2 → *Add bucket* `gigapdf-backups` → paramètres du
-  bucket → chiffrement activé ; clé d'accès limitée à ce bucket.
-- Scaleway : `scw object bucket create name=gigapdf-backups region=fr-par`
+## Installation du timer
 
-## Setup cron (une seule fois sur le VPS)
-
-SSH sur le serveur puis :
+La CLI AWS et PostgreSQL sont requis sur le serveur :
 
 ```bash
-sudo -u ubuntu crontab -e
+sudo apt install awscli postgresql-client
+sudo cp deploy/systemd/gigapdf-backup.service /etc/systemd/system/
+sudo cp deploy/systemd/gigapdf-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now gigapdf-backup.timer
 ```
 
-Ajouter la ligne suivante :
+Le service fourni utilise l'utilisateur `ploi`, le dépôt
+`/home/ploi/giga-pdf.com` et charge `/home/ploi/giga-pdf.com/.env` sans afficher
+les secrets. Les sorties sont écrites dans `/var/log/gigapdf/backup.log` et
+`backup-error.log`.
 
-```
-0 3 * * * /opt/gigapdf/scripts/backup-postgres.sh >> /var/log/gigapdf/backup.log 2>&1
-```
-
-Créer le fichier de log et appliquer la rotation :
+## Vérification
 
 ```bash
-sudo touch /var/log/gigapdf/backup.log
-sudo chown ubuntu:ubuntu /var/log/gigapdf/backup.log
+# Lancer immédiatement la même unité que le timer
+sudo systemctl start gigapdf-backup.service
+systemctl status gigapdf-backup.service --no-pager
+
+# Vérifier la planification et les journaux
+systemctl list-timers gigapdf-backup.timer --no-pager
+journalctl -u gigapdf-backup.service --since "1 hour ago" --no-pager
+
+# Lister les archives présentes dans iDrive
+ENV_FILE=/home/ploi/giga-pdf.com/.env \
+  /home/ploi/giga-pdf.com/scripts/restore-postgres.sh --list
 ```
 
-La rotation de `/var/log/gigapdf/*.log` est déjà configurée dans `/etc/logrotate.d/gigapdf` (14 jours, compression).
+Après chaque run réussi, télécharger une archive dans un répertoire temporaire
+et exécuter `gzip -t` avant de la supprimer. La purge ne doit jamais concerner
+d'objets hors du préfixe `backups/postgres`.
 
-## Vérifier que le cron fonctionne
+## Restauration
 
-```bash
-# Lancer manuellement (sans attendre 03:00)
-/opt/gigapdf/scripts/backup-postgres.sh
+### Dry-run recommandé
 
-# Vérifier les logs
-tail -f /var/log/gigapdf/backup.log
-
-# Lister les backups dans S3
-./scripts/restore-postgres.sh --list
-
-# Vérifier dans syslog
-journalctl -t gigapdf-backup --since "1 hour ago"
-```
-
-## Procédure de restore
-
-### 1. Dry-run (recommandé avant tout restore prod)
-
-Restaure dans une base de données temporaire `gigapdf_restore_test`, vérifie l'intégrité, puis supprime la base test. Aucune donnée de production n'est touchée.
+Restaure dans une base temporaire `gigapdf_restore_test`, vérifie le résultat,
+puis supprime cette base. Aucune donnée de production n'est modifiée.
 
 ```bash
-# Latest daily (par défaut)
-/opt/gigapdf/scripts/restore-postgres.sh --dry-run
+ENV_FILE=/home/ploi/giga-pdf.com/.env \
+  /home/ploi/giga-pdf.com/scripts/restore-postgres.sh --dry-run
 
-# Fichier spécifique
-/opt/gigapdf/scripts/restore-postgres.sh --dry-run \
+# Archive spécifique
+ENV_FILE=/home/ploi/giga-pdf.com/.env \
+  /home/ploi/giga-pdf.com/scripts/restore-postgres.sh --dry-run \
   --file gigapdf_daily_20260421_030000.sql.gz
 ```
 
-### 2. Restore vers une base isolée (test complet)
+### Base isolée
 
 ```bash
-# Crée gigapdf_staging et restaure dedans
-/opt/gigapdf/scripts/restore-postgres.sh \
-  --file gigapdf_weekly_20260420_030000.sql.gz \
+ENV_FILE=/home/ploi/giga-pdf.com/.env \
+  /home/ploi/giga-pdf.com/scripts/restore-postgres.sh \
   --target-db gigapdf_staging
 ```
 
-### 3. Restore production (DESTRUCTIF)
+### Restauration production — destructif
 
 ```bash
-# Liste les backups disponibles
-/opt/gigapdf/scripts/restore-postgres.sh --list
+ENV_FILE=/home/ploi/giga-pdf.com/.env \
+  /home/ploi/giga-pdf.com/scripts/restore-postgres.sh --list
 
-# Restore du backup sélectionné — arrête les services, drop la DB, restaure, redémarre
-/opt/gigapdf/scripts/restore-postgres.sh \
+ENV_FILE=/home/ploi/giga-pdf.com/.env \
+  /home/ploi/giga-pdf.com/scripts/restore-postgres.sh \
   --confirm-production \
   --file gigapdf_daily_20260421_030000.sql.gz
 ```
 
-Le script demande de saisir le nom de la base de données pour confirmer. Il arrête tous les services `gigapdf-*` avant le restore et les redémarre ensuite.
+Cette dernière commande arrête les services, supprime et recrée la base, puis
+restaure l'archive. Ne jamais l'utiliser comme simple test : le dry-run et la
+base isolée existent pour cela.
 
-### Temps estimés (base ~500 MB compressée)
+## Maintenance
 
-| Opération | Durée estimée |
-|-----------|--------------|
-| pg_dump + gzip | 2-5 min |
-| Upload S3 | 1-2 min |
-| Download S3 | 1-2 min |
-| Restore psql | 3-8 min |
-
-## Test de la procédure (à réaliser mensuellement)
-
-1. Lister les backups : `--list`
-2. Dry-run sur le dernier daily : `--dry-run`
-3. Vérifier dans les logs que `tables found > 0`
-4. Documenter la date et le résultat
-
-## Scripts
-
-| Script | Rôle |
-|--------|------|
-| `/opt/gigapdf/scripts/backup-postgres.sh` | Dump + upload S3 + retention |
-| `/opt/gigapdf/scripts/restore-postgres.sh` | Download S3 + restore + vérification |
+Tester le dry-run chaque mois et vérifier que les tables sont présentes dans le
+rapport. Surveiller les échecs du service avec `systemctl status` et les logs.
+Conserver la rétention à 45 jours sauf décision explicite d'augmenter le volume
+et le coût de stockage.
