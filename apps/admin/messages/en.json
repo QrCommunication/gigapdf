@@ -337,6 +337,7 @@
       "email": "Email",
       "role": "Role",
       "tenant": "Organization",
+      "documents": "Documents",
       "status": "Status",
       "lastLogin": "Last Login",
       "createdAt": "Created",
