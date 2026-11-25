@@ -156,7 +156,7 @@ fi
 BACKUP_FILENAME="gigapdf_${BACKUP_TYPE}_${TIMESTAMP}.sql.gz"
 BACKUP_FILE="$BACKUP_DIR/$BACKUP_FILENAME"
 S3_PREFIX="${BACKUP_S3_BUCKET}/postgres/${BACKUP_TYPE}"
-BACKUP_RUN_ID=$(psql -tAXq "INSERT INTO backup_runs(run_type,status) VALUES ('${BACKUP_TYPE}','running') RETURNING id" || true)
+BACKUP_RUN_ID=$(psql -tAXq -c "INSERT INTO backup_runs(run_type,status) VALUES ('${BACKUP_TYPE}','running') RETURNING id" || true)
 
 log_info "Starting $BACKUP_TYPE backup — db=$PGDATABASE host=$PGHOST"
 
