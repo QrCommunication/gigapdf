@@ -16,7 +16,9 @@ export async function proxy(request: NextRequest) {
   }
 
   // Check for session cookie
-  const sessionCookie = request.cookies.get("better-auth.session_token");
+  const sessionCookie =
+    request.cookies.get("__Secure-better-auth.session_token") ||
+    request.cookies.get("better-auth.session_token");
 
   if (!sessionCookie) {
     // No session, redirect to login
@@ -28,7 +30,7 @@ export async function proxy(request: NextRequest) {
     const baseUrl = withAdminBasePath(process.env.BETTER_AUTH_URL || "http://localhost:3001");
     const response = await fetch(`${baseUrl}/api/auth/get-session`, {
       headers: {
-        cookie: `better-auth.session_token=${sessionCookie.value}`,
+        cookie: request.headers.get("cookie") || "",
       },
     });
 
